@@ -14,6 +14,7 @@ on:
         type: choice
         default: acquire-and-audit
         options:
+          - probe-only
           - acquire-and-audit
           - passive-benchmarks
           - baseline-development
@@ -92,9 +93,43 @@ jobs:
           chmod -R a+rwX freqtrade/user_data artifacts
 
       - name: Pull the pinned Freqtrade image
+        if: inputs.stage != 'probe-only'
         run: docker pull "$IMAGE"
 
+      - name: Endpoint reachability report
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY' | tee artifacts/endpoint_report.txt
+          import urllib.request, urllib.error, time
+          BASE = "https://data.binance.vision"
+          targets = [
+              ("trading-api",   "https://api.binance.com/api/v3/exchangeInfo"),
+              ("data-api",      "https://data-api.binance.vision/api/v3/exchangeInfo"),
+              ("data-api-kline","https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1"),
+              ("monthly-1h",    f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip"),
+              ("monthly-1h-sum",f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip.CHECKSUM"),
+              ("monthly-5m",    f"{BASE}/data/spot/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2021-01.zip"),
+              ("monthly-5m-eth",f"{BASE}/data/spot/monthly/klines/ETHUSDT/5m/ETHUSDT-5m-2021-01.zip"),
+              ("monthly-5m-last",f"{BASE}/data/spot/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2026-08.zip"),
+              ("monthly-1h-2020",f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-12.zip"),
+              ("daily-1h",      f"{BASE}/data/spot/daily/klines/BTCUSDT/1h/BTCUSDT-1h-2026-08-30.zip"),
+          ]
+          for name, url in targets:
+              started = time.time()
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as r:
+                      body = r.read()
+                  status, size = r.status, len(body)
+              except urllib.error.HTTPError as e:
+                  status, size = e.code, 0
+              except Exception as e:
+                  status, size = f"ERR:{type(e).__name__}", 0
+              print(f"{name:<18} {str(status):<8} {size:>10} bytes  {time.time()-started:5.2f}s  {url}")
+          PY
+
       - name: Probe public Binance data endpoints
+        if: inputs.stage != 'probe-only' 
         # api.binance.com answers 451 (geo-restriction) to GitHub-hosted runners.
         # These are Binance's own public market-data endpoints, which serve the
         # same spot klines without the trading-API eligibility check.
@@ -126,7 +161,7 @@ jobs:
         # even load markets. Binance publishes the same spot klines as checksummed
         # ZIP archives on data.binance.vision, with no eligibility check. This is
         # real exchange data, not a synthetic substitute.
-        if: steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload
+        if: inputs.stage != 'probe-only' && (steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload)
         run: |
           set -euo pipefail
           python3 scripts/fetch_binance_public_data.py \
@@ -139,6 +174,7 @@ jobs:
           ls -la "$DATA_DIR"
 
       - name: Deep audit and dual fingerprints
+        if: inputs.stage != 'probe-only'
         run: |
           set -euo pipefail
           python3 scripts/audit_data.py \
@@ -179,6 +215,7 @@ jobs:
           PY
 
       - name: Can Freqtrade read the acquired data through the mirror?
+        if: inputs.stage != 'probe-only'
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -190,6 +227,7 @@ jobs:
             2>&1 | tail -30 | tee artifacts/freqtrade_list_data.log
 
       - name: Assert against the dataset lock once it is frozen
+        if: inputs.stage != 'probe-only'
         run: |
           set -euo pipefail
           status="$(python3 -c "import json;print(json.load(open('$LOCK'))['status'])")"
@@ -356,6 +394,7 @@ jobs:
           ls -laR artifacts | head -60
           # Artifact blob storage is unreachable from the analysis environment, so
           # the job log is the delivery channel. Re-print the key evidence last.
+          echo "===== ENDPOINT REPORT ====="; cat artifacts/endpoint_report.txt 2>/dev/null || echo "(none)"
           echo "===== ENDPOINT PROBE ====="; cat artifacts/endpoint_probe.txt 2>/dev/null || echo "(none)"
           echo "===== FREQTRADE list-data ====="; cat artifacts/freqtrade_list_data.log 2>/dev/null || echo "(none)"
           echo "===== AUDIT SUMMARY ====="; cat artifacts/dataset_v2_audit_summary.txt 2>/dev/null || echo "(none)"
