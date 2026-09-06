@@ -93,14 +93,6 @@ jobs:
           # The Freqtrade image runs as ftuser (uid 1000); the runner is 1001.
           chmod -R a+rwX freqtrade/user_data artifacts
 
-      - name: Pull the pinned Freqtrade image
-        # Only the engine steps need it. Acquisition and the audit are pure
-        # Python, and pulling here once put Docker Hub's anonymous rate limit on
-        # the critical path of a 5-year download.
-        if: startsWith(inputs.stage, 'baseline-')
-        timeout-minutes: 10
-        run: docker pull "$IMAGE"
-
       - name: Endpoint reachability report
         run: |
           set -uo pipefail
@@ -226,19 +218,6 @@ jobs:
           print("\nrange_alignment:", json.dumps(report["range_alignment"]))
           PY
 
-      - name: Can Freqtrade read the acquired data through the mirror?
-        if: startsWith(inputs.stage, 'baseline-')
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          set -uo pipefail
-          docker run --rm \
-            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
-            "$IMAGE" list-data \
-              --config /freqtrade/user_data/config.research.json \
-              --data-format-ohlcv feather \
-            2>&1 | tail -30 | tee artifacts/freqtrade_list_data.log
-
       - name: Assert against the dataset lock once it is frozen
         if: inputs.stage != 'probe-only'
         run: |
@@ -279,6 +258,38 @@ jobs:
               --wallet "$WALLET" --stake 10 --max-open-trades 2 \
               --out artifacts/passive_validation.json \
             | tee artifacts/passive_validation.log
+
+      - name: Pull the pinned Freqtrade image
+        # Deliberately late: everything above is pure Python, so the dataset
+        # evidence and the passive benchmarks are already banked before Docker
+        # Hub's anonymous rate limit can become this run's problem.
+        if: startsWith(inputs.stage, 'baseline-')
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then
+              echo "pulled on attempt $attempt"
+              exit 0
+            fi
+            echo "pull attempt $attempt failed or timed out; Docker Hub may be rate limiting"
+            sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts (Docker Hub rate limit)"
+          exit 1
+
+      - name: Can Freqtrade read the acquired data through the mirror?
+        if: startsWith(inputs.stage, 'baseline-')
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          docker run --rm \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" list-data \
+              --config /freqtrade/user_data/config.research.json \
+              --data-format-ohlcv feather \
+            2>&1 | tail -30 | tee artifacts/freqtrade_list_data.log
 
       - name: Freeze the code hashes being evaluated
         if: startsWith(inputs.stage, 'baseline-')
