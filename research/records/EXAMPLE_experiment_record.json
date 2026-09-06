@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-09-06T21:33:30Z",
+  "experiment": "cloud-0",
+  "run_name": "EXAMPLE-not-a-result",
+  "command": "python3 research/record_experiment.py template  # illustrative only; no backtest was run",
+  "code_commit": "dirty:0b44fe43f49581f7475ddae4edf27b92026c8a80",
+  "code_dirty": true,
+  "config_hash": "5c7e03bd647b95def10927f5ec4641e981aeeff596b538464b13676bfd83dd7e",
+  "config_files": [
+    "freqtrade/user_data/config.paper.json.example"
+  ],
+  "dataset_hashes": {
+    "BTC/USDT 1h": "b29689f5d0c0e86c95b5ec15e63e6bcfbcb8ad4596408dcc0f9040b3bbdfb4f9",
+    "BTC/USDT 5m": "2ab332f23d2376677b61d5a02492b5a4b67f2d37ac68f89a925697252cc7b908",
+    "ETH/USDT 1h": "a5de3ae5e9c3c73439eb8aec8ff496f9e9d5ebc7cec83842b2b2827880201ccf",
+    "ETH/USDT 5m": "4fa5ca782864ee84aff0e02786be3ca663de159288a7fb4baf12398fcdcca5c4"
+  },
+  "dataset_audit_pass": true,
+  "strategy": {
+    "name": "PlumbingSmokeStrategy",
+    "file": "freqtrade/user_data/strategies/PlumbingSmokeStrategy.py",
+    "sha256": "a4d14316fd2942f6f14e7b6ebd202d144b634407507281f1dcc835147a9d20d5"
+  },
+  "freqtrade_version": "2026.7 (historical local-runtime evidence; not executed in this cloud sandbox)",
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
+  "timeframe": "15m",
+  "detail_timeframe": null,
+  "timerange": "20250901-20260501",
+  "period_label": "development",
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "assumed Binance spot fee, 0.1% per side; replace with the fee actually configured",
+    "slippage_note": "no slippage model applied"
+  },
+  "wallet": 100,
+  "stake": 10,
+  "max_open_trades": 2,
+  "metrics": {
+    "total_return_pct": -27.31,
+    "max_drawdown_pct": 27.73,
+    "sharpe": -6.06,
+    "trade_count": 1230,
+    "passive_exposure_matched_return_pct": -7.83
+  },
+  "analyses": {
+    "lookahead": "not_run",
+    "recursive": "not_run",
+    "detail_timeframe_simulation": "not_run"
+  },
+  "gate": "INFORMATIONAL",
+  "reason": "Shape example only. The numbers are the historical PlumbingSmokeStrategy smoke backtest recorded on the owner's local machine and were NOT reproduced in this cloud sandbox. PlumbingSmokeStrategy is an infrastructure smoke test, not a research candidate, and is never to be optimised. This file exists so the schema has a concrete reference instance.",
+  "notes": "Fields left deliberately imperfect for a real gate: analyses are not_run and the Freqtrade version string is annotated rather than machine-collected. A record used as gate evidence must be produced by an actual run in a verifiable environment."
+}

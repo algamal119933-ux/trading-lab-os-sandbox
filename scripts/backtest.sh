@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")/.."
-TIMERANGE="${1:-20250101-}"
-python3 scripts/paper_guard.py
+# Deterministic backtest. Timerange is required: an implicit window is not evidence.
+# Usage: scripts/backtest.sh <TIMERANGE> [extra freqtrade args...]
+source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+
+TIMERANGE="${1:-}"
+if [[ -z "$TIMERANGE" ]]; then
+  echo "usage: scripts/backtest.sh <TIMERANGE e.g. 20250901-20260501> [extra args]" >&2
+  exit 2
+fi
+shift
+
+require_paper_config
 
 docker compose run --rm freqtrade backtesting \
-  --config /freqtrade/user_data/config.json \
-  --strategy PlumbingSmokeStrategy \
-  --timeframe 15m \
+  --config "$CONTAINER_CONFIG" \
+  --strategy "$STRATEGY" \
   --timerange "$TIMERANGE" \
   --enable-protections \
-  --export trades
+  --export trades \
+  "$@"

@@ -1,0 +1,67 @@
+{
+  "dataset_id": "dataset_v1",
+  "status": "frozen",
+  "provenance": "historical local-runtime evidence (owner machine, 2026-09-06); NOT re-verified in the cloud sandbox",
+  "exchange": "binance",
+  "market_type": "spot",
+  "data_format": "feather",
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "timeframes": ["5m", "1h"],
+  "download_timerange": "20250701-20260907",
+  "coverage": {
+    "1h": { "start": "2025-07-01T00:00:00+00:00", "end": "2026-09-06T17:00:00+00:00", "rows": 10386 },
+    "5m": { "start": "2025-07-01T00:00:00+00:00", "end": "2026-09-06T18:50:00+00:00", "rows": 124643 }
+  },
+  "dataset_hashes": {
+    "BTC/USDT 1h": "b29689f5d0c0e86c95b5ec15e63e6bcfbcb8ad4596408dcc0f9040b3bbdfb4f9",
+    "BTC/USDT 5m": "2ab332f23d2376677b61d5a02492b5a4b67f2d37ac68f89a925697252cc7b908",
+    "ETH/USDT 1h": "a5de3ae5e9c3c73439eb8aec8ff496f9e9d5ebc7cec83842b2b2827880201ccf",
+    "ETH/USDT 5m": "4fa5ca782864ee84aff0e02786be3ca663de159288a7fb4baf12398fcdcca5c4"
+  },
+  "protocol_windows": {
+    "warmup": {
+      "start": "2025-07-01T00:00:00+00:00",
+      "end": "2025-08-31T23:59:59+00:00",
+      "purpose": "indicator warm-up only; never scored, never optimised against"
+    },
+    "development": {
+      "start": "2025-09-01T00:00:00+00:00",
+      "end": "2026-04-30T23:59:59+00:00",
+      "timerange": "20250901-20260501",
+      "status": "open"
+    },
+    "validation": {
+      "start": "2026-05-01T00:00:00+00:00",
+      "end": "2026-06-30T23:59:59+00:00",
+      "timerange": "20260501-20260701",
+      "status": "open only after development gates pass"
+    },
+    "oos": {
+      "start": "2026-07-01T00:00:00+00:00",
+      "end": "2026-09-06T17:00:00+00:00",
+      "timerange": "20260701-20260907",
+      "status": "LOCKED"
+    }
+  },
+  "known_passive_development_benchmark": {
+    "fee_per_side": 0.001,
+    "btc_net_buy_and_hold": -0.2959500590629275,
+    "eth_net_buy_and_hold": -0.48754637506055964,
+    "full_50_50_return": -0.39174821706174356,
+    "exposure_matched_return": -0.07834964341234862,
+    "note": "the development window is strongly bearish; reduced exposure alone will look like alpha unless results are exposure-adjusted"
+  },
+  "audit": {
+    "gate": "DATA_INTEGRITY_GATE = PASS",
+    "evidence": "freqtrade/user_data/baseline_v1_data_audit.json",
+    "checks": [
+      "no duplicate timestamps",
+      "no gaps",
+      "no NaN",
+      "valid OHLC",
+      "BTC/ETH range alignment",
+      "exact 5m -> 1h OHLCV reconciliation"
+    ],
+    "reverify_command": "python3 scripts/audit_data.py --data-dir freqtrade/user_data/data/binance --pair BTC/USDT --pair ETH/USDT --timeframe 5m --timeframe 1h --lock research/datasets/dataset_v1.lock.json"
+  }
+}
