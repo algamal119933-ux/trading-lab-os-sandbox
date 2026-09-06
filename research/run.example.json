@@ -1,0 +1,13 @@
+{
+  "experiment": "baseline-validation",
+  "run_name": "plumbing-smoke-001",
+  "strategy": "PlumbingSmokeStrategy",
+  "timerange": "20250101-20260101",
+  "pair_set": "BTC/USDT,ETH/USDT",
+  "backtest_profit_pct": 0,
+  "max_drawdown_pct": 0,
+  "trade_count": 0,
+  "lookahead_pass": false,
+  "recursive_pass": false,
+  "paper_days": 0
+}

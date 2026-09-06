@@ -1,0 +1,88 @@
+services:
+  freqtrade:
+    image: ${FREQTRADE_IMAGE:-freqtradeorg/freqtrade:2026.7}
+    container_name: tradinglab-freqtrade
+    restart: unless-stopped
+    volumes:
+      - ./freqtrade/user_data:/freqtrade/user_data
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      FREQTRADE__API_SERVER__USERNAME: ${FREQTRADE_API_USER}
+      FREQTRADE__API_SERVER__PASSWORD: ${FREQTRADE_API_PASSWORD}
+      FREQTRADE__API_SERVER__JWT_SECRET_KEY: ${FREQTRADE_JWT_SECRET}
+      FREQTRADE__API_SERVER__WS_TOKEN: ${FREQTRADE_WS_TOKEN}
+    command: >
+      trade
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
+      --config /freqtrade/user_data/config.json
+      --strategy PlumbingSmokeStrategy
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.15.1
+    container_name: tradinglab-mlflow
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+
+  freqtrade-exporter:
+    build:
+      context: ./monitoring/exporter
+    container_name: tradinglab-freqtrade-exporter
+    restart: unless-stopped
+    depends_on:
+      - freqtrade
+    environment:
+      FREQTRADE_URL: http://freqtrade:8080
+      FREQTRADE_API_USER: ${FREQTRADE_API_USER}
+      FREQTRADE_API_PASSWORD: ${FREQTRADE_API_PASSWORD}
+      EXPORTER_PORT: "9108"
+    ports:
+      - "127.0.0.1:9108:9108"
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: tradinglab-prometheus
+    restart: unless-stopped
+    depends_on:
+      - freqtrade-exporter
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+
+  grafana:
+    image: grafana/grafana:13.2.0
+    container_name: tradinglab-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  mlflow_data:
+  prometheus_data:
+  grafana_data:

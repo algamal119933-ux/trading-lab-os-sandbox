@@ -1,0 +1,29 @@
+{
+  "fee_per_side": 0.001,
+  "requested_period": "development",
+  "result": {
+    "period": "development",
+    "BTC": {
+      "start_candle": "2025-09-01T00:00:00+00:00",
+      "end_candle": "2026-04-30T23:00:00+00:00",
+      "start_close": 108222.37,
+      "end_close": 76346.57,
+      "gross_return": -0.29453984421150625,
+      "net_return_after_entry_and_exit_fee": -0.2959500590629275
+    },
+    "ETH": {
+      "start_candle": "2025-09-01T00:00:00+00:00",
+      "end_candle": "2026-04-30T23:00:00+00:00",
+      "start_close": 4396.49,
+      "end_close": 2257.51,
+      "gross_return": -0.4865199283974261,
+      "net_return_after_entry_and_exit_fee": -0.48754637506055964
+    },
+    "full_50_50_wallet_start": 100.0,
+    "full_50_50_wallet_end": 60.825178293825644,
+    "full_50_50_return": -0.39174821706174356,
+    "exposure_matched_wallet_start": 100.0,
+    "exposure_matched_wallet_end": 92.16503565876513,
+    "exposure_matched_return": -0.07834964341234862
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "base_directory": "/freqtrade/user_data/data/binance",
+  "files": [
+    {
+      "pair": "BTC/USDT",
+      "timeframe": "1h",
+      "file": "BTC_USDT-1h.feather",
+      "sha256": "b29689f5d0c0e86c95b5ec15e63e6bcfbcb8ad4596408dcc0f9040b3bbdfb4f9",
+      "rows": 10386,
+      "start": "2025-07-01T00:00:00+00:00",
+      "end": "2026-09-06T17:00:00+00:00",
+      "expected_rows_from_range": 10386,
+      "duplicate_timestamps": 0,
+      "missing_intervals": 0,
+      "missing_examples": [],
+      "unexpected_timestamps": 0,
+      "nan_cells": 0,
+      "nonfinite_numeric_cells": 0,
+      "bad_ohlc_rows": 0,
+      "prices_positive": true,
+      "volume_nonnegative": true,
+      "monotonic_time": true,
+      "pass": true
+    },
+    {
+      "pair": "BTC/USDT",
+      "timeframe": "5m",
+      "file": "BTC_USDT-5m.feather",
+      "sha256": "2ab332f23d2376677b61d5a02492b5a4b67f2d37ac68f89a925697252cc7b908",
+      "rows": 124643,
+      "start": "2025-07-01T00:00:00+00:00",
+      "end": "2026-09-06T18:50:00+00:00",
+      "expected_rows_from_range": 124643,
+      "duplicate_timestamps": 0,
+      "missing_intervals": 0,
+      "missing_examples": [],
+      "unexpected_timestamps": 0,
+      "nan_cells": 0,
+      "nonfinite_numeric_cells": 0,
+      "bad_ohlc_rows": 0,
+      "prices_positive": true,
+      "volume_nonnegative": true,
+      "monotonic_time": true,
+      "pass": true
+    },
+    {
+      "pair": "ETH/USDT",
+      "timeframe": "1h",
+      "file": "ETH_USDT-1h.feather",
+      "sha256": "a5de3ae5e9c3c73439eb8aec8ff496f9e9d5ebc7cec83842b2b2827880201ccf",
+      "rows": 10386,
+      "start": "2025-07-01T00:00:00+00:00",
+      "end": "2026-09-06T17:00:00+00:00",
+      "expected_rows_from_range": 10386,
+      "duplicate_timestamps": 0,
+      "missing_intervals": 0,
+      "missing_examples": [],
+      "unexpected_timestamps": 0,
+      "nan_cells": 0,
+      "nonfinite_numeric_cells": 0,
+      "bad_ohlc_rows": 0,
+      "prices_positive": true,
+      "volume_nonnegative": true,
+      "monotonic_time": true,
+      "pass": true
+    },
+    {
+      "pair": "ETH/USDT",
+      "timeframe": "5m",
+      "file": "ETH_USDT-5m.feather",
+      "sha256": "4fa5ca782864ee84aff0e02786be3ca663de159288a7fb4baf12398fcdcca5c4",
+      "rows": 124643,
+      "start": "2025-07-01T00:00:00+00:00",
+      "end": "2026-09-06T18:50:00+00:00",
+      "expected_rows_from_range": 124643,
+      "duplicate_timestamps": 0,
+      "missing_intervals": 0,
+      "missing_examples": [],
+      "unexpected_timestamps": 0,
+      "nan_cells": 0,
+      "nonfinite_numeric_cells": 0,
+      "bad_ohlc_rows": 0,
+      "prices_positive": true,
+      "volume_nonnegative": true,
+      "monotonic_time": true,
+      "pass": true
+    }
+  ],
+  "aggregation_checks": [
+    {
+      "pair": "BTC/USDT",
+      "common_complete_hours": 10386,
+      "incomplete_5m_hours_in_downloaded_range": 1,
+      "mismatched_1h_bars": {
+        "open": 0,
+        "high": 0,
+        "low": 0,
+        "close": 0,
+        "volume": 0
+      },
+      "pass": true
+    },
+    {
+      "pair": "ETH/USDT",
+      "common_complete_hours": 10386,
+      "incomplete_5m_hours_in_downloaded_range": 1,
+      "mismatched_1h_bars": {
+        "open": 0,
+        "high": 0,
+        "low": 0,
+        "close": 0,
+        "volume": 0
+      },
+      "pass": true
+    }
+  ],
+  "range_alignment": {
+    "1h": {
+      "same_start": true,
+      "same_end": true,
+      "same_rows": true,
+      "pass": true
+    },
+    "5m": {
+      "same_start": true,
+      "same_end": true,
+      "same_rows": true,
+      "pass": true
+    }
+  },
+  "overall_pass": true
+}
