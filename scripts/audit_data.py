@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""Deterministic OHLCV dataset audit and fingerprinting.
+
+CLOUD-0 / C0.7 — data-reproduction plan.
+
+Market data is deliberately not committed to this repository, so the only way a
+result stays reproducible is to fingerprint the exact files a run consumed and to
+prove they are structurally sound. This script does both, and can additionally
+assert that the files still match a frozen dataset lock so a re-download cannot
+silently change a dataset mid-experiment.
+
+Supported inputs (Freqtrade ``user_data/data/<exchange>`` layout):
+    <PAIR>-<TIMEFRAME>.feather / .parquet   (needs pandas; imported lazily)
+    <PAIR>-<TIMEFRAME>.json / .json.gz      (stdlib only)
+
+Usage
+-----
+    python3 scripts/audit_data.py --data-dir freqtrade/user_data/data/binance \
+        --pair BTC/USDT --pair ETH/USDT --timeframe 1h --timeframe 5m \
+        --out freqtrade/user_data/baseline_v1_data_audit.json
+
+    python3 scripts/audit_data.py --data-dir ... --lock research/datasets/dataset_v1.lock.json
+
+Exit codes
+----------
+    0  audit passed (and matched the lock, when one was given)
+    2  audit failed, or a fingerprint drifted from the lock
+    3  no data files found
+"""
+
+from __future__ import annotations
+
+import argparse
+import gzip
+import hashlib
+import json
+import math
+import sys
+from pathlib import Path
+
+TIMEFRAME_SECONDS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+MAX_MISSING_EXAMPLES = 5
+SUPPORTED_SUFFIXES = (".feather", ".parquet", ".json", ".json.gz")
+
+
+def timeframe_seconds(timeframe: str) -> int:
+    unit = timeframe[-1]
+    if unit not in TIMEFRAME_SECONDS or not timeframe[:-1].isdigit():
+        raise SystemExit(f"unsupported timeframe: {timeframe!r}")
+    return int(timeframe[:-1]) * TIMEFRAME_SECONDS[unit]
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def iso(ts_ms: int) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+
+
+def find_file(data_dir: Path, pair: str, timeframe: str) -> Path | None:
+    token = pair.replace("/", "_")
+    for suffix in SUPPORTED_SUFFIXES:
+        candidate = data_dir / f"{token}-{timeframe}{suffix}"
+        if candidate.exists():
+            return candidate
+    matches = sorted(
+        p for p in data_dir.glob(f"{token}-{timeframe}*")
+        if "".join(p.suffixes[-2:]) in SUPPORTED_SUFFIXES or p.suffix in SUPPORTED_SUFFIXES
+    )
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise SystemExit(
+            f"cannot uniquely resolve {pair} {timeframe} in {data_dir}: {[m.name for m in matches]}"
+        )
+    return None
+
+
+def load_candles(path: Path) -> list[tuple[int, float, float, float, float, float]]:
+    """Return candles as (timestamp_ms, open, high, low, close, volume), file order preserved."""
+    name = path.name
+    if name.endswith(".json") or name.endswith(".json.gz"):
+        opener = gzip.open if name.endswith(".gz") else open
+        with opener(path, "rt", encoding="utf-8") as handle:  # type: ignore[operator]
+            raw = json.load(handle)
+        return [
+            (int(row[0]), float(row[1]), float(row[2]), float(row[3]), float(row[4]), float(row[5]))
+            for row in raw
+        ]
+
+    import pandas as pd  # noqa: PLC0415 - heavy dependency, only needed for binary formats
+
+    frame = pd.read_feather(path) if path.suffix == ".feather" else pd.read_parquet(path)
+    missing = {"date", "open", "high", "low", "close", "volume"} - set(frame.columns)
+    if missing:
+        raise SystemExit(f"{path.name} is missing columns: {sorted(missing)}")
+    dates = pd.to_datetime(frame["date"], utc=True).astype("int64") // 1_000_000
+    return [
+        (int(ts), float(o), float(h), float(low), float(c), float(v))
+        for ts, o, h, low, c, v in zip(
+            dates, frame["open"], frame["high"], frame["low"], frame["close"], frame["volume"]
+        )
+    ]
+
+
+def audit_file(pair: str, timeframe: str, path: Path) -> dict:
+    step_ms = timeframe_seconds(timeframe) * 1000
+    candles = load_candles(path)
+
+    report: dict = {
+        "pair": pair,
+        "timeframe": timeframe,
+        "file": path.name,
+        "sha256": sha256_file(path),
+        "rows": len(candles),
+    }
+    if not candles:
+        report.update({"pass": False, "error": "file contains no candles"})
+        return report
+
+    timestamps = [c[0] for c in candles]
+    start, end = timestamps[0], timestamps[-1]
+    expected_rows = (end - start) // step_ms + 1 if end >= start else 0
+
+    seen: set[int] = set()
+    duplicates = 0
+    for ts in timestamps:
+        if ts in seen:
+            duplicates += 1
+        seen.add(ts)
+
+    off_grid = sum(1 for ts in timestamps if (ts - start) % step_ms != 0)
+
+    missing_examples: list[str] = []
+    missing = 0
+    cursor = start
+    while cursor <= end:
+        if cursor not in seen:
+            missing += 1
+            if len(missing_examples) < MAX_MISSING_EXAMPLES:
+                missing_examples.append(iso(cursor))
+        cursor += step_ms
+
+    nan_cells = 0
+    bad_ohlc = 0
+    prices_positive = True
+    volume_nonnegative = True
+    for _ts, o, h, low, c, v in candles:
+        values = (o, h, low, c, v)
+        if any(math.isnan(x) or math.isinf(x) for x in values):
+            nan_cells += 1
+            continue
+        if h < low or h < max(o, c) or low > min(o, c):
+            bad_ohlc += 1
+        if min(o, h, low, c) <= 0:
+            prices_positive = False
+        if v < 0:
+            volume_nonnegative = False
+
+    monotonic = all(b > a for a, b in zip(timestamps, timestamps[1:]))
+
+    report.update(
+        {
+            "start": iso(start),
+            "end": iso(end),
+            "expected_rows_from_range": int(expected_rows),
+            "duplicate_timestamps": duplicates,
+            "missing_intervals": missing,
+            "missing_examples": missing_examples,
+            "unexpected_timestamps": off_grid,
+            "nan_cells": nan_cells,
+            "nonfinite_numeric_cells": nan_cells,
+            "bad_ohlc_rows": bad_ohlc,
+            "prices_positive": prices_positive,
+            "volume_nonnegative": volume_nonnegative,
+            "monotonic_time": monotonic,
+        }
+    )
+    report["pass"] = bool(
+        duplicates == 0
+        and missing == 0
+        and off_grid == 0
+        and nan_cells == 0
+        and bad_ohlc == 0
+        and prices_positive
+        and volume_nonnegative
+        and monotonic
+        and report["rows"] == report["expected_rows_from_range"]
+    )
+    return report
+
+
+def reconcile(pair: str, fine: Path, fine_tf: str, coarse: Path, coarse_tf: str) -> dict:
+    """Verify that the fine timeframe aggregates exactly into the coarse timeframe."""
+    fine_step = timeframe_seconds(fine_tf) * 1000
+    coarse_step = timeframe_seconds(coarse_tf) * 1000
+    if coarse_step % fine_step != 0:
+        raise SystemExit(f"{coarse_tf} is not a whole multiple of {fine_tf}")
+    per_bucket = coarse_step // fine_step
+
+    buckets: dict[int, list[tuple[int, float, float, float, float, float]]] = {}
+    for candle in load_candles(fine):
+        buckets.setdefault((candle[0] // coarse_step) * coarse_step, []).append(candle)
+
+    coarse_candles = {c[0]: c for c in load_candles(coarse)}
+
+    incomplete = 0
+    compared = 0
+    mismatches = {"open": 0, "high": 0, "low": 0, "close": 0, "volume": 0}
+    for bucket_start, rows in buckets.items():
+        if len(rows) != per_bucket:
+            incomplete += 1
+            continue
+        if bucket_start not in coarse_candles:
+            continue
+        rows.sort(key=lambda r: r[0])
+        expected = (
+            rows[0][1],
+            max(r[2] for r in rows),
+            min(r[3] for r in rows),
+            rows[-1][4],
+            sum(r[5] for r in rows),
+        )
+        _ts, o, h, low, c, v = coarse_candles[bucket_start]
+        compared += 1
+        for name, want, got in zip(
+            ("open", "high", "low", "close", "volume"), expected, (o, h, low, c, v)
+        ):
+            if not math.isclose(want, got, rel_tol=1e-9, abs_tol=1e-8):
+                mismatches[name] += 1
+
+    return {
+        "pair": pair,
+        "fine_timeframe": fine_tf,
+        "coarse_timeframe": coarse_tf,
+        "common_complete_buckets": compared,
+        "incomplete_fine_buckets_in_downloaded_range": incomplete,
+        "mismatched_bars": mismatches,
+        "pass": compared > 0 and all(v == 0 for v in mismatches.values()),
+    }
+
+
+def range_alignment(files: list[dict]) -> dict:
+    out: dict = {}
+    by_tf: dict[str, list[dict]] = {}
+    for entry in files:
+        by_tf.setdefault(entry["timeframe"], []).append(entry)
+    for timeframe, entries in sorted(by_tf.items()):
+        if len(entries) < 2:
+            continue
+        same_start = len({e.get("start") for e in entries}) == 1
+        same_end = len({e.get("end") for e in entries}) == 1
+        same_rows = len({e.get("rows") for e in entries}) == 1
+        out[timeframe] = {
+            "same_start": same_start,
+            "same_end": same_end,
+            "same_rows": same_rows,
+            "pass": same_start and same_end and same_rows,
+        }
+    return out
+
+
+def build_report(data_dir: Path, pairs: list[str], timeframes: list[str]) -> dict:
+    files: list[dict] = []
+    resolved: dict[tuple[str, str], Path] = {}
+    for pair in pairs:
+        for timeframe in timeframes:
+            path = find_file(data_dir, pair, timeframe)
+            if path is None:
+                continue
+            resolved[(pair, timeframe)] = path
+            files.append(audit_file(pair, timeframe, path))
+
+    aggregation: list[dict] = []
+    if len(timeframes) >= 2:
+        ordered = sorted(timeframes, key=timeframe_seconds)
+        fine_tf, coarse_tf = ordered[0], ordered[-1]
+        for pair in pairs:
+            fine = resolved.get((pair, fine_tf))
+            coarse = resolved.get((pair, coarse_tf))
+            if fine and coarse:
+                aggregation.append(reconcile(pair, fine, fine_tf, coarse, coarse_tf))
+
+    alignment = range_alignment(files)
+    overall = bool(
+        files
+        and all(f.get("pass") for f in files)
+        and all(a.get("pass") for a in aggregation)
+        and all(a.get("pass") for a in alignment.values())
+    )
+    return {
+        "base_directory": data_dir.as_posix(),
+        "pairs": pairs,
+        "timeframes": timeframes,
+        "files": files,
+        "aggregation_checks": aggregation,
+        "range_alignment": alignment,
+        "overall_pass": overall,
+    }
+
+
+def check_lock(report: dict, lock_path: Path) -> list[str]:
+    """Compare fingerprints against a frozen dataset lock. Any drift is a failure."""
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    expected: dict[str, str] = lock.get("dataset_hashes", {})
+    problems: list[str] = []
+    seen: set[str] = set()
+    for entry in report["files"]:
+        key = f"{entry['pair']} {entry['timeframe']}"
+        seen.add(key)
+        if key not in expected:
+            problems.append(f"{key}: present on disk but absent from the lock")
+        elif expected[key] != entry["sha256"]:
+            problems.append(
+                f"{key}: fingerprint drift — lock {expected[key]} != on-disk {entry['sha256']}"
+            )
+    for key in sorted(set(expected) - seen):
+        problems.append(f"{key}: named in the lock but not found on disk")
+    return problems
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Audit and fingerprint OHLCV datasets.")
+    parser.add_argument("--data-dir", required=True)
+    parser.add_argument("--pair", action="append", default=[], metavar="BASE/QUOTE")
+    parser.add_argument("--timeframe", action="append", default=[], metavar="TF")
+    parser.add_argument("--out", default=None, help="Write the audit report JSON here.")
+    parser.add_argument("--lock", default=None, help="Frozen dataset lock to assert against.")
+    args = parser.parse_args(argv)
+
+    pairs = args.pair or ["BTC/USDT", "ETH/USDT"]
+    timeframes = args.timeframe or ["5m", "1h"]
+
+    data_dir = Path(args.data_dir)
+    if not data_dir.is_dir():
+        print(f"DATA_AUDIT_FAIL: data directory not found: {data_dir}", file=sys.stderr)
+        return 3
+
+    report = build_report(data_dir, pairs, timeframes)
+    if not report["files"]:
+        print(f"DATA_AUDIT_FAIL: no dataset files found in {data_dir}", file=sys.stderr)
+        return 3
+
+    lock_problems: list[str] = []
+    if args.lock:
+        lock_problems = check_lock(report, Path(args.lock))
+        report["dataset_lock"] = {
+            "file": args.lock,
+            "problems": lock_problems,
+            "pass": not lock_problems,
+        }
+        report["overall_pass"] = report["overall_pass"] and not lock_problems
+
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    for entry in report["files"]:
+        print(f"{entry['pair']:>10} {entry['timeframe']:>4}  rows={entry['rows']:<8} "
+              f"{'PASS' if entry.get('pass') else 'FAIL'}  {entry['sha256']}")
+    for entry in report["aggregation_checks"]:
+        print(f"{entry['pair']:>10} {entry['fine_timeframe']}->{entry['coarse_timeframe']} "
+              f"reconciliation: {'PASS' if entry['pass'] else 'FAIL'}")
+    for problem in lock_problems:
+        print(f"DATA_LOCK_FAIL: {problem}", file=sys.stderr)
+
+    if report["overall_pass"]:
+        print("DATA_INTEGRITY_GATE = PASS")
+        return 0
+    print("DATA_INTEGRITY_GATE = FAIL", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
