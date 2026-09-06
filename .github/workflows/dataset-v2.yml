@@ -411,6 +411,29 @@ jobs:
           echo "===== ENDPOINT PROBE ====="; cat artifacts/endpoint_probe.txt 2>/dev/null || echo "(none)"
           echo "===== FREQTRADE list-data ====="; cat artifacts/freqtrade_list_data.log 2>/dev/null || echo "(none)"
           echo "===== AUDIT SUMMARY ====="; cat artifacts/dataset_v2_audit_summary.txt 2>/dev/null || echo "(none)"
+          echo "===== LOCK FRAGMENT (paste into dataset_v2.lock.json) ====="
+          python3 - <<'PY' 2>/dev/null || echo "(none)"
+          import json, pathlib
+          r = json.loads(pathlib.Path("artifacts/dataset_v2_audit.json").read_text())
+          key = lambda f: f"{f['pair']} {f['timeframe']}"
+          print(json.dumps({
+              "raw_file_hashes": {key(f): f["raw_file_sha256"] for f in r["files"]},
+              "canonical_hashes": {key(f): f["canonical_candle_content_sha256"] for f in r["files"]},
+              "coverage": {key(f): {"start": f["start"], "end": f["end"], "rows": f["rows"],
+                                    "expected_rows": f["expected_rows_from_range"],
+                                    "missing": f["missing_intervals"],
+                                    "missing_ratio": f["missing_ratio"],
+                                    "structural_pass": f["structural_pass"]} for f in r["files"]},
+              "gap_clusters": {key(f): f.get("gap_clusters", []) for f in r["files"]},
+              "reconciliation": [{"pair": a["pair"],
+                                  "prices_exact": a.get("price_reconciliation_exact"),
+                                  "compared": a["common_complete_buckets"],
+                                  "mismatched_bars": a["mismatched_bars"],
+                                  "worst_relative_deviation": a.get("worst_relative_deviation"),
+                                  "worst_examples": a.get("worst_deviation_examples")}
+                                 for a in r["aggregation_checks"]],
+          }, indent=2))
+          PY
           echo "===== ACQUISITION MANIFEST (summary) ====="
           python3 - <<'PY' 2>/dev/null || echo "(none)"
           import json, pathlib
