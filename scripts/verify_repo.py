@@ -147,6 +147,21 @@ def check_parsable(paths: list[str], problems: list[str]) -> None:
                 problems.append(f"invalid YAML in {rel}: {exc}")
 
 
+def check_untracked(problems: list[str]) -> None:
+    """Flag files that are neither tracked nor ignored.
+
+    A source file left untracked looks fine locally and simply does not exist in
+    CI — this check exists because tests/test_exporter.py was missed exactly that
+    way.
+    """
+    out = subprocess.check_output(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--others", "--exclude-standard", "-z"],
+        text=True,
+    )
+    for rel in sorted(p for p in out.split("\0") if p):
+        problems.append(f"untracked file is neither committed nor ignored: {rel}")
+
+
 def check_manifest(paths: list[str], problems: list[str], fix: bool) -> None:
     expected = build_manifest(paths)
     if fix:
@@ -173,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     check_forbidden(paths, problems)
     check_secrets(paths, problems)
     check_parsable(paths, problems)
+    check_untracked(problems)
     check_manifest(paths, problems, args.fix)
 
     if problems:

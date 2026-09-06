@@ -36,6 +36,13 @@ def test_every_tracked_json_and_yaml_parses(repo_root):
     assert problems == []
 
 
+def test_no_source_file_is_left_untracked():
+    """An untracked file works locally and is simply absent in CI."""
+    problems: list[str] = []
+    verify_repo.check_untracked(problems)
+    assert problems == []
+
+
 def test_manifest_is_current(repo_root):
     problems: list[str] = []
     verify_repo.check_manifest(tracked(repo_root), problems, fix=False)
