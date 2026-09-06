@@ -70,24 +70,37 @@ def tracked_files() -> list[str]:
     return sorted(p for p in out.split("\0") if p)
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def staged_bytes(rel: str) -> bytes:
+    """Content of a tracked file as it currently stands in the git index.
+
+    The manifest must describe what gets committed, not what happens to be in the
+    working tree: hashing the worktree lets an unstaged edit slip a hash into the
+    manifest for content that is never committed, which then fails in CI.
+    """
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "show", f":{rel}"], stderr=subprocess.DEVNULL
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Outside a git index (tests, exported tarball): fall back to the file.
+        return (REPO_ROOT / rel).read_bytes()
+
+
+def sha256_staged(rel: str) -> str:
+    return hashlib.sha256(staged_bytes(rel)).hexdigest()
 
 
 def build_manifest(paths: list[str]) -> str:
     lines = [
         "# Tracked-file manifest for trading-lab-os-sandbox.",
-        "# Regenerate with: python3 scripts/verify_repo.py --fix",
+        "# sha256 of each tracked file as staged in git, not as it sits in the",
+        "# working tree — regenerate after staging: python3 scripts/verify_repo.py --fix",
         f"# {MANIFEST_NAME} itself is excluded (it cannot contain its own hash).",
     ]
     for rel in paths:
         if rel == MANIFEST_NAME:
             continue
-        lines.append(f"{sha256_file(REPO_ROOT / rel)}  {rel}")
+        lines.append(f"{sha256_staged(rel)}  {rel}")
     return "\n".join(lines) + "\n"
 
 
@@ -100,11 +113,10 @@ def check_forbidden(paths: list[str], problems: list[str]) -> None:
 
 def check_secrets(paths: list[str], problems: list[str]) -> None:
     for rel in paths:
-        path = REPO_ROOT / rel
-        if path.suffix not in TEXT_SUFFIXES and not rel.endswith(".json.example"):
+        if Path(rel).suffix not in TEXT_SUFFIXES and not rel.endswith(".json.example"):
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            text = staged_bytes(rel).decode("utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         lines = text.splitlines()
@@ -118,17 +130,16 @@ def check_secrets(paths: list[str], problems: list[str]) -> None:
 
 def check_parsable(paths: list[str], problems: list[str]) -> None:
     for rel in paths:
-        path = REPO_ROOT / rel
         if rel.endswith(".json") or rel.endswith(".json.example"):
             try:
-                json.loads(path.read_text(encoding="utf-8"))
+                json.loads(staged_bytes(rel).decode("utf-8"))
             except Exception as exc:  # noqa: BLE001
                 problems.append(f"invalid JSON in {rel}: {exc}")
         elif rel.endswith((".yml", ".yaml")):
             try:
                 import yaml  # noqa: PLC0415
 
-                list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+                list(yaml.safe_load_all(staged_bytes(rel).decode("utf-8")))
             except ImportError:
                 problems.append("PyYAML is required to validate YAML files")
                 return
@@ -144,9 +155,11 @@ def check_manifest(paths: list[str], problems: list[str], fix: bool) -> None:
     if not MANIFEST.exists():
         problems.append(f"{MANIFEST_NAME} is missing; run: python3 scripts/verify_repo.py --fix")
         return
-    if MANIFEST.read_text(encoding="utf-8") != expected:
+    current = staged_bytes(MANIFEST_NAME).decode("utf-8")
+    if current != expected:
         problems.append(
-            f"{MANIFEST_NAME} is stale; run: python3 scripts/verify_repo.py --fix"
+            f"{MANIFEST_NAME} is stale; stage your changes, then run: "
+            "python3 scripts/verify_repo.py --fix && git add MANIFEST.txt"
         )
 
 

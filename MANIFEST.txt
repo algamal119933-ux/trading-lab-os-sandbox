@@ -1,5 +1,6 @@
 # Tracked-file manifest for trading-lab-os-sandbox.
-# Regenerate with: python3 scripts/verify_repo.py --fix
+# sha256 of each tracked file as staged in git, not as it sits in the
+# working tree — regenerate after staging: python3 scripts/verify_repo.py --fix
 # MANIFEST.txt itself is excluded (it cannot contain its own hash).
 0ecc898927b94017aca56c7d33f53faa1f90797695fc19126422c3d93b864b0a  .env.example
 c0375a99744136f5029748b5939c2ef1280c45d2d2685bd7c78093237cd948e4  .github/workflows/ci.yml
@@ -10,7 +11,7 @@ e43e3823d74f71a48cbc11041145411dc952ee4328435f3cc8a617c1cf3e1bf7  .gitignore
 aa197b796d75bfe0e38732a3533ccd7b672250a553e7de6235efbe6b936f5823  START_WINDOWS.ps1
 57bbc63521b4c63de2fa774a76a217e958f2b79ecf482c156108024a2084eb64  STOP_WINDOWS.ps1
 8e5eb28ba4e6512e3f75b1d5207214618c8213d1ba5f378788f9af93963e1ff8  docker-compose.yml
-3a5220936d51a20c026ba42e775a148211eae498e0050055519e59d160a5b01d  docs/ACCEPTANCE_CHECKLIST.md
+3aa061ae32bc13bea8af4066e40bba731d59caec816361efe5ff00c8a24a0afa  docs/ACCEPTANCE_CHECKLIST.md
 44cb4a6a7ad2602d1ae4c8b952f3ad9fba50c67600cd3f6f910c064b5e7c0928  docs/ARCHITECTURE.md
 b0363c2a5197b9c0365495c15e5a84da4d10e5dbe7bb76973a0dd1fe192cc51e  docs/REVIEW_REPORT_2026-09-05.md
 f599c996c3274992883a28e5666fce5ecb736e3aa13722b04d3de42684bcf44e  docs/ROADMAP.md
@@ -47,7 +48,7 @@ af9f2ae6c3593283a7a867dcf163079651c13dc8965d631e269d638dda243962  scripts/effect
 bd47067daed78034bdc2a40537c9a558e1592f967bf614bc44fd26c344621416  scripts/recursive.sh
 c806e209c08f657abc8127068c13c09081b9f1b7101d80f7f69b1ae20273d799  scripts/start_paper.sh
 d6998cf06fa9798efac58c04e696e5702738a5873fa5a71c72d279fbd6cdb5a6  scripts/stop.sh
-b0d7c23b6f0cc5b91330d614ffc985a90d0193e5ca906a2ee3666681b34ee886  scripts/verify_repo.py
+240a69a8d275c3e72f149a67418b43aae9ed7313d761cb1f90679cc33a950a24  scripts/verify_repo.py
 032e86d1e4fe3b0608df7afc748fa574a3da74969f15b023666b84524b147ff6  tests/conftest.py
 daa19ba61f4f7dd979488bc3ba75aa90c626f57d878dc7d7226a5a1ada705798  tests/test_compose.py
 a0749ad6478f560d1064e2142a67a92886f4fc0d50f486761f17f798d1151e78  tests/test_config_isolation.py
