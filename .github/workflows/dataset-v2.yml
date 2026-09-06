@@ -315,6 +315,7 @@ jobs:
           PY
 
       - name: Backtest on Development (1h signals, 5m detail simulation)
+        timeout-minutes: 25
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
@@ -334,6 +335,7 @@ jobs:
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_development.log
 
       - name: Backtest on Validation (single unchanged run)
+        timeout-minutes: 25
         if: inputs.stage == 'baseline-validation'
         run: |
           set -euo pipefail
@@ -352,6 +354,7 @@ jobs:
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_validation.log
 
       - name: Lookahead analysis (Development)
+        timeout-minutes: 20
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
@@ -367,6 +370,7 @@ jobs:
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
 
       - name: Recursive analysis (Development)
+        timeout-minutes: 20
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
@@ -383,6 +387,7 @@ jobs:
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
       - name: Normalise backtest metrics
+        timeout-minutes: 10
         # Three silent failures here all came from the same class of bug: a
         # heredoc whose terminator was not at column 0 once nested, which makes
         # bash exit 2 before producing any output at all. There is no heredoc in
