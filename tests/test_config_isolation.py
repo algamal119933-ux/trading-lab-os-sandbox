@@ -114,6 +114,29 @@ def test_override_values_are_typed_like_freqtrade_parses_them(raw, expected):
     assert effective_config.coerce(raw) == expected
 
 
+def test_fee_is_stated_explicitly_rather_than_inherited(example_config):
+    """An exchange-default fee is invisible in the record and can change upstream."""
+    assert example_config["fee"] == 0.001
+
+
+def test_config_fee_matches_the_dataset_v2_lock(repo_root, example_config):
+    import json
+
+    lock = json.loads((repo_root / "research/datasets/dataset_v2.lock.json").read_text())
+    assert example_config["fee"] == lock["fee_assumption"]["per_side_ratio"]
+
+
+def test_config_sizing_matches_the_dataset_v2_lock(repo_root, example_config):
+    import json
+
+    lock = json.loads((repo_root / "research/datasets/dataset_v2.lock.json").read_text())
+    sizing = lock["sizing"]
+    assert example_config["dry_run_wallet"] == sizing["dry_run_wallet"]
+    assert example_config["stake_amount"] == sizing["stake_amount"]
+    assert example_config["max_open_trades"] == sizing["max_open_trades"]
+    assert example_config["stake_currency"] == sizing["stake_currency"]
+
+
 def test_precedence_is_documented_in_the_output(repo_root):
     report = effective_config.build([repo_root / CONFIG_EXAMPLE], [], environ={})
     assert report["precedence"] == "cli > environment > config file(s) > strategy defaults"

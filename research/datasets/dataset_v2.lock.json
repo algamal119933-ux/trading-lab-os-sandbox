@@ -1,0 +1,92 @@
+{
+  "dataset_id": "dataset_v2",
+  "status": "pending_acquisition",
+  "spec_frozen_utc": "2026-09-06T22:00:00Z",
+  "spec_frozen_before_any_active_baseline_outcome": true,
+  "supersedes": null,
+  "relationship_to_dataset_v1": "Dataset V1 is preserved unchanged as immutable historical evidence. V2 does not replace or rewrite it.",
+
+  "exchange": "binance",
+  "market_type": "spot",
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "primary_timeframe": "1h",
+  "detail_timeframe": "5m",
+  "timeframes": ["5m", "1h"],
+  "data_format": "feather",
+
+  "acquisition": {
+    "start_utc": "2020-12-01T00:00:00Z",
+    "end_utc": "2026-08-31T23:59:59Z",
+    "freqtrade_timerange": "20201201-20260901",
+    "note": "Freqtrade timeranges are start-inclusive and end-exclusive, so 20260901 is the exclusive bound for a window ending 2026-08-31."
+  },
+
+  "protocol_windows": {
+    "warmup": {
+      "start_utc": "2020-12-01T00:00:00Z",
+      "end_utc": "2020-12-31T23:59:59Z",
+      "purpose": "Indicator warm-up only. Never scored, never optimised against. One month of 1h candles is ~744 bars, comfortably more than the 200 an EMA200 needs, so no Development bar is computed from a partially warmed indicator.",
+      "status": "not scored"
+    },
+    "development": {
+      "start_utc": "2021-01-01T00:00:00Z",
+      "end_utc": "2024-12-31T23:59:59Z",
+      "freqtrade_timerange": "20210101-20250101",
+      "status": "open",
+      "purpose": "Four years. The only window BASELINE-1 may be examined on before its logic is frozen."
+    },
+    "validation": {
+      "start_utc": "2025-01-01T00:00:00Z",
+      "end_utc": "2026-08-31T23:59:59Z",
+      "freqtrade_timerange": "20250101-20260901",
+      "status": "closed until the baseline implementation and Development protocol are frozen",
+      "purpose": "Twenty months. Run once, unchanged, after the freeze. Not a pristine holdout - see locked_oos below."
+    }
+  },
+
+  "locked_oos": {
+    "designated": false,
+    "reason": "No period of this dataset qualifies as pristine Locked OOS. Dataset V1 work already inspected 2025-09 through 2026-09 (its development, validation and OOS windows all fall inside 2025-2026), so designating any 2025-2026 span as untouched holdout would be false. The Validation window here is therefore labelled Validation, not OOS.",
+    "first_strict_prospective_holdout": "forward paper / prospective OOS, beginning only after the strategy and protocol are frozen, over data that did not exist at freeze time"
+  },
+
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "Binance spot taker fee, 0.1% per side, set explicitly in the config rather than inherited from an exchange default",
+    "slippage_note": "no slippage model applied; entry and exit use the configured order-book pricing"
+  },
+
+  "sizing": {
+    "dry_run_wallet": 100,
+    "stake_amount": 10,
+    "stake_currency": "USDT",
+    "max_open_trades": 2
+  },
+
+  "integrity_contract": {
+    "canonical_digest_version": "CANONICAL_CANDLE_V1",
+    "canonical_digest_definition": "sha256 over the version tag followed by one line per candle, candles sorted by timestamp, each line 'ts|open|high|low|close|volume' with integer milliseconds and Python's shortest round-tripping float repr",
+    "why": "A Feather/PyArrow version bump, a compression change or different file metadata moves the raw file hash while the market data is identical. The canonical digest is the drift signal; the raw hash is recorded but a mismatch with a matching canonical digest is a serialization note, not drift.",
+    "required_checks": [
+      "exact timerange",
+      "expected cadence",
+      "duplicate timestamps",
+      "gaps",
+      "NaN / non-finite cells",
+      "OHLC validity",
+      "monotonic timestamps",
+      "completed-candle boundaries",
+      "5m -> 1h reconciliation"
+    ]
+  },
+
+  "raw_file_hashes": {},
+  "canonical_hashes": {},
+  "coverage": {},
+
+  "acquisition_route": {
+    "environment": "The cloud sandbox cannot reach Binance: the egress policy answers 403 to CONNECT for api.binance.com, data-api.binance.vision, api1.binance.com and fapi.binance.com.",
+    "route": "GitHub Actions runner via .github/workflows/dataset-v2.yml, using the pinned freqtradeorg/freqtrade image. Evidence returns as workflow artifacts and is committed here.",
+    "command": "freqtrade download-data --exchange binance --pairs BTC/USDT ETH/USDT --timeframes 5m 1h --timerange 20201201-20260901 --data-format-ohlcv feather"
+  }
+}

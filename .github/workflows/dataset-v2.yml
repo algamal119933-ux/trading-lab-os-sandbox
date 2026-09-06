@@ -1,0 +1,285 @@
+name: Dataset V2 research
+
+# The cloud sandbox cannot reach Binance (the egress policy answers 403 to
+# CONNECT for every Binance host), so real market data is acquired here, on a
+# GitHub-hosted runner, from Binance's public REST API. No exchange credential
+# is used or required: download-data and backtesting read public market data,
+# and dry_run stays true throughout.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Which research stage to run
+        type: choice
+        default: acquire-and-audit
+        options:
+          - acquire-and-audit
+          - passive-benchmarks
+          - baseline-development
+          - baseline-validation
+      force_redownload:
+        description: Ignore the cached dataset and download again
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: freqtradeorg/freqtrade:2026.7
+  DATA_DIR: freqtrade/user_data/data/binance
+  LOCK: research/datasets/dataset_v2.lock.json
+  ACQUIRE_TIMERANGE: "20201201-20260901"
+  DEV_TIMERANGE: "20210101-20250101"
+  VAL_TIMERANGE: "20250101-20260901"
+  DEV_START: "2021-01-01T00:00:00Z"
+  DEV_END: "2024-12-31T23:59:59Z"
+  VAL_START: "2025-01-01T00:00:00Z"
+  VAL_END: "2026-08-31T23:59:59Z"
+  STRATEGY: BaselineEmaRegimeV1
+  WALLET: "100"
+  FEE: "0.001"
+
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Create the runtime config from the committed example and guard it
+        run: |
+          set -euo pipefail
+          cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+
+      - name: Pull the pinned Freqtrade image
+        run: docker pull "$IMAGE"
+
+      - name: Restore the Dataset V2 market-data cache
+        id: data-cache
+        uses: actions/cache@v4
+        with:
+          path: freqtrade/user_data/data
+          key: dataset-v2-binance-spot-btc-eth-5m-1h-20201201-20260901
+
+      - name: Download Binance spot market data (public, no credentials)
+        if: steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA_DIR"
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" download-data \
+              --config /freqtrade/user_data/config.json \
+              --exchange binance \
+              --pairs BTC/USDT ETH/USDT \
+              --timeframes 5m 1h \
+              --timerange "$ACQUIRE_TIMERANGE" \
+              --data-format-ohlcv feather
+          ls -la "$DATA_DIR"
+
+      - name: Deep audit and dual fingerprints
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Run inside the Freqtrade image so the feather reader is the exact one
+          # the engine uses; the runner has no pandas/pyarrow of its own.
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
+            scripts/audit_data.py \
+              --data-dir "$DATA_DIR" \
+              --pair BTC/USDT --pair ETH/USDT \
+              --timeframe 5m --timeframe 1h \
+              --out artifacts/dataset_v2_audit.json \
+            | tee artifacts/dataset_v2_audit.log
+
+      - name: Assert against the dataset lock once it is frozen
+        run: |
+          set -euo pipefail
+          status="$(python3 -c "import json;print(json.load(open('$LOCK'))['status'])")"
+          if [ "$status" = "frozen" ]; then
+            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+              -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
+              scripts/audit_data.py \
+                --data-dir "$DATA_DIR" \
+                --pair BTC/USDT --pair ETH/USDT \
+                --timeframe 5m --timeframe 1h \
+                --lock "$LOCK" | tee artifacts/dataset_v2_lock_check.log
+          else
+            echo "dataset lock status is '$status'; fingerprints are being established by this run"
+          fi
+
+      - name: Passive benchmarks on the frozen Development window
+        if: inputs.stage != 'acquire-and-audit'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
+            freqtrade/user_data/baseline_benchmarks.py \
+              --data-dir "$DATA_DIR" \
+              --lock "$LOCK" \
+              --period development \
+              --fee "$FEE" \
+              --wallet "$WALLET" --stake 10 --max-open-trades 2 \
+              --out artifacts/passive_development.json \
+            | tee artifacts/passive_development.log
+
+      - name: Passive benchmarks on the Validation window
+        if: inputs.stage == 'baseline-validation'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
+            freqtrade/user_data/baseline_benchmarks.py \
+              --data-dir "$DATA_DIR" \
+              --lock "$LOCK" \
+              --period validation \
+              --fee "$FEE" \
+              --wallet "$WALLET" --stake 10 --max-open-trades 2 \
+              --out artifacts/passive_validation.json \
+            | tee artifacts/passive_validation.log
+
+      - name: Freeze the code hashes being evaluated
+        if: startsWith(inputs.stage, 'baseline-')
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          def sha(p):
+              return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+          strategy = f"freqtrade/user_data/strategies/{os.environ['STRATEGY']}.py"
+          import subprocess
+          out = {
+              "strategy_file": strategy,
+              "strategy_sha256": sha(strategy),
+              "config_example_sha256": sha("freqtrade/user_data/config.paper.json.example"),
+              "effective_config_sha256": subprocess.check_output(
+                  ["python3", "scripts/effective_config.py", "--hash-only",
+                   "--config", "freqtrade/user_data/config.json"], text=True).strip(),
+              "code_commit": os.environ["GITHUB_SHA"],
+          }
+          pathlib.Path("artifacts/frozen_hashes.json").write_text(json.dumps(out, indent=2) + "\n")
+          print(json.dumps(out, indent=2))
+          PY
+
+      - name: Backtest on Development (1h signals, 5m detail simulation)
+        if: inputs.stage == 'baseline-development'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" backtesting \
+              --config /freqtrade/user_data/config.json \
+              --strategy "$STRATEGY" \
+              --strategy-path /freqtrade/user_data/strategies \
+              --timerange "$DEV_TIMERANGE" \
+              --timeframe-detail 5m \
+              --enable-protections \
+              --export trades \
+              --export-filename /freqtrade/user_data/backtest_results/dev.json \
+            2>&1 | tee artifacts/backtest_development.log
+          # Freqtrade exits 0 on a configuration error, so check the output too.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_development.log
+
+      - name: Backtest on Validation (single unchanged run)
+        if: inputs.stage == 'baseline-validation'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" backtesting \
+              --config /freqtrade/user_data/config.json \
+              --strategy "$STRATEGY" \
+              --strategy-path /freqtrade/user_data/strategies \
+              --timerange "$VAL_TIMERANGE" \
+              --timeframe-detail 5m \
+              --enable-protections \
+              --export trades \
+              --export-filename /freqtrade/user_data/backtest_results/val.json \
+            2>&1 | tee artifacts/backtest_validation.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_validation.log
+
+      - name: Lookahead analysis (Development)
+        if: inputs.stage == 'baseline-development'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" lookahead-analysis \
+              --config /freqtrade/user_data/config.json \
+              --strategy "$STRATEGY" \
+              --strategy-path /freqtrade/user_data/strategies \
+              --timerange "$DEV_TIMERANGE" \
+            2>&1 | tee artifacts/lookahead_development.log
+
+      - name: Recursive analysis (Development)
+        if: inputs.stage == 'baseline-development'
+        run: |
+          set -euo pipefail
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" recursive-analysis \
+              --config /freqtrade/user_data/config.json \
+              --strategy "$STRATEGY" \
+              --strategy-path /freqtrade/user_data/strategies \
+              --timerange "$DEV_TIMERANGE" \
+              -p BTC/USDT \
+            2>&1 | tee artifacts/recursive_development.log
+
+      - name: Normalise backtest metrics
+        if: startsWith(inputs.stage, 'baseline-')
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for f in freqtrade/user_data/backtest_results/*.json; do
+            echo "=== $f ==="
+            python3 research/summarize_backtest.py --result "$f" --dump-schema || true
+          done
+          if [ "${{ inputs.stage }}" = "baseline-development" ]; then
+            RESULT=freqtrade/user_data/backtest_results/dev.json
+            python3 research/summarize_backtest.py \
+              --result "$RESULT" \
+              --window-start "$DEV_START" --window-end "$DEV_END" \
+              --wallet "$WALLET" --fee "$FEE" \
+              --passive artifacts/passive_development.json \
+              --out artifacts/metrics_development.json \
+              --md artifacts/metrics_development.md
+            cat artifacts/metrics_development.md
+          else
+            RESULT=freqtrade/user_data/backtest_results/val.json
+            python3 research/summarize_backtest.py \
+              --result "$RESULT" \
+              --window-start "$VAL_START" --window-end "$VAL_END" \
+              --wallet "$WALLET" --fee "$FEE" \
+              --passive artifacts/passive_validation.json \
+              --out artifacts/metrics_validation.json \
+              --md artifacts/metrics_validation.md
+            cat artifacts/metrics_validation.md
+          fi
+
+      - name: Collect raw engine output
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/backtest_results
+          cp -r freqtrade/user_data/backtest_results/. artifacts/backtest_results/ 2>/dev/null || true
+          ls -laR artifacts | head -100
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dataset-v2-${{ inputs.stage }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30

@@ -7,6 +7,7 @@
   "fiat_display_currency": "USD",
   "dry_run": true,
   "dry_run_wallet": 100,
+  "fee": 0.001,
   "cancel_open_orders_on_exit": true,
   "trading_mode": "spot",
   "unfilledtimeout": {
