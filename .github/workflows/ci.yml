@@ -102,8 +102,10 @@ jobs:
           echo "paper guard correctly rejected the unsafe config"
 
       - name: Effective config (redacted, no secrets required)
+        # Written outside the checkout: the repository checks fail on any file
+        # that is neither tracked nor ignored, and that strictness is the point.
         run: |
-          python3 scripts/effective_config.py > effective-config.json
+          python3 scripts/effective_config.py > "$RUNNER_TEMP/effective-config.json"
           python3 scripts/effective_config.py --hash-only
 
       - name: Validate committed experiment records
@@ -116,7 +118,7 @@ jobs:
         if: always()
         with:
           name: effective-config
-          path: effective-config.json
+          path: ${{ runner.temp }}/effective-config.json
           if-no-files-found: warn
 
   compose:
