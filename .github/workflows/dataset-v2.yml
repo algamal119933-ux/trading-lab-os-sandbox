@@ -194,11 +194,14 @@ jobs:
           python3 - <<'PY' | tee artifacts/dataset_v2_audit_summary.txt
           import json, pathlib
           report = json.loads(pathlib.Path("artifacts/dataset_v2_audit.json").read_text())
-          print("overall_pass:", report["overall_pass"])
+          print("overall_pass:", report["overall_pass"], "| structural_pass:", report.get("structural_pass"))
           for f in report["files"]:
               print(f"\n{f['pair']} {f['timeframe']}: pass={f.get('pass')} rows={f['rows']}")
               print("  range:", f.get("start"), "->", f.get("end"))
               print("  start_ok:", f.get("start_matches_expected"), "end_ok:", f.get("end_matches_expected"))
+              print("  structural_pass:", f.get("structural_pass"),
+                    "continuity_pass:", f.get("continuity_pass"),
+                    "missing_ratio:", f"{f.get('missing_ratio', 0):.6%}")
               print("  missing:", f.get("missing_intervals"),
                     "clusters:", f.get("gap_cluster_count"),
                     "largest:", f.get("largest_gap_candles"))
@@ -214,8 +217,12 @@ jobs:
                   print(f"    gap {c['missing_candles']:>7} candles  {c['start']} -> {c['end']}")
           for a in report["aggregation_checks"]:
               print(f"\n{a['pair']} {a['fine_timeframe']}->{a['coarse_timeframe']}: pass={a['pass']} "
+                    f"prices_exact={a.get('price_reconciliation_exact')} "
                     f"compared={a['common_complete_buckets']} incomplete={a['incomplete_fine_buckets_in_downloaded_range']} "
                     f"mismatches={a['mismatched_bars']}")
+              print("   worst relative deviation:", a.get("worst_relative_deviation"))
+              for field, example in (a.get("worst_deviation_examples") or {}).items():
+                  print(f"     {field}: {example}")
           print("\nrange_alignment:", json.dumps(report["range_alignment"]))
           PY
 

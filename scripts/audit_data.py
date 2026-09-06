@@ -188,6 +188,7 @@ def audit_file(
     path: Path,
     expect_start: str | None = None,
     expect_end: str | None = None,
+    max_missing_ratio: float = 0.0,
 ) -> dict:
     step_ms = timeframe_seconds(timeframe) * 1000
     candles = load_candles(path)
@@ -278,23 +279,46 @@ def audit_file(
     coverage_ok = bool(
         report.get("start_matches_expected", True) and report.get("end_matches_expected", True)
     )
-    report["pass"] = bool(
+    # Two different kinds of problem, deliberately kept apart.
+    #
+    # Structural integrity is about whether the data is *sound*: duplicates,
+    # off-grid timestamps, NaN, impossible OHLC, non-monotonic time, wrong
+    # coverage, a half-formed final candle. Any of these means the acquisition or
+    # the file is broken, and none is ever tolerable.
+    #
+    # Continuity is about whether the *exchange* was up. Binance really did halt
+    # trading on some days, and those candles do not exist in Binance's own
+    # authoritative archive either. Treating an exchange outage as data
+    # corruption would be wrong, and silently folding it into a single pass/fail
+    # would hide it. So gaps are measured, located, and reported separately.
+    report["structural_pass"] = bool(
         coverage_ok
         and report["last_candle_is_complete"]
         and duplicates == 0
-        and missing == 0
         and off_grid == 0
         and nan_cells == 0
         and bad_ohlc == 0
         and prices_positive
         and volume_nonnegative
         and monotonic
-        and report["rows"] == report["expected_rows_from_range"]
     )
+    expected_rows = int(expected_rows) or 1
+    report["missing_ratio"] = missing / expected_rows
+    report["continuity_pass"] = missing == 0
+    report["continuity_within_tolerance"] = report["missing_ratio"] <= max_missing_ratio
+    report["max_missing_ratio_allowed"] = max_missing_ratio
+    report["pass"] = bool(report["structural_pass"] and report["continuity_within_tolerance"])
     return report
 
 
-def reconcile(pair: str, fine: Path, fine_tf: str, coarse: Path, coarse_tf: str) -> dict:
+def reconcile(
+    pair: str,
+    fine: Path,
+    fine_tf: str,
+    coarse: Path,
+    coarse_tf: str,
+    reconcile_rel_tol: float = 1e-9,
+) -> dict:
     """Verify that the fine timeframe aggregates exactly into the coarse timeframe."""
     fine_step = timeframe_seconds(fine_tf) * 1000
     coarse_step = timeframe_seconds(coarse_tf) * 1000
@@ -311,6 +335,8 @@ def reconcile(pair: str, fine: Path, fine_tf: str, coarse: Path, coarse_tf: str)
     incomplete = 0
     compared = 0
     mismatches = {"open": 0, "high": 0, "low": 0, "close": 0, "volume": 0}
+    worst: dict[str, float] = {"open": 0.0, "high": 0.0, "low": 0.0, "close": 0.0, "volume": 0.0}
+    worst_examples: dict[str, str] = {}
     for bucket_start, rows in buckets.items():
         if len(rows) != per_bucket:
             incomplete += 1
@@ -330,7 +356,13 @@ def reconcile(pair: str, fine: Path, fine_tf: str, coarse: Path, coarse_tf: str)
         for name, want, got in zip(
             ("open", "high", "low", "close", "volume"), expected, (o, h, low, c, v)
         ):
-            if not math.isclose(want, got, rel_tol=1e-9, abs_tol=1e-8):
+            deviation = abs(want - got) / abs(want) if want else abs(want - got)
+            if deviation > worst[name]:
+                worst[name] = deviation
+                worst_examples[name] = (
+                    f"{iso(bucket_start)}: aggregated {want!r} vs stored {got!r}"
+                )
+            if not math.isclose(want, got, rel_tol=reconcile_rel_tol, abs_tol=1e-8):
                 mismatches[name] += 1
 
     return {
@@ -340,6 +372,12 @@ def reconcile(pair: str, fine: Path, fine_tf: str, coarse: Path, coarse_tf: str)
         "common_complete_buckets": compared,
         "incomplete_fine_buckets_in_downloaded_range": incomplete,
         "mismatched_bars": mismatches,
+        "relative_tolerance": reconcile_rel_tol,
+        "worst_relative_deviation": worst,
+        "worst_deviation_examples": worst_examples,
+        "price_reconciliation_exact": all(
+            mismatches[field] == 0 for field in ("open", "high", "low", "close")
+        ),
         "pass": compared > 0 and all(v == 0 for v in mismatches.values()),
     }
 
@@ -370,6 +408,8 @@ def build_report(
     timeframes: list[str],
     expect_start: str | None = None,
     expect_end: str | None = None,
+    max_missing_ratio: float = 0.0,
+    reconcile_rel_tol: float = 1e-9,
 ) -> dict:
     files: list[dict] = []
     resolved: dict[tuple[str, str], Path] = {}
@@ -379,7 +419,9 @@ def build_report(
             if path is None:
                 continue
             resolved[(pair, timeframe)] = path
-            files.append(audit_file(pair, timeframe, path, expect_start, expect_end))
+            files.append(
+                audit_file(pair, timeframe, path, expect_start, expect_end, max_missing_ratio)
+            )
 
     aggregation: list[dict] = []
     if len(timeframes) >= 2:
@@ -389,7 +431,9 @@ def build_report(
             fine = resolved.get((pair, fine_tf))
             coarse = resolved.get((pair, coarse_tf))
             if fine and coarse:
-                aggregation.append(reconcile(pair, fine, fine_tf, coarse, coarse_tf))
+                aggregation.append(
+                    reconcile(pair, fine, fine_tf, coarse, coarse_tf, reconcile_rel_tol)
+                )
 
     alignment = range_alignment(files)
     overall = bool(
@@ -404,6 +448,9 @@ def build_report(
         "timeframes": timeframes,
         "expected_start": expect_start,
         "expected_end_exclusive": expect_end,
+        "max_missing_ratio_allowed": max_missing_ratio,
+        "reconcile_relative_tolerance": reconcile_rel_tol,
+        "structural_pass": all(f.get("structural_pass") for f in files) if files else False,
         "files": files,
         "aggregation_checks": aggregation,
         "range_alignment": alignment,
@@ -472,6 +519,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="Assert the first candle sits exactly here.")
     parser.add_argument("--expect-end", default=None, metavar="ISO8601",
                         help="Exclusive upper bound; the last candle must be the one just below it.")
+    parser.add_argument("--max-missing-ratio", type=float, default=0.0, metavar="RATIO",
+                        help="Fraction of candles allowed to be absent because the exchange was "
+                             "halted. Structural defects are never tolerated by this. Default 0.")
+    parser.add_argument("--reconcile-rel-tol", type=float, default=1e-9, metavar="TOL",
+                        help="Relative tolerance for 5m -> 1h reconciliation. Default 1e-9.")
     args = parser.parse_args(argv)
 
     pairs = args.pair or ["BTC/USDT", "ETH/USDT"]
@@ -482,7 +534,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DATA_AUDIT_FAIL: data directory not found: {data_dir}", file=sys.stderr)
         return 3
 
-    report = build_report(data_dir, pairs, timeframes, args.expect_start, args.expect_end)
+    report = build_report(
+        data_dir, pairs, timeframes, args.expect_start, args.expect_end,
+        args.max_missing_ratio, args.reconcile_rel_tol,
+    )
     if not report["files"]:
         print(f"DATA_AUDIT_FAIL: no dataset files found in {data_dir}", file=sys.stderr)
         return 3

@@ -129,6 +129,58 @@ def test_a_partial_live_candle_is_rejected(tmp_path):
     assert report["pass"] is False
 
 
+def test_a_gap_is_a_continuity_finding_not_a_structural_one(tmp_path):
+    """An exchange halt is a fact about the market, not a corrupt file."""
+    rows = [candle(START + i * HOUR_MS) for i in range(48) if i != 20]
+    path = tmp_path / "BTC_USDT-1h.json"
+    write_json(path, rows)
+
+    strict = audit_data.audit_file("BTC/USDT", "1h", path)
+    assert strict["structural_pass"] is True, "a gap must not look like corruption"
+    assert strict["continuity_pass"] is False
+    assert strict["pass"] is False, "the default tolerance is zero"
+
+    tolerant = audit_data.audit_file("BTC/USDT", "1h", path, max_missing_ratio=0.05)
+    assert tolerant["pass"] is True
+    assert tolerant["continuity_pass"] is False, "the gap is still reported, not erased"
+    assert tolerant["missing_ratio"] == pytest.approx(1 / 48, rel=1e-3)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda rows: rows.insert(5, rows[5]),                       # duplicate
+        lambda rows: rows[7].__setitem__(2, rows[7][3] - 5.0),      # high below low
+        lambda rows: rows[9].__setitem__(5, -3.0),                  # negative volume
+        lambda rows: rows[30].__setitem__(0, rows[30][0] + 90_000),  # off grid
+    ],
+)
+def test_tolerance_never_excuses_a_structural_defect(tmp_path, mutate):
+    rows = [candle(START + i * HOUR_MS) for i in range(48)]
+    mutate(rows)
+    path = tmp_path / "BTC_USDT-1h.json"
+    write_json(path, rows)
+    report = audit_data.audit_file("BTC/USDT", "1h", path, max_missing_ratio=1.0)
+    assert report["structural_pass"] is False
+    assert report["pass"] is False, "a generous gap tolerance must not hide corruption"
+
+
+def test_reconciliation_reports_the_worst_deviation(tmp_path):
+    fine, coarse = build_consistent_pair(tmp_path, "BTC/USDT")
+    rows = json.loads(coarse.read_text())
+    rows[5][5] *= 1.000001  # a volume that is off by one part in a million
+    write_json(coarse, rows)
+
+    strict = audit_data.reconcile("BTC/USDT", fine, "5m", coarse, "1h")
+    assert strict["mismatched_bars"]["volume"] == 1
+    assert strict["price_reconciliation_exact"] is True
+    assert strict["worst_relative_deviation"]["volume"] == pytest.approx(1e-6, rel=1e-2)
+    assert "aggregated" in strict["worst_deviation_examples"]["volume"]
+
+    loose = audit_data.reconcile("BTC/USDT", fine, "5m", coarse, "1h", reconcile_rel_tol=1e-5)
+    assert loose["pass"] is True
+
+
 def test_gap_is_detected(tmp_path):
     rows = [candle(START + i * HOUR_MS) for i in range(48) if i != 20]
     path = tmp_path / "BTC_USDT-1h.json"
