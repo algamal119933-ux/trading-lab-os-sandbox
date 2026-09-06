@@ -39,11 +39,27 @@ import pandas as pd
 DEFAULT_DATA_DIR = Path("/freqtrade/user_data/data/binance")
 DEFAULT_OUT = Path("/freqtrade/user_data/baseline_v1_passive_benchmarks.json")
 
-PERIODS = {
+# Dataset V1 windows, kept so V1 results stay reproducible without a lock file.
+PERIODS_V1 = {
     "development": ("2025-09-01T00:00:00Z", "2026-04-30T23:59:59Z"),
     "validation": ("2026-05-01T00:00:00Z", "2026-06-30T23:59:59Z"),
     "oos": ("2026-07-01T00:00:00Z", "2026-09-06T17:00:00Z"),
 }
+
+
+def periods_from_lock(lock_path: Path) -> dict[str, tuple[str, str]]:
+    """Read protocol windows from a dataset lock so the benchmark and the
+    backtest can never disagree about which dates a window covers."""
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    windows = lock.get("protocol_windows") or {}
+    out: dict[str, tuple[str, str]] = {}
+    for name, spec in windows.items():
+        if name == "warmup":
+            continue  # never scored
+        out[name] = (spec["start_utc"], spec["end_utc"])
+    if not out:
+        raise SystemExit(f"{lock_path} declares no scorable protocol windows")
+    return out
 
 
 def find_1h(pair: str, base: Path) -> Path:
@@ -90,31 +106,59 @@ def period_return(df: pd.DataFrame, start: str, end: str, fee: float) -> dict:
     }
 
 
-def compute_period(name: str, btc: pd.DataFrame, eth: pd.DataFrame, fee: float) -> dict:
-    start, end = PERIODS[name]
+def compute_period(
+    name: str,
+    btc: pd.DataFrame,
+    eth: pd.DataFrame,
+    fee: float,
+    periods: dict[str, tuple[str, str]],
+    wallet: float = 100.0,
+    stake: float = 10.0,
+    max_open_trades: int = 2,
+) -> dict:
+    start, end = periods[name]
     btc_r = period_return(btc, start, end, fee)
     eth_r = period_return(eth, start, end, fee)
 
+    half = wallet / 2.0
     full_final = (
-        50.0 * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
-        + 50.0 * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
+        half * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
+        + half * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
     )
+
+    # Structural max-exposure-matched passive: the most capital the sizing rules
+    # can ever have in the market (max_open_trades x stake), split evenly across
+    # the pairs, with the remainder in cash. This is an upper bound on the
+    # strategy's exposure, not its realised exposure -- the realised-exposure
+    # comparison needs the backtest and is computed after it.
+    invested = min(float(stake) * int(max_open_trades), wallet)
+    per_pair = invested / 2.0
+    cash = wallet - invested
     exposure_final = (
-        80.0
-        + 10.0 * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
-        + 10.0 * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
+        cash
+        + per_pair * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
+        + per_pair * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
     )
 
     return {
         "period": name,
+        "window_start": start,
+        "window_end": end,
         "BTC": btc_r,
         "ETH": eth_r,
-        "full_50_50_wallet_start": 100.0,
+        "full_50_50_wallet_start": wallet,
         "full_50_50_wallet_end": full_final,
-        "full_50_50_return": full_final / 100.0 - 1.0,
-        "exposure_matched_wallet_start": 100.0,
+        "full_50_50_return": full_final / wallet - 1.0,
+        "max_exposure_matched_methodology": (
+            f"{invested:.2f} of a {wallet:.2f} wallet invested for the whole window "
+            f"({per_pair:.2f} BTC + {per_pair:.2f} ETH), {cash:.2f} held in cash; "
+            f"invested fraction {invested / wallet:.4f} = max_open_trades({max_open_trades}) "
+            f"x stake({stake}) capped at the wallet"
+        ),
+        "max_exposure_invested_fraction": invested / wallet,
+        "exposure_matched_wallet_start": wallet,
         "exposure_matched_wallet_end": exposure_final,
-        "exposure_matched_return": exposure_final / 100.0 - 1.0,
+        "exposure_matched_return": exposure_final / wallet - 1.0,
     }
 
 
@@ -122,9 +166,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--period",
-        choices=["development", "validation", "oos"],
         default="development",
+        help="Protocol window to score. Names come from --lock when given.",
     )
+    parser.add_argument(
+        "--lock",
+        default=None,
+        help="Dataset lock defining the protocol windows. Defaults to the Dataset V1 windows.",
+    )
+    parser.add_argument("--wallet", type=float, default=100.0)
+    parser.add_argument("--stake", type=float, default=10.0)
+    parser.add_argument("--max-open-trades", type=int, default=2)
     parser.add_argument(
         "--unlock-oos",
         action="store_true",
@@ -148,6 +200,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    periods = periods_from_lock(Path(args.lock)) if args.lock else dict(PERIODS_V1)
+    if args.period not in periods:
+        raise SystemExit(
+            f"unknown period {args.period!r}; available: {', '.join(sorted(periods))}"
+        )
+
     if args.period == "oos" and not args.unlock_oos:
         print("OOS_LOCKED: refusing to expose locked OOS benchmark.")
         print("Use --period oos --unlock-oos only at the final OOS gate.")
@@ -157,12 +215,22 @@ def main() -> int:
     out = Path(args.out)
     btc = load("BTC/USDT", base)
     eth = load("ETH/USDT", base)
-    result = compute_period(args.period, btc, eth, args.fee)
+    result = compute_period(
+        args.period,
+        btc,
+        eth,
+        args.fee,
+        periods,
+        wallet=args.wallet,
+        stake=args.stake,
+        max_open_trades=args.max_open_trades,
+    )
 
     # Preserve only the explicitly requested period in this run's report.
     report = {
         "fee_per_side": args.fee,
         "requested_period": args.period,
+        "windows_source": args.lock or "built-in Dataset V1 windows",
         "result": result,
     }
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -181,7 +249,10 @@ def main() -> int:
         f"{result['ETH']['net_return_after_entry_and_exit_fee']:.2%}"
     )
     print(f"Full 50/50:       {result['full_50_50_return']:.2%}")
-    print(f"Exposure-matched: {result['exposure_matched_return']:.2%}")
+    print(
+        f"Max-exposure-matched ({result['max_exposure_invested_fraction']:.0%} invested): "
+        f"{result['exposure_matched_return']:.2%}"
+    )
     print("Report:", out)
     return 0
 

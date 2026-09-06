@@ -50,15 +50,36 @@ def test_clean_dataset_passes(clean_1h):
     assert report["rows"] == 48
     assert report["missing_intervals"] == 0
     assert report["duplicate_timestamps"] == 0
-    assert len(report["sha256"]) == 64
+    assert len(report["raw_file_sha256"]) == 64
+    assert len(report["canonical_candle_content_sha256"]) == 64
 
 
-def test_fingerprint_changes_when_a_single_candle_changes(tmp_path, clean_1h):
-    first = audit_data.audit_file("BTC/USDT", "1h", clean_1h)["sha256"]
+def test_both_fingerprints_change_when_a_single_candle_changes(tmp_path, clean_1h):
+    before = audit_data.audit_file("BTC/USDT", "1h", clean_1h)
     rows = json.loads(clean_1h.read_text())
     rows[10][4] += 0.01
     write_json(clean_1h, rows)
-    assert audit_data.audit_file("BTC/USDT", "1h", clean_1h)["sha256"] != first
+    after = audit_data.audit_file("BTC/USDT", "1h", clean_1h)
+    assert after["raw_file_sha256"] != before["raw_file_sha256"]
+    assert after["canonical_candle_content_sha256"] != before["canonical_candle_content_sha256"]
+
+
+def test_canonical_digest_survives_a_serialization_change(tmp_path, clean_1h):
+    """A re-serialized file is a different file but the same market data."""
+    before = audit_data.audit_file("BTC/USDT", "1h", clean_1h)
+    rows = json.loads(clean_1h.read_text())
+    # Same numbers, different bytes on disk: whitespace and row order.
+    reserialized = tmp_path / "BTC_USDT-1h-reserialized.json"
+    reserialized.write_text(json.dumps(list(reversed(rows)), indent=4), encoding="utf-8")
+    after = audit_data.audit_file("BTC/USDT", "1h", reserialized)
+    assert after["raw_file_sha256"] != before["raw_file_sha256"]
+    assert after["canonical_candle_content_sha256"] == before["canonical_candle_content_sha256"]
+
+
+def test_canonical_digest_is_order_independent_and_versioned():
+    rows = [(START + i * HOUR_MS, 1.0 + i, 2.0 + i, 0.5 + i, 1.5 + i, 10.0 + i) for i in range(5)]
+    assert audit_data.canonical_digest(rows) == audit_data.canonical_digest(list(reversed(rows)))
+    assert audit_data.CANONICAL_DIGEST_VERSION == "CANONICAL_CANDLE_V1"
 
 
 def test_gap_is_detected(tmp_path):
@@ -188,20 +209,74 @@ def test_misaligned_pairs_fail_range_alignment(tmp_path):
     assert report["range_alignment"]["1h"]["pass"] is False
 
 
-def test_dataset_lock_detects_fingerprint_drift(tmp_path):
+def hashes(report, field):
+    return {f"{f['pair']} {f['timeframe']}": f[field] for f in report["files"]}
+
+
+def test_dataset_lock_accepts_an_unchanged_dataset(tmp_path):
     build_consistent_pair(tmp_path, "BTC/USDT")
     report = audit_data.build_report(tmp_path, ["BTC/USDT"], ["5m", "1h"])
-    real = {f"{f['pair']} {f['timeframe']}": f["sha256"] for f in report["files"]}
-
     lock = tmp_path / "lock.json"
-    lock.write_text(json.dumps({"dataset_hashes": real}), encoding="utf-8")
-    assert audit_data.check_lock(report, lock) == []
+    lock.write_text(
+        json.dumps(
+            {
+                "raw_file_hashes": hashes(report, "raw_file_sha256"),
+                "canonical_hashes": hashes(report, "canonical_candle_content_sha256"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    problems, notes = audit_data.check_lock(report, lock)
+    assert problems == [] and notes == []
 
-    drifted = dict(real)
-    drifted["BTC/USDT 1h"] = "0" * 64
-    lock.write_text(json.dumps({"dataset_hashes": drifted}), encoding="utf-8")
-    problems = audit_data.check_lock(report, lock)
-    assert any("drift" in p for p in problems)
+
+def test_dataset_lock_reports_content_drift_as_a_failure(tmp_path):
+    build_consistent_pair(tmp_path, "BTC/USDT")
+    report = audit_data.build_report(tmp_path, ["BTC/USDT"], ["5m", "1h"])
+    canonical = hashes(report, "canonical_candle_content_sha256")
+    canonical["BTC/USDT 1h"] = "0" * 64
+    lock = tmp_path / "lock.json"
+    lock.write_text(
+        json.dumps(
+            {"raw_file_hashes": hashes(report, "raw_file_sha256"), "canonical_hashes": canonical}
+        ),
+        encoding="utf-8",
+    )
+    problems, _notes = audit_data.check_lock(report, lock)
+    assert any("CONTENT DRIFT" in p for p in problems)
+
+
+def test_serialization_difference_is_a_note_not_a_failure(tmp_path):
+    """Re-downloading with a different PyArrow build must not read as drift."""
+    build_consistent_pair(tmp_path, "BTC/USDT")
+    report = audit_data.build_report(tmp_path, ["BTC/USDT"], ["5m", "1h"])
+    raw = hashes(report, "raw_file_sha256")
+    raw["BTC/USDT 1h"] = "0" * 64  # file bytes moved
+    lock = tmp_path / "lock.json"
+    lock.write_text(
+        json.dumps(
+            {
+                "raw_file_hashes": raw,
+                "canonical_hashes": hashes(report, "canonical_candle_content_sha256"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    problems, notes = audit_data.check_lock(report, lock)
+    assert problems == []
+    assert any("serialization only" in n for n in notes)
+
+
+def test_raw_drift_without_a_canonical_digest_stays_a_failure(tmp_path):
+    """Dataset V1's lock predates canonical digests; it must not get looser."""
+    build_consistent_pair(tmp_path, "BTC/USDT")
+    report = audit_data.build_report(tmp_path, ["BTC/USDT"], ["5m", "1h"])
+    raw = hashes(report, "raw_file_sha256")
+    raw["BTC/USDT 1h"] = "0" * 64
+    lock = tmp_path / "lock.json"
+    lock.write_text(json.dumps({"dataset_hashes": raw}), encoding="utf-8")
+    problems, _notes = audit_data.check_lock(report, lock)
+    assert any("no canonical digest" in p for p in problems)
 
 
 def test_dataset_lock_detects_a_missing_file(tmp_path):
@@ -211,7 +286,7 @@ def test_dataset_lock_detects_a_missing_file(tmp_path):
     lock.write_text(
         json.dumps({"dataset_hashes": {"ETH/USDT 1h": "0" * 64}}), encoding="utf-8"
     )
-    problems = audit_data.check_lock(report, lock)
+    problems, _notes = audit_data.check_lock(report, lock)
     assert any("not found on disk" in p for p in problems)
 
 
@@ -237,5 +312,6 @@ def test_committed_dataset_lock_matches_the_recorded_audit(repo_root):
     lock = json.loads((repo_root / "research/datasets/dataset_v1.lock.json").read_text())
     audit = json.loads((repo_root / "freqtrade/user_data/baseline_v1_data_audit.json").read_text())
     from_audit = {f"{f['pair']} {f['timeframe']}": f["sha256"] for f in audit["files"]}
+    # Dataset V1 is immutable historical evidence: raw-file hashes only.
     assert lock["dataset_hashes"] == from_audit
     assert audit["overall_pass"] is True

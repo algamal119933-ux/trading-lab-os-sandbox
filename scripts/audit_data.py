@@ -39,6 +39,9 @@ import sys
 from pathlib import Path
 
 TIMEFRAME_SECONDS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+# Version tag baked into the canonical digest so the digest describes its own
+# normalisation rules. Changing the rules must change this string.
+CANONICAL_DIGEST_VERSION = "CANONICAL_CANDLE_V1"
 MAX_MISSING_EXAMPLES = 5
 SUPPORTED_SUFFIXES = (".feather", ".parquet", ".json", ".json.gz")
 
@@ -55,6 +58,27 @@ def sha256_file(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def canonical_digest(candles: list[tuple[int, float, float, float, float, float]]) -> str:
+    """Serialization-independent digest of candle *content*.
+
+    A Feather/PyArrow version bump, a different compression codec or changed file
+    metadata all move the raw file hash while the market data is byte-for-byte the
+    same numbers. This digest is computed from sorted, normalised candle content
+    only, so a change here means the data really changed.
+
+    Normalisation: candles sorted by timestamp; each row rendered as
+    ``ts|open|high|low|close|volume`` with integer milliseconds and Python's
+    shortest round-tripping float repr; rows joined by newlines under a version
+    tag.
+    """
+    digest = hashlib.sha256()
+    digest.update(f"{CANONICAL_DIGEST_VERSION}\n".encode("utf-8"))
+    for ts, o, h, low, c, v in sorted(candles, key=lambda row: row[0]):
+        row = f"{int(ts)}|{float(o)!r}|{float(h)!r}|{float(low)!r}|{float(c)!r}|{float(v)!r}\n"
+        digest.update(row.encode("utf-8"))
     return digest.hexdigest()
 
 
@@ -118,7 +142,8 @@ def audit_file(pair: str, timeframe: str, path: Path) -> dict:
         "pair": pair,
         "timeframe": timeframe,
         "file": path.name,
-        "sha256": sha256_file(path),
+        "raw_file_sha256": sha256_file(path),
+        "canonical_candle_content_sha256": canonical_digest(candles),
         "rows": len(candles),
     }
     if not candles:
@@ -306,24 +331,54 @@ def build_report(data_dir: Path, pairs: list[str], timeframes: list[str]) -> dic
     }
 
 
-def check_lock(report: dict, lock_path: Path) -> list[str]:
-    """Compare fingerprints against a frozen dataset lock. Any drift is a failure."""
+def check_lock(report: dict, lock_path: Path) -> tuple[list[str], list[str]]:
+    """Compare a dataset against its frozen lock.
+
+    Returns (problems, notes). Content drift is a problem. A raw-file hash that
+    moved while the canonical content digest still matches is a *note*: that is a
+    serialization difference (PyArrow version, compression, file metadata), not
+    market-data drift, and treating it as drift would block every re-download.
+    Locks that predate canonical digests carry raw hashes only, so for those a
+    raw mismatch stays a hard failure.
+    """
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
-    expected: dict[str, str] = lock.get("dataset_hashes", {})
+    expected_raw: dict[str, str] = lock.get("raw_file_hashes") or lock.get("dataset_hashes") or {}
+    expected_canonical: dict[str, str] = lock.get("canonical_hashes") or {}
+
     problems: list[str] = []
+    notes: list[str] = []
     seen: set[str] = set()
+
     for entry in report["files"]:
         key = f"{entry['pair']} {entry['timeframe']}"
         seen.add(key)
-        if key not in expected:
+        raw = entry["raw_file_sha256"]
+        canonical = entry["canonical_candle_content_sha256"]
+
+        if key not in expected_raw and key not in expected_canonical:
             problems.append(f"{key}: present on disk but absent from the lock")
-        elif expected[key] != entry["sha256"]:
+            continue
+
+        canonical_known = key in expected_canonical
+        if canonical_known and expected_canonical[key] != canonical:
             problems.append(
-                f"{key}: fingerprint drift — lock {expected[key]} != on-disk {entry['sha256']}"
+                f"{key}: CONTENT DRIFT — lock canonical {expected_canonical[key]} "
+                f"!= on-disk {canonical}"
             )
-    for key in sorted(set(expected) - seen):
+            continue
+
+        if key in expected_raw and expected_raw[key] != raw:
+            message = (
+                f"{key}: raw file hash differs — lock {expected_raw[key]} != on-disk {raw}"
+            )
+            if canonical_known:
+                notes.append(message + " (canonical content identical: serialization only)")
+            else:
+                problems.append(message + " (lock has no canonical digest to distinguish)")
+
+    for key in sorted((set(expected_raw) | set(expected_canonical)) - seen):
         problems.append(f"{key}: named in the lock but not found on disk")
-    return problems
+    return problems, notes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -349,11 +404,13 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     lock_problems: list[str] = []
+    lock_notes: list[str] = []
     if args.lock:
-        lock_problems = check_lock(report, Path(args.lock))
+        lock_problems, lock_notes = check_lock(report, Path(args.lock))
         report["dataset_lock"] = {
             "file": args.lock,
             "problems": lock_problems,
+            "notes": lock_notes,
             "pass": not lock_problems,
         }
         report["overall_pass"] = report["overall_pass"] and not lock_problems
@@ -363,10 +420,14 @@ def main(argv: list[str] | None = None) -> int:
 
     for entry in report["files"]:
         print(f"{entry['pair']:>10} {entry['timeframe']:>4}  rows={entry['rows']:<8} "
-              f"{'PASS' if entry.get('pass') else 'FAIL'}  {entry['sha256']}")
+              f"{'PASS' if entry.get('pass') else 'FAIL'}")
+        print(f"{'':>10} raw       {entry['raw_file_sha256']}")
+        print(f"{'':>10} canonical {entry['canonical_candle_content_sha256']}")
     for entry in report["aggregation_checks"]:
         print(f"{entry['pair']:>10} {entry['fine_timeframe']}->{entry['coarse_timeframe']} "
               f"reconciliation: {'PASS' if entry['pass'] else 'FAIL'}")
+    for note in lock_notes:
+        print(f"DATA_LOCK_NOTE: {note}")
     for problem in lock_problems:
         print(f"DATA_LOCK_FAIL: {problem}", file=sys.stderr)
 
