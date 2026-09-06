@@ -63,6 +63,14 @@ STRATEGY_OWNED_KEYS = (
     "order_time_in_force",
 )
 
+# api_server credentials live in .env and are injected as FREQTRADE__API_SERVER__*.
+# A config file must therefore carry a recognisable placeholder, never a real value.
+API_CREDENTIAL_KEYS = ("username", "password", "jwt_secret_key", "ws_token")
+API_PLACEHOLDER_PREFIX = "OVERWRITTEN_BY_ENV"
+# Freqtrade's own config schema requires at least this many characters, so a
+# placeholder shorter than it makes the committed config fail to load standalone.
+JWT_SECRET_MIN_LENGTH = 32
+
 # Credential-bearing fields that must be empty inside a committed config.
 EXCHANGE_CREDENTIAL_KEYS = ("key", "secret", "password", "uid", "apiKey", "privateKey", "walletAddress")
 
@@ -203,6 +211,21 @@ def check_config(path: Path, violations: Violations) -> None:
             violations.add(
                 src,
                 "inside Docker api_server.listen_ip_address must be 0.0.0.0; the host port stays localhost-bound",
+            )
+        for key in API_CREDENTIAL_KEYS:
+            value = api.get(key)
+            if not isinstance(value, str) or not value.startswith(API_PLACEHOLDER_PREFIX):
+                violations.add(
+                    src,
+                    f"api_server.{key} must be the {API_PLACEHOLDER_PREFIX}* placeholder; "
+                    "real credentials belong in .env and reach Freqtrade as FREQTRADE__API_SERVER__*",
+                )
+        jwt = api.get("jwt_secret_key")
+        if isinstance(jwt, str) and len(jwt) < JWT_SECRET_MIN_LENGTH:
+            violations.add(
+                src,
+                f"api_server.jwt_secret_key must be at least {JWT_SECRET_MIN_LENGTH} characters or "
+                "Freqtrade rejects the config before any override is applied",
             )
 
     telegram = cfg.get("telegram")

@@ -76,6 +76,11 @@ def test_backtest_does_not_pin_a_timeframe_the_strategy_owns(repo_root):
     assert "--timeframe " not in text, "timeframe must come from the strategy, not the script"
 
 
+def test_start_paper_refuses_shipped_placeholder_credentials(repo_root):
+    text = (repo_root / "scripts/start_paper.sh").read_text(encoding="utf-8")
+    assert "CHANGE_ME" in text, "start_paper.sh must refuse to start on placeholder credentials"
+
+
 def test_powershell_bootstrapper_keeps_the_guard(repo_root):
     text = (repo_root / "START_WINDOWS.ps1").read_text(encoding="utf-8")
     assert "paper_guard.py" in text

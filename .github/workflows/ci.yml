@@ -167,11 +167,33 @@ jobs:
           set -euo pipefail
           IMAGE="freqtradeorg/freqtrade:2026.7"
           docker pull "$IMAGE"
+
+          # Freqtrade exits 0 even when configuration validation fails, so the
+          # exit code alone would let a broken config pass as green. Every
+          # invocation is therefore checked for a validation error in its output.
+          run_ft() {
+            local label="$1"; shift
+            echo "::group::freqtrade $label"
+            if ! docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+                 "$IMAGE" "$@" 2>&1 | tee "/tmp/ft-$label.log"; then
+              echo "::error::freqtrade $label exited non-zero"
+              exit 1
+            fi
+            echo "::endgroup::"
+            if grep -qE 'CRITICAL - Invalid configuration|Configuration error|OperationalException' \
+                 "/tmp/ft-$label.log"; then
+              echo "::error::freqtrade $label reported a configuration error"
+              exit 1
+            fi
+          }
+
           # No trading command is issued: this only proves the config parses and
           # the strategy class imports against the pinned engine version.
-          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" \
-            list-strategies --config /freqtrade/user_data/config.json \
+          run_ft list-strategies list-strategies \
+            --config /freqtrade/user_data/config.json \
             --strategy-path /freqtrade/user_data/strategies
-          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" \
-            show-config --config /freqtrade/user_data/config.json
+          grep -q PlumbingSmokeStrategy /tmp/ft-list-strategies.log
+
+          run_ft show-config show-config --config /freqtrade/user_data/config.json
+
           docker run --rm "$IMAGE" --version

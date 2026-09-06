@@ -58,7 +58,7 @@
     "CORS_origins": [],
     "username": "OVERWRITTEN_BY_ENV",
     "password": "OVERWRITTEN_BY_ENV",
-    "jwt_secret_key": "OVERWRITTEN_BY_ENV",
+    "jwt_secret_key": "OVERWRITTEN_BY_ENV_NOT_A_SECRET_USE_DOTENV",
     "ws_token": "OVERWRITTEN_BY_ENV"
   },
   "bot_name": "trading-lab-paper",

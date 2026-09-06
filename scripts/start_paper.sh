@@ -7,6 +7,12 @@ if [[ ! -f .env ]]; then
   exit 2
 fi
 
+if grep -q "CHANGE_ME" .env; then
+  echo "Refusing to start: .env still contains CHANGE_ME placeholders." >&2
+  echo "Set a real local password for every CHANGE_ME_* value first." >&2
+  exit 2
+fi
+
 require_paper_config
 docker compose up -d
 

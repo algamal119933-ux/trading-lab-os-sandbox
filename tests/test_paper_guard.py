@@ -118,6 +118,28 @@ def test_disabled_api_server_is_rejected(example_config, write_config):
     assert run(write_config(config)) == 2
 
 
+@pytest.mark.parametrize("field", ["username", "password", "jwt_secret_key", "ws_token"])
+def test_real_api_credentials_in_a_config_file_are_rejected(example_config, write_config, field):
+    """Credentials belong in .env; a config file must carry only the placeholder."""
+    config = copy.deepcopy(example_config)
+    config["api_server"][field] = "a-real-looking-credential-value-32-chars"
+    assert run(write_config(config)) == 2
+
+
+def test_short_jwt_placeholder_is_rejected(example_config, write_config):
+    """Freqtrade's own schema requires >= 32 chars, so a shorter placeholder
+    makes the committed config fail to load before any env override applies."""
+    config = copy.deepcopy(example_config)
+    config["api_server"]["jwt_secret_key"] = "OVERWRITTEN_BY_ENV"
+    assert run(write_config(config)) == 2
+
+
+def test_shipped_example_satisfies_freqtrades_jwt_length_rule(example_config):
+    jwt = example_config["api_server"]["jwt_secret_key"]
+    assert jwt.startswith(paper_guard.API_PLACEHOLDER_PREFIX)
+    assert len(jwt) >= paper_guard.JWT_SECRET_MIN_LENGTH
+
+
 def test_guard_reports_every_violation_not_only_the_first(example_config, write_config, capsys):
     config = copy.deepcopy(example_config)
     config["dry_run"] = False
