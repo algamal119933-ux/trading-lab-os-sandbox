@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/experiment_record-1.0.0.json",
+  "title": "Trading Lab OS experiment record",
+  "description": "Machine-readable, reproducible record of a single research run. Every field needed to re-run the experiment from a clean checkout must be present.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timestamp_utc",
+    "command",
+    "code_commit",
+    "config_hash",
+    "dataset_hashes",
+    "strategy",
+    "freqtrade_version",
+    "pairs",
+    "timeframe",
+    "timerange",
+    "fee_assumption",
+    "wallet",
+    "stake",
+    "max_open_trades",
+    "period_label",
+    "metrics",
+    "gate",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp of when the run was recorded.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|\\+00:00)$"
+    },
+    "experiment": {
+      "type": "string",
+      "description": "Experiment family, e.g. baseline-1.",
+      "minLength": 1
+    },
+    "run_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "command": {
+      "type": "string",
+      "description": "Exact command line that produced the result.",
+      "minLength": 1
+    },
+    "code_commit": {
+      "type": "string",
+      "description": "Full git SHA of the repository state, or 'dirty:<sha>' when the worktree was not clean.",
+      "pattern": "^(dirty:)?[0-9a-f]{40}$"
+    },
+    "code_dirty": {
+      "type": "boolean",
+      "description": "True when the worktree carried uncommitted changes. A dirty run is never gate evidence."
+    },
+    "config_hash": {
+      "type": "string",
+      "description": "sha256 of the canonical redacted effective config (scripts/effective_config.py --hash-only).",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "config_files": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "dataset_hashes": {
+      "type": "object",
+      "description": "Frozen dataset fingerprints, keyed as '<PAIR> <TIMEFRAME>' e.g. 'BTC/USDT 1h'.",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Z0-9]+/[A-Z0-9]+ [0-9]+[smhdw]$" },
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "dataset_audit_pass": {
+      "type": "boolean",
+      "description": "Whether the deep data audit passed for the datasets used."
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "freqtrade_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^[A-Z0-9]+/[A-Z0-9]+$" }
+    },
+    "timeframe": {
+      "type": "string",
+      "pattern": "^[0-9]+[smhdw]$"
+    },
+    "detail_timeframe": {
+      "type": ["string", "null"],
+      "description": "Timeframe used for --timeframe-detail intra-candle simulation, or null when not used.",
+      "pattern": "^[0-9]+[smhdw]$"
+    },
+    "timerange": {
+      "type": "string",
+      "description": "Freqtrade timerange string, e.g. 20250901-20260501.",
+      "pattern": "^[0-9]{8}-[0-9]{8}$"
+    },
+    "period_label": {
+      "type": "string",
+      "description": "Which protocol window this run belongs to. 'oos' requires an explicit unlock.",
+      "enum": ["development", "validation", "oos", "forward_paper"]
+    },
+    "fee_assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["per_side_ratio", "source"],
+      "properties": {
+        "per_side_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.01 },
+        "source": { "type": "string", "minLength": 1 },
+        "slippage_note": { "type": "string" }
+      }
+    },
+    "wallet": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "stake": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "max_open_trades": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Result metrics. Additional numeric metrics are allowed; the listed ones are the CLOUD-0 minimum vocabulary.",
+      "properties": {
+        "total_return_pct": { "type": "number" },
+        "max_drawdown_pct": { "type": "number" },
+        "sharpe": { "type": "number" },
+        "sortino": { "type": "number" },
+        "calmar": { "type": "number" },
+        "profit_factor": { "type": "number" },
+        "win_rate_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "trade_count": { "type": "integer", "minimum": 0 },
+        "max_consecutive_losses": { "type": "integer", "minimum": 0 },
+        "total_fees_stake": { "type": "number" },
+        "turnover_stake": { "type": "number" },
+        "time_exposure_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "capital_exposure_pct": { "type": "number", "minimum": 0 },
+        "return_per_exposure_unit": { "type": "number" },
+        "per_pair_return_pct": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "passive_exposure_matched_return_pct": { "type": "number" }
+      },
+      "additionalProperties": { "type": ["number", "integer", "string", "boolean", "null", "object"] }
+    },
+    "analyses": {
+      "type": "object",
+      "description": "Outcome of the supporting Freqtrade analyses, when run.",
+      "additionalProperties": false,
+      "properties": {
+        "lookahead": { "enum": ["pass", "fail", "not_run"] },
+        "recursive": { "enum": ["pass", "fail", "not_run"] },
+        "detail_timeframe_simulation": { "enum": ["pass", "fail", "not_run"] }
+      }
+    },
+    "gate": {
+      "type": "string",
+      "description": "Decision this record supports.",
+      "enum": ["PASS", "FAIL", "INCONCLUSIVE", "INFORMATIONAL"]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable justification for the gate decision. Required even on PASS.",
+      "minLength": 1
+    },
+    "notes": { "type": "string" }
+  }
+}
