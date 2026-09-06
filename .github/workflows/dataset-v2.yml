@@ -94,7 +94,11 @@ jobs:
           chmod -R a+rwX freqtrade/user_data artifacts
 
       - name: Pull the pinned Freqtrade image
-        if: inputs.stage != 'probe-only'
+        # Only the engine steps need it. Acquisition and the audit are pure
+        # Python, and pulling here once put Docker Hub's anonymous rate limit on
+        # the critical path of a 5-year download.
+        if: startsWith(inputs.stage, 'baseline-')
+        timeout-minutes: 10
         run: docker pull "$IMAGE"
 
       - name: Endpoint reachability report
@@ -158,6 +162,7 @@ jobs:
           key: dataset-v2-binance-spot-btc-eth-5m-1h-20201201-20260901
 
       - name: Acquire Binance spot klines from the public data archive
+        timeout-minutes: 90
         # api.binance.com answers 451 to this runner, so ccxt/download-data cannot
         # even load markets. Binance publishes the same spot klines as checksummed
         # ZIP archives on data.binance.vision, with no eligibility check. This is
@@ -215,8 +220,9 @@ jobs:
           PY
 
       - name: Can Freqtrade read the acquired data through the mirror?
-        if: inputs.stage != 'probe-only'
+        if: startsWith(inputs.stage, 'baseline-')
         continue-on-error: true
+        timeout-minutes: 10
         run: |
           set -uo pipefail
           docker run --rm \
