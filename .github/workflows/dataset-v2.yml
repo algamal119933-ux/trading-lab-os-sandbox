@@ -383,52 +383,54 @@ jobs:
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
       - name: Normalise backtest metrics
+        # Three silent failures here all came from the same class of bug: a
+        # heredoc whose terminator was not at column 0 once nested, which makes
+        # bash exit 2 before producing any output at all. There is no heredoc in
+        # this step any more, and everything it prints is captured to a file the
+        # collect step echoes at the very end of the job, because artifact
+        # storage is unreachable from the analysis environment.
         if: startsWith(inputs.stage, 'baseline-')
         run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for f in freqtrade/user_data/backtest_results/*.json; do
-            echo "=== $f ==="
-            python3 research/summarize_backtest.py --result "$f" --dump-schema || true
-          done
-          # Written in Python rather than a shell pipeline: under `set -o pipefail`
-          # a `... | head -1` closes the pipe early, the upstream process dies of
-          # SIGPIPE, and the step fails even though it found the file. That is
-          # exactly how this step failed twice while the backtest itself was fine.
-          RESULT="$(python3 - <<'PY'
-          import pathlib
-          results = pathlib.Path("freqtrade/user_data/backtest_results")
-          candidates = [p for p in results.glob("*.json")
-                        if not p.name.endswith(".meta.json")
-                        and p.name != ".last_result.json"]
-          print(max(candidates, key=lambda p: p.stat().st_mtime) if candidates else "")
-          PY
-          )"
-          if [ -z "$RESULT" ]; then
-            echo "::error::no backtest result JSON was produced"
+          set -uo pipefail
+          (
+            set -euo pipefail
+            echo "--- backtest_results directory ---"
             ls -la freqtrade/user_data/backtest_results/ || true
-            exit 1
-          fi
-          echo "using result file: $RESULT"
-          if [ "${{ inputs.stage }}" = "baseline-development" ]; then
+
+            shopt -s nullglob
+            for f in freqtrade/user_data/backtest_results/*.json; do
+              echo "=== schema of $f ==="
+              python3 research/summarize_backtest.py --result "$f" --dump-schema || true
+            done
+
+            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in d.glob("*.json") if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
+            if [ -z "$RESULT" ]; then
+              echo "::error::no backtest result JSON was produced"
+              exit 1
+            fi
+            echo "using result file: $RESULT"
+
+            if [ "${{ inputs.stage }}" = "baseline-development" ]; then
+              WINDOW_START="$DEV_START"; WINDOW_END="$DEV_END"
+              PASSIVE=artifacts/passive_development.json
+              OUT=artifacts/metrics_development.json; MD=artifacts/metrics_development.md
+            else
+              WINDOW_START="$VAL_START"; WINDOW_END="$VAL_END"
+              PASSIVE=artifacts/passive_validation.json
+              OUT=artifacts/metrics_validation.json; MD=artifacts/metrics_validation.md
+            fi
+
             python3 research/summarize_backtest.py \
               --result "$RESULT" \
-              --window-start "$DEV_START" --window-end "$DEV_END" \
+              --window-start "$WINDOW_START" --window-end "$WINDOW_END" \
               --wallet "$WALLET" --fee "$FEE" \
-              --passive artifacts/passive_development.json \
-              --out artifacts/metrics_development.json \
-              --md artifacts/metrics_development.md
-            cat artifacts/metrics_development.md
-          else
-            python3 research/summarize_backtest.py \
-              --result "$RESULT" \
-              --window-start "$VAL_START" --window-end "$VAL_END" \
-              --wallet "$WALLET" --fee "$FEE" \
-              --passive artifacts/passive_validation.json \
-              --out artifacts/metrics_validation.json \
-              --md artifacts/metrics_validation.md
-            cat artifacts/metrics_validation.md
-          fi
+              --passive "$PASSIVE" \
+              --out "$OUT" --md "$MD"
+            cat "$MD"
+          ) 2>&1 | tee artifacts/metrics_step.log
+          code=${PIPESTATUS[0]}
+          echo "metrics step exit code: $code" >> artifacts/metrics_step.log
+          exit "$code"
 
       - name: Collect raw engine output
         if: always()
@@ -472,6 +474,7 @@ jobs:
           echo "===== FROZEN HASHES ====="; cat artifacts/frozen_hashes.json 2>/dev/null || echo "(none)"
           echo "===== PASSIVE (development) ====="; cat artifacts/passive_development.json 2>/dev/null || echo "(none)"
           echo "===== PASSIVE (validation) ====="; cat artifacts/passive_validation.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS STEP LOG ====="; tail -40 artifacts/metrics_step.log 2>/dev/null || echo "(none)"
           echo "===== METRICS (development) ====="; cat artifacts/metrics_development.json 2>/dev/null || echo "(none)"
           echo "===== METRICS (validation) ====="; cat artifacts/metrics_validation.json 2>/dev/null || echo "(none)"
           echo "===== BACKTEST development (tail) ====="; tail -60 artifacts/backtest_development.log 2>/dev/null || echo "(none)"
