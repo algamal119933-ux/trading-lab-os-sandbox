@@ -32,6 +32,7 @@ import hashlib
 import io
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -89,8 +90,6 @@ def fetch(url: str) -> bytes | None:
         except Exception as exc:  # noqa: BLE001 - network flakiness is retried
             last_error = exc
         if attempt < RETRIES - 1:
-            import time
-
             time.sleep(2**attempt)
     raise SystemExit(f"failed to fetch {url}: {last_error}")
 
@@ -197,7 +196,10 @@ def download_series(
     missing_months: list[str] = []
 
     monthly = archive_urls(base_url, symbol, timeframe, start, end)
+    print(f"    {symbol} {timeframe}: fetching {len(monthly)} monthly archives", flush=True)
+    started = time.time()
     fetched = _fetch_many(monthly, verify)
+    print(f"    {symbol} {timeframe}: monthly done in {time.time() - started:.1f}s", flush=True)
     for month, url in monthly:
         payload, entry = fetched[url]
         if payload is None:
@@ -217,7 +219,13 @@ def download_series(
         window = day_range(max(first, start), min(last, end))
         daily.extend(daily_urls(base_url, symbol, timeframe, window))
 
+    if daily:
+        print(f"    {symbol} {timeframe}: {len(missing_months)} month(s) not published monthly "
+              f"({', '.join(missing_months)}); fetching {len(daily)} daily archives", flush=True)
+        started = time.time()
     fetched = _fetch_many(daily, verify)
+    if daily:
+        print(f"    {symbol} {timeframe}: daily done in {time.time() - started:.1f}s", flush=True)
     for day, url in daily:
         payload, entry = fetched[url]
         if payload is None:
@@ -279,9 +287,12 @@ def main(argv: list[str] | None = None) -> int:
     for symbol in args.symbol:
         for timeframe in args.timeframe:
             print(f"fetching {symbol} {timeframe} {args.start}..{args.end}", flush=True)
+            series_started = time.time()
             rows = download_series(
                 args.base_url, symbol, timeframe, start, end, manifest, verify=not args.no_verify
             )
+            print(f"  {symbol} {timeframe}: {len(rows)} candles in "
+                  f"{time.time() - series_started:.1f}s", flush=True)
             if not rows:
                 raise SystemExit(f"no data returned for {symbol} {timeframe}")
             pair = to_pair(symbol)
