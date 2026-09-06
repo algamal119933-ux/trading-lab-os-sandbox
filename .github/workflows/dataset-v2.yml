@@ -76,6 +76,26 @@ jobs:
       - name: Pull the pinned Freqtrade image
         run: docker pull "$IMAGE"
 
+      - name: Probe public Binance data endpoints
+        # api.binance.com answers 451 (geo-restriction) to GitHub-hosted runners.
+        # These are Binance's own public market-data endpoints, which serve the
+        # same spot klines without the trading-API eligibility check.
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts
+          probe() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "$2" || echo "000")
+            printf '%-24s %-4s %s\n' "$1" "$code" "$2"
+          }
+          {
+            probe trading-api   "https://api.binance.com/api/v3/exchangeInfo"
+            probe data-api      "https://data-api.binance.vision/api/v3/exchangeInfo"
+            probe data-api-kl   "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1"
+            probe archive-1h    "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip"
+            probe archive-5m    "https://data.binance.vision/data/spot/monthly/klines/ETHUSDT/5m/ETHUSDT-5m-2021-01.zip"
+            probe archive-chk   "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip.CHECKSUM"
+          } | tee artifacts/endpoint_probe.txt
+
       - name: Restore the Dataset V2 market-data cache
         id: data-cache
         uses: actions/cache@v4
