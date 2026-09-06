@@ -82,6 +82,53 @@ def test_canonical_digest_is_order_independent_and_versioned():
     assert audit_data.CANONICAL_DIGEST_VERSION == "CANONICAL_CANDLE_V1"
 
 
+def test_gap_clusters_group_contiguous_holes(tmp_path):
+    """Five scattered examples cannot distinguish one outage from ten thousand."""
+    keep = [i for i in range(48) if i not in (10, 11, 12, 30)]
+    rows = [candle(START + i * HOUR_MS) for i in keep]
+    path = tmp_path / "BTC_USDT-1h.json"
+    write_json(path, rows)
+    report = audit_data.audit_file("BTC/USDT", "1h", path)
+    assert report["missing_intervals"] == 4
+    assert report["gap_cluster_count"] == 2
+    assert report["largest_gap_candles"] == 3
+    assert report["gap_clusters"][0]["missing_candles"] == 3
+
+
+def test_coverage_assertions_flag_a_short_dataset(tmp_path):
+    rows = [candle(START + i * HOUR_MS) for i in range(48)]
+    path = tmp_path / "BTC_USDT-1h.json"
+    write_json(path, rows)
+    good = audit_data.audit_file(
+        "BTC/USDT", "1h", path,
+        expect_start="2025-09-01T00:00:00Z", expect_end="2025-09-03T00:00:00Z",
+    )
+    assert good["start_matches_expected"] is True
+    assert good["end_matches_expected"] is True
+    assert good["pass"] is True
+
+    short = audit_data.audit_file(
+        "BTC/USDT", "1h", path,
+        expect_start="2025-09-01T00:00:00Z", expect_end="2025-10-01T00:00:00Z",
+    )
+    assert short["end_matches_expected"] is False
+    assert short["pass"] is False
+
+
+def test_a_partial_live_candle_is_rejected(tmp_path):
+    """The final candle must be closed, or the last bar is a half-formed one."""
+    import time as _time
+
+    now_ms = int(_time.time() * 1000)
+    aligned = (now_ms // HOUR_MS) * HOUR_MS  # the currently forming hour
+    rows = [candle(aligned - i * HOUR_MS) for i in range(5, -1, -1)]
+    path = tmp_path / "BTC_USDT-1h.json"
+    write_json(path, rows)
+    report = audit_data.audit_file("BTC/USDT", "1h", path)
+    assert report["last_candle_is_complete"] is False
+    assert report["pass"] is False
+
+
 def test_gap_is_detected(tmp_path):
     rows = [candle(START + i * HOUR_MS) for i in range(48) if i != 20]
     path = tmp_path / "BTC_USDT-1h.json"

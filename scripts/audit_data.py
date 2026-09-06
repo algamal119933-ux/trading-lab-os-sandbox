@@ -36,6 +36,8 @@ import hashlib
 import json
 import math
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 TIMEFRAME_SECONDS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
@@ -43,6 +45,7 @@ TIMEFRAME_SECONDS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 # normalisation rules. Changing the rules must change this string.
 CANONICAL_DIGEST_VERSION = "CANONICAL_CANDLE_V1"
 MAX_MISSING_EXAMPLES = 5
+MAX_GAP_CLUSTERS = 25
 SUPPORTED_SUFFIXES = (".feather", ".parquet", ".json", ".json.gz")
 
 
@@ -83,9 +86,16 @@ def canonical_digest(candles: list[tuple[int, float, float, float, float, float]
 
 
 def iso(ts_ms: int) -> str:
-    from datetime import datetime, timezone
-
     return datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
+
+
+def to_ms(value: str) -> int:
+    """Parse an ISO-8601 UTC timestamp into epoch milliseconds."""
+    text = value.strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp() * 1000)
 
 
 def find_file(data_dir: Path, pair: str, timeframe: str) -> Path | None:
@@ -134,7 +144,51 @@ def load_candles(path: Path) -> list[tuple[int, float, float, float, float, floa
     ]
 
 
-def audit_file(pair: str, timeframe: str, path: Path) -> dict:
+def gap_clusters(timestamps: set[int], start: int, end: int, step_ms: int) -> list[dict]:
+    """Group missing candles into contiguous runs.
+
+    Five scattered example timestamps cannot tell you whether a dataset has one
+    exchange outage or ten thousand holes, and that is exactly the judgement a
+    date adjustment has to be based on.
+    """
+    clusters: list[dict] = []
+    cursor = start
+    run_start: int | None = None
+    previous: int | None = None
+    while cursor <= end:
+        if cursor not in timestamps:
+            if run_start is None:
+                run_start = cursor
+            previous = cursor
+        elif run_start is not None:
+            clusters.append(
+                {
+                    "start": iso(run_start),
+                    "end": iso(previous),
+                    "missing_candles": (previous - run_start) // step_ms + 1,
+                }
+            )
+            run_start = None
+        cursor += step_ms
+    if run_start is not None and previous is not None:
+        clusters.append(
+            {
+                "start": iso(run_start),
+                "end": iso(previous),
+                "missing_candles": (previous - run_start) // step_ms + 1,
+            }
+        )
+    clusters.sort(key=lambda c: c["missing_candles"], reverse=True)
+    return clusters
+
+
+def audit_file(
+    pair: str,
+    timeframe: str,
+    path: Path,
+    expect_start: str | None = None,
+    expect_end: str | None = None,
+) -> dict:
     step_ms = timeframe_seconds(timeframe) * 1000
     candles = load_candles(path)
 
@@ -172,6 +226,7 @@ def audit_file(pair: str, timeframe: str, path: Path) -> dict:
             if len(missing_examples) < MAX_MISSING_EXAMPLES:
                 missing_examples.append(iso(cursor))
         cursor += step_ms
+    clusters = gap_clusters(seen, start, end, step_ms) if missing else []
 
     nan_cells = 0
     bad_ohlc = 0
@@ -199,6 +254,9 @@ def audit_file(pair: str, timeframe: str, path: Path) -> dict:
             "duplicate_timestamps": duplicates,
             "missing_intervals": missing,
             "missing_examples": missing_examples,
+            "gap_clusters": clusters[:MAX_GAP_CLUSTERS],
+            "gap_cluster_count": len(clusters),
+            "largest_gap_candles": clusters[0]["missing_candles"] if clusters else 0,
             "unexpected_timestamps": off_grid,
             "nan_cells": nan_cells,
             "nonfinite_numeric_cells": nan_cells,
@@ -206,10 +264,24 @@ def audit_file(pair: str, timeframe: str, path: Path) -> dict:
             "prices_positive": prices_positive,
             "volume_nonnegative": volume_nonnegative,
             "monotonic_time": monotonic,
+            "last_candle_is_complete": end + step_ms <= int(time.time() * 1000),
         }
     )
+    if expect_start is not None:
+        report["expected_start"] = expect_start
+        report["start_matches_expected"] = iso(start) == iso(to_ms(expect_start))
+    if expect_end is not None:
+        # The last *completed* candle strictly inside the requested end bound.
+        bound = to_ms(expect_end)
+        report["expected_end_exclusive"] = expect_end
+        report["end_matches_expected"] = bound - step_ms <= end < bound
+    coverage_ok = bool(
+        report.get("start_matches_expected", True) and report.get("end_matches_expected", True)
+    )
     report["pass"] = bool(
-        duplicates == 0
+        coverage_ok
+        and report["last_candle_is_complete"]
+        and duplicates == 0
         and missing == 0
         and off_grid == 0
         and nan_cells == 0
@@ -292,7 +364,13 @@ def range_alignment(files: list[dict]) -> dict:
     return out
 
 
-def build_report(data_dir: Path, pairs: list[str], timeframes: list[str]) -> dict:
+def build_report(
+    data_dir: Path,
+    pairs: list[str],
+    timeframes: list[str],
+    expect_start: str | None = None,
+    expect_end: str | None = None,
+) -> dict:
     files: list[dict] = []
     resolved: dict[tuple[str, str], Path] = {}
     for pair in pairs:
@@ -301,7 +379,7 @@ def build_report(data_dir: Path, pairs: list[str], timeframes: list[str]) -> dic
             if path is None:
                 continue
             resolved[(pair, timeframe)] = path
-            files.append(audit_file(pair, timeframe, path))
+            files.append(audit_file(pair, timeframe, path, expect_start, expect_end))
 
     aggregation: list[dict] = []
     if len(timeframes) >= 2:
@@ -324,6 +402,8 @@ def build_report(data_dir: Path, pairs: list[str], timeframes: list[str]) -> dic
         "base_directory": data_dir.as_posix(),
         "pairs": pairs,
         "timeframes": timeframes,
+        "expected_start": expect_start,
+        "expected_end_exclusive": expect_end,
         "files": files,
         "aggregation_checks": aggregation,
         "range_alignment": alignment,
@@ -388,6 +468,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeframe", action="append", default=[], metavar="TF")
     parser.add_argument("--out", default=None, help="Write the audit report JSON here.")
     parser.add_argument("--lock", default=None, help="Frozen dataset lock to assert against.")
+    parser.add_argument("--expect-start", default=None, metavar="ISO8601",
+                        help="Assert the first candle sits exactly here.")
+    parser.add_argument("--expect-end", default=None, metavar="ISO8601",
+                        help="Exclusive upper bound; the last candle must be the one just below it.")
     args = parser.parse_args(argv)
 
     pairs = args.pair or ["BTC/USDT", "ETH/USDT"]
@@ -398,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"DATA_AUDIT_FAIL: data directory not found: {data_dir}", file=sys.stderr)
         return 3
 
-    report = build_report(data_dir, pairs, timeframes)
+    report = build_report(data_dir, pairs, timeframes, args.expect_start, args.expect_end)
     if not report["files"]:
         print(f"DATA_AUDIT_FAIL: no dataset files found in {data_dir}", file=sys.stderr)
         return 3

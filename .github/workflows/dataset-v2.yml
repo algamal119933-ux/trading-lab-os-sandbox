@@ -37,6 +37,8 @@ env:
   DEV_END: "2024-12-31T23:59:59Z"
   VAL_START: "2025-01-01T00:00:00Z"
   VAL_END: "2026-08-31T23:59:59Z"
+  EXPECT_START: "2020-12-01T00:00:00Z"
+  EXPECT_END_EXCLUSIVE: "2026-09-01T00:00:00Z"
   STRATEGY: BaselineEmaRegimeV1
   WALLET: "100"
   FEE: "0.001"
@@ -63,6 +65,14 @@ jobs:
           cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
           python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
 
+      - name: Make the mounted paths writable by the image's own user
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA_DIR" artifacts freqtrade/user_data/backtest_results \
+                   freqtrade/user_data/logs
+          # The Freqtrade image runs as ftuser (uid 1000); the runner is 1001.
+          chmod -R a+rwX freqtrade/user_data artifacts
+
       - name: Pull the pinned Freqtrade image
         run: docker pull "$IMAGE"
 
@@ -77,8 +87,7 @@ jobs:
         if: steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload
         run: |
           set -euo pipefail
-          mkdir -p "$DATA_DIR"
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" download-data \
               --config /freqtrade/user_data/config.json \
@@ -92,24 +101,51 @@ jobs:
       - name: Deep audit and dual fingerprints
         run: |
           set -euo pipefail
-          mkdir -p artifacts
           # Run inside the Freqtrade image so the feather reader is the exact one
           # the engine uses; the runner has no pandas/pyarrow of its own.
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
             scripts/audit_data.py \
               --data-dir "$DATA_DIR" \
               --pair BTC/USDT --pair ETH/USDT \
               --timeframe 5m --timeframe 1h \
+              --expect-start "$EXPECT_START" \
+              --expect-end "$EXPECT_END_EXCLUSIVE" \
               --out artifacts/dataset_v2_audit.json \
-            | tee artifacts/dataset_v2_audit.log
+            | tee artifacts/dataset_v2_audit.log || echo "AUDIT_EXIT=$?" | tee -a artifacts/dataset_v2_audit.log
+          # Surface the diagnosis regardless: a failing audit is the finding.
+          python3 - <<'PY' | tee artifacts/dataset_v2_audit_summary.txt
+          import json, pathlib
+          report = json.loads(pathlib.Path("artifacts/dataset_v2_audit.json").read_text())
+          print("overall_pass:", report["overall_pass"])
+          for f in report["files"]:
+              print(f"\n{f['pair']} {f['timeframe']}: pass={f.get('pass')} rows={f['rows']}")
+              print("  range:", f.get("start"), "->", f.get("end"))
+              print("  start_matches_expected:", f.get("start_matches_expected"),
+                    "end_matches_expected:", f.get("end_matches_expected"))
+              print("  missing:", f.get("missing_intervals"),
+                    "clusters:", f.get("gap_cluster_count"),
+                    "largest:", f.get("largest_gap_candles"))
+              print("  dupes:", f.get("duplicate_timestamps"),
+                    "off_grid:", f.get("unexpected_timestamps"),
+                    "nan:", f.get("nan_cells"),
+                    "bad_ohlc:", f.get("bad_ohlc_rows"),
+                    "monotonic:", f.get("monotonic_time"),
+                    "last_complete:", f.get("last_candle_is_complete"))
+              for c in (f.get("gap_clusters") or [])[:10]:
+                  print(f"    gap {c['missing_candles']:>6} candles  {c['start']} -> {c['end']}")
+          for a in report["aggregation_checks"]:
+              print(f"\n{a['pair']} {a['fine_timeframe']}->{a['coarse_timeframe']}: pass={a['pass']} "
+                    f"compared={a['common_complete_buckets']} mismatches={a['mismatched_bars']}")
+          print("\nrange_alignment:", json.dumps(report["range_alignment"]))
+          PY
 
       - name: Assert against the dataset lock once it is frozen
         run: |
           set -euo pipefail
           status="$(python3 -c "import json;print(json.load(open('$LOCK'))['status'])")"
           if [ "$status" = "frozen" ]; then
-            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            docker run --rm \
               -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
               scripts/audit_data.py \
                 --data-dir "$DATA_DIR" \
@@ -124,7 +160,7 @@ jobs:
         if: inputs.stage != 'acquire-and-audit'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
             freqtrade/user_data/baseline_benchmarks.py \
               --data-dir "$DATA_DIR" \
@@ -139,7 +175,7 @@ jobs:
         if: inputs.stage == 'baseline-validation'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
             freqtrade/user_data/baseline_benchmarks.py \
               --data-dir "$DATA_DIR" \
@@ -177,7 +213,7 @@ jobs:
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" backtesting \
               --config /freqtrade/user_data/config.json \
@@ -196,7 +232,7 @@ jobs:
         if: inputs.stage == 'baseline-validation'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" backtesting \
               --config /freqtrade/user_data/config.json \
@@ -214,7 +250,7 @@ jobs:
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" lookahead-analysis \
               --config /freqtrade/user_data/config.json \
@@ -227,7 +263,7 @@ jobs:
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" recursive-analysis \
               --config /freqtrade/user_data/config.json \
