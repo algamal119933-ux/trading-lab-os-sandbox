@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-09-06T22:48:31Z",
+  "experiment": "baseline-1",
+  "run_name": "baseline-1-development-datasetv2",
+  "command": "freqtrade backtesting --config config.research.json --strategy BaselineEmaRegimeV1 --timerange 20210101-20250101 --timeframe-detail 5m --enable-protections --export trades",
+  "code_commit": "94753fe66f09dbb49805a3304023603aa5f2aec3",
+  "code_dirty": false,
+  "config_hash": "7941da97563bc610a9513d9777ce42785efd85eb79eb227533b7f3874c6e137e",
+  "config_files": [
+    "freqtrade/user_data/config.paper.json.example",
+    "freqtrade/user_data/config.binance-data-mirror.json.example"
+  ],
+  "dataset_hashes": {
+    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
+    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
+  },
+  "dataset_audit_pass": true,
+  "strategy": {
+    "name": "BaselineEmaRegimeV1",
+    "file": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
+    "sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc"
+  },
+  "freqtrade_version": "2026.7",
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
+  "timeframe": "1h",
+  "detail_timeframe": "5m",
+  "timerange": "20210101-20250101",
+  "period_label": "development",
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "Binance spot taker fee, set explicitly in the config",
+    "slippage_note": "no slippage model; market orders priced on the far side of the book"
+  },
+  "wallet": 100.0,
+  "stake": 10.0,
+  "max_open_trades": 2,
+  "metrics": {
+    "total_return_pct": 27.8,
+    "total_return_abs": 27.797,
+    "max_drawdown_pct": 11.67,
+    "max_drawdown_abs": 13.842,
+    "relative_drawdown_pct": 10.17,
+    "drawdown_duration_days": 419,
+    "drawdown_start": "2021-11-10T17:00:00Z",
+    "drawdown_end": "2023-01-03T17:00:00Z",
+    "min_wallet_balance": 97.68,
+    "max_wallet_balance": 130.472,
+    "sharpe": 0.8,
+    "sortino": 0.97,
+    "calmar": 3.12,
+    "trade_count": 211,
+    "winning_trades": 62,
+    "losing_trades": 149,
+    "win_rate_pct": 29.4,
+    "avg_profit_pct_per_trade": 1.32,
+    "avg_trade_duration_days": 7.1264,
+    "avg_capital_exposure_pct": 10.29,
+    "return_per_exposure_unit": 270.1,
+    "turnover_stake": 4220.0,
+    "total_fees_stake_estimate": 4.22,
+    "passive_btc_buy_and_hold_pct": 222.08,
+    "passive_eth_buy_and_hold_pct": 353.79,
+    "passive_full_50_50_return_pct": 287.94,
+    "passive_max_exposure_matched_return_pct": 57.59,
+    "passive_realised_exposure_matched_return_pct": 29.63,
+    "excess_over_realised_exposure_matched_pp": -1.83,
+    "derivation_note": "avg_capital_exposure_pct, return_per_exposure_unit, turnover, fees and the realised-exposure-matched comparison are derived from the engine's own trade count, average duration and fixed stake, not produced by summarize_backtest.py, whose step failed on a shell pipeline bug. Per-pair attribution and time-in-market are therefore NOT available and the protocol result is not a full PASS."
+  },
+  "analyses": {
+    "lookahead": "pass",
+    "recursive": "pass",
+    "detail_timeframe_simulation": "pass"
+  },
+  "gate": "INCONCLUSIVE",
+  "reason": "BASELINE_PROTOCOL_RESULT = INCOMPLETE, BASELINE_PERFORMANCE_CLASSIFICATION = NEUTRAL. Correctness evidence is real and passes: lookahead-analysis found no bias over 20 signals (0 biased entries, 0 biased exits, 0 biased indicators); recursive analysis found no bias with drift of 0.000% (ema_fast) and -0.003% (ema_slow) at the strategy's 600 startup candles; the backtest completed over the full four-year window with 5m detail simulation on checksum-verified real Binance data. The protocol is INCOMPLETE only because per-pair attribution and time-in-market were not computed: the metrics step failed on a pipeline bug. On performance, +27.8% against a realised-exposure-matched passive line of +29.6% is -1.8 percentage points, inside the NEUTRAL band pre-registered before any result existed.",
+  "notes": "BTC/USDT fingerprints are recorded in the audit artifact of run 34064374896 but were not transcribed into this record or the lock, so the dataset lock is deliberately marked frozen_pending_hash_transcription rather than frozen. Evidence: https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34064987322"
+}
