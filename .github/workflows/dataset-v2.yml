@@ -359,6 +359,23 @@ jobs:
           echo "===== ENDPOINT PROBE ====="; cat artifacts/endpoint_probe.txt 2>/dev/null || echo "(none)"
           echo "===== FREQTRADE list-data ====="; cat artifacts/freqtrade_list_data.log 2>/dev/null || echo "(none)"
           echo "===== AUDIT SUMMARY ====="; cat artifacts/dataset_v2_audit_summary.txt 2>/dev/null || echo "(none)"
+          echo "===== ACQUISITION MANIFEST (summary) ====="
+          python3 - <<'PY' 2>/dev/null || echo "(none)"
+          import json, pathlib
+          m = json.loads(pathlib.Path("artifacts/acquisition_manifest.json").read_text())
+          print("source:", m["source"], "| checksum verification:", m["checksum_verification"])
+          print("archives:", len(m["archives"]),
+                "| verified:", sum(1 for a in m["archives"] if a.get("checksum_verified")))
+          for f in m["files_written"]:
+              print(" ", f)
+          PY
+          echo "===== FROZEN HASHES ====="; cat artifacts/frozen_hashes.json 2>/dev/null || echo "(none)"
+          echo "===== PASSIVE (development) ====="; cat artifacts/passive_development.json 2>/dev/null || echo "(none)"
+          echo "===== PASSIVE (validation) ====="; cat artifacts/passive_validation.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS (development) ====="; cat artifacts/metrics_development.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS (validation) ====="; cat artifacts/metrics_validation.json 2>/dev/null || echo "(none)"
+          echo "===== LOOKAHEAD (tail) ====="; tail -30 artifacts/lookahead_development.log 2>/dev/null || echo "(none)"
+          echo "===== RECURSIVE (tail) ====="; tail -30 artifacts/recursive_development.log 2>/dev/null || echo "(none)"
 
       - uses: actions/upload-artifact@v4
         if: always()

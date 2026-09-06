@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "timestamp_utc": "",
+  "experiment": "baseline-1",
+  "run_name": "baseline-1-development",
+  "command": "freqtrade backtesting --strategy BaselineEmaRegimeV1 --timerange 20210101-20250101 --timeframe-detail 5m --enable-protections",
+  "code_commit": "",
+  "code_dirty": false,
+  "config_hash": "",
+  "config_files": [
+    "freqtrade/user_data/config.paper.json.example",
+    "freqtrade/user_data/config.binance-data-mirror.json.example"
+  ],
+  "dataset_hashes": {},
+  "dataset_audit_pass": false,
+  "strategy": {
+    "name": "BaselineEmaRegimeV1",
+    "file": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
+    "sha256": ""
+  },
+  "freqtrade_version": "2026.7",
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "timeframe": "1h",
+  "detail_timeframe": "5m",
+  "timerange": "20210101-20250101",
+  "period_label": "development",
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "Binance spot taker fee, set explicitly in the config",
+    "slippage_note": "no slippage model applied"
+  },
+  "wallet": 100,
+  "stake": 10,
+  "max_open_trades": 2,
+  "metrics": {},
+  "analyses": {
+    "lookahead": "not_run",
+    "recursive": "not_run",
+    "detail_timeframe_simulation": "not_run"
+  },
+  "gate": "INFORMATIONAL",
+  "reason": "template; filled from a real run"
+}
