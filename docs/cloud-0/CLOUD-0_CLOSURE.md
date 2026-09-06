@@ -13,9 +13,27 @@ Docker Desktop, `.env`, local datasets or databases.
 | C0.2 Secret and artifact hygiene | **PASS** | [`C0.2_ARTIFACT_CLASSIFICATION.md`](C0.2_ARTIFACT_CLASSIFICATION.md), `scripts/verify_repo.py`, `tests/test_repo_hygiene.py` |
 | C0.3 Paper-safety invariant | **PASS** | `scripts/paper_guard.py`, `tests/test_paper_guard.py` (49 tests) |
 | C0.4 Configuration isolation | **PASS** | [`C0.4_CONFIG_PRECEDENCE.md`](C0.4_CONFIG_PRECEDENCE.md), `scripts/effective_config.py`, `tests/test_config_isolation.py` |
-| C0.5 CI | **PASS** | `.github/workflows/ci.yml` — three jobs, green (see "CI evidence") |
+| C0.5 CI | **PASS** | `.github/workflows/ci.yml` — three jobs, green on run 4 (see "CI evidence") |
 | C0.6 Research evidence schema | **PASS** | `research/schema/experiment_record.schema.json`, `research/record_experiment.py`, `tests/test_experiment_record.py` |
 | C0.7 Data-reproduction plan | **PASS** | [`C0.7_DATA_REPRODUCTION_PLAN.md`](C0.7_DATA_REPRODUCTION_PLAN.md), `scripts/audit_data.py`, `research/datasets/dataset_v1.lock.json`, `tests/test_data_audit.py` |
+
+## CI evidence
+
+Workflow run 4 on commit `8b750d7` — all three jobs green, on GitHub-hosted
+runners with no private credentials:
+
+| Job | What it actually proved |
+| --- | --- |
+| `static` | Python compiles, every JSON/YAML/shell/PowerShell source parses, repository checks pass, the paper guard passes on the committed config **and rejects a live+futures config**, the redacted effective config renders (uploaded as an artifact), the committed experiment record validates, 198 tests pass. |
+| `compose` | `docker compose config` renders from dummy local values; the exporter image builds; a started exporter serves `/metrics` and reports `freqtrade_api_up 0` while Freqtrade is unreachable. |
+| `freqtrade-load` | `freqtradeorg/freqtrade:2026.7` pulls (Freqtrade 2026.7, CCXT 4.5.68); `list-strategies` finds `PlumbingSmokeStrategy`; `show-config` renders the full effective config with no validation error. No trading command was issued. |
+
+Runs 1–3 failed or were misleading, and each failure is recorded rather than
+tidied away: a manifest built from the working tree instead of the git index; a
+CI step leaving scratch output in the checkout; and — the one that mattered —
+run 3 going **green while its own log showed the config failing validation**,
+because Freqtrade exits 0 on a configuration error. See findings F14 and F15 in
+the repository state record.
 
 ## What is now enforced, not merely asserted
 
@@ -38,6 +56,10 @@ Docker Desktop, `.env`, local datasets or databases.
 * **A result can be traced.** Any gate decision needs a record carrying the
   code commit, config hash, dataset fingerprints, strategy hash, engine version,
   window, costs and reason.
+* **Credentials cannot be committed by accident.** The guard rejects any config
+  whose `api_server` credentials are not the `OVERWRITTEN_BY_ENV*` placeholder,
+  and `start_paper.sh` refuses to start while `.env` still holds a shipped
+  `CHANGE_ME` value.
 * **A dataset cannot move underneath an experiment.** `download_data.sh` refuses
   to re-download over a frozen dataset, and `audit_data.py --lock` fails on any
   fingerprint drift.
