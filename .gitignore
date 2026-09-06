@@ -1,12 +1,75 @@
+# ---------------------------------------------------------------------------
+# Secrets and local credentials — never tracked.
+# ---------------------------------------------------------------------------
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+*.secret
+
+# ---------------------------------------------------------------------------
+# Freqtrade runtime state.
+# The runtime config is generated from config.paper.json.example and must never
+# be committed: committing it would make the effective config ambiguous.
+# ---------------------------------------------------------------------------
 freqtrade/user_data/config.json
+freqtrade/user_data/config.local.json
 freqtrade/user_data/*.sqlite*
 freqtrade/user_data/logs/
+freqtrade/user_data/plot/
+freqtrade/user_data/notebooks/
+freqtrade/user_data/hyperopt.lock
+
+# ---------------------------------------------------------------------------
+# Market data and derived artifacts.
+# Datasets are reproduced via scripts/download_data.sh and pinned by
+# research/datasets/*.lock.json — the payload itself stays out of Git.
+# ---------------------------------------------------------------------------
 freqtrade/user_data/data/
 freqtrade/user_data/backtest_results/
 freqtrade/user_data/hyperopt_results/
 freqtrade/user_data/models/
 freqtrade/user_data/freqaimodels/
+*.feather
+*.parquet
+
+# ---------------------------------------------------------------------------
+# Experiment tracking runtime state (MLflow keeps its own store).
+# ---------------------------------------------------------------------------
 mlruns/
+mlartifacts/
+
+# ---------------------------------------------------------------------------
+# Local research records are evidence, but only the ones deliberately committed
+# under research/records/ belong in Git. Scratch runs stay local.
+# ---------------------------------------------------------------------------
+research/records/scratch/
+
+# ---------------------------------------------------------------------------
+# Python / tooling.
+# ---------------------------------------------------------------------------
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# ---------------------------------------------------------------------------
+# Archives and OS noise.
+# ---------------------------------------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+.DS_Store
+Thumbs.db

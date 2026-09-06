@@ -1,0 +1,7 @@
+# Development / CI dependencies for the CLOUD-0 harness.
+# Pinned exactly so a CI run is reproducible.
+pytest==9.1.1
+jsonschema==4.26.0
+PyYAML==6.0.3
+requests==2.32.5
+prometheus-client==0.22.1
