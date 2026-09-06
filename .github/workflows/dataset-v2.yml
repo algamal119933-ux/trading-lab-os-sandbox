@@ -391,11 +391,19 @@ jobs:
             echo "=== $f ==="
             python3 research/summarize_backtest.py --result "$f" --dump-schema || true
           done
-          pick_result() {
-            ls -t freqtrade/user_data/backtest_results/*.json 2>/dev/null \
-              | grep -v '\.meta\.json$' | grep -v '\.last_result\.json$' | head -1
-          }
-          RESULT="$(pick_result)"
+          # Written in Python rather than a shell pipeline: under `set -o pipefail`
+          # a `... | head -1` closes the pipe early, the upstream process dies of
+          # SIGPIPE, and the step fails even though it found the file. That is
+          # exactly how this step failed twice while the backtest itself was fine.
+          RESULT="$(python3 - <<'PY'
+          import pathlib
+          results = pathlib.Path("freqtrade/user_data/backtest_results")
+          candidates = [p for p in results.glob("*.json")
+                        if not p.name.endswith(".meta.json")
+                        and p.name != ".last_result.json"]
+          print(max(candidates, key=lambda p: p.stat().st_mtime) if candidates else "")
+          PY
+          )"
           if [ -z "$RESULT" ]; then
             echo "::error::no backtest result JSON was produced"
             ls -la freqtrade/user_data/backtest_results/ || true
