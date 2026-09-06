@@ -25,8 +25,15 @@ Binance data:
 | No rule changed between spec freeze and evaluation | **PASS**, with one recorded correction |
 
 The seventh fails and that is why the protocol result is not a PASS: the metrics
-step died on a shell pipeline bug (`ls … | head -1` under `set -o pipefail`
-kills the upstream process with SIGPIPE). Capital exposure, turnover and fees
+step never ran to completion. Its cause was found by extracting the step and
+running it locally — a heredoc whose terminator is not at column 0 once nested,
+which makes bash exit 2 before executing anything, producing the instant,
+output-free failure seen in CI. The step has been rewritten without heredocs and
+both its success and failure paths verified locally, but **the confirming CI run
+has not completed**: it stalled in the backtest step for over an hour, against
+35-53 seconds in the two runs that produced the evidence above, and was
+cancelled. So the fix is committed and locally proven, and the metrics remain
+uncomputed in CI. Capital exposure, turnover and fees
 below are therefore **derived** from the engine's own trade count, average
 duration and fixed stake — arithmetic, but not engine output. **Per-pair
 attribution and time-in-market are simply not available**, and the protocol
