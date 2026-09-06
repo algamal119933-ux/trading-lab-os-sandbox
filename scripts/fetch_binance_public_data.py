@@ -35,6 +35,7 @@ import sys
 import urllib.error
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -42,6 +43,9 @@ DEFAULT_BASE_URL = "https://data.binance.vision"
 MARKET = "spot"
 RETRIES = 4
 TIMEOUT = 120
+# Archives are independent, so fetching them concurrently turns a ~50-minute
+# sequential download into a few minutes. Kept modest to stay polite to the CDN.
+MAX_WORKERS = 8
 
 # Binance kline CSV layout. Only the first six columns matter here.
 OPEN_TIME, OPEN, HIGH, LOW, CLOSE, VOLUME = range(6)
@@ -66,12 +70,17 @@ def day_range(start: date, end: date) -> list[str]:
     return days
 
 
+_OPENER = urllib.request.build_opener()
+_OPENER.addheaders = [("User-Agent", "trading-lab-os-sandbox/1.0 (research)"),
+                      ("Connection", "keep-alive")]
+
+
 def fetch(url: str) -> bytes | None:
     """Return the body, or None for a 404 (archive not published for that period)."""
     last_error: Exception | None = None
     for attempt in range(RETRIES):
         try:
-            with urllib.request.urlopen(url, timeout=TIMEOUT) as response:  # noqa: S310
+            with _OPENER.open(url, timeout=TIMEOUT) as response:  # noqa: S310
                 return response.read()
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -145,6 +154,36 @@ def daily_urls(base_url: str, symbol: str, timeframe: str, days: list[str]) -> l
     return out
 
 
+def _fetch_verified(url: str, verify: bool) -> tuple[str, bytes | None, dict | None]:
+    """Fetch one archive and, when asked, verify it against its published checksum."""
+    payload = fetch(url)
+    if payload is None:
+        return url, None, None
+    digest = hashlib.sha256(payload).hexdigest()
+    entry: dict = {"url": url, "sha256": digest}
+    if verify:
+        checksum = fetch(url + ".CHECKSUM")
+        if checksum is None:
+            entry["checksum_verified"] = False
+            entry["checksum_note"] = "no .CHECKSUM published"
+        else:
+            want = expected_sha256(checksum)
+            if want != digest:
+                raise SystemExit(f"checksum mismatch for {url}: published {want}, got {digest}")
+            entry["checksum_verified"] = True
+    return url, payload, entry
+
+
+def _fetch_many(urls: list[tuple[str, str]], verify: bool) -> dict[str, tuple[bytes | None, dict | None]]:
+    results: dict[str, tuple[bytes | None, dict | None]] = {}
+    if not urls:
+        return results
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        for url, payload, entry in pool.map(lambda item: _fetch_verified(item[1], verify), urls):
+            results[url] = (payload, entry)
+    return results
+
+
 def download_series(
     base_url: str,
     symbol: str,
@@ -157,52 +196,35 @@ def download_series(
     rows: list[tuple[int, float, float, float, float, float]] = []
     missing_months: list[str] = []
 
-    for month, url in archive_urls(base_url, symbol, timeframe, start, end):
-        payload = fetch(url)
+    monthly = archive_urls(base_url, symbol, timeframe, start, end)
+    fetched = _fetch_many(monthly, verify)
+    for month, url in monthly:
+        payload, entry = fetched[url]
         if payload is None:
             missing_months.append(month)
             continue
-        digest = hashlib.sha256(payload).hexdigest()
-        entry = {"symbol": symbol, "timeframe": timeframe, "period": month,
-                 "url": url, "sha256": digest, "granularity": "monthly"}
-        if verify:
-            checksum = fetch(url + ".CHECKSUM")
-            if checksum is None:
-                entry["checksum_verified"] = False
-                entry["checksum_note"] = "no .CHECKSUM published"
-            else:
-                want = expected_sha256(checksum)
-                if want != digest:
-                    raise SystemExit(f"checksum mismatch for {url}: published {want}, got {digest}")
-                entry["checksum_verified"] = True
+        entry.update({"symbol": symbol, "timeframe": timeframe, "period": month, "granularity": "monthly"})
         manifest.append(entry)
         rows.extend(parse_klines(payload))
 
     # A month with no monthly archive is usually the current, still-open month;
     # Binance publishes those day by day.
+    daily: list[tuple[str, str]] = []
     for month in missing_months:
         year, mon = (int(part) for part in month.split("-"))
         first = date(year, mon, 1)
         last = date(year + (mon // 12), (mon % 12) + 1, 1) - timedelta(days=1)
-        window = [d for d in day_range(max(first, start), min(last, end))]
-        for day, url in daily_urls(base_url, symbol, timeframe, window):
-            payload = fetch(url)
-            if payload is None:
-                continue
-            digest = hashlib.sha256(payload).hexdigest()
-            entry = {"symbol": symbol, "timeframe": timeframe, "period": day,
-                     "url": url, "sha256": digest, "granularity": "daily"}
-            if verify:
-                checksum = fetch(url + ".CHECKSUM")
-                if checksum is not None:
-                    want = expected_sha256(checksum)
-                    if want != digest:
-                        raise SystemExit(f"checksum mismatch for {url}: published {want}, got {digest}")
-                    entry["checksum_verified"] = True
-                else:
-                    entry["checksum_verified"] = False
-            manifest.append(entry)
-            rows.extend(parse_klines(payload))
+        window = day_range(max(first, start), min(last, end))
+        daily.extend(daily_urls(base_url, symbol, timeframe, window))
+
+    fetched = _fetch_many(daily, verify)
+    for day, url in daily:
+        payload, entry = fetched[url]
+        if payload is None:
+            continue
+        entry.update({"symbol": symbol, "timeframe": timeframe, "period": day, "granularity": "daily"})
+        manifest.append(entry)
+        rows.extend(parse_klines(payload))
 
     return rows
 
@@ -278,7 +300,9 @@ def main(argv: list[str] | None = None) -> int:
                     "requested_end_utc": args.end,
                     "checksum_verification": not args.no_verify,
                     "files_written": written,
-                    "archives": manifest,
+                    "archives": sorted(
+                        manifest, key=lambda e: (e["symbol"], e["timeframe"], e["period"])
+                    ),
                 },
                 indent=2,
             )
