@@ -363,6 +363,8 @@ jobs:
               --strategy-path /freqtrade/user_data/strategies \
               --timerange "$DEV_TIMERANGE" \
             2>&1 | tee artifacts/lookahead_development.log
+          # Freqtrade exits 0 on a configuration error.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
 
       - name: Recursive analysis (Development)
         if: inputs.stage == 'baseline-development'
@@ -377,6 +379,8 @@ jobs:
               --timerange "$DEV_TIMERANGE" \
               -p BTC/USDT \
             2>&1 | tee artifacts/recursive_development.log
+          # Freqtrade exits 0 on a configuration error.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
       - name: Normalise backtest metrics
         if: startsWith(inputs.stage, 'baseline-')
@@ -387,8 +391,18 @@ jobs:
             echo "=== $f ==="
             python3 research/summarize_backtest.py --result "$f" --dump-schema || true
           done
+          pick_result() {
+            ls -t freqtrade/user_data/backtest_results/*.json 2>/dev/null \
+              | grep -v '\.meta\.json$' | grep -v '\.last_result\.json$' | head -1
+          }
+          RESULT="$(pick_result)"
+          if [ -z "$RESULT" ]; then
+            echo "::error::no backtest result JSON was produced"
+            ls -la freqtrade/user_data/backtest_results/ || true
+            exit 1
+          fi
+          echo "using result file: $RESULT"
           if [ "${{ inputs.stage }}" = "baseline-development" ]; then
-            RESULT=freqtrade/user_data/backtest_results/dev.json
             python3 research/summarize_backtest.py \
               --result "$RESULT" \
               --window-start "$DEV_START" --window-end "$DEV_END" \
@@ -398,7 +412,6 @@ jobs:
               --md artifacts/metrics_development.md
             cat artifacts/metrics_development.md
           else
-            RESULT=freqtrade/user_data/backtest_results/val.json
             python3 research/summarize_backtest.py \
               --result "$RESULT" \
               --window-start "$VAL_START" --window-end "$VAL_END" \
@@ -430,20 +443,13 @@ jobs:
           print(json.dumps({
               "raw_file_hashes": {key(f): f["raw_file_sha256"] for f in r["files"]},
               "canonical_hashes": {key(f): f["canonical_candle_content_sha256"] for f in r["files"]},
-              "coverage": {key(f): {"start": f["start"], "end": f["end"], "rows": f["rows"],
-                                    "expected_rows": f["expected_rows_from_range"],
-                                    "missing": f["missing_intervals"],
-                                    "missing_ratio": f["missing_ratio"],
-                                    "structural_pass": f["structural_pass"]} for f in r["files"]},
-              "gap_clusters": {key(f): f.get("gap_clusters", []) for f in r["files"]},
-              "reconciliation": [{"pair": a["pair"],
-                                  "prices_exact": a.get("price_reconciliation_exact"),
-                                  "compared": a["common_complete_buckets"],
-                                  "mismatched_bars": a["mismatched_bars"],
-                                  "worst_relative_deviation": a.get("worst_relative_deviation"),
-                                  "worst_examples": a.get("worst_deviation_examples")}
-                                 for a in r["aggregation_checks"]],
-          }, indent=2))
+              "coverage": {key(f): [f["start"], f["end"], f["rows"], f["missing_intervals"],
+                                    f["structural_pass"]] for f in r["files"]},
+              "reconciliation": {a["pair"]: [a.get("price_reconciliation_exact"),
+                                             a["common_complete_buckets"],
+                                             a["mismatched_bars"]["volume"]]
+                                 for a in r["aggregation_checks"]},
+          }, indent=None))
           PY
           echo "===== ACQUISITION MANIFEST (summary) ====="
           python3 - <<'PY' 2>/dev/null || echo "(none)"
@@ -460,6 +466,8 @@ jobs:
           echo "===== PASSIVE (validation) ====="; cat artifacts/passive_validation.json 2>/dev/null || echo "(none)"
           echo "===== METRICS (development) ====="; cat artifacts/metrics_development.json 2>/dev/null || echo "(none)"
           echo "===== METRICS (validation) ====="; cat artifacts/metrics_validation.json 2>/dev/null || echo "(none)"
+          echo "===== BACKTEST development (tail) ====="; tail -60 artifacts/backtest_development.log 2>/dev/null || echo "(none)"
+          echo "===== BACKTEST validation (tail) ====="; tail -60 artifacts/backtest_validation.log 2>/dev/null || echo "(none)"
           echo "===== LOOKAHEAD (tail) ====="; tail -30 artifacts/lookahead_development.log 2>/dev/null || echo "(none)"
           echo "===== RECURSIVE (tail) ====="; tail -30 artifacts/recursive_development.log 2>/dev/null || echo "(none)"
 
