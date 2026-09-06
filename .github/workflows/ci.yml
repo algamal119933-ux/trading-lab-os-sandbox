@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Dummy local-only values. The stack binds every port to 127.0.0.1 and the
+  # exchange key/secret stay empty, so nothing here can reach a real account.
+  FREQTRADE_API_USER: ci_dummy_user
+  FREQTRADE_API_PASSWORD: ci_dummy_password_not_a_secret
+  FREQTRADE_JWT_SECRET: ci_dummy_jwt_secret_not_a_secret
+  FREQTRADE_WS_TOKEN: ci_dummy_ws_token_not_a_secret
+  GRAFANA_ADMIN_USER: ci_admin
+  GRAFANA_ADMIN_PASSWORD: ci_dummy_grafana_password
+
+jobs:
+  static:
+    name: Static checks and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Python compile check
+        run: python -m compileall -q scripts research monitoring freqtrade tests
+
+      - name: JSON validity
+        run: |
+          set -euo pipefail
+          git ls-files '*.json' '*.json.example' | while read -r f; do
+            python -c "import json,sys; json.load(open(sys.argv[1]))" "$f"
+            echo "ok  $f"
+          done
+
+      - name: YAML validity
+        run: |
+          set -euo pipefail
+          git ls-files '*.yml' '*.yaml' | while read -r f; do
+            python -c "import sys,yaml; list(yaml.safe_load_all(open(sys.argv[1])))" "$f"
+            echo "ok  $f"
+          done
+
+      - name: Shell script syntax
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          git ls-files '*.sh' | while read -r f; do bash -n "$f" && echo "parsed  $f"; done
+          # SC1091: _common.sh is sourced by relative path at runtime.
+          git ls-files '*.sh' | xargs shellcheck --severity=warning --exclude=SC1091
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { throw "$($_.Name): $($errors[0].Message)" }
+            Write-Host "parsed  $($_.Name)"
+          }
+
+      - name: Deterministic repository checks
+        run: python3 scripts/verify_repo.py
+
+      - name: Paper-safety guard (fail closed)
+        run: python3 scripts/paper_guard.py
+
+      - name: Paper guard must reject an unsafe config
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib
+          cfg = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
+          cfg["dry_run"] = False
+          cfg["trading_mode"] = "futures"
+          pathlib.Path("/tmp/unsafe.json").write_text(json.dumps(cfg))
+          PY
+          if python3 scripts/paper_guard.py --config /tmp/unsafe.json --skip-strategies; then
+            echo "::error::paper guard accepted an unsafe config"
+            exit 1
+          fi
+          echo "paper guard correctly rejected the unsafe config"
+
+      - name: Effective config (redacted, no secrets required)
+        run: |
+          python3 scripts/effective_config.py > effective-config.json
+          python3 scripts/effective_config.py --hash-only
+
+      - name: Validate committed experiment records
+        run: python3 research/record_experiment.py validate research/records/*.json
+
+      - name: Test suite
+        run: python -m pytest
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: effective-config
+          path: effective-config.json
+          if-no-files-found: warn
+
+  compose:
+    name: Compose render and exporter image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render docker compose config with dummy local values
+        run: |
+          docker compose config
+          docker compose config --services
+
+      - name: Build the read-only exporter image
+        run: docker build -t tradinglab-exporter:ci monitoring/exporter
+
+      - name: Exporter starts, serves metrics, and reports the API as down
+        run: |
+          set -euo pipefail
+          docker run -d --name exporter-ci -p 9108:9108 \
+            -e FREQTRADE_URL=http://127.0.0.1:1 \
+            -e EXPORTER_PORT=9108 tradinglab-exporter:ci
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9108/metrics >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:9108/metrics | tee metrics.txt | grep -E '^freqtrade_api_up' || true
+          grep -q 'freqtrade_api_up 0' metrics.txt
+          docker logs exporter-ci
+          docker rm -f exporter-ci
+
+  freqtrade-load:
+    name: Freqtrade loads the paper config and strategy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the runtime config from the committed example
+        run: cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
+
+      - name: Guard the generated runtime config
+        run: python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+
+      - name: Strategy and config load inside the pinned Freqtrade image
+        run: |
+          set -euo pipefail
+          IMAGE="freqtradeorg/freqtrade:2026.7"
+          docker pull "$IMAGE"
+          # No trading command is issued: this only proves the config parses and
+          # the strategy class imports against the pinned engine version.
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" \
+            list-strategies --config /freqtrade/user_data/config.json \
+            --strategy-path /freqtrade/user_data/strategies
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" \
+            show-config --config /freqtrade/user_data/config.json
+          docker run --rm "$IMAGE" --version

@@ -2,6 +2,7 @@
 # Regenerate with: python3 scripts/verify_repo.py --fix
 # MANIFEST.txt itself is excluded (it cannot contain its own hash).
 0ecc898927b94017aca56c7d33f53faa1f90797695fc19126422c3d93b864b0a  .env.example
+c0375a99744136f5029748b5939c2ef1280c45d2d2685bd7c78093237cd948e4  .github/workflows/ci.yml
 e43e3823d74f71a48cbc11041145411dc952ee4328435f3cc8a617c1cf3e1bf7  .gitignore
 4050b64a7c36cab91dc95c27db1c6cd4e2617ba1e12db735ff1f4e9dcbd53f41  CLAUDE.md
 08858b78b146f474f8e9795aeb7155f53bc92775e7ddfc19a2acadc73cbb7c4a  README_AR.md
