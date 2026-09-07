@@ -1,0 +1,71 @@
+{
+  "dataset_id": "warmup_overlay_v1",
+  "status": "pending_acquisition",
+  "spec_frozen_utc": "2026-09-07T08:00:00Z",
+  "authority": "pre-Wave-1 review correction: provide at least 1300 valid completed 1h startup candles before the first scored Development candle, without mutating Dataset V2",
+
+  "relationship_to_dataset_v2": {
+    "mutates_dataset_v2": false,
+    "explanation": "A separate, immutable artifact with its own lock. Dataset V2 keeps every byte and every canonical digest it was frozen with. The two series are combined only at load time, never merged on disk.",
+    "disjoint": "The overlay ends 2020-11-30T23:00:00Z; Dataset V2 begins 2020-12-01T00:00:00Z. No candle exists in both, so no Dataset V2 value can be overwritten by the join.",
+    "never_scored": "The overlay lies entirely before the Development window opens on 2021-01-01, so it contributes indicator history and nothing else."
+  },
+
+  "exchange": "binance",
+  "market_type": "spot",
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "timeframes": ["1h"],
+  "data_format": "feather",
+
+  "acquisition": {
+    "start_utc": "2020-10-01T00:00:00Z",
+    "end_utc": "2020-11-30T23:00:00Z",
+    "freqtrade_timerange": "20201001-20201201",
+    "route": "the same data.binance.vision public archive route that acquired Dataset V2; no exchange credential is used or required"
+  },
+
+  "warmup_budget": {
+    "overlay_candles_1h": 1464,
+    "dataset_v2_pre_development_candles_1h": 744,
+    "total_before_first_scored_candle": 2208,
+    "required_by_emacross": 1300,
+    "margin": 908,
+    "note": "The requirement is 1300 VALID COMPLETED candles, not 1300 rows. The overlay must pass the full acquisition audit before its candles may be counted toward the budget."
+  },
+
+  "required_checks": [
+    "exact timerange",
+    "expected cadence",
+    "duplicate timestamps",
+    "gaps",
+    "NaN / non-finite cells",
+    "OHLC validity",
+    "monotonic timestamps",
+    "completed-candle boundaries",
+    "disjointness from Dataset V2",
+    "DATASET_V2_CANONICAL_IDENTITY_PRESERVED"
+  ],
+
+  "canonical_identity_gate": {
+    "rule": "After the overlay is joined, every Dataset V2 candle must still hash to the CANONICAL_CANDLE_V1 digest recorded in research/datasets/dataset_v2.lock.json.",
+    "on_failure": "the run stops; the joined series is discarded",
+    "why": "This is the property that makes the overlay safe rather than merely well-intentioned. It is asserted as a gate on every run, not argued once in prose. A join that moved any scored candle would silently invalidate BASELINE-1 as a comparison control."
+  },
+
+  "integrity_contract": {
+    "canonical_digest_version": "CANONICAL_CANDLE_V1",
+    "note": "Identical definition to Dataset V2's, so the two artifacts are directly comparable."
+  },
+
+  "raw_file_hashes": {},
+  "canonical_hashes": {},
+  "coverage": {},
+
+  "applies_to": [
+    "BTCLAB_EMACROSS_H1",
+    "BTCLAB_EMACROSSFUNDING_H2"
+  ],
+  "does_not_apply_to": {
+    "BASELINE1_FROZEN_CONTROL": "BASELINE-1 declares startup_candle_count=600 and is satisfied by Dataset V2's own 744 pre-Development candles. Its frozen records are not re-run and not altered."
+  }
+}

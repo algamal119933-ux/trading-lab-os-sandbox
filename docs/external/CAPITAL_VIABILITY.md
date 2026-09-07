@@ -1,114 +1,141 @@
-# Capital viability — is the edge economically meaningful?
+# Capital viability — operating economics, kept separate from alpha
 
-Required by directive v1.1 §6, which asks for a **separate** economic view at 100, 500,
-2,000 and 10,000 USDT, and insists on keeping `STATISTICAL_EDGE` apart from
-`ECONOMICALLY_MEANINGFUL_EDGE`.
+Required by directive v1.1 §6, revised under the pre-Wave-1 review correction. The
+correction replaced a single proportional break-even with a **scenario matrix**, because
+one break-even number silently assumed one sizing mode and one hosting arrangement, and
+neither is a given.
 
-This is the framework plus the frozen control's row. Candidate rows are added as each one
-clears its gates. Nothing here required running anything: every input is BASELINE-1's
-immutable Development record.
+Two things are reported separately throughout and must never be merged:
 
-## Inputs (all frozen evidence)
+```
+STATISTICAL_ALPHA    - is there excess return over exposure-matched passive?
+OPERATING_ECONOMICS  - does what remains survive fees and running costs at this size?
+```
+
+A candidate can pass one and fail the other. Conflating them is how a strategy with no
+edge gets sold on its gross return, and how a real edge gets dismissed because someone
+priced it against a dedicated server it never needed.
+
+This is the framework plus the frozen control's row. Candidate rows are added as each
+clears its gates. Every input is BASELINE-1's immutable Development record; nothing here
+required a run.
+
+## Inputs (frozen evidence)
 
 | | |
 | --- | --- |
 | Window | Dataset V2 Development, 2021-01-01 → 2024-12-31 (4 years) |
-| Net return | **+27.80%** on a 100 USDT wallet |
-| Trades | 211 |
-| Turnover | 4,150 USDT — **41.5× capital** over four years |
+| Net return | +27.80% on a 100 USDT wallet |
+| Trades / turnover | 211 trades, 4,150 USDT — **41.5× capital** |
 | Fees paid | 4.15 USDT at 0.1% per side |
-| Sizing as configured | fixed 10 USDT stake, max 2 open trades |
-| Operating cost assumed | **$5/month VPS** — the postmortem's own figure, not invented here |
+| Sizing as configured | **fixed** 10 USDT stake, max 2 open trades |
+| Binance spot min notional | 5 USDT — every stake below clears it |
 
-## The four tiers
+## Sizing scenarios
 
-Two sizing modes have to be shown separately, because BASELINE-1 is configured with a
-**fixed** 10 USDT stake. Scale the wallet without scaling the stake and the strategy still
-deploys at most 20 USDT, so absolute profit does not move at all.
+**Fixed stake** is what BASELINE-1 actually declares: 10 USDT per trade, at most two open.
+Absolute profit is then capped by the stake and does not respond to wallet size at all.
 
-| Wallet | Mode | Stake | Net profit (4y) | Fees | Opex (4y) | After opex |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| 100 | proportional | 10 | 27.80 | 4.15 | 240 | **−212.20** |
-| 100 | fixed stake | 10 | 27.80 | 4.15 | 240 | **−212.20** |
-| 500 | proportional | 50 | 138.99 | 20.75 | 240 | **−101.01** |
-| 500 | fixed stake | 10 | 27.80 | 4.15 | 240 | **−212.20** |
-| 2,000 | proportional | 200 | 555.95 | 83.00 | 240 | +315.95 |
-| 2,000 | fixed stake | 10 | 27.80 | 4.15 | 240 | **−212.20** |
-| 10,000 | proportional | 1,000 | 2,779.74 | 415.00 | 240 | +2,539.74 |
-| 10,000 | fixed stake | 10 | 27.80 | 4.15 | 240 | **−212.20** |
+**Proportional stake** scales the stake with the wallet, holding percentage exposure
+constant. Only in this mode does "return %" mean what a reader assumes.
 
-All stakes clear Binance spot's 5 USDT minimum notional, so order-size mechanics are not
-the binding constraint here. Something else is.
+The gap between them is the single largest effect in this document — larger than any
+hosting choice:
 
-## Finding 1 — operating cost, not strategy quality, decides small accounts
+| Wallet | Sizing | Net profit (4y) | Fees |
+| ---: | --- | ---: | ---: |
+| 100 | either | 27.80 | 4.15 |
+| 500 | proportional | 138.99 | 20.75 |
+| 500 | fixed | 27.80 | 4.15 |
+| 2,000 | proportional | 555.95 | 83.00 |
+| 2,000 | fixed | 27.80 | 4.15 |
+| 10,000 | proportional | 2,779.74 | 415.00 |
+| 10,000 | fixed | **27.80** | 4.15 |
 
-**A $5/month VPS costs 240 USDT over four years. BASELINE-1's entire four-year profit on a
-100 USDT wallet is 27.80 USDT.** The hosting bill is roughly **nine times** the profit.
+At 10,000 USDT under the configured fixed stake, average capital exposure falls to roughly
+0.2% and the strategy returns the same 27.80 USDT it returned on 100. **Any capital row
+that does not name its sizing mode is not interpretable.**
 
-Breakeven against that single line item, scaling proportionally:
+## Infrastructure scenarios
 
-> **≈ 863 USDT.** Below that, a strategy performing exactly as BASELINE-1 did returns less
-> than the cost of the machine it runs on.
+| Infrastructure | Opex (4y) | Break-even wallet, proportional |
+| --- | ---: | ---: |
+| Dedicated VPS ($5/mo) | 240 USDT | **863 USDT** |
+| Shared VPS, 1 of 4 strategies ($1.25/mo) | 60 USDT | **216 USDT** |
+| Existing / local hardware | 0 | **0 — no opex hurdle** |
 
-That is before tax, before any exchange withdrawal fee, and before a single hour of the
-operator's time is valued at anything.
+The $5/month figure is the postmortem's own, not invented here. The shared row assumes one
+box already running four strategies; the marginal cost of the fourth is what should be
+charged to it. The third row is the common retail reality — a machine that is already on
+and already paid for, where the marginal cost of one more Freqtrade process is
+approximately nothing.
 
-This reframes the sprint's smallest tier. At 100 USDT the question "does this strategy have
-an edge?" is not the operative one, because no edge of this magnitude survives the
-overhead. It is worth knowing that before spending CI minutes discovering it.
+## Full matrix, after operating cost
 
-## Finding 2 — the fixed-stake configuration does not scale at all
+| Wallet | Sizing | Dedicated VPS | Shared VPS | Existing hardware |
+| ---: | --- | ---: | ---: | ---: |
+| 100 | proportional | −212.20 | −32.20 | **+27.80** |
+| 100 | fixed | −212.20 | −32.20 | **+27.80** |
+| 500 | proportional | −101.01 | **+78.99** | **+138.99** |
+| 500 | fixed | −212.20 | −32.20 | **+27.80** |
+| 2,000 | proportional | **+315.95** | **+495.95** | **+555.95** |
+| 2,000 | fixed | −212.20 | −32.20 | **+27.80** |
+| 10,000 | proportional | **+2,539.74** | **+2,719.74** | **+2,779.74** |
+| 10,000 | fixed | −212.20 | −32.20 | **+27.80** |
 
-The frozen control deploys 10 USDT per trade with at most two positions open, so its
-average capital exposure was 10.13% on a 100 USDT wallet. Move the wallet to 10,000 and
-leave the sizing alone and exposure falls to about 0.2%: the same 27.80 USDT of profit
-against a hundred times the capital.
+### What the matrix corrects
 
-So a capital-viability row is meaningless unless it states which mode it assumes. Any
-future candidate row in this table must declare it. Proportional scaling is the only mode
-in which "return %" means what a reader will assume it means.
+The earlier single break-even of ~863 USDT was real but over-general. It is the break-even
+for **one** cell — proportional sizing on a dedicated VPS. Read as *the* break-even it
+overstates the hurdle by about 4× against a shared box, and it does not apply at all to
+someone running on hardware they already own.
 
-## Finding 3 — low turnover is this design's real cost advantage
+The honest summary is narrower and more useful:
 
-211 trades in four years is 41.5× turnover. Working backwards from the frozen figures, the
-fee per side that would erase the entire net return is **≈ 0.77%** — nearly **eight times**
-the 0.1% actually charged.
+- **Hosting choice, not account size, decides the small tiers.** At 100 USDT the control
+  is under water on a dedicated VPS and profitable on existing hardware. Same strategy,
+  same trades, opposite economics.
+- **Fixed stake is the binding constraint above ~500 USDT**, and no hosting choice rescues
+  it. It never clears a dedicated VPS at any wallet size tested.
 
-That headroom is the strongest thing in the control's economic profile, and it is worth
-stating plainly because it is the exact opposite of what the external sources found
-elsewhere: btc-strategy-lab records `EMASkipPump` making 5,953 trades and paying **1,191%
-of capital** in fees, and 21 of 22 5m strategies unprofitable with a median of −95.6%.
+## Fee headroom — this design's real strength
 
-**Implication for Wave 1 ordering.** `GeneticEngineV1` is a 5m strategy claiming 183 trades
-in three months. Its fee headroom should be computed *before* its return is discussed — the
-cost gate (V6) is cheap, and on this evidence it is where 5m candidates are most likely to
-die.
+211 trades in four years is 41.5× turnover. Working back from the frozen figures, the fee
+per side that would erase the whole net return is **≈ 0.77%** — nearly **eight times** the
+0.1% charged. Fees are 13.0% of gross profit.
 
-## Finding 4 — the control has no economically meaningful edge at any tier
+That inverts what the external sources found elsewhere: btc-strategy-lab records
+`EMASkipPump` paying **1,191% of capital** in fees over 5,953 trades, and 21 of 22 5m
+strategies unprofitable at a median of −95.6%.
 
-The tiers above use **raw return**, which flatters the picture. The frozen classification is
-`E = −1.38 pp` on Development and `+1.97 pp` on Validation against the
-exposure-matched passive line: the control roughly reproduces the return of the exposure it
-takes.
+**Ordering consequence for Wave 1.** Compute a high-frequency candidate's fee headroom
+*before* discussing its return. On this evidence the cost gate (V6) is where 5m candidates
+are most likely to die, and it is cheap to run.
 
-So the 27.80 USDT is not edge. It is market exposure, obtainable by holding, without the
-VPS. Combining that with Finding 1:
+## The control's verdict
+
+Every figure above uses **raw return**, which flatters. The frozen classification is
+`E = −1.38 pp` on Development and `+1.97 pp` on Validation against exposure-matched
+passive.
 
 ```
-STATISTICAL_EDGE            = NOT PROVEN  (E within the NEUTRAL band, both windows)
-ECONOMICALLY_MEANINGFUL_EDGE = NO         (at every tier, for the frozen control)
+STATISTICAL_ALPHA    = NOT PROVEN  (E inside the NEUTRAL band on both windows)
+OPERATING_ECONOMICS  = VIABLE only on shared or already-owned infrastructure,
+                       and only under proportional sizing
 ```
 
-That is not a criticism of BASELINE-1, which was built as a reference and passed its
-protocol. It is the correct reading of a NEUTRAL result, and it sets the bar the external
-sprint has to clear: **a candidate must beat exposure-matched passive by enough to cover
-its own operating cost at the account size it is meant for.** A candidate that wins on
-excess return but only at 10,000 USDT is a real finding, and so is one that wins nowhere.
+So the 27.80 USDT is exposure, not edge — obtainable by holding, without the machine. That
+is not a criticism of a reference that passed its protocol; it is what NEUTRAL means, and
+it sets the bar for the sprint: **a candidate must beat exposure-matched passive by enough
+to cover its own operating cost, in the sizing mode and on the infrastructure it is
+actually meant for.** A candidate that wins only at 10,000 USDT is a real finding. So is
+one that wins nowhere.
 
-## What this file must not be used for
+## Limits
 
-- Not a projection. These are four-year historical figures on one frozen window.
-- Not a recommendation to trade at any size. `REAL_MONEY_AUTHORIZED=NO`.
-- Not a slippage model. None is applied anywhere in Dataset V2; a strategy whose edge is
-  thinner than the spread would not be caught by anything in this table, which is why
-  slippage sensitivity stays a separate Wave 2 stress test.
+- Four-year historical figures on one frozen window. Not a projection.
+- No slippage is modelled anywhere in Dataset V2. A strategy whose edge is thinner than the
+  spread would not be caught by anything here, which is why slippage sensitivity stays a
+  separate Wave 2 stress test.
+- Tax is excluded entirely, and it is not small in most jurisdictions.
+- `REAL_MONEY_AUTHORIZED=NO`. Nothing here is a recommendation to trade at any size.

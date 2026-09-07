@@ -128,7 +128,10 @@ def test_registry_strategy_hashes_match_the_pin_manifest(registry, pins):
         ("GENETICENGINEV1_CLAIM_CHALLENGE", "genetic_engine_v1", "GeneticEngineV1.py"),
         ("E0V1E_NATIVE_HISTORICAL_RECONSTRUCTION", "e0v1e_historical", "strategies/e0v1e/E0V1E.py"),
     ]
-    candidates = {c["candidate_id"]: c for c in registry["candidates"]}
+    candidates = {
+        c["candidate_id"]: c
+        for c in registry["candidates"] + registry["claim_and_method_reference_track"]["candidates"]
+    }
     for candidate_id, source_key, path in checks:
         assert candidates[candidate_id]["strategy_sha256"] == by_path[(source_key, path)], candidate_id
 
@@ -224,12 +227,14 @@ def test_the_gates_that_must_kill_do_kill(gates):
     """Source identity, safety, data integrity and lookahead are not advisory."""
     kills = {g["id"] for g in gates["validity_gates"]["gates"] if g["kill"]}
     assert {
-        "V1_SOURCE_IDENTITY",
+        "V1_REPRODUCTION_IDENTITY",
         "V2_LOAD_AND_CONFIG",
         "V3_SAFETY_COMPATIBILITY",
         "V4_DATA_INTEGRITY",
         "V5_LOOKAHEAD",
         "V6_REALISTIC_COSTS",
+        "V3B_EXECUTION_RIGHTS",
+        "V7_WINDOW_PARITY",
     } <= kills
 
 
@@ -247,3 +252,71 @@ def test_funding_ablation_cannot_run_on_a_substitute_series(ablations):
     assert funding["predeclared_primary_axis"].startswith("max drawdown")
     assert "not approximated with a substitute series" in funding["kill_condition"]
     assert any("params files" in p for p in funding["prerequisites"])
+
+
+# --- pre-Wave-1 review corrections -----------------------------------------------
+
+
+def test_reproduction_identity_pins_all_five_components(registry):
+    """A source-code SHA alone is not an identity: the same source under different
+    params, config, engine or data is a different experiment."""
+    required = {"strategy_source", "parameter_files", "config", "engine_version", "data_contract"}
+    for candidate in registry["candidates"]:
+        identity = candidate["reproduction_identity"]
+        assert required <= set(identity), f"{candidate['candidate_id']} missing {required - set(identity)}"
+
+
+def test_executable_track_carries_only_licensed_candidates(registry, pins):
+    """V3B_EXECUTION_RIGHTS: a source with no recognised license leaves this track."""
+    unlicensed = {
+        key for key, source in pins["sources"].items() if source["license"]["spdx"] is None
+    }
+    assert unlicensed, "fixture sanity: some pinned sources are expected to be unlicensed"
+
+    executable_projects = {c["project"] for c in registry["candidates"]}
+    unlicensed_projects = {
+        pins["sources"][key]["project"].split(" (")[0] for key in unlicensed
+    }
+    assert not (executable_projects & unlicensed_projects), (
+        f"unlicensed project on the executable track: {executable_projects & unlicensed_projects}"
+    )
+
+
+def test_no_license_candidates_are_demoted_not_deleted(registry):
+    """Demotion is a rights finding. Reading and method extraction continue."""
+    demoted = {c["candidate_id"] for c in registry["claim_and_method_reference_track"]["candidates"]}
+    assert {
+        "GENETICENGINEV1_CLAIM_CHALLENGE",
+        "E0V1E_NATIVE_HISTORICAL_RECONSTRUCTION",
+    } <= demoted
+    for candidate in registry["claim_and_method_reference_track"]["candidates"]:
+        assert candidate["track"] == "CLAIM_AND_METHOD_REFERENCE"
+        assert "rights" in candidate["demotion_reason"].lower()
+        assert "priority_order" not in candidate
+
+
+def test_executable_priority_is_the_corrected_order(registry):
+    order = [c["candidate_id"] for c in sorted(registry["candidates"], key=lambda c: c["priority_order"])]
+    assert order == [
+        "BTCLAB_EMACROSS_H1",
+        "BTCLAB_EMACROSSFUNDING_H2",
+        "POSTMORTEM_NEGATIVE_CONTROL",
+        "NFI_NATIVE_SPOT_QUALIFICATION",
+    ]
+
+
+def test_same_hour_funding_is_not_presumed_to_be_lookahead(gates):
+    """The correction: prove funding_available_at <= signal_decision_time, do not
+    treat a shared timestamp as guilt."""
+    v5 = next(g for g in gates["validity_gates"]["gates"] if g["id"] == "V5_LOOKAHEAD")
+    special = v5["special_case_funding"]
+    assert "NOT automatically lookahead" in special
+    assert "funding_available_at <= signal_decision_time" in special
+    assert "STRICT_1H_DELAY" in special
+
+
+def test_warmup_gate_forbids_lowering_the_declared_startup_count(gates):
+    v7 = next(g for g in gates["validity_gates"]["gates"] if g["id"] == "V7_WINDOW_PARITY")
+    assert v7["kill"] is True
+    assert "never mutating Dataset V2" in v7["note"]
+    assert "never lowering" in v7["note"]

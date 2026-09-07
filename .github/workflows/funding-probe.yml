@@ -1,0 +1,95 @@
+name: Funding archive probe
+
+# Wave 1 prerequisite. EmaCrossFunding (H2) consumes a perpetual funding series as a
+# read-only feature; no derivative order is ever placed, which is what directive v1.1
+# section 11 permits.
+#
+# This runs on a GitHub runner because both Binance hosts are blocked from the research
+# sandbox: fapi.binance.com and data.binance.vision each answer 403 to CONNECT there.
+# fapi additionally returned 451 to GitHub runners during Dataset V2 acquisition, so the
+# API-equivalence check is expected to be the hard part, and it fails closed by design.
+#
+# Manual dispatch only: this reaches an external service and should run when someone asks.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First month to fetch (YYYY-MM-DD)"
+        default: "2020-10-01"
+      end:
+        description: "Last month to fetch (YYYY-MM-DD)"
+        default: "2026-08-31"
+      probe_only:
+        description: "Fetch one month and report reachability and schema only"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe and verify the Binance funding archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Reachability of each candidate host
+        # Recorded whatever the outcome: which hosts a runner can reach is the evidence
+        # that decides whether H2 is measurable at all.
+        run: |
+          set -uo pipefail
+          for host in \
+            "https://data.binance.vision/" \
+            "https://fapi.binance.com/fapi/v1/time" ; do
+            code=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "$host" || echo "000")
+            echo "  $code  $host"
+          done
+
+      - name: Funding acquisition gate
+        id: gate
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          args=(--start "${{ inputs.start }}" --end "${{ inputs.end }}"
+                --report "$RUNNER_TEMP/funding_report.json"
+                --out "$RUNNER_TEMP/funding_series.json")
+          if [ "${{ inputs.probe_only }}" = "true" ]; then args+=(--probe-only); fi
+          python3 scripts/fetch_binance_funding.py "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/funding_probe.log"
+          echo "rc=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Report
+        # Artifact storage is unreachable from the analysis environment, so the verdict is
+        # echoed into the job log where it can actually be read. No inline Python here:
+        # a nested heredoc silently killed a step in the Dataset V2 workflow, and the
+        # script already prints its own summary.
+        if: always()
+        run: |
+          set -uo pipefail
+          echo "=== gate exit: ${{ steps.gate.outputs.rc }} ==="
+          if [ -f "$RUNNER_TEMP/funding_report.json" ]; then
+            cat "$RUNNER_TEMP/funding_report.json"
+          else
+            echo "no report written; see the probe log above"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: funding-probe
+          path: |
+            ${{ runner.temp }}/funding_report.json
+            ${{ runner.temp }}/funding_probe.log
+          if-no-files-found: warn
+
+      - name: Fail the job if the gate failed on a non-probe run
+        if: inputs.probe_only == false && steps.gate.outputs.rc != '0'
+        run: |
+          echo "::error::FUNDING_ACQUISITION_GATE = FAIL - H2 is NOT_MEASURABLE until this passes"
+          exit 1

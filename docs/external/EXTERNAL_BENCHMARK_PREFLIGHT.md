@@ -8,6 +8,11 @@ CI, and that is open in PR #3.
 Everything below was established without running a single candidate, and none of it
 depends on the gate. It changes what Wave 1 should do on day one.
 
+**Revision v2** applies the pre-Wave-1 review correction. Sections 2, 3 and 7 are
+superseded by it: the warm-up fix is now an immutable overlay with a canonical-identity
+proof, funding knowability is a per-observation proof obligation rather than a
+same-hour presumption, and the executable ordering is decided by execution rights.
+
 ---
 
 ## 1. The sandbox cannot execute any candidate. CI must.
@@ -31,82 +36,127 @@ one parameterised workflow rather than one workflow per candidate.
 
 ---
 
-## 2. EmaCross needs a longer warm-up than Dataset V2 has
+## 2. EmaCross needs 1300 valid startup candles, supplied by an overlay
 
 `EmaCross` and `EmaCrossFunding` both declare `startup_candle_count = 1300`.
 
 ```
-Dataset V2 warm-up available (2020-12-01 → 2021-01-01):   744 candles
-BaselineEmaRegimeV1 requires:                             600   OK
-EmaCross / EmaCrossFunding require:                      1300   short by 556 (23.2 days)
+Dataset V2 warm-up available (2020-12-01 -> 2021-01-01):   744 candles
+BaselineEmaRegimeV1 requires:                              600   OK
+EmaCross / EmaCrossFunding require:                       1300   short by 556 (23.2 days)
 ```
 
 Freqtrade trims `startup_candle_count` candles from the start of the loaded data, so the
 first scored bar would land at **2021-01-24**, twenty-three days inside Development. The
-control and the candidate would then be scored on different windows, which breaks §14's
-requirement to hold data constant, and makes any excess-return difference partly an
-artifact of the start date.
+control and the candidate would then be scored on different bars, which breaks §14's
+requirement to hold data constant.
 
-The indicator itself is fine: `EmaCross.json` pins `ema_period = 600`, which converges
-inside 744 candles. This is purely Freqtrade's declared-startup trimming, not
-non-convergence — which is what makes the cheap fix legitimate rather than a fudge.
+### The fix: a separate immutable overlay, never a mutation
 
-**Recommended fix — extend the warm-up, never the scored window.** Acquire
-`2020-10-01 → 2020-12-01` as an additive, warm-up-only segment with its own lock entry.
-It sits entirely *before* Development, so it cannot touch a scored bar, cannot alter any
-existing candle, and cannot move any Dataset V2 fingerprint. Dataset V2 stays immutable
-evidence, and both strategies then start scoring on 2021-01-01.
+**Dataset V2 is not touched.** The warm-up comes from a distinct artifact with its own
+lock, and the two are combined only at load time:
 
-Rejected alternatives: lowering `startup_candle_count` edits upstream source and would
-make the run no longer a reproduction of the pinned candidate; scoring from 2021-01-24
-would require re-running the frozen control on a shortened window for a fair comparison.
+| | |
+| --- | --- |
+| Overlay range | 2020-10-01 → 2020-11-30T23:00Z |
+| Overlay candles (1h) | 1,464 |
+| Plus Dataset V2's own warm-up | 744 |
+| **Total before first scored bar** | **2,208 ≥ 1300** ✓ |
+| Lock | `research/datasets/warmup_overlay.lock.json`, separate from Dataset V2's |
+| Scored? | **Never.** The overlay ends before Development begins. |
 
----
+Three properties make this safe, and each is asserted rather than assumed:
 
-## 3. `EmaCrossFunding` needs a funding series we cannot yet obtain
+1. **Disjoint.** The overlay ends at 2020-11-30T23:00Z; Dataset V2 begins at
+   2020-12-01T00:00Z. No candle exists in both, so no value can be overwritten.
+2. **Canonical-identity preserved.** After the overlay is joined, every Dataset V2 candle
+   must still hash to its frozen `CANONICAL_CANDLE_V1` digest. This is run as a gate, not
+   asserted in prose: a joined series that moves any scored candle fails and the run stops.
+3. **Never scored.** The overlay lies entirely before the Development window, so it
+   contributes indicator history and nothing else.
+
+The overlay must itself pass the full acquisition audit — coverage, cadence, duplicates,
+gaps, NaN, OHLC validity, monotonic timestamps, completed-candle boundaries — so that
+"1300 startup candles" means 1300 *valid completed* candles, not merely 1300 rows.
+
+### What is explicitly not done
+
+**`startup_candle_count` is not lowered.** Editing it would make the run a reproduction of
+a different strategy than the one pinned, and V1_REPRODUCTION_IDENTITY would fail it.
+
+**The warm-up is not arbitrarily extended to 180 days** to force the funding percentile to
+maturity. The percentile's immaturity is real but is handled as a reported sensitivity —
+see §3 — not by inflating the startup window until it disappears.
+
+## 3. Funding: acquisition must be verified, and knowability proved per observation
 
 The strategy reads `research/webdata/funding.feather`, built upstream by
-`research/fetch_onchain.py` from `https://fapi.binance.com/fapi/v1/fundingRate` (BTCUSDT,
-from 2019-09-01).
+`research/fetch_onchain.py` from `https://fapi.binance.com/fapi/v1/fundingRate`.
 
-That host is blocked from this sandbox, and during Dataset V2 acquisition Binance's
-trading API returned **451** to GitHub-hosted runners — which is why Dataset V2 was
-ultimately built from the public archive at `data.binance.vision` instead.
+`fapi.binance.com` is blocked from this sandbox and returned **451** to GitHub-hosted
+runners during Dataset V2 acquisition. `data.binance.vision` is the route that worked for
+candles — and it too is blocked from the sandbox (403 to CONNECT, confirmed), so the probe
+runs in CI. `scripts/fetch_binance_funding.py` implements it.
 
-**The same archive publishes funding-rate history** under the UM futures path. Proving that
-route is a prerequisite for H2 and should be the first CI job of Wave 1, because if it
-fails, `EmaCrossFunding` cannot run at all and the H1/H2 split collapses to H1 alone.
+### Nothing about the archive is trusted by default
 
-**Do not substitute a different funding source.** A series with different settlement
-semantics would silently change the feature and invalidate the ablation.
+Before the series may be used, all of the following must pass; any failure is fatal:
 
-### FUNDING_TIMESTAMP_KNOWABILITY — preliminary PASS, must be re-asserted on real data
+| Check | What it establishes |
+| --- | --- |
+| Coverage | every requested month present, spanning the range |
+| Schema | columns are a recognised shape — an unknown header **fails closed**, never guesses |
+| Checksum | each archive matches its published `.CHECKSUM` |
+| Ordering / dedup | timestamps strictly increasing, no duplicates |
+| **Semantics** | every timestamp on the 00:00/08:00/16:00 UTC settlement grid |
+| Continuity | exactly one settlement per 8-hour slot, no gaps |
+| **API equivalence** | overlapping samples agree with the upstream API representation |
 
-Directive §11 requires proof that each funding value was knowable at decision time.
-Reading the pinned source rather than trusting the upstream comment:
+The last two carry the argument. The archive names its columns `calc_time` /
+`last_funding_rate`; the API names them `fundingTime` / `fundingRate`. **That these denote
+the same instant is an assumption until measured**, and getting it wrong shifts every value
+by up to eight hours.
 
-```python
-df["date"] = pd.to_datetime(df.fundingTime, unit="ms", utc=True)   # fetch_onchain.py
-f = fr.reindex(idx, method="ffill")                                # EmaCrossFunding.py
+So if the API cannot be reached, equivalence is `UNESTABLISHED` and the gate **fails
+closed** — "could not check" must never read as "checked". A unit test pins exactly that
+behaviour, because it is the one place a well-meaning fix would quietly turn a blocker into
+a pass.
+
+**Consequence worth stating plainly:** `fapi.binance.com` is refused from both networks
+available to this project. If no API sample can be obtained from a network Binance does not
+refuse, equivalence cannot be established and **H2 is `NOT_MEASURABLE`**. That is the
+correct outcome under the directive, not a problem to engineer around. A single small API
+sample from an unblocked network would discharge it.
+
+### FUNDING_TIMESTAMP_KNOWABILITY — a proof obligation, not a same-hour presumption
+
+**Corrected.** Same-hour funding is *not* automatically lookahead. Freqtrade evaluates
+signals on candle close and enters at the next candle open, so for a candle opening at `T`
+the decision is taken at `T+1h`. A value settled at `T` is already published by then.
+
+The gate is discharged by proving, per observation:
+
+```
+funding_available_at <= signal_decision_time
 ```
 
-- `fundingTime` is Binance's **settlement** timestamp — the instant the rate is applied
-  and therefore known — not the start of the interval it accrued over. This is the
-  distinction that decides the question: had the series been keyed on interval *start*,
-  every value would leak up to eight hours.
-- `method="ffill"` carries only the last already-settled value forward. Nothing indexes
-  ahead.
-- The derived features — `rolling(72).mean()` and `rolling(24*180).rank(pct=True)` — are
-  both trailing windows over that already-lagged series.
-- Freqtrade acts on a signal at the open of the candle *after* the one that produced it, so
-  a value settled at 08:00 and used on the candle opening 08:00 is acted on at 09:00.
+and not by treating a shared timestamp as guilt. Reading the pinned source supports the
+mapping — `fetch_onchain.py` keys the series on `fundingTime`, the settlement instant, and
+`EmaCrossFunding.py` carries it forward with `reindex(..., method="ffill")`, so nothing
+indexes ahead — but source reading gives `PRELIMINARY_PASS` only. The empirical
+per-observation assertion is required before any H2 result is recorded, and a value whose
+availability cannot be established is a FAIL.
 
-**Verdict: PRELIMINARY_PASS on source reading.** It is not yet evidence. Before any H2
-result is recorded, assert empirically against the acquired series that every value's
-timestamp precedes the decision bar, and run Freqtrade's own lookahead analysis. A
-future-aligned value is an automatic FAIL under §11.
+### Two sensitivities, recorded separately from the native run
 
----
+- **`STRICT_1H_DELAY`** — re-run with every funding value held back a further full hour
+  beyond native availability. Robustness against residual uncertainty in publication
+  timing. Native timing remains *the* reproduction; a disagreement between them is
+  reported, not resolved by preferring one.
+- **`MATURE_FEATURE`** — the percentile uses `rolling(24*180, min_periods=24*30)`, so early
+  bars are built on a 30-day window where the rule intends 180. Report H2 restricted to
+  bars where the percentile is fully populated, *alongside* the unrestricted native run.
+  Diagnostic evidence; it does not replace the native run.
 
 ## 4. Reproducing a claim means loading its parameter files
 
@@ -176,16 +226,28 @@ case.
 
 ---
 
-## 7. Ordering that follows from the above
+## 7. Ordering — decided by execution rights, then by cost
 
-1. Prove the `data.binance.vision` funding-rate route in CI. It gates H2 entirely.
-2. Acquire the warm-up-only extension so the control and candidates share a scored window.
-3. `EmaCross` (H1) native BTC-only reproduction — the cheapest real candidate, and
-   btc-strategy-lab is BTC-native, so per §10 it is registered BTC-first rather than forced
-   onto ETH.
-4. `EmaCrossFunding` (H2) **as an ablation against H1**, never as a standalone ranking.
-5. Postmortem negative control — cheap, and it calibrates everything after it.
-6. GeneticEngineV1 claim challenge — cost and concentration gates first.
-7. E0V1E native reconstruction — expected `NOT_ENOUGH_PUBLIC_INPUTS`.
+**Corrected.** No-license candidates must not block Wave 1 or sit ahead of licensed work.
+`V3B_EXECUTION_RIGHTS` enforces it: a source with no recognised license at its pinned
+commit leaves the executable track for the claim/method-reference track. That is a rights
+finding, never a judgement on the project.
 
-Nothing in this list may start before the §0 gate passes.
+**Executable track**
+
+1. Prove the `data.binance.vision` funding route in CI — it gates H2 entirely, and a clean
+   kill here is cheap.
+2. Acquire and lock the warm-up overlay; prove Dataset V2 canonical identity is preserved.
+3. **`EmaCross`** (H1) — native BTC-only. btc-strategy-lab is BTC-native, so per §10 it is
+   registered BTC-first rather than forced onto ETH.
+4. **`EmaCrossFunding`** (H2) — as an ablation against H1, never a standalone ranking, with
+   both sensitivities recorded separately.
+5. **Licensed Freqtrade negative controls** — the postmortem, GPL-3.0 at its pinned commit.
+   Cheap, and it calibrates everything after it.
+6. **NFI native Spot** — Wave 2, timeboxed.
+
+**Claim / method-reference track** (no recognised license: `GeneticEngineV1`, `E0V1E`,
+Kronos). Source inspection, claim freezing and method extraction continue. No ranked
+execution and no vendoring into core unless rights are explicitly resolved.
+
+Nothing in either list may start before the §0 gate passes.
