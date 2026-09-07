@@ -177,3 +177,73 @@ def test_registry_records_the_sprint_as_gated(registry):
     activation = registry["sprint_activation"]
     assert "1dfb69604bb87856b75c8c90957f2acc8e1fab7f" in activation["requirement"]
     assert registry["invariants"]["real_money_authorized"] is False
+
+
+# --- pre-registration invariants -------------------------------------------------
+#
+# A threshold chosen after seeing a result is commentary, not a threshold. These
+# assert that the gates stay declared-in-advance and that they keep judging every
+# candidate on the same scale the frozen control already faced.
+
+
+@pytest.fixture(scope="module")
+def gates() -> dict:
+    return json.loads((EXTERNAL / "qualification_gates.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def ablations() -> dict:
+    return json.loads((EXTERNAL / "ablation_registry.json").read_text(encoding="utf-8"))
+
+
+def test_gates_and_ablations_declare_themselves_pre_result(gates, ablations):
+    assert gates["pre_registered_before_any_candidate_result"] is True
+    assert ablations["pre_registered_before_any_candidate_result"] is True
+
+
+def test_classification_bands_are_baseline_1s_unchanged(gates):
+    """Candidates must be scored on the scale the control faced, not a new one."""
+    bands = gates["inherited_without_change"]["classification"]
+    assert bands["STRONG"] == (
+        "E > +10 pp AND Sharpe > 0.5 AND max drawdown < 35% AND at least 30 closed trades"
+    )
+    assert bands["WEAK"] == "E < -10 pp OR profit factor < 0.8"
+    assert bands["NEUTRAL"] == "anything else"
+    assert gates["inherited_without_change"]["excess_definition"].startswith(
+        "E = total_return_pct - passive_realised_exposure_matched_return_pct"
+    )
+
+
+def test_every_gate_is_actionable(gates):
+    for gate in gates["validity_gates"]["gates"]:
+        assert gate["id"] and gate["question"] and gate["method"] and gate["fail_rule"]
+        assert isinstance(gate["kill"], bool)
+
+
+def test_the_gates_that_must_kill_do_kill(gates):
+    """Source identity, safety, data integrity and lookahead are not advisory."""
+    kills = {g["id"] for g in gates["validity_gates"]["gates"] if g["kill"]}
+    assert {
+        "V1_SOURCE_IDENTITY",
+        "V2_LOAD_AND_CONFIG",
+        "V3_SAFETY_COMPATIBILITY",
+        "V4_DATA_INTEGRITY",
+        "V5_LOOKAHEAD",
+        "V6_REALISTIC_COSTS",
+    } <= kills
+
+
+def test_prohibited_list_keeps_the_directive_s_hard_noes(gates):
+    joined = " ".join(gates["prohibited"]).lower()
+    assert "win rate as a primary success metric" in joined
+    assert "raw return" in joined
+    assert "validation" in joined
+
+
+def test_funding_ablation_cannot_run_on_a_substitute_series(ablations):
+    """A different settlement convention would silently change the component."""
+    funding = next(a for a in ablations["ablations"] if a["ablation_id"] == "ABL_FUNDING_FILTER")
+    assert funding["status"] == "PRE_REGISTERED_NOT_RUN"
+    assert funding["predeclared_primary_axis"].startswith("max drawdown")
+    assert "not approximated with a substitute series" in funding["kill_condition"]
+    assert any("params files" in p for p in funding["prerequisites"])
