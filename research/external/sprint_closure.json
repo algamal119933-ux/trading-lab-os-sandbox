@@ -1,0 +1,65 @@
+{
+  "schema_version": "SPRINT_CLOSURE_V1",
+  "sprint": "POST-BASELINE-EXTBENCH-1",
+  "status": "OWNER_TERMINATED_INCONCLUSIVE",
+  "recorded_utc": "2026-09-07T00:00:00Z",
+  "authority": "TRADING_LAB_OS_OWNER_COMPRESSION_AND_FP_NEXT_STAGE_20260907.md section 0",
+  "why_this_file_exists": "The frozen preregistration artifacts are historical evidence and are not rewritten to carry a terminal status they did not have. The Owner amendment is recorded additively, here, so a reader of Repo Truth cannot mistake a terminated sprint for a closed one.",
+  "owner_reason": "Marginal retrospective evidence no longer justifies delaying prospective forward-paper evidence.",
+  "explicitly_not": [
+    "SURVIVOR",
+    "NO_SURVIVOR",
+    "FULL_PREREGISTERED_CLOSURE",
+    "PROSPECTIVE_OOS"
+  ],
+  "survivor_state": "NOT_DETERMINED",
+  "no_survivor": "NOT_ESTABLISHED",
+  "prospective_oos_proven": false,
+  "dataset_v2_validation_status": "SPENT / RETROSPECTIVE",
+  "dataset_v2_reacquired": false,
+  "executed_arms": [
+    {
+      "lane": "H1_DATASET_V2_DEVELOPMENT",
+      "candidate": "H1_EMACROSS",
+      "state": "EXECUTED",
+      "measurement_validity": "PASS",
+      "candidate_quality": "NOT_DETERMINED",
+      "evidence_grade": "C_DEVELOPMENT",
+      "workflow_run": 34126570635,
+      "job": 101756531915,
+      "interpretation": "VALID HISTORICAL MEASUREMENT. Not a survivor. Not a prospective edge proof."
+    }
+  ],
+  "cancelled_arms": [
+    { "item": "Track B - funding archive acquisition and verification", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "H2_DATASET_V2_DEVELOPMENT (EmaCrossFunding)", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT", "note": "All validity gates passed; the backtest never ran because the strategy reads research/webdata/funding.feather, which Track B was to supply. Blocked on a preregistered dependency, not defective." },
+    { "item": "H1-vs-H2 ablation", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "licensed Freqtrade negative control", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "NFI native Spot qualification", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "deep validation for survivors", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "component mining and one-component ablations", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "TradingLabCandidateV1", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "ETH_GENERALIZATION_CHALLENGE", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" },
+    { "item": "CLAIM_SNAPSHOT_RECONSTRUCTION and CURRENT_NATIVE_REPLAY", "state": "NOT_EXECUTED — CANCELLED_BY_OWNER_COMPRESSION_AMENDMENT" }
+  ],
+  "preserved_h1_evidence": {
+    "measurement_validity": "PASS",
+    "net_return_pct": 20.02157908,
+    "trades": 76,
+    "win_rate_pct": 25.0,
+    "profit_factor": 2.168958166224399,
+    "max_drawdown_pct": 5.182473626914299,
+    "sharpe": 0.18816686734820506,
+    "sortino": 2.6934126369412636,
+    "time_in_market_pct": 56.37566665715997,
+    "controls": {
+      "btc_buy_and_hold_pct": 222.084921074677,
+      "max_exposure_matched_pct": 44.41698421493538,
+      "realised_exposure_matched_pct": 12.306064183383148
+    },
+    "excess_vs_realised_exposure_matched_pp": 7.715514896616852,
+    "excess_vs_max_exposure_matched_pp": -24.395405134991024,
+    "excess_vs_buy_and_hold_pp": -202.06334199393023
+  },
+  "real_money_authorized": false
+}
