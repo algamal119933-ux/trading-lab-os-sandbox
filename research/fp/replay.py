@@ -35,8 +35,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 STRATEGY_PATH = REPO_ROOT / "freqtrade" / "user_data" / "strategies" / "BaselineEmaRegimeV1.py"
 
 # Set to "VERIFIED_IN_CI" only by evidence from the TA-Lib parity job, never by
-# assertion. See .github/workflows/ci.yml, job `freqtrade-load`.
-EMA_PARITY_STATUS = "ASSERTED_PENDING_TALIB_EXECUTION"
+# assertion.
+#
+# First verified by CI run 43, job "Freqtrade loads the paper config and
+# strategy", on commit 4419dfd:
+#
+#     EMA_PARITY = PASS - 600 bars, periods 50 and 200,
+#     max relative difference within 1e-12
+#
+# The claim stays live rather than becoming a stale badge: research/fp/
+# talib_parity.py re-runs inside freqtradeorg/freqtrade:2026.7 on every push, so
+# any edit to ``ema()`` that diverges from TA-Lib turns CI red on the commit that
+# makes it. Revert this constant to "ASSERTED_PENDING_TALIB_EXECUTION" if that
+# job is ever removed.
+EMA_PARITY_STATUS = "VERIFIED_IN_CI"
 
 REPLAY_ENGINE_VERSION = "FP_EVENT_TIME_REPLAY_V1"
 

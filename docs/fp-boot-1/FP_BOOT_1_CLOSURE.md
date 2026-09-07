@@ -25,12 +25,12 @@ evidence: [`FP_BOOT_1_ENTRY_STATE.md`](FP_BOOT_1_ENTRY_STATE.md).
 
 | Section 32 condition | State |
 | --- | --- |
-| 1. admission is explicit | **BLOCKED** — 9 of 14 section-5 conditions are not `PASS` |
-| 2. candidate/control cohort is frozen | **NO** — no survivor exists to freeze |
+| 1. admission is explicit | **BLOCKED** — 8 of 14 section-5 conditions are not `PASS` |
+| 2. candidate/control cohort is frozen | **NO** — the sprint's own frozen registry records that no candidate has been executed |
 | 3. safety gate passes | **PASS** — paper guard accepts the shipped config and rejects an unsafe one |
 | 4. input capture is working | **PASS** — executed against a 900-candle sample, chain-verified, tamper detected |
 | 5. decision ledger is working | **PASS** — executed, append-only, erratum does not rewrite the corrected record |
-| 6. event-time replay works | **PASS** on synthetic input; the TA-Lib EMA equivalence is executed in CI |
+| 6. event-time replay works | **PASS** on synthetic input; the TA-Lib EMA equivalence is executed in CI and passed |
 | 7. recovery drill passes | **NOT RUN** — needs a running instance and a database to recover |
 | 8. runtime isolation is proven | **NOT PROVEN** — no instance declares a `db_path` to isolate |
 | 9. monitoring is green | **NOT PROVEN** — liveness is a property of a running instance |
@@ -41,6 +41,21 @@ evidence: [`FP_BOOT_1_ENTRY_STATE.md`](FP_BOOT_1_ENTRY_STATE.md).
 Section 2 is explicit about the correct response: *"If no candidate survives, do
 not invent one merely to populate FP-RUN."* No candidate was invented, no cohort
 was started, and no `T0` was written.
+
+Section 3's STATE A does not apply either: no paper cohort was started early
+under the "start the clock early" rule, so there is no prior `T0` to adopt and
+nothing whose evidence time could be reset.
+
+## CI evidence
+
+Run 43 on commit `4419dfd`, all three jobs green on GitHub-hosted runners with
+no private credential:
+
+| Job | What it proved for this stage |
+| --- | --- |
+| `static` | the forward-paper records validate against their schemas; the admission record regenerates identically and still reads `BLOCKED`; preflight refuses a `T0`; 320 tests pass |
+| `freqtrade-load` | the replay EMA equals TA-Lib's inside the pinned engine image — `EMA_PARITY = PASS`, 600 bars, periods 50 and 200, within `1e-12` |
+| `compose` | unchanged from CLOUD-0: compose renders, the exporter image builds and serves `/metrics` |
 
 ## What was built and proven
 
@@ -53,7 +68,7 @@ work in this stage.
 | `research/fp/replay.py` | event-time replay reference (section 9.1) and the canonical-later diagnostic (section 9.2) | 20 tests, including a flipped decision being caught, a decision with no captured input being caught, and an upstream revision being classified `SOURCE_REVISION_DRIFT` only when event-time replay passed |
 | `research/fp/admission.py` | evaluates all 14 section-5 conditions against repository state | 27 tests; forced all-`PASS` yields `ADMITTED`, and any single `UNPROVEN` **or** `FAIL` blocks |
 | `research/fp/preflight.py` | the 12 section-12 checks, three of them executed with negative controls | 19 tests; the gate is shown to be capable of `PASS`, and each executed check is shown to detect its fault |
-| `research/fp/talib_parity.py` | executes the replay EMA against TA-Lib inside `freqtradeorg/freqtrade:2026.7` | CI job `freqtrade-load` |
+| `research/fp/talib_parity.py` | executes the replay EMA against TA-Lib inside `freqtradeorg/freqtrade:2026.7` | CI job `freqtrade-load`, run 43: `EMA_PARITY = PASS`, 600 bars, both periods, within `1e-12` |
 | `research/schema/paper_candidate_admission.schema.json` | section 5 + section 6 record shape | validated in CI |
 | `research/schema/forward_paper_cohort_registry.schema.json` | section 7 runtime identity, section 15 change classes | validated in CI |
 
@@ -83,11 +98,15 @@ have been faked.
   real decision.
 * **Event-time replay has been exercised on synthetic candles only.** It has
   never seen a candle that came from an exchange.
-* **The EMA equivalence with TA-Lib is `ASSERTED_PENDING_TALIB_EXECUTION` in the
-  research environment**, which has no TA-Lib. `EMA_PARITY_STATUS` in
-  `research/fp/replay.py` is flipped to `VERIFIED_IN_CI` only by evidence from
-  the CI parity job, never by assertion — and while it reads
-  `ASSERTED_PENDING_TALIB_EXECUTION`, admission condition 12 stays `UNPROVEN`.
+* **The EMA equivalence with TA-Lib now rests on an executed check, not on the
+  research environment**, which has no TA-Lib at all. CI run 43 on commit
+  `4419dfd` reported `EMA_PARITY = PASS — 600 bars, periods 50 and 200, max
+  relative difference within 1e-12`, so `EMA_PARITY_STATUS` reads
+  `VERIFIED_IN_CI` and admission condition 12 moved from `UNPROVEN` to `PASS`.
+  It is not a stale badge: the parity job re-runs on every push, so a divergent
+  edit to `ema()` turns CI red on the commit that makes it. What is still *not*
+  proven is that replay agrees with the engine's full decision path — only that
+  the indicator underneath it agrees.
 * **No recovery drill was performed** (section 13), and no runtime isolation,
   monitoring liveness or duplicate-instance exclusion was observed.
 * **`PAPER_FILL_MODEL_VERSION` is unset.** Section 11 requires a frozen fill
@@ -117,8 +136,11 @@ In order, because each depends on the one above it.
 2. **Run BASELINE-1 on the Development window**, with lookahead and recursive
    analysis, recorded as a schema-valid experiment record. This unblocks
    conditions 2–6.
-3. **Run the benchmark sprint** the specification calls `POST-BASELINE-EXTBENCH-1`,
-   producing a survivor registry — or producing none, which is a legitimate
+3. **Execute the benchmark sprint** the specification calls
+   `POST-BASELINE-EXTBENCH-1`. It is already pre-registered on the sibling
+   branch `claude/new-session-140zbb`, with its candidate registry frozen before
+   any result and its own activation gate recorded as NOT MET. Executing it
+   produces a survivor registry — or produces none, which is a legitimate
    outcome and returns this repository to entry state C with better evidence.
 4. Only then: freeze a runtime identity into the cohort registry, re-run
    preflight, perform the recovery drill of section 13, and create a `T0`.

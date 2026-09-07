@@ -241,3 +241,24 @@ def test_change_model_is_predeclared(request):
     doc = (request.config.rootpath / "docs/fp-boot-1/FP_BOOT_1_ENTRY_STATE.md").read_text(encoding="utf-8")
     for token in ("OBSERVABILITY", "RUNTIME REPAIR", "SEMANTIC CHANGE", "OLD_COHORT = CLOSED"):
         assert token in doc
+
+
+def test_replay_condition_tracks_the_ema_parity_status(monkeypatch):
+    """Condition 12 must follow the parity evidence, not a hard-coded verdict.
+
+    While the EMA equivalence with TA-Lib is only asserted, "deterministic or
+    explainable replay exists" is UNPROVEN; once CI has executed it, it passes.
+    """
+    from fp import replay
+
+    monkeypatch.setattr(replay, "EMA_PARITY_STATUS", "ASSERTED_PENDING_TALIB_EXECUTION")
+    assert admission._replay_available()[0] == "UNPROVEN"
+
+    monkeypatch.setattr(replay, "EMA_PARITY_STATUS", "VERIFIED_IN_CI")
+    assert admission._replay_available()[0] == "PASS"
+
+
+def test_the_committed_parity_status_is_one_of_the_two_known_values():
+    from fp import replay
+
+    assert replay.EMA_PARITY_STATUS in {"ASSERTED_PENDING_TALIB_EXECUTION", "VERIFIED_IN_CI"}

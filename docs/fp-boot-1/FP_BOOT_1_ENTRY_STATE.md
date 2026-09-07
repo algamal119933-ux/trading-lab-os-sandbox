@@ -8,11 +8,12 @@
 
 Section 2 lists the inputs FP-BOOT-1 requires from the preceding benchmark
 sprint. None of them exists in this repository, and the reason is not an
-oversight: the sprint that produces them has not happened.
+oversight: the sprint that produces them has been pre-registered but has not
+been executed.
 
 | Required input (section 2) | State in this repository |
 | --- | --- |
-| candidate/survivor registry | absent — no benchmark sprint has run |
+| candidate/survivor registry | **pre-registered but unexecuted** — see "The sprint that is in flight" below |
 | source/config/params hashes for a survivor | absent |
 | measurement-validity verdict | absent — `research/records/` holds only `EXAMPLE_experiment_record.json` |
 | candidate-quality verdict | absent |
@@ -34,6 +35,38 @@ So the ordering the specification assumes —
 two whole stages. Section 2 is explicit about what to do with that:
 
 > If no candidate survives, do not invent one merely to populate FP-RUN.
+
+## The sprint that is in flight
+
+`POST-BASELINE-EXTBENCH-1` is not merely absent: it has been **specified and
+pre-registered**, on the sibling branch `claude/new-session-140zbb`, and it has
+**not been executed**. That distinction matters enough to record precisely,
+because "the sprint has not run" and "no sprint work exists" are different
+claims and only the first is true.
+
+That branch carries `research/external/candidate_registry.json` with
+`stage_label = "POST-BASELINE-EXTBENCH-1"`,
+`frozen_before_any_candidate_result = true`, and its own activation gate:
+
+> "1dfb69604bb87856b75c8c90957f2acc8e1fab7f must be an ancestor of main via a
+> merge commit, with merged-main CI green" — status at freeze: **NOT MET**.
+> "No candidate in this registry may be executed until the gate passes."
+
+Its `research/external/qualification_scorecard.csv` is a header row and a
+comment: *"columns pre-registered before any result exists; one row per
+executable experiment"*. Its negative control is marked
+`survivor_eligible = false`, and its Wave-2 candidate is
+`survivor_eligible = "pending qualification"`.
+
+This is **stronger** evidence for entry state C than an empty repository would
+be. The sprint's own frozen registry states, from before any result existed,
+that no candidate has been executed and none may be. There is therefore no
+survivor to adopt, and section 3's STATE A ("survivor already running") does not
+apply: no paper cohort was started early under the specification's
+"start the clock early" rule, so there is no original `T0` to preserve.
+
+Nothing in this stage touches that branch, its registry, or its pre-registered
+scorecard columns.
 
 ## What state C authorises
 

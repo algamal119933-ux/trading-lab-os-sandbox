@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "evaluated_utc": "2026-09-07T09:12:50Z",
-  "code_commit": "9825541a267ff5287253eac24b15fe8aa286874a",
+  "evaluated_utc": "2026-09-07T09:25:16Z",
+  "code_commit": "4419dfd755f48987b33b358a3d16c2e9ba32686d",
   "candidate": {
     "role": "FP-CANDIDATE-A",
     "name": null,
@@ -84,8 +84,8 @@
     {
       "id": 12,
       "requirement": "deterministic or explainable replay exists",
-      "result": "UNPROVEN",
-      "evidence": "FP_EVENT_TIME_REPLAY_V1 derives BASELINE-1 decisions from the captured input ledger; periods are read from the frozen strategy by AST, not copied; EMA parity vs TA-Lib is ASSERTED_PENDING_TALIB_EXECUTION \u2014 the parity claim has not yet been executed against TA-Lib"
+      "result": "PASS",
+      "evidence": "FP_EVENT_TIME_REPLAY_V1 derives BASELINE-1 decisions from the captured input ledger; periods are read from the frozen strategy by AST, not copied; EMA parity vs TA-Lib is VERIFIED_IN_CI"
     },
     {
       "id": 13,
@@ -118,5 +118,5 @@
   },
   "paper_alpha_cohort": "NONE",
   "real_money_authorized": false,
-  "reason": "PAPER_ADMISSION = BLOCKED. Section 5 conditions not satisfied: 1, 2, 3, 4, 5, 6, 9, 11, 12. No benchmark sprint has closed, Dataset V2 is not acquired, and BASELINE-1 has never been run, so no candidate can be frozen for forward paper."
+  "reason": "PAPER_ADMISSION = BLOCKED. Section 5 conditions not satisfied: 1, 2, 3, 4, 5, 6, 9, 11. No benchmark sprint has closed, Dataset V2 is not acquired, and BASELINE-1 has never been run, so no candidate can be frozen for forward paper."
 }
