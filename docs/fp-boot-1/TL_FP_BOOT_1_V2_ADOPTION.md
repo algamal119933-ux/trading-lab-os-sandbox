@@ -5,7 +5,10 @@
 **Classification (directive §1.3):** `FP-BOOT-1 PREPARATORY SCAFFOLD / PARKED / NON-AUTHORITATIVE UNTIL RECONCILED`
 
 ```text
-TL_FP_BOOT_1 = BLOCKED — authoritative lineage not consolidated
+TL_FP_BOOT_1 = BLOCKED — section 3.1 DONE, section 3.2 outstanding
+BASELINE_CLOSURE_ANCESTOR = YES (1dfb696 -> origin/main 07f957c)
+BENCHMARK_CLOSURE_MERGED  = NO
+ENTRY_STATE = NOT_AUTHORITATIVE
 FP_INFRASTRUCTURE_SCAFFOLD_VALIDATION = PASS
 FP_RUNTIME_READINESS = NOT_PROVEN
 DATASET_V2_REACQUIRED = NO
@@ -87,23 +90,61 @@ unmerged it emits `NOT_AUTHORITATIVE`, and it flips by itself once the merge
 lands, because the ancestry is checked with `git merge-base --is-ancestor`
 rather than asserted.
 
-## Activation status — §3.1
+## §3.1 — BASELINE lineage merge: COMPLETE
+
+Merged on owner authorisation.
+[PR #3](https://github.com/algamal119933-ux/trading-lab-os-sandbox/pull/3) —
+*BASELINE-1 evaluation and Dataset V2 acquisition*.
+
+All seven steps of §3.1 verified, not assumed:
+
+| § | Step | Evidence |
+| --- | --- | --- |
+| 3.1.1 | merged into `main` with a normal merge commit | `07f957c`, two parents |
+| 3.1.2 | not squashed | parents are `9825541` **and** `1dfb696`; a squash has one |
+| 3.1.3 | not rebased | `1dfb696` retains its original SHA as the second parent |
+| 3.1.4 | `1dfb696…` not rewritten | present verbatim in `git log origin/main` |
+| 3.1.5 | ancestry proof | `git merge-base --is-ancestor 1dfb696 origin/main` → **exit 0** |
+| 3.1.6 | merged-main CI green | run 34108300025 on `07f957c` — **success** |
+| 3.1.7 | frozen artifacts unchanged | every blob hash identical across the merge (below) |
+
+Step 7 was checked by comparing git blob object IDs before and after the merge,
+which is a byte-identity test rather than a diff of rendered content:
 
 ```text
-BASELINE_CLOSURE_COMMIT   = 1dfb69604bb87856b75c8c90957f2acc8e1fab7f
-ANCESTOR_OF_ORIGIN_MAIN   = NO
-origin/main               = 9825541
+05c72ab  research/datasets/dataset_v2.lock.json
+33ce9e4  research/datasets/dataset_v1.lock.json
+2a95e5e  research/records/baseline1_development_datasetv2.json
+d17b72e  research/records/baseline1_validation_datasetv2.json
+1082eb0  freqtrade/user_data/strategies/BaselineEmaRegimeV1.py
+922d651  freqtrade/user_data/config.paper.json.example
+ARTIFACT_INTEGRITY = PASS
 ```
 
-§3.1: *"If this proof fails: `TL-FP-BOOT-1 = BLOCKED`."* It fails. Everything
-downstream — benchmark execution, scaffold integration, entry-state
-recomputation, admission, `T0` — is gated behind it.
+Dataset V2 Validation is now **spent** on authoritative `main` and must never
+again be described as pristine OOS.
 
-The merge itself is ready and waiting, not blocked on any work:
+## §3.2 — benchmark closure: OUTSTANDING
 
-* **PR #3** — [BASELINE-1 evaluation and Dataset V2 acquisition](https://github.com/algamal119933-ux/trading-lab-os-sandbox/pull/3)
-* head `1dfb696`, base `9825541`, `mergeable_state: clean`, `main` is an ancestor
-* CI green on `1dfb696` (run 34077889259)
+`main` carries no `research/external/` artifacts, so
+`BENCHMARK_CLOSURE = NOT_MERGED`. §3 is explicit that *"only that merged main is
+authoritative for FP-BOOT entry-state determination"*, so passing §3.1 alone
+does **not** make any entry state binding.
+
+The evaluator models this rather than collapsing it. `benchmark_closure_state()`
+distinguishes three states, because reading a pre-registered scorecard as a
+closed one would let an unexecuted sprint satisfy §3.2:
+
+| State | Meaning |
+| --- | --- |
+| `NOT_MERGED` | the sprint's artifacts are not on `main` at all — **current state** |
+| `MERGED_NOT_EXECUTED` | registry present, scorecard carries no experiment rows |
+| `CLOSED` | scorecard carries at least one row |
+
+`entry_state` stays `NOT_AUTHORITATIVE` until §3.1 **and** §3.2 are both on
+`main`. Both are checked with git, so each flips by itself when its merge lands
+— condition 18 already did exactly that when PR #3 merged, with no edit to any
+committed record.
 
 ## What changed in the scaffold under v2.0
 
@@ -141,7 +182,13 @@ mechanism_restart            = PASS      (restarted writer resumes the chain, no
   was resolved**, per §4: resolving them against a stale `main` would mean
   solving them twice against different project truths.
 * **`claude/fp-boot-1-integration` was not created**, per §4: it must be cut from
-  an authoritative `main` that does not yet exist.
+  a `main` that carries **both** BASELINE-1 and benchmark closure. It now carries
+  only the first.
+* **`main` was not merged into this branch.** §4 defers that until the benchmark
+  lineage is authoritative, so the scaffold stays behind `main` on purpose. The
+  CI anti-fork guard was changed to compare the Dataset V2 lock against the
+  *merge base* rather than main's tip, so being behind reads as behind and only
+  an independent edit reads as a fork.
 * **Nothing on `claude/new-session-140zbb` was touched.**
 * **No `T0`, no cohort, no admission.**
 

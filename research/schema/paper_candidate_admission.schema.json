@@ -17,7 +17,8 @@
     "feature_availability",
     "real_money_authorized",
     "reason",
-    "authoritative_lineage"
+    "authoritative_lineage",
+    "benchmark_closure"
   ],
   "properties": {
     "schema_version": {
@@ -246,6 +247,28 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "benchmark_closure": {
+      "type": "object",
+      "description": "Section 3.2 / 3: the benchmark lineage must be merged AND closed before any entry state is authoritative.",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "detail"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "NOT_MERGED",
+            "MERGED_NOT_EXECUTED",
+            "CLOSED"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   }

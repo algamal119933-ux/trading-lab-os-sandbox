@@ -50,17 +50,53 @@ def test_admission_is_blocked_in_the_current_repository_state(record):
     assert record["paper_alpha_cohort"] == "NONE"
 
 
-def test_entry_state_is_not_authoritative_off_a_parked_branch(record):
-    """Section 7: the entry state is recomputed from authoritative merged main.
+def test_entry_state_requires_both_merges(record):
+    """Section 3 + 7: the entry state is recomputed from authoritative merged main.
 
-    While the BASELINE-1 closure lineage is unmerged, reporting a plain "C" here
-    would look binding when it is not.
+    Both merges are the precondition — BASELINE-1 closure (3.1) and benchmark
+    closure (3.2). Passing 3.1 alone must not make the entry state look binding.
     """
-    lineage = record["authoritative_lineage"]
-    if lineage["is_ancestor_of_main"]:
+    lineage_ok = record["authoritative_lineage"]["is_ancestor_of_main"]
+    closed = record["benchmark_closure"]["state"] == "CLOSED"
+    if lineage_ok and closed:
         assert record["entry_state"] in {"A", "B", "C"}
     else:
         assert record["entry_state"] == "NOT_AUTHORITATIVE"
+
+
+def test_a_merged_but_unexecuted_sprint_is_not_closure(monkeypatch, tmp_path):
+    """The three benchmark states must stay distinguishable.
+
+    A pre-registered scorecard carrying only its header and comment is the state
+    the sprint freezes *before* running; reading it as closure would let an
+    unexecuted sprint satisfy section 3.2.
+    """
+    header = "candidate_id,lane,measurement_validity\n# columns pre-registered before any result exists\n"
+
+    def fake_show(ref, path):
+        if path.endswith("qualification_scorecard.csv"):
+            return header
+        if path.endswith("candidate_registry.json"):
+            return "{}"
+        return None
+
+    monkeypatch.setattr(admission, "_git_show", fake_show)
+    state, detail = admission.benchmark_closure_state()
+    assert state == "MERGED_NOT_EXECUTED"
+    assert "not executed" in detail
+
+    monkeypatch.setattr(
+        admission, "_git_show", lambda ref, path: header + "cand_a,native,PASS\n"
+        if path.endswith(".csv") else "{}"
+    )
+    assert admission.benchmark_closure_state()[0] == "CLOSED"
+
+
+def test_absent_sprint_artifacts_are_not_merged(monkeypatch):
+    monkeypatch.setattr(admission, "_git_show", lambda ref, path: None)
+    state, detail = admission.benchmark_closure_state()
+    assert state == "NOT_MERGED"
+    assert "3.2" in detail
 
 
 def test_the_lineage_proof_is_computed_not_asserted(record):
@@ -69,6 +105,11 @@ def test_the_lineage_proof_is_computed_not_asserted(record):
     assert lineage["baseline_closure_commit"] == admission.BASELINE_CLOSURE_COMMIT
     integrity = record["conditions"][17]
     assert integrity["result"] == ("PASS" if lineage["is_ancestor_of_main"] else "FAIL")
+
+
+def test_the_benchmark_closure_state_is_recorded(record):
+    assert record["benchmark_closure"]["state"] in {"NOT_MERGED", "MERGED_NOT_EXECUTED", "CLOSED"}
+    assert record["benchmark_closure"]["detail"].strip()
 
 
 def _force_all_pass(monkeypatch):

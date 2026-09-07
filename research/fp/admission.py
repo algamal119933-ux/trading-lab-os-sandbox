@@ -14,9 +14,11 @@ override it, and section 9 names the four that must not exist: ``--force``,
 ``--assume-pass``, ``--allow-blocked``, and a silent environment override.
 
 Section 7 governs the entry state: it is recomputed from authoritative merged
-main and is never inherited from this parked scaffold branch. While the
-BASELINE-1 closure lineage is unmerged, the entry state reported here is
-``NOT_AUTHORITATIVE`` rather than a value that looks binding.
+main and is never inherited from this parked scaffold branch. Section 3 makes
+*both* merges the precondition — the BASELINE-1 closure lineage (3.1) and the
+completed benchmark lineage (3.2) — so until both are on main the entry state
+reported here is ``NOT_AUTHORITATIVE`` rather than a value that looks binding.
+Both are checked with git, so each flips by itself when its merge lands.
 
 Usage
 -----
@@ -445,6 +447,55 @@ def _baseline_lineage_is_authoritative() -> tuple[bool, str]:
     return False, "no main ref is available in this checkout to prove ancestry against"
 
 
+def _git_show(ref: str, path: str) -> str | None:
+    """File content at a ref, or None when the ref or path is absent."""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "show", f"{ref}:{path}"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def benchmark_closure_state() -> tuple[str, str]:
+    """Has POST-BASELINE-EXTBENCH-1 closed *on authoritative main*?
+
+    Section 3.2 requires the completed benchmark lineage merged to main before
+    entry state may be determined, and section 3 is explicit that "only that
+    merged main is authoritative for FP-BOOT entry-state determination".
+
+    Three distinguishable states, because collapsing them would let an unmerged
+    or unexecuted sprint read as a closed one:
+
+    * ``NOT_MERGED``  - the sprint's artifacts are not on main at all;
+    * ``MERGED_NOT_EXECUTED`` - registry present, but the scorecard has no rows,
+      which is the pre-registration state the sprint freezes before running;
+    * ``CLOSED`` - the scorecard carries at least one experiment row.
+    """
+    for ref in ("origin/main", "main"):
+        scorecard = _git_show(ref, "research/external/qualification_scorecard.csv")
+        registry = _git_show(ref, "research/external/candidate_registry.json")
+        if scorecard is None and registry is None:
+            return "NOT_MERGED", (
+                f"no POST-BASELINE-EXTBENCH-1 artifacts on {ref}; the sprint lineage has not been merged "
+                "(section 3.2)"
+            )
+        rows = [
+            line
+            for line in (scorecard or "").splitlines()[1:]
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        if not rows:
+            return "MERGED_NOT_EXECUTED", (
+                f"the sprint registry is on {ref} but its qualification scorecard carries no experiment rows: "
+                "pre-registered, not executed"
+            )
+        return "CLOSED", f"qualification scorecard on {ref} carries {len(rows)} experiment row(s)"
+    return "NOT_MERGED", "no main ref is available in this checkout"
+
+
 def _project_integrity() -> tuple[str, str]:
     """Condition 18 — no unresolved P0 project-integrity issue.
 
@@ -467,6 +518,7 @@ def evaluate() -> dict:
     """Evaluate all eighteen section-9 conditions against repository state."""
     contract, feature_result, feature_detail = _feature_availability()
     lineage_ok, lineage_detail = _baseline_lineage_is_authoritative()
+    benchmark_state, benchmark_detail = benchmark_closure_state()
 
     results: list[tuple[str, str]] = [
         _candidate_identity_frozen(),
@@ -503,10 +555,11 @@ def evaluate() -> dict:
         reason = (
             "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: "
             + ", ".join(str(i) for i in blocking)
-            + ". This branch is the parked FP scaffold, not authoritative project state: "
-            + lineage_detail
-            + ". The Dataset V2 lock visible here is the pre-acquisition stub; the frozen lock lives in the "
-            "BASELINE-1 closure lineage and reaches this branch by merge, never by reacquisition."
+            + ". This branch is the parked FP scaffold, not authoritative project state. "
+            + f"BASELINE-1 lineage: {lineage_detail}. "
+            + f"Benchmark closure: {benchmark_state} — {benchmark_detail}. "
+            + "The Dataset V2 lock visible on this branch is the pre-acquisition stub; the frozen lock "
+            "reaches it by merging main, never by reacquisition."
         )
 
     return {
@@ -531,10 +584,12 @@ def evaluate() -> dict:
             "config_files": ["freqtrade/user_data/config.paper.json.example"],
             "config_hash": None,
         },
-        # Section 7: entry state is recomputed from authoritative merged main, never
-        # inherited from this branch. Until the lineage is consolidated, the only
-        # honest value is the one that says so.
-        "entry_state": "C" if lineage_ok else "NOT_AUTHORITATIVE",
+        # Section 7: entry state is recomputed from authoritative merged main,
+        # never inherited from this branch. Section 3 makes *both* merges the
+        # precondition — BASELINE-1 closure and benchmark closure — so §3.1 alone
+        # is not enough to make any value here binding.
+        "entry_state": "NOT_AUTHORITATIVE" if not (lineage_ok and benchmark_state == "CLOSED") else "C",
+        "benchmark_closure": {"state": benchmark_state, "detail": benchmark_detail},
         "conditions": conditions,
         "paper_admission": "ADMITTED" if admitted else "BLOCKED",
         "feature_availability": contract if not admitted else contract,

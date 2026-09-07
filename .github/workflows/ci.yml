@@ -173,18 +173,27 @@ jobs:
         run: |
           set -euo pipefail
           LOCK=research/datasets/dataset_v2.lock.json
-          git fetch --depth=1 origin main
-          if git cat-file -e "origin/main:$LOCK" 2>/dev/null; then
-            if git diff --quiet origin/main -- "$LOCK"; then
+          git fetch origin main
+          BASE=$(git merge-base HEAD FETCH_HEAD)
+          # Compare against the merge base, not against main's tip. A branch that
+          # simply has not merged main yet is *behind*, which section 4 actively
+          # requires of the parked scaffold; a branch that edited this file since
+          # diverging has *forked*, which section 2 forbids. Only the second is a
+          # fault, and only the merge base can tell them apart.
+          if git diff --quiet "$BASE" HEAD -- "$LOCK"; then
+            if git diff --quiet HEAD FETCH_HEAD -- "$LOCK"; then
               echo "dataset_v2 lock is identical to origin/main"
             else
-              echo "::error::$LOCK differs from origin/main. Section 2 forbids reacquiring or hand-editing"
-              echo "::error::Dataset V2; the frozen lock reaches a branch by merge only."
-              git diff --stat origin/main -- "$LOCK"
-              exit 1
+              echo "dataset_v2 lock is unmodified on this branch; it is behind origin/main, which is not a fork"
+              echo "  branch and main differ only because main has advanced:"
+              git diff --stat HEAD FETCH_HEAD -- "$LOCK"
             fi
           else
-            echo "origin/main carries no $LOCK yet; nothing to fork from"
+            echo "::error::$LOCK was modified on this branch since it diverged from main."
+            echo "::error::Section 2 forbids reacquiring or hand-editing Dataset V2; the frozen lock"
+            echo "::error::reaches a branch by merge only."
+            git diff --stat "$BASE" HEAD -- "$LOCK"
+            exit 1
           fi
 
       - name: Report the section 3.1 activation gate
