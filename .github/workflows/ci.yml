@@ -111,6 +111,69 @@ jobs:
       - name: Validate committed experiment records
         run: python3 research/record_experiment.py validate research/records/*.json
 
+      - name: Validate the forward-paper records against their schemas
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, sys
+          import jsonschema
+
+          pairs = [
+              ("research/schema/paper_candidate_admission.schema.json",
+               "research/fp/records/paper_candidate_admission.json"),
+              ("research/schema/forward_paper_cohort_registry.schema.json",
+               "research/fp/records/forward_paper_cohort_registry.json"),
+          ]
+          failed = False
+          for schema_path, record_path in pairs:
+              schema = json.loads(pathlib.Path(schema_path).read_text())
+              record = json.loads(pathlib.Path(record_path).read_text())
+              errors = list(jsonschema.validators.validator_for(schema)(schema).iter_errors(record))
+              if errors:
+                  failed = True
+                  print(f"INVALID {record_path}")
+                  for err in errors:
+                      print(f"  - {'/'.join(str(p) for p in err.absolute_path) or '<root>'}: {err.message}")
+              else:
+                  print(f"VALID   {record_path}")
+          sys.exit(2 if failed else 0)
+          PY
+
+      - name: Paper admission must be BLOCKED while no candidate is admitted
+        # The committed record is regenerated and compared, so it cannot drift
+        # from what the evaluator actually says. Entry state C: an ADMITTED
+        # verdict here would mean a candidate was let into forward paper without
+        # a benchmark sprint, which is the failure this gate exists to prevent.
+        run: |
+          set -euo pipefail
+          python3 research/fp/admission.py evaluate -o "$RUNNER_TEMP/admission.json"
+          python - <<'PY'
+          import json, os, pathlib, sys
+          fresh = json.loads(pathlib.Path(os.environ["RUNNER_TEMP"], "admission.json").read_text())
+          committed = json.loads(pathlib.Path("research/fp/records/paper_candidate_admission.json").read_text())
+          if fresh["paper_admission"] != "BLOCKED":
+              print("::error::paper admission is no longer BLOCKED; a candidate freeze must be reviewed")
+              sys.exit(1)
+          fresh_results = [c["result"] for c in fresh["conditions"]]
+          committed_results = [c["result"] for c in committed["conditions"]]
+          if fresh_results != committed_results:
+              print("::error::the committed admission record has drifted from the evaluator")
+              print(f"  committed: {committed_results}")
+              print(f"  evaluated: {fresh_results}")
+              sys.exit(1)
+          print(f"PAPER_ADMISSION = {fresh['paper_admission']} — {fresh['reason']}")
+          PY
+
+      - name: FP-BOOT-1 preflight must not permit a T0
+        run: |
+          set -euo pipefail
+          python3 research/fp/preflight.py
+          if python3 research/fp/preflight.py --require-pass >/dev/null; then
+            echo "::error::preflight reported PASS; creating a cohort T0 requires an explicit owner decision"
+            exit 1
+          fi
+          echo "preflight correctly refuses a T0"
+
       - name: Test suite
         run: python -m pytest
 
@@ -197,3 +260,13 @@ jobs:
           run_ft show-config show-config --config /freqtrade/user_data/config.json
 
           docker run --rm "$IMAGE" --version
+
+      - name: Replay EMA matches TA-Lib inside the pinned engine image
+        # fp.replay.ema is a pure-Python re-implementation, because the research
+        # environment has no TA-Lib. Event-time replay is the primary parity
+        # gate, so the equivalence is executed here rather than asserted.
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python3 \
+            -v "$PWD:/repo:ro" -w /repo \
+            "freqtradeorg/freqtrade:2026.7" research/fp/talib_parity.py

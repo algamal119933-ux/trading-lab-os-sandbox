@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/forward_paper_cohort_registry.schema.json",
+  "title": "Forward-paper cohort registry",
+  "description": "Section 7 of FP-BOOT-1: the complete runtime identity frozen before T0. No silent mutation after T0; a semantic change closes the cohort and starts a new one (section 15).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_version",
+    "registry_updated_utc",
+    "entry_state",
+    "paper_alpha_cohort",
+    "fp_run_active",
+    "instances",
+    "real_money_authorized"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "spec_version": { "type": "string", "minLength": 1 },
+    "registry_updated_utc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "entry_state": { "enum": ["A", "B", "C"] },
+    "paper_alpha_cohort": {
+      "description": "Section 3, STATE C: recorded as the string NONE when no paper-admissible survivor exists.",
+      "type": "string"
+    },
+    "fp_run_active": { "type": "boolean" },
+    "adopted_prior_t0": { "type": "boolean" },
+    "instances": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "Section 4: at most one control plus two survivor candidates.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "cohort_id", "status", "t0_utc", "runtime_identity"],
+        "properties": {
+          "role": { "enum": ["FP-CONTROL-1", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
+          "cohort_id": { "type": ["string", "null"] },
+          "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED", "CLOSED"] },
+          "t0_utc": {
+            "description": "null until preflight passes. A T0 may never be back-dated or reused across a semantic change.",
+            "type": ["string", "null"],
+            "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$"
+          },
+          "closed_utc": { "type": ["string", "null"] },
+          "closure_reason": { "type": ["string", "null"] },
+          "runtime_identity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "candidate_family",
+              "source_commit",
+              "strategy_sha256",
+              "config_sha256",
+              "engine_version",
+              "pairs",
+              "timeframe",
+              "fee_model",
+              "sizing",
+              "max_open_trades",
+              "paper_fill_model_version",
+              "bot_name",
+              "db_path",
+              "log_path",
+              "evidence_dir"
+            ],
+            "properties": {
+              "candidate_family": { "type": ["string", "null"] },
+              "source_commit": { "type": ["string", "null"] },
+              "strategy_sha256": { "type": ["string", "null"], "pattern": "^([a-f0-9]{64})?$" },
+              "params_sha256": { "type": ["string", "null"] },
+              "config_sha256": { "type": ["string", "null"] },
+              "engine_version": { "type": ["string", "null"] },
+              "image_digest": { "type": ["string", "null"] },
+              "python_version": { "type": ["string", "null"] },
+              "pairs": { "type": "array", "items": { "type": "string" } },
+              "timeframe": { "type": ["string", "null"] },
+              "detail_timeframe": { "type": ["string", "null"] },
+              "fee_model": { "type": ["object", "null"] },
+              "sizing": { "type": ["object", "null"] },
+              "max_open_trades": { "type": ["integer", "null"] },
+              "order_policy": { "type": ["object", "null"] },
+              "feature_sources": { "type": "array", "items": { "type": "string" } },
+              "paper_fill_model_version": { "type": ["string", "null"] },
+              "environment_variable_allowlist": { "type": "array", "items": { "type": "string" } },
+              "bot_name": { "type": ["string", "null"] },
+              "db_path": { "type": ["string", "null"] },
+              "wallet": { "type": ["number", "null"] },
+              "log_path": { "type": ["string", "null"] },
+              "evidence_dir": { "type": ["string", "null"] }
+            }
+          },
+          "change_log": {
+            "type": "array",
+            "description": "Section 15: every post-T0 change classified O (observability), R (runtime repair, semantics preserved) or S (semantic — closes the cohort).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["utc", "class", "description"],
+              "properties": {
+                "utc": { "type": "string" },
+                "class": { "enum": ["O", "R", "S"] },
+                "description": { "type": "string" },
+                "replay_parity_before_after": { "type": ["string", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "real_money_authorized": { "const": false },
+    "notes": { "type": "string" }
+  }
+}
