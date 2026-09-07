@@ -436,6 +436,10 @@ jobs:
             echo "--- $f ---"
             if [ -n "$HITS" ]; then
               echo "$HITS"
+              # A Traceback line matches, but its body does not, so the matching
+              # line alone says only "something raised". Show the tail too.
+              echo "  ...tail:"
+              tail -10 "$f"
             else
               # No recognised error line. A step can fail without printing one -
               # a non-zero exit from a clean run, a pipefail, a killed process -

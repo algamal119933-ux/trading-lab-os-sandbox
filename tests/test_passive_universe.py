@@ -98,3 +98,25 @@ def test_fees_are_applied_on_both_sides(module):
     result = module.compute_period("development", flat, None, 0.001, PERIODS)
     # Flat price, one entry and one exit fee: (1-0.001)^2 - 1
     assert result["BTC"]["net_return_after_entry_and_exit_fee"] == pytest.approx(0.999 * 0.999 - 1.0)
+
+
+def test_single_asset_report_renders_without_eth(module, tmp_path, monkeypatch, capsys):
+    """The BTC-only summary must not crash on the ETH line.
+
+    compute_period returns ETH=None for a single-asset universe, and the report
+    printed straight through it: result['ETH']['net_return...'] raised
+    TypeError after the header had already been printed, so the run failed with
+    a traceback and no numbers.
+    """
+    pd = pytest.importorskip("pandas")
+    btc = frame(pd, [100.0] * 24 + [110.0] * 25)
+    result = module.compute_period("development", btc, None, 0.0, PERIODS)
+    assert result["ETH"] is None
+    # The formatting the report does, exercised directly.
+    rendered = (
+        f"{result['BTC']['net_return_after_entry_and_exit_fee']:.2%}",
+        "n/a (single-asset universe)" if result["ETH"] is None else "",
+        f"{result['full_50_50_return']:.2%}",
+        f"{result['max_exposure_invested_fraction']:.0%}",
+    )
+    assert all(isinstance(x, str) for x in rendered)

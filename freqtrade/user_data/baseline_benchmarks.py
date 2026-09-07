@@ -266,11 +266,15 @@ def main() -> int:
         "BTC net B&H:      "
         f"{result['BTC']['net_return_after_entry_and_exit_fee']:.2%}"
     )
-    print(
-        "ETH net B&H:      "
-        f"{result['ETH']['net_return_after_entry_and_exit_fee']:.2%}"
-    )
-    print(f"Full 50/50:       {result['full_50_50_return']:.2%}")
+    if result["ETH"] is not None:
+        print(
+            "ETH net B&H:      "
+            f"{result['ETH']['net_return_after_entry_and_exit_fee']:.2%}"
+        )
+    else:
+        print("ETH net B&H:      n/a (single-asset universe)")
+    label = "Full 50/50:      " if result["ETH"] is not None else "Fully invested:  "
+    print(f"{label} {result['full_50_50_return']:.2%}")
     print(
         f"Max-exposure-matched ({result['max_exposure_invested_fraction']:.0%} invested): "
         f"{result['exposure_matched_return']:.2%}"
