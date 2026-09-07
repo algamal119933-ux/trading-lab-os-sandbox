@@ -172,11 +172,13 @@ def test_committed_example_record_is_not_presented_as_evidence():
 
 
 def test_every_committed_record_validates(repo_root):
-    """A schema nothing is checked against is decoration.
+    """Catch a malformed record locally, not three commits later in CI.
 
     Both baseline records were committed with keys the schema forbids and
-    `analyses` values outside its enum, and nothing noticed, because no test
-    ever fed a real record to the validator.
+    `analyses` values outside its enum. CI's own "Validate committed experiment
+    records" step did catch it — the gap was here: no test in this suite ever
+    fed a real record to the validator, so three pushes went out red before
+    anyone looked at the CI result.
     """
     records = sorted((repo_root / "research" / "records").glob("*.json"))
     assert records, "no experiment records found to validate"
