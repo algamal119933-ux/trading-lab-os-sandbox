@@ -62,7 +62,13 @@ concurrency:
 
 env:
   IMAGE: freqtradeorg/freqtrade:2026.7
+  # DATA_DIR is the working copy Freqtrade reads and the overlay joins into.
+  # CACHE_DIR is the pristine acquisition, restored between runs and never
+  # written to after acquisition: the join mutates its input, so caching the
+  # working copy would carry a joined series into the next run and fail V4
+  # against the frozen digests. It did exactly that once.
   DATA_DIR: freqtrade/user_data/data/binance
+  CACHE_DIR: dataset-cache/binance
   OVERLAY_DIR: overlay-data/binance
   STRATEGY_DIR: freqtrade/user_data/strategies
   # Dataset V2 Development, identical to the window BASELINE-1 was scored on.
@@ -246,7 +252,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            freqtrade/user_data/data
+            dataset-cache
             overlay-data
           key: extbench-data-v1-${{ hashFiles('research/datasets/dataset_v2.lock.json') }}
           restore-keys: extbench-data-v1-
@@ -259,14 +265,21 @@ jobs:
           # is the frozen dataset, and the frozen lock names BTC and ETH at 1h
           # and 5m; asserting a slice of it would be a weaker gate wearing the
           # same name. The lane's universe is narrowed in the config, not here.
-          if [ ! -f "$DATA_DIR/BTC_USDT-1h.feather" ] || [ ! -f "$DATA_DIR/ETH_USDT-1h.feather" ]; then
+          mkdir -p "$CACHE_DIR"
+          if [ ! -f "$CACHE_DIR/BTC_USDT-1h.feather" ] || [ ! -f "$CACHE_DIR/ETH_USDT-1h.feather" ]; then
             python3 scripts/fetch_binance_public_data.py \
               --symbol BTCUSDT --symbol ETHUSDT --timeframe 1h --timeframe 5m \
               --start 2020-12-01 --end 2026-08-31 \
-              --out-dir "$DATA_DIR" --manifest artifacts/acquisition_dataset_v2.json
+              --out-dir "$CACHE_DIR" --manifest artifacts/acquisition_dataset_v2.json
           else
             echo "Dataset V2 restored from cache"
           fi
+          # Fresh working copy every run, from the pristine cache.
+          rm -rf "$DATA_DIR"
+          mkdir -p "$DATA_DIR"
+          cp "$CACHE_DIR"/*.feather "$DATA_DIR"/
+          chmod -R a+rwX freqtrade/user_data
+          echo "working copy:"; ls -la "$DATA_DIR"
           if [ ! -f "$OVERLAY_DIR/BTC_USDT-1h.feather" ]; then
             python3 scripts/fetch_binance_public_data.py \
               --symbol BTCUSDT --timeframe 1h \

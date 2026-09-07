@@ -196,7 +196,16 @@ def join_series(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--data-dir", required=True, help="Dataset V2 feather directory (mutated in place)")
+    parser.add_argument(
+        "--data-dir",
+        required=True,
+        help=(
+            "Working copy of the Dataset V2 feather directory. MUTATED IN PLACE: pass a per-run copy, "
+            "never the pristine acquisition. Joining is a load-time operation; a joined series that "
+            "outlives its run will fail the frozen-digest gate on the next one, which is how this "
+            "requirement was discovered."
+        ),
+    )
     parser.add_argument("--overlay-dir", required=True, help="overlay feather directory")
     parser.add_argument("--lock", required=True, help="dataset_v2.lock.json")
     parser.add_argument("--pair", action="append", required=True, help="e.g. BTC/USDT (repeatable)")
