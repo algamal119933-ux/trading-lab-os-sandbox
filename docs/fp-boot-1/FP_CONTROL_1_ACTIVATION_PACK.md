@@ -55,19 +55,28 @@ timedatectl status                # expect NTP synchronised (clock skew is a P1 
 
 ### A2 — clone, fetch, check out the exact authoritative commit
 
+This pack is **not on `main`**. It lives on `claude/new-session-pvkkbj`, which
+contains the authoritative commit `ab39a762…` as an ancestor. Checking out
+`ab39a762…` directly would give you a tree without this file, so check out the
+branch and then prove the authoritative commit is in its history.
+
 ```bash
 git clone https://github.com/algamal119933-ux/trading-lab-os-sandbox.git
 cd trading-lab-os-sandbox
-git fetch origin main
-git checkout ab39a7622bb3567aca493560afd34556d080cfc8
+git fetch origin main claude/new-session-pvkkbj
+git checkout claude/new-session-pvkkbj
 ```
+
+If the Owner merges this pack to `main` first, check out `main` at its merge
+commit instead; the ancestry proof in A3 is unchanged either way.
 
 ### A3 — verify authoritative main and a clean worktree
 
 ```bash
-git rev-parse HEAD
-# expect: ab39a7622bb3567aca493560afd34556d080cfc8
+git rev-parse HEAD                 # the branch head carrying this pack
 
+# The authoritative commit must be an ancestor of BOTH your checkout and main.
+git merge-base --is-ancestor ab39a7622bb3567aca493560afd34556d080cfc8 HEAD && echo PACK_TREE_OK
 git merge-base --is-ancestor ab39a7622bb3567aca493560afd34556d080cfc8 origin/main && echo AUTHORITATIVE_OK
 git merge-base --is-ancestor 1dfb69604bb87856b75c8c90957f2acc8e1fab7f origin/main && echo BASELINE_1_ANCESTOR_OK
 git merge-base --is-ancestor af788f5b49b33be10c29b926b10a634a123db812 origin/main && echo AMENDMENT_ANCESTOR_OK
@@ -292,7 +301,7 @@ python3 research/fp/preflight.py --json > artifacts/fp_control_closure_preflight
 
 | # | Check | Expected |
 | --- | --- | --- |
-| 1 | authoritative commit | `git rev-parse HEAD` = `ab39a762…` |
+| 1 | authoritative commit | `PACK_TREE_OK` and `AUTHORITATIVE_OK` both printed |
 | 2 | ancestry | three `_OK` lines from A3 |
 | 3 | worktree | `git status --porcelain` empty; `REPO_CHECK_PASS` |
 | 4 | tests | `443 passed, 16 skipped` |
@@ -328,7 +337,7 @@ lower a threshold, or force an entry.
 Stop immediately, do not freeze T0, and report, if any of these hold:
 
 ```text
-S1   git rev-parse HEAD != ab39a7622bb3567aca493560afd34556d080cfc8
+S1   ab39a7622bb3567aca493560afd34556d080cfc8 is not an ancestor of your checkout, or not an ancestor of origin/main
 S2   git status --porcelain is non-empty at A3
 S3   verify_repo.py does not print REPO_CHECK_PASS
 S4   any test fails
