@@ -452,3 +452,87 @@ def test_dataset_v1_lock_is_untouched_by_dataset_v2(repo_root):
     assert lock["dataset_hashes"]["ETH/USDT 5m"] == (
         "4fa5ca782864ee84aff0e02786be3ca663de159288a7fb4baf12398fcdcca5c4"
     )
+
+
+def _dataset_with_a_real_exchange_gap(tmp_path):
+    """A dataset that is structurally perfect but has a missing hour, like the
+    real one: Binance halted, so the candle is absent from its archive too."""
+    import pandas as pd
+
+    for pair in ("BTC_USDT", "ETH_USDT"):
+        rows = []
+        base = pd.Timestamp("2021-01-01", tz="UTC")
+        for i in range(48):
+            if i == 20:
+                continue  # the exchange was down for this hour
+            rows.append({
+                "date": base + pd.Timedelta(hours=i),
+                "open": 100.0 + i, "high": 101.0 + i,
+                "low": 99.0 + i, "close": 100.5 + i, "volume": 10.0,
+            })
+        pd.DataFrame(rows).to_feather(tmp_path / f"{pair}-1h.feather")
+    return tmp_path
+
+
+def test_full_gate_fails_on_a_gap_but_lock_gate_asks_a_different_question(tmp_path, capsys):
+    """The two gates answer different questions and must not be conflated.
+
+    At acquisition the question is "is this data acceptable?" and a gap is a
+    finding. Once the dataset is frozen and its gaps are recorded, every later
+    run asks only "is this still the same data?" - re-running the acquisition
+    gate there would fail forever on conditions already accepted in writing.
+    """
+    data = _dataset_with_a_real_exchange_gap(tmp_path)
+
+    code = audit_data.main(
+        ["--data-dir", str(data), "--pair", "BTC/USDT", "--pair", "ETH/USDT",
+         "--timeframe", "1h", "--out", str(tmp_path / "a.json")]
+    )
+    assert code == 2  # full gate: the gap is a finding
+    assert "DATA_INTEGRITY_GATE = FAIL" in capsys.readouterr().err
+
+    report = json.loads((tmp_path / "a.json").read_text())
+    assert report["structural_pass"] is True
+    lock = tmp_path / "lock.json"
+    lock.write_text(json.dumps({
+        "canonical_hashes": {
+            f"{f['pair']} {f['timeframe']}": f["canonical_candle_content_sha256"]
+            for f in report["files"]
+        },
+    }), encoding="utf-8")
+
+    code = audit_data.main(
+        ["--data-dir", str(data), "--pair", "BTC/USDT", "--pair", "ETH/USDT",
+         "--timeframe", "1h", "--lock", str(lock), "--gate", "lock"]
+    )
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "DATASET_LOCK_GATE = PASS" in captured.out
+    # The full verdict is still reported, so choosing a gate hides nothing:
+    # the run says the acquisition gate would fail and why, and separately
+    # that the content still matches the lock.
+    assert "DATA_INTEGRITY_GATE = FAIL" in captured.err
+
+
+def test_lock_gate_still_fails_when_the_content_drifts(tmp_path, capsys):
+    data = _dataset_with_a_real_exchange_gap(tmp_path)
+    lock = tmp_path / "lock.json"
+    lock.write_text(json.dumps({
+        "canonical_hashes": {"BTC/USDT 1h": "0" * 64, "ETH/USDT 1h": "0" * 64},
+    }), encoding="utf-8")
+    code = audit_data.main(
+        ["--data-dir", str(data), "--pair", "BTC/USDT", "--pair", "ETH/USDT",
+         "--timeframe", "1h", "--lock", str(lock), "--gate", "lock"]
+    )
+    assert code == 2
+    assert "DATASET_LOCK_GATE = FAIL" in capsys.readouterr().err
+
+
+def test_lock_gate_requires_a_lock(tmp_path, capsys):
+    data = _dataset_with_a_real_exchange_gap(tmp_path)
+    code = audit_data.main(
+        ["--data-dir", str(data), "--pair", "BTC/USDT", "--pair", "ETH/USDT",
+         "--timeframe", "1h", "--gate", "lock"]
+    )
+    assert code == 3
+    assert "requires --lock" in capsys.readouterr().err

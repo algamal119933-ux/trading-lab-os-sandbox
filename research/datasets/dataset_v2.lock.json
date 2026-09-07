@@ -82,7 +82,8 @@
       "monotonic timestamps",
       "completed-candle boundaries",
       "5m -> 1h reconciliation"
-    ]
+    ],
+    "gate_on_later_runs": "Every run after the freeze asserts with `scripts/audit_data.py --gate lock`, which passes only if the structural checks still pass and all eight fingerprints still match this lock. It deliberately does not re-run the acquisition gate: the continuity gaps and the four volume-only reconciliation hours below were examined and accepted in writing before any baseline outcome was seen, so re-deciding them on every run would fail forever while answering the wrong question. Because the canonical digests pin the candle content exactly, matching digests mean the gaps and reconciliation figures are necessarily unchanged too - a new gap or a fifth mismatched hour would move a digest and fail this gate. The acquisition verdict is still printed on every run alongside the lock verdict."
   },
   "raw_file_hashes": {
     "BTC/USDT 1h": "d8e2ffd5cd78c6bdf24f41e5e71d463f2343b3fb099f6546e2bc6c68b48b67e4",

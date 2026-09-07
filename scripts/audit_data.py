@@ -524,6 +524,12 @@ def main(argv: list[str] | None = None) -> int:
                              "halted. Structural defects are never tolerated by this. Default 0.")
     parser.add_argument("--reconcile-rel-tol", type=float, default=1e-9, metavar="TOL",
                         help="Relative tolerance for 5m -> 1h reconciliation. Default 1e-9.")
+    parser.add_argument("--gate", choices=("full", "lock"), default="full",
+                        help="Which verdict decides the exit code. 'full' (default) is the "
+                             "acquisition-time gate: every check must pass. 'lock' asks the "
+                             "narrower question a frozen dataset needs answered on every "
+                             "later run - is this still the same data? - and requires "
+                             "--lock. Both verdicts are always printed.")
     args = parser.parse_args(argv)
 
     pairs = args.pair or ["BTC/USDT", "ETH/USDT"]
@@ -570,10 +576,30 @@ def main(argv: list[str] | None = None) -> int:
     for problem in lock_problems:
         print(f"DATA_LOCK_FAIL: {problem}", file=sys.stderr)
 
-    if report["overall_pass"]:
-        print("DATA_INTEGRITY_GATE = PASS")
+    print(f"DATA_INTEGRITY_GATE = {'PASS' if report['overall_pass'] else 'FAIL'}",
+          file=sys.stdout if report["overall_pass"] else sys.stderr)
+
+    if args.gate == "full":
+        return 0 if report["overall_pass"] else 2
+
+    # Gate 'lock': the dataset is frozen, so the question is no longer "is this
+    # data good enough to accept?" - that was settled and recorded at
+    # acquisition - but "is this the same data?". The canonical digests pin the
+    # candle content exactly, so if they match, every derived figure (gaps,
+    # reconciliation) necessarily matches too. Structural checks are still
+    # required, so a file that matched its digest but somehow failed a
+    # structural invariant would not slip through.
+    if not args.lock:
+        print("DATA_LOCK_FAIL: --gate lock requires --lock", file=sys.stderr)
+        return 3
+    lock_gate = bool(report["structural_pass"]) and not lock_problems
+    report["lock_gate_pass"] = lock_gate
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    if lock_gate:
+        print("DATASET_LOCK_GATE = PASS (content matches the frozen lock)")
         return 0
-    print("DATA_INTEGRITY_GATE = FAIL", file=sys.stderr)
+    print("DATASET_LOCK_GATE = FAIL", file=sys.stderr)
     return 2
 
 

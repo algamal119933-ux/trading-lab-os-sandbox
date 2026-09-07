@@ -220,6 +220,15 @@ jobs:
 
       - name: Assert against the dataset lock once it is frozen
         if: inputs.stage != 'probe-only'
+        # --gate lock, not the acquisition gate. Dataset V2's continuity gaps
+        # and its four volume-only reconciliation hours are real properties of
+        # Binance's published data, examined and recorded in the lock's
+        # integrity_result before any baseline outcome was seen. Re-running the
+        # acquisition gate here would fail on those recorded conditions forever
+        # while answering the wrong question: what a frozen dataset needs
+        # checking on every later run is whether it is still the same data.
+        # The canonical digests settle that exactly, and the acquisition
+        # verdict is still printed alongside.
         run: |
           set -euo pipefail
           status="$(python3 -c "import json;print(json.load(open('$LOCK'))['status'])")"
@@ -228,7 +237,10 @@ jobs:
                 --data-dir "$DATA_DIR" \
                 --pair BTC/USDT --pair ETH/USDT \
                 --timeframe 5m --timeframe 1h \
-                --lock "$LOCK" | tee artifacts/dataset_v2_lock_check.log
+                --lock "$LOCK" \
+                --gate lock 2>&1 | tee artifacts/dataset_v2_lock_check.log
+            code=${PIPESTATUS[0]}
+            [ "$code" -eq 0 ]
           else
             echo "dataset lock status is '$status'; fingerprints are being established by this run"
           fi
@@ -454,6 +466,7 @@ jobs:
           echo "===== ENDPOINT PROBE ====="; cat artifacts/endpoint_probe.txt 2>/dev/null || echo "(none)"
           echo "===== FREQTRADE list-data ====="; cat artifacts/freqtrade_list_data.log 2>/dev/null || echo "(none)"
           echo "===== AUDIT SUMMARY ====="; cat artifacts/dataset_v2_audit_summary.txt 2>/dev/null || echo "(none)"
+          echo "===== DATASET LOCK CHECK ====="; cat artifacts/dataset_v2_lock_check.log 2>/dev/null || echo "(none)"
           echo "===== LOCK FRAGMENT (paste into dataset_v2.lock.json) ====="
           python3 - <<'PY' 2>/dev/null || echo "(none)"
           import json, pathlib
