@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/paper_candidate_admission.schema.json",
+  "title": "Forward-paper candidate admission record",
+  "description": "Section 9 of TL-FP-BOOT-1 v2.0: the eighteen conditions a candidate must satisfy before it may enter FP-RUN. Fails closed: any condition not independently PASS yields PAPER_ADMISSION = BLOCKED, and UNPROVEN is not PASS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_version",
+    "evaluated_utc",
+    "code_commit",
+    "candidate",
+    "entry_state",
+    "conditions",
+    "paper_admission",
+    "feature_availability",
+    "real_money_authorized",
+    "reason",
+    "authoritative_lineage",
+    "benchmark_closure",
+    "entry_state_reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "spec_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evaluated_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "code_commit": {
+      "type": "string",
+      "minLength": 7
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "name"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "FP-CONTROL-1",
+            "FP-CANDIDATE-A",
+            "FP-CANDIDATE-B"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strategy_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strategy_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([a-f0-9]{64})?$"
+        },
+        "config_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "entry_state": {
+      "description": "Section 7: recomputed from authoritative merged main. NOT_AUTHORITATIVE while the BASELINE-1 lineage is unconsolidated, because no entry state computed off a parked branch is binding.",
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "NOT_AUTHORITATIVE"
+      ]
+    },
+    "conditions": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "requirement",
+          "result",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 18
+          },
+          "requirement": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNPROVEN",
+              "NOT_APPLICABLE"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "paper_admission": {
+      "enum": [
+        "ADMITTED",
+        "BLOCKED"
+      ]
+    },
+    "feature_availability": {
+      "type": "object",
+      "description": "Section 6: historical measurability is not prospective availability. One contract per decision-time feature.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "features"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "CONTRACTED",
+            "BLOCKED_FEATURE_AVAILABILITY",
+            "NOT_EVALUATED"
+          ]
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "feature",
+              "source_identity",
+              "retrieval_path",
+              "source_latency",
+              "max_admissible_staleness",
+              "outage_policy",
+              "fallback_policy",
+              "provenance"
+            ],
+            "properties": {
+              "feature": {
+                "type": "string"
+              },
+              "source_identity": {
+                "type": "string"
+              },
+              "retrieval_path": {
+                "type": "string"
+              },
+              "source_latency": {
+                "type": "string"
+              },
+              "max_admissible_staleness": {
+                "type": "string"
+              },
+              "outage_policy": {
+                "enum": [
+                  "NO_NEW_ENTRY",
+                  "SAFE_HOLD",
+                  "INSTANCE_PAUSE",
+                  "FORCED_EXIT"
+                ]
+              },
+              "fallback_policy": {
+                "type": "string"
+              },
+              "provenance": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "paper_alpha_cohort": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "real_money_authorized": {
+      "const": false
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "type": "string"
+    },
+    "authoritative_lineage": {
+      "type": "object",
+      "description": "Section 3.1 activation proof. Recomputed with git, never asserted.",
+      "additionalProperties": false,
+      "required": [
+        "baseline_closure_commit",
+        "is_ancestor_of_main",
+        "detail"
+      ],
+      "properties": {
+        "baseline_closure_commit": {
+          "type": "string",
+          "minLength": 7
+        },
+        "is_ancestor_of_main": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "benchmark_closure": {
+      "type": "object",
+      "description": "Section 3.2 / 3: the benchmark lineage must be merged AND closed before any entry state is authoritative.",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "detail"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "NOT_MERGED",
+            "MERGED_NOT_EXECUTED",
+            "OWNER_TERMINATED_INCONCLUSIVE",
+            "CLOSED"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "entry_state_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the entry state is what it is. A bare 'C' cannot distinguish 'no survivor was found' from 'no survivor decision was ever reached'."
+    }
+  }
+}

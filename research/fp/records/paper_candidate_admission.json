@@ -1,0 +1,160 @@
+{
+  "schema_version": "2.0.0",
+  "spec_version": "TL-FP-BOOT-1 v2.0 FINAL 2026-09-07",
+  "supersedes": [
+    "TRADING_LAB_OS_FP1_PROSPECTIVE_FORWARD_PAPER_v1.0_2026-09-07.md",
+    "TRADING_LAB_OS_FP_BOOT1_AND_FP_RUN_v1.1_FINAL_2026-09-07.md"
+  ],
+  "authoritative_lineage": {
+    "baseline_closure_commit": "1dfb69604bb87856b75c8c90957f2acc8e1fab7f",
+    "is_ancestor_of_main": true,
+    "detail": "1dfb696 is an ancestor of origin/main"
+  },
+  "evaluated_utc": "2026-09-07T13:54:24Z",
+  "code_commit": "939e6b51c6177421dcc3301872e61658b846604c",
+  "candidate": {
+    "role": "FP-CANDIDATE-A",
+    "name": null,
+    "strategy_file": null,
+    "strategy_sha256": null,
+    "config_files": [
+      "freqtrade/user_data/config.paper.json.example"
+    ],
+    "config_hash": null
+  },
+  "entry_state": "C",
+  "entry_state_reason": "No paper-admissible survivor exists, because the benchmark sprint was terminated by Owner amendment before a survivor decision was reached - not because a survivor decision rejected every candidate. SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. Read as 'none available', never as 'none survived'.",
+  "benchmark_closure": {
+    "state": "OWNER_TERMINATED_INCONCLUSIVE",
+    "detail": "the sprint on origin/main was terminated by Owner amendment before every preregistered arm ran: SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. It is over, so an entry state can be determined, but it is not a closure and declares no survivor"
+  },
+  "conditions": [
+    {
+      "id": 1,
+      "requirement": "candidate family identified",
+      "result": "UNPROVEN",
+      "evidence": "no forward_paper_cohort_registry.json entry names a frozen candidate (entry state C, paper_alpha_cohort='NONE'); no survivor exists to freeze"
+    },
+    {
+      "id": 2,
+      "requirement": "frozen configuration identified",
+      "result": "UNPROVEN",
+      "evidence": "no candidate instance names a frozen configuration hash; a configuration cannot be identified for a candidate that does not exist"
+    },
+    {
+      "id": 3,
+      "requirement": "measurement validity PASS",
+      "result": "UNPROVEN",
+      "evidence": "MEASUREMENT_VALIDITY: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
+    },
+    {
+      "id": 4,
+      "requirement": "qualification/deep validation complete as required",
+      "result": "UNPROVEN",
+      "evidence": "qualification / deep validation: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
+    },
+    {
+      "id": 5,
+      "requirement": "no unresolved lookahead",
+      "result": "UNPROVEN",
+      "evidence": "lookahead analysis: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
+    },
+    {
+      "id": 6,
+      "requirement": "no unresolved timestamp-knowability defect",
+      "result": "UNPROVEN",
+      "evidence": "timestamp knowability: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
+    },
+    {
+      "id": 7,
+      "requirement": "Binance Spot only",
+      "result": "PASS",
+      "evidence": "paper guard PASS; exchange=binance, trading_mode=spot, dry_run=True"
+    },
+    {
+      "id": 8,
+      "requirement": "no leverage",
+      "result": "PASS",
+      "evidence": "paper guard rejects any leverage key in the config and any `leverage`/`can_leverage` declaration in a strategy file; the shipped config declares none"
+    },
+    {
+      "id": 9,
+      "requirement": "no futures execution",
+      "result": "PASS",
+      "evidence": "trading_mode must be explicitly 'spot'; the guard rejects any other value in the config and any non-spot trading_mode declared in a strategy file"
+    },
+    {
+      "id": 10,
+      "requirement": "no margin",
+      "result": "PASS",
+      "evidence": "margin_mode must be empty; the guard rejects any populated margin mode"
+    },
+    {
+      "id": 11,
+      "requirement": "no shorts",
+      "result": "PASS",
+      "evidence": "the guard rejects shorting in the config, `can_short = True` in any strategy file, and derivative or leveraged-token pairs in the whitelist; BaselineEmaRegimeV1 sets can_short = False"
+    },
+    {
+      "id": 12,
+      "requirement": "source/config/params/engine identity frozen",
+      "result": "PASS",
+      "evidence": "dataset_v2 frozen with 4 content fingerprints: BTC/USDT 1h, BTC/USDT 5m, ETH/USDT 1h, ETH/USDT 5m"
+    },
+    {
+      "id": 13,
+      "requirement": "paper execution rights acceptable",
+      "result": "PASS",
+      "evidence": "dry_run=true with empty exchange key/secret; no private credential is required to run paper"
+    },
+    {
+      "id": 14,
+      "requirement": "every required decision-time feature has a prospective availability contract",
+      "result": "UNPROVEN",
+      "evidence": "BASELINE-1 has exactly one decision-time feature (the closed 1h OHLCV candle) and no external non-market feature, so no post-facto archive is being used as a real-time feed. The contract is declared, but its retrieval path has not been exercised by a running paper instance."
+    },
+    {
+      "id": 15,
+      "requirement": "deterministic or explainable replay exists",
+      "result": "PASS",
+      "evidence": "FP_EVENT_TIME_REPLAY_V1 derives BASELINE-1 decisions from the captured input ledger; periods are read from the frozen strategy by AST, not copied; EMA parity vs TA-Lib is VERIFIED_IN_CI"
+    },
+    {
+      "id": 16,
+      "requirement": "outage behavior is predeclared",
+      "result": "PASS",
+      "evidence": "predeclared per section 17, one of NO_NEW_ENTRY / SAFE_HOLD / INSTANCE_PAUSE / FORCED_EXIT: closed 1h OHLCV candle (open, high, low, close, volume) -> NO_NEW_ENTRY"
+    },
+    {
+      "id": 17,
+      "requirement": "semantic-change policy is predeclared",
+      "result": "PASS",
+      "evidence": "section 15 change model O/R/S is written into docs/fp-boot-1/FP_BOOT_1_ENTRY_STATE.md, and the cohort registry schema requires every post-T0 change to carry its class"
+    },
+    {
+      "id": 18,
+      "requirement": "no unresolved P0 project-integrity issue",
+      "result": "PASS",
+      "evidence": "authoritative lineage consolidated: 1dfb696 is an ancestor of origin/main"
+    }
+  ],
+  "paper_admission": "BLOCKED",
+  "feature_availability": {
+    "status": "CONTRACTED",
+    "features": [
+      {
+        "feature": "closed 1h OHLCV candle (open, high, low, close, volume)",
+        "source_identity": "Binance spot public REST market data, pair BTC/USDT and ETH/USDT",
+        "retrieval_path": "Freqtrade exchange layer via ccxt; no private credential, no archive replay",
+        "source_latency": "candle becomes retrievable at its close boundary; observed lag is recorded per cycle in paper_input_ledger",
+        "max_admissible_staleness": "one candle period (1h). A decision bar whose candle is older than that is not a decision bar.",
+        "outage_policy": "NO_NEW_ENTRY",
+        "fallback_policy": "no forward-fill of a missing required candle; the cycle is recorded as missed and no entry is taken. An existing position is left to its frozen exit logic.",
+        "provenance": "each captured candle is hashed into paper_input_ledger with the exchange timestamp and the local receipt timestamp"
+      }
+    ]
+  },
+  "paper_alpha_cohort": "NONE",
+  "real_money_authorized": false,
+  "reason": "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: 1, 2, 3, 4, 5, 6, 14. This branch is the parked FP scaffold, not authoritative project state. BASELINE-1 lineage: 1dfb696 is an ancestor of origin/main. Benchmark closure: OWNER_TERMINATED_INCONCLUSIVE \u2014 the sprint on origin/main was terminated by Owner amendment before every preregistered arm ran: SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. It is over, so an entry state can be determined, but it is not a closure and declares no survivor. The Dataset V2 lock visible on this branch is the pre-acquisition stub; the frozen lock reaches it by merging main, never by reacquisition."
+}

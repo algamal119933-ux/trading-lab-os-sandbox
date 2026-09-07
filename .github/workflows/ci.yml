@@ -117,6 +117,120 @@ jobs:
         # being benchmarked against source other than the one that was reviewed.
         run: python3 research/external/pin_upstream.py --verify --cache-dir "$RUNNER_TEMP/upstream"
 
+      - name: Validate the forward-paper records against their schemas
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, sys
+          import jsonschema
+
+          pairs = [
+              ("research/schema/paper_candidate_admission.schema.json",
+               "research/fp/records/paper_candidate_admission.json"),
+              ("research/schema/forward_paper_cohort_registry.schema.json",
+               "research/fp/records/forward_paper_cohort_registry.json"),
+          ]
+          failed = False
+          for schema_path, record_path in pairs:
+              schema = json.loads(pathlib.Path(schema_path).read_text())
+              record = json.loads(pathlib.Path(record_path).read_text())
+              errors = list(jsonschema.validators.validator_for(schema)(schema).iter_errors(record))
+              if errors:
+                  failed = True
+                  print(f"INVALID {record_path}")
+                  for err in errors:
+                      print(f"  - {'/'.join(str(p) for p in err.absolute_path) or '<root>'}: {err.message}")
+              else:
+                  print(f"VALID   {record_path}")
+          sys.exit(2 if failed else 0)
+          PY
+
+      - name: Paper admission must be BLOCKED while no candidate is admitted
+        # The committed record is regenerated and compared, so it cannot drift
+        # from what the evaluator actually says. An ADMITTED verdict here would
+        # mean a candidate was let into forward paper before the authoritative
+        # lineage was even consolidated, which is the failure this gate prevents.
+        run: |
+          set -euo pipefail
+          python3 research/fp/admission.py evaluate -o "$RUNNER_TEMP/admission.json"
+          python - <<'PY'
+          import json, os, pathlib, sys
+          fresh = json.loads(pathlib.Path(os.environ["RUNNER_TEMP"], "admission.json").read_text())
+          committed = json.loads(pathlib.Path("research/fp/records/paper_candidate_admission.json").read_text())
+          if fresh["paper_admission"] != "BLOCKED":
+              print("::error::paper admission is no longer BLOCKED; a candidate freeze must be reviewed")
+              sys.exit(1)
+          fresh_results = [c["result"] for c in fresh["conditions"]]
+          committed_results = [c["result"] for c in committed["conditions"]]
+          if fresh_results != committed_results:
+              print("::error::the committed admission record has drifted from the evaluator")
+              print(f"  committed: {committed_results}")
+              print(f"  evaluated: {fresh_results}")
+              sys.exit(1)
+          print(f"PAPER_ADMISSION = {fresh['paper_admission']} — {fresh['reason']}")
+          PY
+
+      - name: Dataset V2 lock must not fork from main
+        # TL-FP-BOOT-1 v2.0 section 2: DO NOT REACQUIRE DATASET V2. A second set
+        # of authoritative hashes is a provenance fork, and a later archive
+        # revision would make the two impossible to reconcile. The only legal way
+        # for this file to change on a branch is by merging main, so any
+        # divergence from main is either a reacquisition or a hand edit.
+        run: |
+          set -euo pipefail
+          LOCK=research/datasets/dataset_v2.lock.json
+          git fetch origin main
+          BASE=$(git merge-base HEAD FETCH_HEAD)
+          # Compare against the merge base, not against main's tip. A branch that
+          # simply has not merged main yet is *behind*, which section 4 actively
+          # requires of the parked scaffold; a branch that edited this file since
+          # diverging has *forked*, which section 2 forbids. Only the second is a
+          # fault, and only the merge base can tell them apart.
+          if git diff --quiet "$BASE" HEAD -- "$LOCK"; then
+            if git diff --quiet HEAD FETCH_HEAD -- "$LOCK"; then
+              echo "dataset_v2 lock is identical to origin/main"
+            else
+              echo "dataset_v2 lock is unmodified on this branch; it is behind origin/main, which is not a fork"
+              echo "  branch and main differ only because main has advanced:"
+              git diff --stat HEAD FETCH_HEAD -- "$LOCK"
+            fi
+          else
+            echo "::error::$LOCK was modified on this branch since it diverged from main."
+            echo "::error::Section 2 forbids reacquiring or hand-editing Dataset V2; the frozen lock"
+            echo "::error::reaches a branch by merge only."
+            git diff --stat "$BASE" HEAD -- "$LOCK"
+            exit 1
+          fi
+
+      - name: Report the section 3.1 activation gate
+        # Not a failing gate: this branch is the parked scaffold and the merge is
+        # a project-level decision. It is reported on every run so the blocker
+        # stays visible rather than being rediscovered.
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib
+          record = json.loads(pathlib.Path("research/fp/records/paper_candidate_admission.json").read_text())
+          lineage = record["authoritative_lineage"]
+          state = "CONSOLIDATED" if lineage["is_ancestor_of_main"] else "NOT CONSOLIDATED"
+          print(f"BASELINE_CLOSURE_COMMIT = {lineage['baseline_closure_commit']}")
+          print(f"AUTHORITATIVE_LINEAGE   = {state} — {lineage['detail']}")
+          print(f"ENTRY_STATE             = {record['entry_state']}")
+          print(f"PAPER_ADMISSION         = {record['paper_admission']}")
+          if not lineage["is_ancestor_of_main"]:
+              print("::notice::TL-FP-BOOT-1 is BLOCKED at section 3.1 until the BASELINE-1 lineage is merged to main.")
+          PY
+
+      - name: FP-BOOT-1 preflight must not permit a T0
+        run: |
+          set -euo pipefail
+          python3 research/fp/preflight.py
+          if python3 research/fp/preflight.py --require-pass >/dev/null; then
+            echo "::error::preflight reported PASS; creating a cohort T0 requires an explicit owner decision"
+            exit 1
+          fi
+          echo "preflight correctly refuses a T0"
+
       - name: Test suite
         run: python -m pytest
 
@@ -203,3 +317,13 @@ jobs:
           run_ft show-config show-config --config /freqtrade/user_data/config.json
 
           docker run --rm "$IMAGE" --version
+
+      - name: Replay EMA matches TA-Lib inside the pinned engine image
+        # fp.replay.ema is a pure-Python re-implementation, because the research
+        # environment has no TA-Lib. Event-time replay is the primary parity
+        # gate, so the equivalence is executed here rather than asserted.
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python3 \
+            -v "$PWD:/repo:ro" -w /repo \
+            "freqtradeorg/freqtrade:2026.7" research/fp/talib_parity.py

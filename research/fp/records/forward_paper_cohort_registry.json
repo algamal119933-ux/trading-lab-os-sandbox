@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0.0",
+  "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
+  "registry_updated_utc": "2026-09-07T00:00:00Z",
+  "entry_state": "C",
+  "paper_alpha_cohort": "NONE",
+  "fp_run_active": false,
+  "adopted_prior_t0": false,
+  "instances": [
+    {
+      "role": "FP-CONTROL-1",
+      "cohort_id": null,
+      "status": "NOT_STARTED",
+      "t0_utc": null,
+      "closed_utc": null,
+      "closure_reason": null,
+      "runtime_identity": {
+        "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
+        "source_commit": null,
+        "strategy_sha256": null,
+        "params_sha256": null,
+        "config_sha256": null,
+        "engine_version": "freqtradeorg/freqtrade:2026.7",
+        "image_digest": null,
+        "python_version": null,
+        "pairs": ["BTC/USDT", "ETH/USDT"],
+        "timeframe": "1h",
+        "detail_timeframe": "5m",
+        "fee_model": { "per_side_ratio": 0.001, "slippage": "none modelled" },
+        "sizing": { "dry_run_wallet": 100, "stake_amount": 10, "stake_currency": "USDT" },
+        "max_open_trades": 2,
+        "order_policy": null,
+        "feature_sources": ["binance spot public OHLCV 1h"],
+        "paper_fill_model_version": null,
+        "environment_variable_allowlist": [],
+        "bot_name": null,
+        "db_path": null,
+        "wallet": 100,
+        "log_path": null,
+        "evidence_dir": null
+      },
+      "change_log": []
+    }
+  ],
+  "real_money_authorized": false,
+  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE and no T0 has been created. The FP-CONTROL-1 row is a declaration of intent, not a running instance: every hash and path is null precisely because nothing has been frozen. Section 3 permits a bounded BASELINE-1 control-only runtime-hardening check, and section 3 also states that BASELINE-1 control operation is not candidate-quality evidence. Populating this row is the first act of FP-BOOT-1 proper, and it may happen only after preflight (section 12) returns PASS."
+}
