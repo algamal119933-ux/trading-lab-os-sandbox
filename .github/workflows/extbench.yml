@@ -402,6 +402,22 @@ jobs:
           echo "===== LOOKAHEAD (tail) ====="; tail -30 artifacts/lookahead_development.log 2>/dev/null || echo "(none)"
           echo "===== RECURSIVE (tail) ====="; tail -30 artifacts/recursive_development.log 2>/dev/null || echo "(none)"
           echo "===== METRICS STEP LOG ====="; tail -40 artifacts/metrics_step.log 2>/dev/null || echo "(none)"
+          # Printed last and kept short on purpose. Artifact blob storage is
+          # unreachable from the analysis environment, so a failure has to be
+          # legible from the tail of the job log alone; anything that needs a
+          # 300-line scrollback is a failure nobody will read.
+          echo
+          echo "########## FAILURE DIGEST ##########"
+          for f in artifacts/backtest_development.log artifacts/lookahead_development.log \
+                   artifacts/recursive_development.log artifacts/metrics_step.log; do
+            [ -f "$f" ] || continue
+            HITS="$(grep -nE 'ERROR|CRITICAL|Traceback|Exception|OperationalException|No data found|not found|Impossible' "$f" | head -12 || true)"
+            if [ -n "$HITS" ]; then
+              echo "--- $f ---"
+              echo "$HITS"
+            fi
+          done
+          echo "########## END DIGEST ##########"
 
       - uses: actions/upload-artifact@v4
         if: always()
