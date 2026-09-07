@@ -1,0 +1,47 @@
+{
+  "dataset_id": "BTSL_NATIVE_DATASET_v1",
+  "status": "pending_acquisition",
+  "spec_frozen_utc": "2026-09-07T08:30:00Z",
+  "authority": "sprint v1.3 section 8.3",
+
+  "purpose": "Native reproduction of the btc-strategy-lab published claim, on its own terms.",
+  "separation_rule": "A native historical reproduction must not silently become a Dataset V2 experiment. This dataset is locked separately and is never mixed with Dataset V2 in one record.",
+
+  "exchange": "binance",
+  "market_type": "spot",
+  "pairs": ["BTC/USDT"],
+  "timeframes": ["1h"],
+  "data_format": "feather",
+
+  "native_conditions_from_upstream": {
+    "source": "README at pinned commit b68a5518b4a3eba2fde1733160d7d7de356023b5",
+    "stated": "BTC/USDT spot, 1h candles, 0.1% fee per side, no leverage, single position, 8 years of data",
+    "upstream_download_range": "20180101- (scripts/download_data.sh at the pinned commit)"
+  },
+
+  "acquisition": {
+    "route": "official public Binance data archive, the same route that acquired Dataset V2; no exchange credential is used or required",
+    "provenance_required": ["source URL per archive", "published .CHECKSUM verification where available", "locally computed SHA256", "retrieval UTC"]
+  },
+
+  "reproduction_grade_rule": {
+    "rule": "If the exact historical inputs upstream used cannot be reconstructed, REPRODUCTION_GRADE must reflect that.",
+    "never": "Do not call an approximate reconstruction exact.",
+    "known_unknowns": [
+      "upstream's exact download date, and therefore which revisions of Binance's archive it saw",
+      "upstream's exact backtest end date - the README states 8 years without pinning a boundary",
+      "whether upstream applied any pair or candle filtering not visible in the pinned scripts"
+    ]
+  },
+
+  "integrity_contract": {
+    "canonical_digest_version": "CANONICAL_CANDLE_V1",
+    "note": "Same definition as Dataset V2's, so the two are directly comparable even though they are never merged."
+  },
+
+  "raw_file_hashes": {},
+  "canonical_hashes": {},
+  "coverage": {},
+
+  "applies_to": ["H1_NATIVE_REPRODUCTION"]
+}

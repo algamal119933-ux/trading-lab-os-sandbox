@@ -1,0 +1,103 @@
+{
+  "schema_version": "CLAIMS_SNAPSHOT_V1",
+  "frozen_utc": "2026-09-07T06:30:00Z",
+  "purpose": "Freeze what each upstream publicly claims, in its own words, BEFORE Trading Lab OS produces any result for that candidate. Directive v1.1 section 7 forbids re-selecting a favourable upstream commit after seeing our own result; this file is what makes that rule checkable.",
+  "verification_method": "Every figure below was read from the README fetched at the pinned commit and hash-verified by research/external/pin_upstream.py. None was transcribed from the owner's directive without independent confirmation against source.",
+
+  "btc_strategy_lab": {
+    "repo": "wiktorj137/btc-strategy-lab",
+    "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+    "readme_sha256": "92dd726a7c9a1e2859da423612a82c4d91524a2c4722dc7c904026c324e39e72",
+    "stated_conditions": "BTC/USDT spot, 1h candles, 0.1% fee per side, no leverage, single position, 8 years of data",
+    "benchmark_scale": {"strategies_tested": 42, "lost_money_outright": 33, "verified": true},
+    "headline_emacrossfunding": {
+      "total_return_pct": 1604, "btc_buy_and_hold_pct": 781, "cagr_pct": 50.9,
+      "max_drawdown_pct": -33.8, "sharpe": 1.31, "sortino": 1.42, "calmar": 1.51,
+      "time_in_market_pct": 61, "trades": 96, "verified": true
+    },
+    "ablation_emacross_only": {"total_return_pct": 1353, "max_drawdown_pct": -49.4, "verified": true},
+    "stated_rule_of_the_increment": "The funding rule buys drawdown, not return. 6 of 6 independent checks showed reduced drawdown.",
+    "walk_forward": {
+      "windows_profitable": "8 of 13", "compound_oos_return_pct": 1125,
+      "btc_buy_and_hold_same_period_pct": 734, "pbo": 0.21, "verified": true
+    },
+    "self_declared_weakness": {
+      "regime_concentration": "One window, H2 2020 at +182%, carries a lot of this. Dropping it leaves +335% against BTC's +734% - i.e. the remainder loses to buy-and-hold.",
+      "selection_effect": "The strategy was picked as the winner of a 42-way benchmark and then had a fourth rule added; upstream names both selection steps itself.",
+      "benchmark_fairness": "Upstream states the benchmark is unfair to multi-pair strategies.",
+      "backtest_only": "Upstream states explicitly that this is backtest only, not live-tested.",
+      "verified": true
+    },
+    "cost_finding_worth_reusing": "Of 22 strategies on 5m candles, 1 profitable and 21 unprofitable, median return -95.6%. EMASkipPump made 5,953 trades and paid 1,191% of capital in fees. Strategy001 won 88.6% of trades and finished at -98.6% - the win-rate trap, in upstream's own words.",
+    "claim_vs_code_discrepancy": {
+      "finding": "README rule 4 says skip entries when funding is in the top 45% of its trailing 180-day range, i.e. a threshold of 55. EmaCrossFunding.py declares funding_max_pct default 90.",
+      "resolution": "user_data/strategies/EmaCrossFunding.json pins funding_max_pct=55, ema_period=600, exit_threshold=2.0, and Freqtrade auto-loads it. The README and the effective configuration agree; only the .py default differs.",
+      "consequence": "Any reproduction that omits the params JSON silently tests different rules than the published claim. Both params files are pinned for this reason.",
+      "verified": true
+    }
+  },
+
+  "genetic_engine_v1": {
+    "repo": "ceyhanmolla/freqtrade-strategies",
+    "commit": "937fefc25ef209120fa2a59d2f520f52d991f26b",
+    "readme_sha256": "db17940407a9b733d2dd303af82c0a5d7d117c9937ac958dbc952c8f87c9eca0",
+    "stated_conditions": "Binance Spot, start balance 100 USDT, 2026-02-08 to 2026-05-13, 5m",
+    "headline": {
+      "return_pct": 42.56, "trades": 183, "win_rate_pct": 98.9,
+      "max_drawdown_pct": 1.65, "profit_factor": "90+", "verified": true
+    },
+    "profit_factor_note": "Upstream itself marks the profit factor as an estimate, writing it as '90+' rather than a computed value.",
+    "internal_inconsistency": {
+      "finding": "The benchmark table states Freqtrade 2026.4 while the Live Configuration section of the same README states Freqtrade 2024.9.",
+      "consequence": "The engine version under which the claim was produced is ambiguous from public inputs. Record which version we run; do not assert the claim was made under ours.",
+      "verified": true
+    },
+    "live_money_status": "Upstream labels the strategy 'Active (Live Testing)'. No independently observable capital or trade evidence is published. Classified LIVE_MONEY=NO per addendum section 7 point 8; treated as BACKTEST_CLAIM.",
+    "adversarial_prior": "A 98.9% win rate at 1.65% drawdown is the exact shape both btc-strategy-lab and the postmortem identify as the win-rate trap. Test fee load, concentration and leakage before treating the return as real."
+  },
+
+  "e0v1e": {
+    "repo": "TheoBrigitte/freqtrade",
+    "pinned_historical_commit": "ebc58b15c279d20d923c38bd2691d34f8be0aaa5",
+    "readme_sha256": "3920196f3662671149b521ead1891bd85f4446adfe84b5a262c3d70d310461b5",
+    "headline": {
+      "period": "2022-06-01 to 2023-06-01", "timeframe": "5m", "max_open_trades": 4,
+      "entries": 2481, "total_profit_pct": 496.37, "cum_profit_pct": 764.03,
+      "total_profit_usdt": 4963.744, "win_rate_pct": 79.8, "wins": 1981, "losses": 500,
+      "max_drawdown_pct": 12.10, "avg_duration": "2:08:00", "verified": true
+    },
+    "why_current_main_is_not_used": "Current main still displays this claim but no longer carries E0V1E.json, and the strategy was modified after the claim was published. Reproducing from current main would test different code than the claim describes.",
+    "reproduction_obstacles_found_in_preflight": [
+      "The pinned config sets dry_run_wallet=70 while the claim reports 4,963.744 USDT of profit at 496.37%, which implies a wallet near 1,000. The config as published cannot produce the published absolute figure.",
+      "stake_currency is BUSD, which Binance has since retired. The pair universe as it existed then is not reconstructible.",
+      "The pair universe is dynamic - VolumePairList plus AgeFilter plus VolatilityFilter, with an empty static whitelist - so the set of pairs traded depended on run-time volume and cannot be replayed. This is textbook pair survivorship.",
+      "No explicit fee is set in the config, so the run inherited an exchange default that is not pinned.",
+      "No timeframe is set in the config; it comes from the strategy."
+    ],
+    "predeclared_allowed_verdict": "NOT_ENOUGH_PUBLIC_INPUTS"
+  },
+
+  "kronos_gauntlet": {
+    "repo": "thotbreakerr/kronos-gauntlet",
+    "commit": "67a47713be6e9ec1ec279640f9ef2e0340ee91eb",
+    "readme_sha256": "01585217d66d16a0c4b78ff8d88e3e56946514e72caa003512b8fe446b8bd933",
+    "headline": "Eleven research phases; every candidate edge was falsified by its own locked gate before any real capital was considered. Paper trading only; live trading never enabled.",
+    "cited_example": "BTC direction prediction: no slice clears the ~0.3% round-trip cost wall; at daily bars buy-and-hold at +534% crushes the best active variant at +1.5%.",
+    "why_it_is_a_process_control": "Upstream preserves negative results AND errata that correct its own earlier published headlines - including one case where a data build failed its own locked roll-seam gate, making the magnitudes non-citable, and one where a published headline turned out to be a tax-model artifact. That is the behaviour our failure ledger should imitate.",
+    "verified": true
+  },
+
+  "postmortem": {
+    "repo": "francisx1999/crypto-trading-bot-postmortem",
+    "commit": "53babe6c478934c91491366078c8600c5616e07d",
+    "readme_sha256": "9fd7605d690bf1565314630790f35a5cb44d2bec591a3cc5843d4712574c4b3a",
+    "headline": "Seven distinct strategies, two exchanges, 100 hyperopt epochs, 24-month window. Every single strategy tested lost money over the same window. Best result -17.75%.",
+    "key_pattern": "Two of the worst strategies failed identically: different entry logic and filters, same 'close when the indicator crosses back the other way' exit, producing 100% win rate on ROI exits and 0% win rate on exit_signal exits, with the latter bleeding more than the former captures.",
+    "role": "Lab calibration. Reproducing these as losses is a test of our harness, not of the strategies.",
+    "verified": true
+  },
+
+  "cross_source_agreement": {
+    "note": "Three independent upstreams - btc-strategy-lab, the postmortem, and Kronos - each concluded that a high win rate and an unmodelled cost floor are the dominant failure modes in retail crypto backtests. GeneticEngineV1's headline claim sits exactly on that failure shape. That agreement is why it is registered as an adversarial claim challenge rather than a promising candidate."
+  }
+}
