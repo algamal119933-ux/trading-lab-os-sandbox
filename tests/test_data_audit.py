@@ -455,22 +455,19 @@ def test_dataset_v1_lock_is_untouched_by_dataset_v2(repo_root):
 
 
 def _dataset_with_a_real_exchange_gap(tmp_path):
-    """A dataset that is structurally perfect but has a missing hour, like the
-    real one: Binance halted, so the candle is absent from its archive too."""
-    import pandas as pd
+    """Structurally perfect, but with an hour missing, like the real dataset:
+    Binance halted, so the candle is absent from its own archive too.
 
+    Built in Freqtrade's JSON format, as the rest of this module does, so the
+    test runs in the static-checks job where pandas is not installed.
+    """
     for pair in ("BTC_USDT", "ETH_USDT"):
-        rows = []
-        base = pd.Timestamp("2021-01-01", tz="UTC")
-        for i in range(48):
-            if i == 20:
-                continue  # the exchange was down for this hour
-            rows.append({
-                "date": base + pd.Timedelta(hours=i),
-                "open": 100.0 + i, "high": 101.0 + i,
-                "low": 99.0 + i, "close": 100.5 + i, "volume": 10.0,
-            })
-        pd.DataFrame(rows).to_feather(tmp_path / f"{pair}-1h.feather")
+        rows = [
+            candle(START + i * HOUR_MS, 100.0 + i)
+            for i in range(48)
+            if i != 20  # the exchange was down for this hour
+        ]
+        write_json(tmp_path / f"{pair}-1h.json", rows)
     return tmp_path
 
 
