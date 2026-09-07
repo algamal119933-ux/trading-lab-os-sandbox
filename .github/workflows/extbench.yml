@@ -448,4 +448,29 @@ jobs:
             fi
           done
           echo "########## END DIGEST ##########"
+          # The scorecard row, printed last and small. Everything above is for
+          # diagnosing a failure; this is what a successful run is actually for,
+          # and it has to survive a tail of the job log.
+          echo
+          echo "########## RESULT BLOCK ##########"
+          python3 - <<'PY' 2>/dev/null || echo "(no metrics produced)"
+          import json, pathlib
+          m = json.loads(pathlib.Path("artifacts/metrics_development.json").read_text())
+          p = json.loads(pathlib.Path("artifacts/passive_development.json").read_text())["result"]
+          flat = {}
+          def walk(o, pre=""):
+              for k, v in (o.items() if isinstance(o, dict) else []):
+                  if isinstance(v, dict): walk(v, pre + k + ".")
+                  else: flat[pre + k] = v
+          walk(m)
+          keys = [k for k in flat if any(t in k.lower() for t in (
+              "return", "drawdown", "trades", "profit_factor", "sharpe", "sortino", "calmar",
+              "exposure", "win", "fee", "expectancy", "start", "end", "consecutive"))]
+          for k in sorted(keys):
+              print(f"  {k} = {flat[k]}")
+          print(f"  CONTROL.btc_buy_and_hold = {p['BTC']['net_return_after_entry_and_exit_fee']}")
+          print(f"  CONTROL.exposure_matched = {p['exposure_matched_return']}")
+          print(f"  CONTROL.invested_fraction = {p['max_exposure_invested_fraction']}")
+          PY
+          echo "########## END RESULT BLOCK ##########"
 
