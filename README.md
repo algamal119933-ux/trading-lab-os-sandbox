@@ -73,8 +73,23 @@ record labelled `oos` refuses to summarise without `--unlock-oos`.
 
 ## Current stage
 
-`CLOUD-0` — repository readiness and a reproducible research harness. See
-[`docs/cloud-0/CLOUD-0_CLOSURE.md`](docs/cloud-0/CLOUD-0_CLOSURE.md).
-Next: `BASELINE-1`, a deterministic EMA50/EMA200 spot long-only reference.
+`BASELINE-1` — closed. A deterministic EMA50/EMA200 spot long-only reference,
+evaluated on Dataset V2 (real, checksum-verified Binance spot data) under a
+protocol fixed before any result existed.
+
+| Stage | State |
+| --- | --- |
+| `CLOUD-0` — repository readiness and reproducible harness | closed — [`docs/cloud-0/CLOUD-0_CLOSURE.md`](docs/cloud-0/CLOUD-0_CLOSURE.md) |
+| `DATASET-V2` — frozen research dataset | frozen — [`docs/research/DATASET_V2_SPEC.md`](docs/research/DATASET_V2_SPEC.md), [`research/datasets/dataset_v2.lock.json`](research/datasets/dataset_v2.lock.json) |
+| `BASELINE-1` Development | protocol **PASS**, performance **NEUTRAL** — [`docs/research/BASELINE_1_DEVELOPMENT_RESULT.md`](docs/research/BASELINE_1_DEVELOPMENT_RESULT.md) |
+| `BASELINE-1` Validation | run once, unchanged; **NEUTRAL** — [`docs/research/BASELINE_1_VALIDATION_RESULT.md`](docs/research/BASELINE_1_VALIDATION_RESULT.md) |
+
+The reference neither beat nor badly lagged a passive position of the same
+average exposure: −1.38 pp on Development, +1.97 pp on Validation. That is the
+number any future candidate has to improve on, under the same frozen protocol.
+
+No prospective out-of-sample evidence exists yet. The first strict holdout must
+be forward paper over data that did not exist when the strategy was frozen.
+This repository remains **paper / research only**.
 
 Arabic quick start: [`README_AR.md`](README_AR.md), [`RUN_WINDOWS_AR.md`](RUN_WINDOWS_AR.md).
