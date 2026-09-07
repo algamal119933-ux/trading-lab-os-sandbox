@@ -15,7 +15,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
 
-for extra in (REPO_ROOT / "scripts", REPO_ROOT / "research", REPO_ROOT / "monitoring" / "exporter"):
+for extra in (
+    REPO_ROOT / "scripts",
+    REPO_ROOT / "research",
+    REPO_ROOT / "research" / "external",
+    REPO_ROOT / "monitoring" / "exporter",
+):
     if str(extra) not in sys.path:
         sys.path.insert(0, str(extra))
 

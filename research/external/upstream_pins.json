@@ -1,0 +1,265 @@
+{
+  "schema_version": "UPSTREAM_PINS_V1",
+  "pinned_utc": "2026-09-07T06:20:00Z",
+  "authority": "VERIFIED_UPSTREAM_PINNING_ADDENDUM_v1.2_20260907, used with POST-BASELINE EXTERNAL BENCHMARK DIRECTIVE v1.1",
+  "policy": {
+    "vendoring": "No upstream source is committed to this repository. Files are pinned by upstream commit plus content hash and fetched on demand by research/external/pin_upstream.py. Two projects are GPL-3.0 and three carry no license at all; committing either class here would be a license incorporation decision that no directive has authorised.",
+    "transport": "raw.githubusercontent.com. The sandbox egress policy answers 403 to github.com and codeload.github.com, so git clone and tarball download are both unavailable. Fetching a single blob at a pinned commit is also the narrower operation.",
+    "commit_selection": "Every commit here was fixed by the owner's addendum before any Trading Lab OS result existed for these candidates. Directive v1.1 section 7 forbids selecting a favourable upstream commit after seeing our own result; re-pinning to a different commit therefore requires a new candidate ID.",
+    "digests": "sha256 is the identity used by the gate. git_blob_sha1 is sha1(b'blob <len>\\u00000' + bytes) - the value GitHub shows in its UI - recorded so a pin can be checked against what a human read without downloading anything."
+  },
+  "sources": {
+    "btc_strategy_lab": {
+      "project": "btc-strategy-lab",
+      "repo": "wiktorj137/btc-strategy-lab",
+      "url": "https://github.com/wiktorj137/btc-strategy-lab",
+      "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "role": "P0 METHODOLOGY + EXECUTABLE RESEARCH BENCHMARK",
+      "evidence_class": "BACKTEST_ONLY",
+      "license": {
+        "spdx": "GPL-3.0",
+        "license_file_present": true,
+        "vendoring_authorised": false,
+        "note": "Benchmarking GPL code does not require making it a core dependency (directive v1.1 section 18). Fetched at run time, never committed."
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "purpose": "public claim snapshot",
+          "sha256": "92dd726a7c9a1e2859da423612a82c4d91524a2c4722dc7c904026c324e39e72",
+          "size_bytes": 17041,
+          "git_blob_sha1": "66d298926f307e95444b594abd20133b58e0db14"
+        },
+        {
+          "path": "LICENSE",
+          "purpose": "license evidence",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "size_bytes": 35149,
+          "git_blob_sha1": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7"
+        },
+        {
+          "path": "user_data/strategies/EmaCross.py",
+          "purpose": "H1 core timing candidate",
+          "sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+          "size_bytes": 2183,
+          "git_blob_sha1": "4cf28fba47aeef0e219ce64839d99041de060606"
+        },
+        {
+          "path": "user_data/strategies/EmaCrossFunding.py",
+          "purpose": "H2 funding increment candidate",
+          "git_blob_sha1": "893f43c5b81cc2e9ab5e2e8f70ad461ea8f18345",
+          "sha256": "0f0d3d4677647da2e11d4dc8195adbb95fce201ce400300df0a78741cf9a9564",
+          "size_bytes": 3366
+        },
+        {
+          "path": "user_data/strategies/EmaCross.json",
+          "purpose": "hyperopt parameters Freqtrade auto-loads; the .py defaults alone do not reproduce the published claim",
+          "sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee",
+          "size_bytes": 168,
+          "git_blob_sha1": "2760f239b15de6eb62ab3f90c231f357b3f3b63a"
+        },
+        {
+          "path": "user_data/strategies/EmaCrossFunding.json",
+          "purpose": "hyperopt parameters Freqtrade auto-loads; carries funding_max_pct=55 while the .py default is 90",
+          "sha256": "1641ce3122ccc0c216aaae1af77bedb15dd77670643201d1c7453066eca38f0b",
+          "size_bytes": 198,
+          "git_blob_sha1": "01c9f5113174d49004c22947d6077660a991f7b7"
+        },
+        {
+          "path": "config.json",
+          "purpose": "upstream run config: exchange, fees, pair universe",
+          "sha256": "a20cfbf8c9efa36b06f336ef772e8be905e9c236b6f7bed38a4a0a810879ecda",
+          "size_bytes": 1236,
+          "git_blob_sha1": "89977426d9b3b9ab19763833796c2b1bc675e5e2"
+        },
+        {
+          "path": "scripts/download_data.sh",
+          "purpose": "data acquisition route evidence",
+          "sha256": "ca2ff70e9b1a3aa12526c919598a7c15ad85df50381e8f1a04fda97cadce3557",
+          "size_bytes": 294,
+          "git_blob_sha1": "6020e4cc2d413050aea334d01d65651198f5db51"
+        },
+        {
+          "path": "research/fetch_onchain.py",
+          "purpose": "FUNDING_TIMESTAMP_KNOWABILITY evidence: shows the funding series is keyed on Binance fundingTime",
+          "sha256": "2312dc978cc62b8b3acd1f75226bd1f51292704d2758fb01eb4d9ead06d876bf",
+          "size_bytes": 2289,
+          "git_blob_sha1": "bce4df4ee8b1225134ba41ac10998cab6efa7f83"
+        }
+      ]
+    },
+    "kronos_gauntlet": {
+      "project": "Kronos Gauntlet",
+      "repo": "thotbreakerr/kronos-gauntlet",
+      "url": "https://github.com/thotbreakerr/kronos-gauntlet",
+      "commit": "67a47713be6e9ec1ec279640f9ef2e0340ee91eb",
+      "role": "P1 PROCESS NEGATIVE CONTROL / METHOD REFERENCE",
+      "evidence_class": "PAPER_ONLY",
+      "license": {
+        "spdx": null,
+        "license_file_present": false,
+        "vendoring_authorised": false,
+        "note": "CODE_COPY_INTO_CORE = NOT AUTHORIZED. No LICENSE, LICENSE.md or COPYING at the pinned commit, independently confirmed by 404 on all three. Source inspection and method extraction only."
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "purpose": "public claim snapshot and method mining",
+          "sha256": "01585217d66d16a0c4b78ff8d88e3e56946514e72caa003512b8fe446b8bd933",
+          "size_bytes": 8720,
+          "git_blob_sha1": "8d90fb7fb8ba5669fefeb44500f5292cf15d3615"
+        },
+        {
+          "path": "LICENSE",
+          "purpose": "license evidence",
+          "expect_missing": true
+        }
+      ]
+    },
+    "genetic_engine_v1": {
+      "project": "GeneticEngineV1",
+      "repo": "ceyhanmolla/freqtrade-strategies",
+      "url": "https://github.com/ceyhanmolla/freqtrade-strategies",
+      "commit": "937fefc25ef209120fa2a59d2f520f52d991f26b",
+      "role": "P2 ADVERSARIAL HIGH-CLAIM TEST",
+      "evidence_class": "BACKTEST_CLAIM",
+      "license": {
+        "spdx": null,
+        "license_file_present": false,
+        "vendoring_authorised": false,
+        "note": "No recognised license at the pinned commit, independently confirmed. Ephemeral benchmark and claim challenge only; never copied into core."
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "purpose": "public claim snapshot",
+          "sha256": "db17940407a9b733d2dd303af82c0a5d7d117c9937ac958dbc952c8f87c9eca0",
+          "size_bytes": 4814,
+          "git_blob_sha1": "26696744910426808fcc1693da46b7b1b8e0ffb7"
+        },
+        {
+          "path": "GeneticEngineV1.py",
+          "purpose": "claim-challenge candidate",
+          "git_blob_sha1": "99a11d0b8d53711c75984356c7e59cfd52c8de3b",
+          "sha256": "7a22d1a184c5c75481ed421470758627c1079980cf9da8640ed5aa878ad4f62f",
+          "size_bytes": 39708
+        },
+        {
+          "path": "LICENSE",
+          "purpose": "license evidence",
+          "expect_missing": true
+        }
+      ]
+    },
+    "e0v1e_historical": {
+      "project": "E0V1E (historical reconstruction snapshot)",
+      "repo": "TheoBrigitte/freqtrade",
+      "url": "https://github.com/TheoBrigitte/freqtrade",
+      "commit": "ebc58b15c279d20d923c38bd2691d34f8be0aaa5",
+      "role": "P2 ADVERSARIAL HIGH-CLAIM TEST",
+      "evidence_class": "BEST_RECONSTRUCTABLE_HISTORICAL_CLAIM",
+      "license": {
+        "spdx": null,
+        "license_file_present": false,
+        "vendoring_authorised": false,
+        "note": "No recognised license at the pinned commit, independently confirmed. Never copied into core."
+      },
+      "pin_rationale": "Current main still shows the +496.37% README claim but no longer carries the E0V1E.json parameter file, and the strategy was modified after the claim was published. Reproducing the claim from current main would be testing different code than the claim describes. This commit is the snapshot at which README, strategy, parameters and config coexist.",
+      "files": [
+        {
+          "path": "strategies/e0v1e/README.md",
+          "purpose": "public claim snapshot",
+          "sha256": "3920196f3662671149b521ead1891bd85f4446adfe84b5a262c3d70d310461b5",
+          "size_bytes": 1103,
+          "git_blob_sha1": "395454b7dbd4600f918980f1550a3a43f054da5d"
+        },
+        {
+          "path": "strategies/e0v1e/E0V1E.py",
+          "purpose": "historical strategy",
+          "git_blob_sha1": "1c04d59421ebd4a9779c554064625c38d4989da5",
+          "sha256": "160f9d81b07a7cb85d57f2b5cd2080a369abce35bdaa9938e7d110552417bddb",
+          "size_bytes": 7496
+        },
+        {
+          "path": "strategies/e0v1e/E0V1E.json",
+          "purpose": "historical hyperopt parameters",
+          "git_blob_sha1": "ce7a8fb846b47d91f7b365779a35c46bb48205b7",
+          "sha256": "1f927271d3cdd1347d1c6a1867879b48a144f2d732ab68db9fd1cb7091ec53d7",
+          "size_bytes": 749
+        },
+        {
+          "path": "config/config.json",
+          "purpose": "historical run config",
+          "git_blob_sha1": "e6f930f1476c8aebc8a3a7f6100e431f711b5fe3",
+          "sha256": "4fdc90f084b5fa32e681a72b12153bb35034301f0eb9c92f5bf85405855e7954",
+          "size_bytes": 2792
+        },
+        {
+          "path": "LICENSE",
+          "purpose": "license evidence",
+          "expect_missing": true
+        }
+      ]
+    },
+    "postmortem_negative_control": {
+      "project": "crypto-trading-bot-postmortem",
+      "repo": "francisx1999/crypto-trading-bot-postmortem",
+      "url": "https://github.com/francisx1999/crypto-trading-bot-postmortem",
+      "commit": "53babe6c478934c91491366078c8600c5616e07d",
+      "role": "P0 FREQTRADE NEGATIVE CONTROL / LAB CALIBRATION",
+      "evidence_class": "BACKTEST_ONLY_DOCUMENTED_FAILURE",
+      "commit_provenance": "Not pinned by the addendum. Resolved from the repository's commit history: a single commit, 'Initial public release', 2026-05-29. Recorded here so the pin is auditable.",
+      "license": {
+        "spdx": "pending_read",
+        "license_file_present": true,
+        "vendoring_authorised": false
+      },
+      "files": [
+        {
+          "path": "README.md",
+          "purpose": "failure-pattern claim snapshot and lab calibration cases",
+          "sha256": "9fd7605d690bf1565314630790f35a5cb44d2bec591a3cc5843d4712574c4b3a",
+          "size_bytes": 16679,
+          "git_blob_sha1": "b105390954222062e5b14d785abdeb4916339436"
+        },
+        {
+          "path": "LICENSE",
+          "purpose": "license evidence",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "size_bytes": 35149,
+          "git_blob_sha1": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7"
+        }
+      ]
+    }
+  },
+  "method_mining_only": {
+    "note": "Studied for method, never executed as a candidate in this sprint, so no file pins are required yet.",
+    "passivbot": {
+      "repo": "enarjord/passivbot",
+      "url": "https://github.com/enarjord/passivbot",
+      "default_branch": "master",
+      "license": "Unlicense",
+      "role": "P0 REAL-MONEY EXTERNAL EVIDENCE / METHOD-MINING ONLY",
+      "safety": "Perpetual-futures oriented. No native derivative execution is authorised in Trading Lab OS. Its raw ROI is never compared directly with spot-long systems."
+    },
+    "nostalgia_for_infinity": {
+      "repo": "iterativv/NostalgiaForInfinity",
+      "url": "https://github.com/iterativv/NostalgiaForInfinity",
+      "license": "GPL-3.0",
+      "role": "P1 MATURE FREQTRADE STRESS TEST / NATIVE SPOT BENCHMARK WHEN SAFE",
+      "note": "Wave 2 only. Do not vendor GPL code into core without an explicit license decision."
+    },
+    "trendrider": {
+      "url": "https://trendrider.net/live",
+      "role": "P1 PUBLIC FORWARD DRY-RUN REFERENCE",
+      "classification": "PUBLIC_FORWARD_PAPER=YES, LIVE_MONEY=NO",
+      "note": "Upstream uses 'live performance' wording while stating no real money is at risk. Classified by actual mode, not by wording."
+    },
+    "hummingbot": {
+      "repo": "hummingbot/hummingbot",
+      "url": "https://github.com/hummingbot/hummingbot",
+      "role": "P2 EXECUTION / MARKET-MAKING METHOD REFERENCE",
+      "note": "No core dependency and no unfair ROI comparison in this sprint."
+    }
+  }
+}
