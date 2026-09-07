@@ -6,8 +6,10 @@ name: Funding archive probe
 #
 # This runs on a GitHub runner because both Binance hosts are blocked from the research
 # sandbox: fapi.binance.com and data.binance.vision each answer 403 to CONNECT there.
-# fapi additionally returned 451 to GitHub runners during Dataset V2 acquisition, so the
-# API-equivalence check is expected to be the hard part, and it fails closed by design.
+# fapi additionally returned 451 to GitHub runners during Dataset V2 acquisition. Under
+# sprint v1.3 section 12.2 that does NOT block H2: an unreachable API downgrades the
+# reproduction grade to OFFICIAL_ARCHIVE_SURROGATE. Only an invalid archive, or a measured
+# archive-vs-API disagreement, fails this gate.
 #
 # Manual dispatch only: this reaches an external service and should run when someone asks.
 
@@ -91,5 +93,6 @@ jobs:
       - name: Fail the job if the gate failed on a non-probe run
         if: inputs.probe_only == false && steps.gate.outputs.rc != '0'
         run: |
-          echo "::error::FUNDING_ACQUISITION_GATE = FAIL - H2 is NOT_MEASURABLE until this passes"
+          echo "::error::FUNDING_ACQUISITION_GATE = FAIL - the archive is invalid or measurably contradicts the API."
+          echo "::error::An unreachable API alone does NOT fail this gate: it downgrades H2 to OFFICIAL_ARCHIVE_SURROGATE."
           exit 1

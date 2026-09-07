@@ -123,7 +123,8 @@ def test_registry_strategy_hashes_match_the_pin_manifest(registry, pins):
         for key, _, entry in all_files(pins)
     }
     checks = [
-        ("BTCLAB_EMACROSS_H1", "btc_strategy_lab", "user_data/strategies/EmaCross.py"),
+        ("H1_NATIVE_REPRODUCTION", "btc_strategy_lab", "user_data/strategies/EmaCross.py"),
+        ("H1_DATASET_V2_DEVELOPMENT", "btc_strategy_lab", "user_data/strategies/EmaCross.py"),
         ("BTCLAB_EMACROSSFUNDING_H2", "btc_strategy_lab", "user_data/strategies/EmaCrossFunding.py"),
         ("GENETICENGINEV1_CLAIM_CHALLENGE", "genetic_engine_v1", "GeneticEngineV1.py"),
         ("E0V1E_NATIVE_HISTORICAL_RECONSTRUCTION", "e0v1e_historical", "strategies/e0v1e/E0V1E.py"),
@@ -204,17 +205,32 @@ def test_gates_and_ablations_declare_themselves_pre_result(gates, ablations):
     assert ablations["pre_registered_before_any_candidate_result"] is True
 
 
-def test_classification_bands_are_baseline_1s_unchanged(gates):
-    """Candidates must be scored on the scale the control faced, not a new one."""
-    bands = gates["inherited_without_change"]["classification"]
-    assert bands["STRONG"] == (
-        "E > +10 pp AND Sharpe > 0.5 AND max drawdown < 35% AND at least 30 closed trades"
-    )
+def test_baseline_1_bands_are_a_lab_reference_not_a_universal_threshold(gates):
+    """Sprint v1.3 section 17. The bands were calibrated on a 1h BTC+ETH long-only spot
+    reference; applying them to a materially different strategy measures the difference
+    in universe and exposure and calls it a verdict on the strategy."""
+    pc = gates["performance_classification"]
+    bands = pc["baseline_1_reference_bands"]
+    assert "not a universal kill threshold" in bands["status"].lower()
+    assert "own asset, universe, timeframe, exposure" in pc["rule"].lower()
+    assert "inherited_without_change" not in gates, "the superseded inherit-verbatim block is gone"
+    # the numeric bands are retained, just demoted
     assert bands["WEAK"] == "E < -10 pp OR profit factor < 0.8"
-    assert bands["NEUTRAL"] == "anything else"
-    assert gates["inherited_without_change"]["excess_definition"].startswith(
-        "E = total_return_pct - passive_realised_exposure_matched_return_pct"
-    )
+
+
+def test_each_candidate_gets_controls_from_its_own_universe(gates):
+    controls = " ".join(gates["performance_classification"]["required_controls_per_candidate"]).lower()
+    assert "own universe" in controls and "exposure-matched passive" in controls
+
+
+def test_verdict_model_keeps_validity_and_quality_separate(gates):
+    """A validly measured loser is a complete result, not a broken experiment."""
+    model = gates["verdict_model"]
+    assert set(model["MEASUREMENT_VALIDITY"]["values"]) == {"PASS", "FAIL", "BLOCKED"}
+    assert set(model["CANDIDATE_QUALITY"]["values"]) == {
+        "PASS", "FAIL", "FRAGILE", "DOMINATED", "INCONCLUSIVE"
+    }
+    assert "do NOT" in model["CANDIDATE_QUALITY"]["critical_rule"]
 
 
 def test_every_gate_is_actionable(gates):
@@ -260,7 +276,10 @@ def test_funding_ablation_cannot_run_on_a_substitute_series(ablations):
 def test_reproduction_identity_pins_all_five_components(registry):
     """A source-code SHA alone is not an identity: the same source under different
     params, config, engine or data is a different experiment."""
-    required = {"strategy_source", "parameter_files", "config", "engine_version", "data_contract"}
+    required = {
+        "strategy_source", "parameter_files", "config", "engine_version", "data_contract",
+        "fee_model", "pair_universe", "timeframe", "position_semantics",
+    }
     for candidate in registry["candidates"]:
         identity = candidate["reproduction_identity"]
         assert required <= set(identity), f"{candidate['candidate_id']} missing {required - set(identity)}"
@@ -295,14 +314,37 @@ def test_no_license_candidates_are_demoted_not_deleted(registry):
         assert "priority_order" not in candidate
 
 
-def test_executable_priority_is_the_corrected_order(registry):
+def test_executable_priority_is_the_v1_3_order(registry):
     order = [c["candidate_id"] for c in sorted(registry["candidates"], key=lambda c: c["priority_order"])]
     assert order == [
-        "BTCLAB_EMACROSS_H1",
+        "H1_NATIVE_REPRODUCTION",
+        "H1_DATASET_V2_DEVELOPMENT",
+        "H1_ETH_GENERALIZATION_CHALLENGE",
         "BTCLAB_EMACROSSFUNDING_H2",
         "POSTMORTEM_NEGATIVE_CONTROL",
         "NFI_NATIVE_SPOT_QUALIFICATION",
     ]
+
+
+def test_native_reproduction_never_runs_against_dataset_v2(registry):
+    """A native historical reproduction must not silently become a Dataset V2 experiment."""
+    native = next(c for c in registry["candidates"] if c["candidate_id"] == "H1_NATIVE_REPRODUCTION")
+    assert "BTSL_NATIVE_DATASET_v1" in native["data_contract_override"]
+    assert "Dataset V2" not in native["reproduction_identity"]["data_contract"].split("Separate from")[0]
+
+
+def test_h1_is_not_blocked_on_funding_availability(registry):
+    """Sprint v1.3 section 9: Track A and Track B run in parallel."""
+    h2 = next(c for c in registry["candidates"] if c["candidate_id"] == "BTCLAB_EMACROSSFUNDING_H2")
+    assert "NOT blocked on funding" in h2["blocking_rule"]
+    opening = registry["execution_order"]["parallel_opening"]
+    assert "never blocks" in opening["track_B"]
+
+
+def test_eth_failure_does_not_kill_a_btc_specialist(registry):
+    eth = next(c for c in registry["candidates"] if c["candidate_id"] == "H1_ETH_GENERALIZATION_CHALLENGE")
+    assert "does NOT automatically kill" in eth["rule"]
+    assert set(eth["classification_outcomes"]) == {"BTC_SPECIALIST", "UNIVERSAL", "PAIR_SPECIFIC"}
 
 
 def test_same_hour_funding_is_not_presumed_to_be_lookahead(gates):
@@ -320,3 +362,16 @@ def test_warmup_gate_forbids_lowering_the_declared_startup_count(gates):
     assert v7["kill"] is True
     assert "never mutating Dataset V2" in v7["note"]
     assert "never lowering" in v7["note"]
+
+
+def test_overlay_gate_is_candle_count_not_calendar_date():
+    """Sprint v1.3 section 8.2: the date is the intent, the count is the gate."""
+    lock = json.loads(
+        (REPO_ROOT / "research" / "datasets" / "warmup_overlay.lock.json").read_text(encoding="utf-8")
+    )
+    assert lock["dataset_id"] == "dataset_v2_benchmark_warmup_overlay_v1"
+    assert "not the requirement" in lock["gate_is_candle_count_not_calendar"]
+    assert lock["warmup_budget"]["total_before_first_scored_candle"] >= 1300
+    proofs = " ".join(lock["canonical_identity_gate"]["per_run_proofs"])
+    assert "byte-identical" in proofs and "strictly pre-score" in proofs
+    assert lock["overlap_policy"]["policy"] == "DISJOINT_BY_CONSTRUCTION"

@@ -35,7 +35,7 @@
   },
   "candidates": [
     {
-      "candidate_id": "BTCLAB_EMACROSS_H1",
+      "candidate_id": "H1_NATIVE_REPRODUCTION",
       "wave": 1,
       "priority_order": 1,
       "project": "btc-strategy-lab",
@@ -63,7 +63,59 @@
         "startup_candle_count=1300 exceeds Dataset V2's 744-candle warm-up; see docs/external/EXTERNAL_BENCHMARK_PREFLIGHT.md"
       ],
       "reproduction_identity": {
-        "note": "Directive-corrected: a source-code SHA alone is not an identity. All five components are pinned and recorded, and V1_REPRODUCTION_IDENTITY verifies them before the run.",
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+        "strategy_source": "user_data/strategies/EmaCross.py sha256 387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+        "parameter_files": [
+          "user_data/strategies/EmaCross.json sha256 9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee (pins ema_period=600, exit_threshold=2.0)"
+        ],
+        "config": "Trading Lab OS research config under the paper-safety invariant; upstream config.json pinned for reference, not used for execution",
+        "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+        "data_contract": "research/datasets/btsl_native_dataset_v1.lock.json - official public Binance spot klines with recorded provenance and checksums. Separate from Dataset V2 by design.",
+        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+        "fee_model": "0.001 per side, the upstream headline benchmark fee",
+        "pair_universe": [
+          "BTC/USDT"
+        ],
+        "timeframe": "1h",
+        "position_semantics": "long-only, single position, no leverage (can_short=False)"
+      },
+      "track": "EXECUTABLE",
+      "lane": "NATIVE_CLAIM_REPRODUCTION",
+      "question": "Can the published btc-strategy-lab result be reconstructed on its own terms?",
+      "data_contract_override": "BTSL_NATIVE_DATASET_v1 - a separately locked native dataset, NOT Dataset V2",
+      "rule": "A native historical reproduction must not silently become a Dataset V2 experiment.",
+      "reproduction_grade_rule": "If exact historical inputs are missing, REPRODUCTION_GRADE must say so. An approximate reconstruction is never called exact."
+    },
+    {
+      "candidate_id": "H1_DATASET_V2_DEVELOPMENT",
+      "wave": 1,
+      "priority_order": 2,
+      "project": "btc-strategy-lab",
+      "repo": "wiktorj137/btc-strategy-lab",
+      "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "retrieved_utc": "2026-09-07T06:20:00Z",
+      "strategy": "EmaCross",
+      "strategy_sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+      "params_file": "user_data/strategies/EmaCross.json",
+      "params_sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee",
+      "license": "GPL-3.0",
+      "vendoring_authorised": false,
+      "hypothesis": "H1 - EMA regime timing alone. Rules 1-3: 600h EMA, cross above to enter, close 2% below to exit.",
+      "native_market": "binance spot",
+      "native_pair_universe": [
+        "BTC/USDT"
+      ],
+      "native_timeframe": "1h",
+      "native_fee_per_side": 0.001,
+      "native_leverage": "none, single position, long only (can_short=False)",
+      "evidence_class": "BACKTEST_ONLY",
+      "safety_compatible": true,
+      "safety_note": "Spot, long-only, no leverage. Directly compatible with the paper-safety invariant.",
+      "known_execution_blockers": [
+        "startup_candle_count=1300 exceeds Dataset V2's 744-candle warm-up; see docs/external/EXTERNAL_BENCHMARK_PREFLIGHT.md"
+      ],
+      "reproduction_identity": {
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
         "strategy_source": "user_data/strategies/EmaCross.py sha256 387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
         "parameter_files": [
           "user_data/strategies/EmaCross.json sha256 9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee (pins ema_period=600, exit_threshold=2.0)"
@@ -71,14 +123,66 @@
         "config": "Trading Lab OS research config under the paper-safety invariant; upstream config.json pinned for reference, not used for execution",
         "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
         "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
-        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)"
+        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+        "fee_model": "Dataset V2 frozen assumption: 0.001 per side",
+        "pair_universe": [
+          "BTC/USDT"
+        ],
+        "timeframe": "1h",
+        "position_semantics": "long-only, single position, no leverage"
       },
-      "track": "EXECUTABLE"
+      "track": "EXECUTABLE",
+      "lane": "NORMALIZED_QUALIFICATION",
+      "question": "Does the same frozen strategy identity hold up on our frozen Development window?",
+      "universe_rule": "BTC ONLY. ETH is not mixed into H1 selection.",
+      "fair_controls": [
+        "cash",
+        "BTC buy-and-hold",
+        "BTC realised exposure-matched passive",
+        "BASELINE-1 as an optional lab reference, explicitly labelled non-identical"
+      ]
+    },
+    {
+      "candidate_id": "H1_ETH_GENERALIZATION_CHALLENGE",
+      "priority_order": 3,
+      "wave": 1,
+      "track": "EXECUTABLE",
+      "lane": "GENERALIZATION_CHALLENGE",
+      "project": "btc-strategy-lab",
+      "repo": "wiktorj137/btc-strategy-lab",
+      "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "license": "GPL-3.0",
+      "vendoring_authorised": false,
+      "runs_only_after": "the BTC candidate is frozen",
+      "question": "Does the BTC-frozen identity generalise to ETH?",
+      "classification_outcomes": [
+        "BTC_SPECIALIST",
+        "UNIVERSAL",
+        "PAIR_SPECIFIC"
+      ],
+      "rule": "ETH failure does NOT automatically kill a robust BTC-specialist candidate. Upstream already reports that cross-asset generalization fails, so an ETH failure here is a confirmation to classify honestly, not a kill.",
+      "reproduction_identity": {
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+        "strategy_source": "user_data/strategies/EmaCross.py sha256 387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+        "parameter_files": [
+          "user_data/strategies/EmaCross.json sha256 9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee (pins ema_period=600, exit_threshold=2.0)"
+        ],
+        "config": "Trading Lab OS research config under the paper-safety invariant; upstream config.json pinned for reference, not used for execution",
+        "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+        "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
+        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+        "fee_model": "Dataset V2 frozen assumption: 0.001 per side",
+        "pair_universe": [
+          "ETH/USDT"
+        ],
+        "timeframe": "1h",
+        "position_semantics": "long-only, single position, no leverage"
+      }
     },
     {
       "candidate_id": "BTCLAB_EMACROSSFUNDING_H2",
       "wave": 1,
-      "priority_order": 2,
+      "priority_order": 4,
       "project": "btc-strategy-lab",
       "repo": "wiktorj137/btc-strategy-lab",
       "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
@@ -107,12 +211,8 @@
         "acquisition_risk": "fapi.binance.com is blocked from this sandbox and returned 451 to GitHub-hosted runners during Dataset V2 acquisition. A data.binance.vision fundingRate archive route must be proven before this candidate can run."
       },
       "funding_timestamp_knowability": "PRELIMINARY_PASS - see docs/external/EXTERNAL_BENCHMARK_PREFLIGHT.md. Must be re-asserted empirically against the acquired series before any result is recorded.",
-      "known_execution_blockers": [
-        "funding.feather is not obtainable by the Dataset V2 route as proven so far",
-        "startup_candle_count=1300 exceeds Dataset V2's 744-candle warm-up"
-      ],
       "reproduction_identity": {
-        "note": "Directive-corrected: a source-code SHA alone is not an identity. All five components are pinned and recorded, and V1_REPRODUCTION_IDENTITY verifies them before the run.",
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
         "strategy_source": "user_data/strategies/EmaCrossFunding.py sha256 0f0d3d4677647da2e11d4dc8195adbb95fce201ce400300df0a78741cf9a9564",
         "parameter_files": [
           "user_data/strategies/EmaCrossFunding.json sha256 1641ce3122ccc0c216aaae1af77bedb15dd77670643201d1c7453066eca38f0b (pins funding_max_pct=55, NOT the .py default of 90)"
@@ -121,14 +221,27 @@
         "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
         "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
         "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
-        "external_series_contract": "research/webdata/funding.feather, built only from the verified data.binance.vision futures/um fundingRate archive; its own lock entry records coverage, ordering, fundingTime semantics and the API-equivalence result."
+        "external_series_contract": "research/webdata/funding.feather, built only from the verified data.binance.vision futures/um fundingRate archive; its own lock entry records coverage, ordering, fundingTime semantics and the API-equivalence result.",
+        "fee_model": "Dataset V2 frozen assumption: 0.001 per side",
+        "pair_universe": [
+          "BTC/USDT"
+        ],
+        "timeframe": "1h",
+        "position_semantics": "long-only, single position, no leverage; perpetual funding consumed as a read-only feature, no derivative order placed"
       },
-      "track": "EXECUTABLE"
+      "track": "EXECUTABLE",
+      "funding_source_grades": {
+        "authority": "sprint v1.3 section 12.2",
+        "EXACT_API_NATIVE": "archive and API agree on overlapping settlements",
+        "OFFICIAL_ARCHIVE_SURROGATE": "API inaccessible but the official archive is internally valid. H2 proceeds at a lower reproduction grade. This does NOT make H2 globally unmeasurable.",
+        "CONTRADICTED": "archive and API measurably disagree - fatal, never downgraded"
+      },
+      "blocking_rule": "H1 is NOT blocked on funding availability (v1.3 section 9). Track A and Track B run in parallel."
     },
     {
       "candidate_id": "POSTMORTEM_NEGATIVE_CONTROL",
       "wave": 1,
-      "priority_order": 3,
+      "priority_order": 5,
       "project": "crypto-trading-bot-postmortem",
       "repo": "francisx1999/crypto-trading-bot-postmortem",
       "commit": "53babe6c478934c91491366078c8600c5616e07d",
@@ -143,7 +256,7 @@
       "safety_compatible": true,
       "expected_verdict": "NEGATIVE - a positive result here is a lab defect signal, not a discovery",
       "reproduction_identity": {
-        "note": "Directive-corrected: a source-code SHA alone is not an identity. All five components are pinned and recorded, and V1_REPRODUCTION_IDENTITY verifies them before the run.",
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
         "strategy_source": "to be selected from the seven documented failure families; pinned before the run",
         "parameter_files": [
           "as published by upstream, if any"
@@ -151,15 +264,28 @@
         "config": "Trading Lab OS research config under the paper-safety invariant",
         "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
         "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
-        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)"
+        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+        "fee_model": "recorded per selected case",
+        "pair_universe": [
+          "as published upstream"
+        ],
+        "timeframe": "as published upstream",
+        "position_semantics": "long-only spot"
       },
       "track": "EXECUTABLE",
-      "license_basis": "GPL-3.0 at the pinned commit - a licensed negative control, which is why it stays on the executable track"
+      "license_basis": "GPL-3.0 at the pinned commit - a licensed negative control, which is why it stays on the executable track",
+      "pre_registration_required": [
+        "exact commit",
+        "exact strategy and config",
+        "the specific public failure claim",
+        "what failure mode the lab is expected to detect"
+      ],
+      "purpose": "Not to match one headline percentage. The lab must demonstrate it can DETECT and PRESERVE known-bad behaviour. If a known negative control appears exceptionally strong, LAB_CALIBRATION=SUSPECT and positive candidates are not trusted until it is investigated."
     },
     {
       "candidate_id": "NFI_NATIVE_SPOT_QUALIFICATION",
       "wave": 2,
-      "priority_order": 4,
+      "priority_order": 6,
       "project": "NostalgiaForInfinity",
       "repo": "iterativv/NostalgiaForInfinity",
       "commit": "UNPINNED - Wave 2, pin before execution",
@@ -169,7 +295,7 @@
       "safety_compatible": "PENDING_SOURCE_REVIEW",
       "constraint": "Native Spot first. A BTC/ETH 1h reduction must never be labelled 'NFI' when native behaviour is 5m and broad-universe. Timeboxed; must not block cheaper candidates.",
       "reproduction_identity": {
-        "note": "Directive-corrected: a source-code SHA alone is not an identity. All five components are pinned and recorded, and V1_REPRODUCTION_IDENTITY verifies them before the run.",
+        "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
         "strategy_source": "UNPINNED - Wave 2, pin before execution",
         "parameter_files": [
           "UNPINNED"
@@ -177,9 +303,15 @@
         "config": "Native Spot config, pinned before execution",
         "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
         "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
-        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)"
+        "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+        "fee_model": "native",
+        "pair_universe": "broad native pair universe",
+        "timeframe": "5m",
+        "position_semantics": "native NFI semantics, multiple open slots"
       },
-      "track": "EXECUTABLE"
+      "track": "EXECUTABLE",
+      "data_contract_override": "NFI_NATIVE_DATASET_v1 with historical pair availability, listing dates, delistings and survivorship controls",
+      "rule": "Do not reshape Dataset V2 to fit NFI. Timeboxed qualification, not immediate deep validation."
     }
   ],
   "method_mining_only": [
@@ -218,7 +350,7 @@
     "validation_window": "Dataset V2 Validation is SHARED_NON_PRISTINE_VALIDATION, already spent by BASELINE-1. At most one unchanged run per frozen candidate. Never tuned against.",
     "recommit_rule": "Any post-validation change creates a new candidate ID and forfeits an untouched-validation claim."
   },
-  "revision": "v2 - REVIEW CORRECTION BEFORE WAVE 1 (2026-09-07)",
+  "revision": "v3 - SPRINT v1.3 FINAL (2026-09-07)",
   "claim_and_method_reference_track": {
     "note": "Directive-corrected. These must not block Wave 1. Reading source, freezing published claims and extracting method remain in scope; executing them as ranked candidates does not, until rights are resolved.",
     "candidates": [
@@ -285,9 +417,30 @@
     ]
   },
   "executable_priority": [
-    "EmaCross",
-    "EmaCrossFunding",
-    "licensed Freqtrade negative controls (postmortem, GPL-3.0)",
+    "H1 EmaCross (native, then normalized)",
+    "H2 EmaCrossFunding as an ablation",
+    "licensed Freqtrade negative control",
     "NFI native Spot"
-  ]
+  ],
+  "stage_label": "POST-BASELINE-EXTBENCH-1",
+  "execution_order": {
+    "authority": "sprint v1.3 section 29",
+    "parallel_opening": {
+      "track_A": "H1 EmaCross - executable immediately",
+      "track_B": "funding archive verification - concurrent, never blocks Track A"
+    },
+    "then": [
+      "H2 if admissible",
+      "H1-vs-H2 ablation",
+      "licensed negative control",
+      "cheap survivor decision",
+      "NFI native qualification",
+      "deep validation for 2-3 survivors only",
+      "component mining",
+      "one-component ablations",
+      "TradingLabCandidateV1 only if justified",
+      "shared non-pristine Validation where semantically valid",
+      "forward paper as each qualifies"
+    ]
+  }
 }

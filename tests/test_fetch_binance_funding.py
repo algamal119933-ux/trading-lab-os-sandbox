@@ -167,3 +167,61 @@ def test_published_checksum_is_parsed_in_binance_s_format():
 def test_month_range_is_inclusive_and_crosses_years():
     from datetime import date
     assert ff.months(date(2023, 11, 1), date(2024, 2, 15)) == ["2023-11", "2023-12", "2024-01", "2024-02"]
+
+
+# --- verdict model (sprint v1.3 section 12.2) -------------------------------------
+#
+# An unreachable API blocks the equivalence *claim*, not the experiment. Collapsing
+# that into a single FAIL would stall H2 on a network condition rather than on
+# anything about the strategy. What must stay fatal is a measured disagreement.
+
+CLEAN = {"pass": True, "problems": []}
+BROKEN = {"pass": False, "problems": ["3 breaks in 8-hour continuity"]}
+
+
+def test_reachable_and_agreeing_api_gives_the_top_reproduction_grade():
+    v = ff.classify(CLEAN, {"status": "PASS", "compared": 200, "mismatches": 0}, [])
+    assert v["admissible"] is True
+    assert v["REPRODUCTION_GRADE"] == "EXACT_API_NATIVE"
+    assert v["MEASUREMENT_VALIDITY"] == "PASS"
+
+
+def test_unreachable_api_downgrades_but_does_not_block_h2():
+    """The correction that matters: H2 is not globally unmeasurable."""
+    v = ff.classify(CLEAN, {"status": "UNESTABLISHED", "reason": "upstream API unreachable: 451"}, [])
+    assert v["admissible"] is True
+    assert v["H2_NATIVE_API_REPRODUCTION"] == "BLOCKED_SOURCE_EQUIVALENCE"
+    assert v["H2_OFFICIAL_ARCHIVE_SURROGATE"] == "MEASURABLE"
+    assert v["REPRODUCTION_GRADE"] == "OFFICIAL_ARCHIVE_SURROGATE"
+    assert v["MEASUREMENT_VALIDITY"] == "PASS"
+
+
+def test_surrogate_grade_is_strictly_lower_than_native():
+    native = ff.classify(CLEAN, {"status": "PASS"}, [])
+    surrogate = ff.classify(CLEAN, {"status": "UNESTABLISHED", "reason": "blocked"}, [])
+    assert native["REPRODUCTION_GRADE"] == "EXACT_API_NATIVE"
+    assert surrogate["REPRODUCTION_GRADE"] == "OFFICIAL_ARCHIVE_SURROGATE"
+    assert native["admissible"] and surrogate["admissible"]
+
+
+def test_measured_disagreement_stays_fatal_and_is_not_downgraded():
+    """'Could not check' and 'checked and they disagree' must never collapse."""
+    v = ff.classify(CLEAN, {"status": "FAIL", "mismatches": 4}, [])
+    assert v["admissible"] is False
+    assert v["MEASUREMENT_VALIDITY"] == "FAIL"
+    assert v["H2_NATIVE_API_REPRODUCTION"] == "CONTRADICTED"
+    assert "contradiction" in v["reason"]
+
+
+def test_invalid_archive_is_fatal_whatever_the_api_says():
+    for equivalence in ({"status": "PASS"}, {"status": "UNESTABLISHED", "reason": "blocked"}):
+        v = ff.classify(BROKEN, equivalence, [])
+        assert v["admissible"] is False
+        assert v["MEASUREMENT_VALIDITY"] == "FAIL"
+        assert v["H2_OFFICIAL_ARCHIVE_SURROGATE"] == "NOT_MEASURABLE"
+
+
+def test_missing_months_are_fatal_even_with_a_clean_integrity_report():
+    v = ff.classify(CLEAN, {"status": "PASS"}, ["2021-03"])
+    assert v["admissible"] is False
+    assert "2021-03" in v["reason"]

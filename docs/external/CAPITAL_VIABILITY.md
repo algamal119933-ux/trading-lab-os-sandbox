@@ -1,5 +1,19 @@
 # Capital viability — operating economics, kept separate from alpha
 
+> **STATUS: PARKED — sprint v1.3 §25.** Capital-economics work is deferred until at least
+> one survivor exists. The question during qualification is *"do we have a robust edge or a
+> useful risk transformation?"*, not *"which VPS plan should we buy?"* This document is
+> retained as the frozen control's reference row and as the method to apply later. **It is
+> not extended further during Wave 1.**
+>
+> **The ~863 USDT figure is not a universal threshold.** It is one cell — proportional
+> sizing on a dedicated VPS, for BASELINE-1's specific trade profile. It does not transfer
+> to any other candidate, sizing mode or infrastructure, and must not be quoted as a
+> project-wide hurdle.
+>
+> Three things stay separate: `STATISTICAL_EDGE`, `OPERATING_ECONOMICS`, and
+> `ECONOMICALLY_MEANINGFUL_EDGE`. Only the last requires both of the first two.
+
 Required by directive v1.1 §6, revised under the pre-Wave-1 review correction. The
 correction replaced a single proportional break-even with a **scenario matrix**, because
 one break-even number silently assumed one sizing mode and one hosting arrangement, and
@@ -119,10 +133,15 @@ Every figure above uses **raw return**, which flatters. The frozen classificatio
 passive.
 
 ```
-STATISTICAL_ALPHA    = NOT PROVEN  (E inside the NEUTRAL band on both windows)
-OPERATING_ECONOMICS  = VIABLE only on shared or already-owned infrastructure,
-                       and only under proportional sizing
+STATISTICAL_EDGE             = NOT PROVEN  (E inside BASELINE-1's own NEUTRAL band, both windows)
+OPERATING_ECONOMICS          = VIABLE only on shared or already-owned infrastructure,
+                               and only under proportional sizing
+ECONOMICALLY_MEANINGFUL_EDGE = NO  (it requires both of the above, and the first is absent)
 ```
+
+These bands are BASELINE-1's own, and per §17 they are **not** carried over as kill
+thresholds for other candidates. Each candidate is judged against controls appropriate to
+its own universe, timeframe, exposure and position semantics.
 
 So the 27.80 USDT is exposure, not edge — obtainable by holding, without the machine. That
 is not a criticism of a reference that passed its protocol; it is what NEUTRAL means, and

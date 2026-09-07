@@ -226,28 +226,38 @@ case.
 
 ---
 
-## 7. Ordering — decided by execution rights, then by cost
+## 7. Ordering — two parallel tracks, rights decide the lane
 
-**Corrected.** No-license candidates must not block Wave 1 or sit ahead of licensed work.
-`V3B_EXECUTION_RIGHTS` enforces it: a source with no recognised license at its pinned
-commit leaves the executable track for the claim/method-reference track. That is a rights
-finding, never a judgement on the project.
+**Corrected twice.** Rights decide which lane a candidate is in (`V3B_EXECUTION_RIGHTS`);
+a no-license source leaves the executable track for the claim/method-reference track, which
+is a rights finding and never a quality judgement. And per sprint v1.3 §9, **H1 does not
+wait on funding** — my earlier ordering put the funding probe first, which would have
+stalled the cheapest real candidate behind a network condition that has nothing to do with
+it.
 
-**Executable track**
+**Track A — executable immediately**
 
-1. Prove the `data.binance.vision` funding route in CI — it gates H2 entirely, and a clean
-   kill here is cheap.
-2. Acquire and lock the warm-up overlay; prove Dataset V2 canonical identity is preserved.
-3. **`EmaCross`** (H1) — native BTC-only. btc-strategy-lab is BTC-native, so per §10 it is
-   registered BTC-first rather than forced onto ETH.
-4. **`EmaCrossFunding`** (H2) — as an ablation against H1, never a standalone ranking, with
-   both sensitivities recorded separately.
-5. **Licensed Freqtrade negative controls** — the postmortem, GPL-3.0 at its pinned commit.
-   Cheap, and it calibrates everything after it.
-6. **NFI native Spot** — Wave 2, timeboxed.
+1. Acquire and lock the warm-up overlay; prove Dataset V2 canonical identity and lock-file
+   byte identity are preserved.
+2. **`H1_NATIVE_REPRODUCTION`** — the published claim on its own terms, against
+   `BTSL_NATIVE_DATASET_v1`, never silently against Dataset V2.
+3. **`H1_DATASET_V2_DEVELOPMENT`** — the same frozen identity on Development, BTC only,
+   against BTC-appropriate controls.
+4. **`H1_ETH_GENERALIZATION_CHALLENGE`** — only after the BTC candidate is frozen. ETH
+   failure classifies the candidate `BTC_SPECIALIST`; it does not kill it.
 
-**Claim / method-reference track** (no recognised license: `GeneticEngineV1`, `E0V1E`,
-Kronos). Source inspection, claim freezing and method extraction continue. No ranked
-execution and no vendoring into core unless rights are explicitly resolved.
+**Track B — concurrent, non-blocking**
 
-Nothing in either list may start before the §0 gate passes.
+The `data.binance.vision` funding archive probe. Its outcome grades H2's reproduction, and
+under §12.2 an unreachable API downgrades H2 to an official-archive surrogate rather than
+making it unmeasurable.
+
+**Then**
+
+`H2` if admissible → H1-vs-H2 ablation → licensed negative control → cheap survivor
+decision → NFI native qualification (timeboxed) → deep validation for 2–3 survivors only.
+
+**Parallel non-blocking lane.** Method and evidence mining (Passivbot, TrendRider, Kronos,
+Hummingbot) runs throughout and must not block executable testing.
+
+Nothing in either track may start before the activation gate passes.

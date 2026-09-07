@@ -22,10 +22,22 @@ following must pass, and any failure is fatal:
   continuity      exactly one settlement per 8-hour slot, no gaps
   equivalence     overlapping samples agree with the upstream API representation
 
-The last one is the one that cannot be waived. The archive and the API use different
-column names, so "calc_time == fundingTime" is an assumption until it is measured. If
-the API is unreachable, equivalence is UNESTABLISHED and this exits non-zero: an
-unverified mapping would silently shift every funding value by up to eight hours.
+Equivalence is graded, not pass/fail. Sprint v1.3 section 12.2 is explicit that an
+inaccessible API does NOT make H2 unmeasurable. The archive and the API use different
+column names, so "calc_time == fundingTime" is an assumption until measured, and the
+verdict records how well it was measured rather than collapsing to a single boolean:
+
+  equivalence PASS          -> H2_NATIVE_API_EQUIVALENCE = PASS
+                               reproduction grade EXACT_API_NATIVE
+  equivalence UNESTABLISHED -> H2_NATIVE_API_REPRODUCTION = BLOCKED_SOURCE_EQUIVALENCE
+     but archive valid         H2_OFFICIAL_ARCHIVE_SURROGATE = MEASURABLE
+                               reproduction grade OFFICIAL_ARCHIVE_SURROGATE (lower)
+  equivalence FAIL          -> the two sources genuinely disagree. That is a measured
+                               contradiction, not a missing measurement, and it is fatal.
+  archive integrity FAIL    -> fatal regardless of equivalence.
+
+The distinction that matters: "could not check" and "checked and they disagree" are
+different findings and must never collapse into one verdict.
 
 This module deliberately mirrors the conventions of scripts/fetch_binance_public_data.py
 (same base URL, retry policy, checksum handling). Once that module and this one are on
@@ -253,6 +265,67 @@ def check_api_equivalence(rows: list[tuple[int, float]], sample_size: int = 200)
     }
 
 
+def classify(integrity: dict, equivalence: dict, missing: list[str]) -> dict:
+    """Grade the acquisition. Sprint v1.3 section 12.2.
+
+    An unreachable API blocks the *equivalence claim*, not the whole experiment: the
+    official archive can still be internally valid and usable as a surrogate, at a
+    lower reproduction grade. Collapsing that into a single FAIL would discard usable
+    evidence and stall H2 on a network condition rather than on anything about the
+    strategy.
+
+    What is NOT downgraded: a measured disagreement between the two sources, and any
+    archive-integrity failure. Both are fatal.
+    """
+    archive_ok = integrity["pass"] and not missing
+    status = equivalence["status"]
+
+    if not archive_ok:
+        return {
+            "H2_NATIVE_API_REPRODUCTION": "BLOCKED_ARCHIVE_INVALID",
+            "H2_OFFICIAL_ARCHIVE_SURROGATE": "NOT_MEASURABLE",
+            "REPRODUCTION_GRADE": "NONE",
+            "MEASUREMENT_VALIDITY": "FAIL",
+            "reason": f"archive integrity failed: {integrity['problems'] or f'missing months {missing}'}",
+            "admissible": False,
+        }
+
+    if status == "PASS":
+        return {
+            "H2_NATIVE_API_EQUIVALENCE": "PASS",
+            "H2_NATIVE_API_REPRODUCTION": "AVAILABLE",
+            "H2_OFFICIAL_ARCHIVE_SURROGATE": "MEASURABLE",
+            "REPRODUCTION_GRADE": "EXACT_API_NATIVE",
+            "MEASUREMENT_VALIDITY": "PASS",
+            "reason": "archive and API agree on every overlapping settlement",
+            "admissible": True,
+        }
+
+    if status == "FAIL":
+        return {
+            "H2_NATIVE_API_EQUIVALENCE": "FAIL",
+            "H2_NATIVE_API_REPRODUCTION": "CONTRADICTED",
+            "H2_OFFICIAL_ARCHIVE_SURROGATE": "NOT_MEASURABLE",
+            "REPRODUCTION_GRADE": "NONE",
+            "MEASUREMENT_VALIDITY": "FAIL",
+            "reason": ("archive and API disagree on overlapping settlements. This is a measured "
+                       "contradiction, not a missing measurement, so it is fatal rather than downgraded."),
+            "admissible": False,
+        }
+
+    return {
+        "H2_NATIVE_API_EQUIVALENCE": "UNESTABLISHED",
+        "H2_NATIVE_API_REPRODUCTION": "BLOCKED_SOURCE_EQUIVALENCE",
+        "H2_OFFICIAL_ARCHIVE_SURROGATE": "MEASURABLE",
+        "REPRODUCTION_GRADE": "OFFICIAL_ARCHIVE_SURROGATE",
+        "MEASUREMENT_VALIDITY": "PASS",
+        "reason": (f"{equivalence.get('reason', 'API unreachable')}. The official archive is internally "
+                   "valid, so H2 proceeds on the surrogate at a lower reproduction grade. H2 is NOT "
+                   "globally unmeasurable."),
+        "admissible": True,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", default="2019-09-01")
@@ -336,9 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  - {problem}")
     print(f"equivalence: {equivalence['status']}  {equivalence.get('reason', equivalence.get('conclusion', ''))}")
 
-    if args.report:
-        Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
-    if args.out and integrity["pass"] and equivalence["status"] == "PASS":
+    if args.out and integrity["pass"] and equivalence["status"] in ("PASS", "UNESTABLISHED"):
         Path(args.out).write_text(json.dumps(
             [{"funding_time_ms": ts, "funding": rate} for ts, rate in sorted(rows)], indent=2) + "\n")
 
@@ -346,13 +417,18 @@ def main(argv: list[str] | None = None) -> int:
         print("\nPROBE ONLY - reachability and schema reported; no gate decision made.")
         return 0 if integrity["rows"] else 1
 
-    ok = integrity["pass"] and equivalence["status"] == "PASS" and not missing
-    if not ok:
+    verdict = classify(integrity, equivalence, missing)
+    report["verdict"] = verdict
+
+    print()
+    for key, value in verdict.items():
+        if key != "admissible":
+            print(f"{key} = {value}")
+    if args.report:
+        Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
+
+    if not verdict["admissible"]:
         print("\nFUNDING_ACQUISITION_GATE = FAIL", file=sys.stderr)
-        if equivalence["status"] == "UNESTABLISHED":
-            print("  Equivalence to the upstream API representation could not be established, and the "
-                  "directive requires failing closed on exactly that. H2 is NOT_MEASURABLE until an API "
-                  "sample is obtainable from a network that Binance does not refuse.", file=sys.stderr)
         return 1
 
     print("\nFUNDING_ACQUISITION_GATE = PASS")

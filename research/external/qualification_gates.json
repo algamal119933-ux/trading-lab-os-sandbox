@@ -4,17 +4,6 @@
   "pre_registered_before_any_candidate_result": true,
   "authority": "directive v1.1 sections 5, 8 and 15; classification bands inherited unchanged from docs/research/BASELINE_1_PROTOCOL.md",
   "why_this_file_exists": "Thresholds chosen after seeing a result are not thresholds, they are commentary. Kronos Gauntlet is mined precisely for this discipline: pre-register the rule, then let it kill things. These gates are fixed before any external candidate has been executed.",
-  "inherited_without_change": {
-    "source": "docs/research/BASELINE_1_PROTOCOL.md",
-    "reason": "The control and every candidate must be judged by the same rule, or the comparison is not a comparison. The bands below are BASELINE-1's, copied verbatim rather than re-derived, so no candidate is scored on a scale the control never faced.",
-    "excess_definition": "E = total_return_pct - passive_realised_exposure_matched_return_pct, both over the same window",
-    "classification": {
-      "STRONG": "E > +10 pp AND Sharpe > 0.5 AND max drawdown < 35% AND at least 30 closed trades",
-      "WEAK": "E < -10 pp OR profit factor < 0.8",
-      "NEUTRAL": "anything else",
-      "small_sample_rule": "Fewer than 30 closed trades cannot support STRONG or WEAK. Report NEUTRAL and label it statistically inconclusive."
-    }
-  },
   "validity_gates": {
     "note": "Binary and methodological, never performance-based. Any FAIL kills the candidate for this sprint regardless of return. A candidate killed here is not 'bad', it is 'not measurable', and the ledger must say which. One gate, V3B_EXECUTION_RIGHTS, kills only for the executable track: a candidate failing it moves to the claim/method-reference track rather than out of the sprint.",
     "gates": [
@@ -68,8 +57,8 @@
       {
         "id": "V6_REALISTIC_COSTS",
         "question": "Does the result survive the fee assumption the control faced?",
-        "method": "0.001 per side, set explicitly, identical to Dataset V2's frozen assumption",
-        "fail_rule": "result only holds at a lower fee than the control was charged",
+        "method": "the fee model declared in the candidate's own reproduction identity, applied consistently; for a native reproduction that is the upstream headline fee, for a normalized run it is Dataset V2's frozen 0.001 per side",
+        "fail_rule": "result only holds at a lower fee than the candidate's own declared fee model, or the fee model is not recorded",
         "kill": true,
         "note": "Three independent upstreams already identify the cost floor as the dominant retail failure mode. Report fees paid as a percentage of starting capital alongside return, always."
       },
@@ -137,5 +126,76 @@
     "re-pinning an upstream commit after seeing our result",
     "normalising a native historical claim onto our universe and then calling the public claim false"
   ],
-  "revision": "v2 - REVIEW CORRECTION BEFORE WAVE 1 (2026-09-07)"
+  "revision": "v3 - SPRINT v1.3 FINAL (2026-09-07); supersedes v1.1/v1.2 where they conflict",
+  "verdict_model": {
+    "authority": "sprint v1.3 section 4",
+    "rule": "Every executable experiment produces TWO verdicts, reported separately and never conflated.",
+    "MEASUREMENT_VALIDITY": {
+      "values": [
+        "PASS",
+        "FAIL",
+        "BLOCKED"
+      ],
+      "meaning": "Can this experiment support a performance conclusion at all?",
+      "failures": [
+        "source/config identity mismatch",
+        "missing load-bearing parameter file",
+        "hash mismatch",
+        "data corruption",
+        "unresolved scored-window mutation",
+        "lookahead",
+        "future information leakage",
+        "funding timestamp unknowability",
+        "unsafe market mode",
+        "non-determinism where determinism is required",
+        "invalid fee/execution assumptions",
+        "execution-rights restriction on the executable track"
+      ]
+    },
+    "CANDIDATE_QUALITY": {
+      "values": [
+        "PASS",
+        "FAIL",
+        "FRAGILE",
+        "DOMINATED",
+        "INCONCLUSIVE"
+      ],
+      "meaning": "How did a validly measured candidate actually do?",
+      "critical_rule": "Poor return, poor Sharpe, high drawdown, passive underperformance or concentration do NOT invalidate the measurement. MEASUREMENT_VALIDITY=PASS with CANDIDATE_QUALITY=FAIL is a complete, publishable result, and that negative evidence is preserved rather than discarded."
+    }
+  },
+  "performance_classification": {
+    "authority": "sprint v1.3 sections 2 and 17 - CORRECTED",
+    "correction": "Earlier revisions of this file inherited BASELINE-1's numeric bands verbatim and applied them to every candidate. v1.3 forbids that: the bands were calibrated on a 1h BTC+ETH long-only spot reference and are not meaningful kill thresholds for a materially different strategy. The combined BTC+ETH BASELINE-1 return is also not the universal financial opponent.",
+    "rule": "Each candidate is judged against controls appropriate to ITS OWN asset, universe, timeframe, exposure, market type and position semantics. BASELINE-1 may appear alongside as a clearly labelled non-identical lab reference, never as the yardstick.",
+    "required_controls_per_candidate": [
+      "cash",
+      "the appropriate buy-and-hold for that candidate's own universe",
+      "realised exposure-matched passive on that same universe",
+      "the appropriate native benchmark where one exists"
+    ],
+    "excess_definition": "E = total_return_pct - passive_realised_exposure_matched_return_pct, both over the same window",
+    "baseline_1_reference_bands": {
+      "status": "LAB REFERENCE ONLY - not a universal kill threshold",
+      "applies_to": "BASELINE-1 itself, and only candidates with materially equivalent semantics (1h spot long-only on the same universe)",
+      "STRONG": "E > +10 pp AND Sharpe > 0.5 AND max drawdown < 35% AND at least 30 closed trades",
+      "WEAK": "E < -10 pp OR profit factor < 0.8",
+      "NEUTRAL": "anything else",
+      "small_sample_rule": "Fewer than 30 closed trades cannot support STRONG or WEAK. Report NEUTRAL and label it statistically inconclusive."
+    },
+    "example_of_the_error_this_prevents": "H1 EmaCross is BTC-only, single-position, with a ~600h regime filter. Scoring it against a BTC+ETH two-slot reference's bands would measure universe and exposure differences and call the result a verdict on the strategy."
+  },
+  "fail_fast": {
+    "authority": "sprint v1.3 section 18",
+    "rule": "Hard validity failures stop interpretation entirely. For validly measured candidates, fail fast only when the conclusion is robust.",
+    "robust_dominance_signals": [
+      "realistic fees erase the entire edge",
+      "worse than the appropriate passive control on BOTH return and drawdown with no compensating predeclared advantage",
+      "one trade, month or regime explains most of the result",
+      "modest execution delay destroys the result",
+      "pair/universe survivorship explains the result",
+      "unstable under a reasonable parameter neighbourhood check where such a check is valid"
+    ],
+    "never": "a single weighted magic score"
+  }
 }
