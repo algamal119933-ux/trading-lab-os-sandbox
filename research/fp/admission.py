@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Paper-admission evaluator (FP-BOOT-1 sections 2, 3, 5, 6).
+"""Paper-admission evaluator (TL-FP-BOOT-1 v2.0, sections 7, 9, 10).
 
-Section 5 lists fourteen conditions and says: otherwise
+Section 9 lists eighteen conditions and says: if any required condition fails,
 ``PAPER_ADMISSION = BLOCKED``. This module evaluates each one against what the
 repository can actually prove and emits a schema-valid
 ``paper_candidate_admission.json``.
 
-It fails closed in the strict sense: ``ADMITTED`` requires all fourteen results
+It fails closed in the strict sense: ``ADMITTED`` requires all eighteen results
 to be ``PASS``. ``UNPROVEN`` — the honest verdict for a condition that needs a
-run this environment has not performed — blocks admission exactly like ``FAIL``.
-There is no flag to override it, because a flag to override it is the whole
-failure mode the gate exists to prevent.
+run this environment has not performed — blocks admission exactly like ``FAIL``,
+which section 9 states outright: "UNPROVEN is not PASS". There is no flag to
+override it, and section 9 names the four that must not exist: ``--force``,
+``--assume-pass``, ``--allow-blocked``, and a silent environment override.
+
+Section 7 governs the entry state: it is recomputed from authoritative merged
+main and is never inherited from this parked scaffold branch. While the
+BASELINE-1 closure lineage is unmerged, the entry state reported here is
+``NOT_AUTHORITATIVE`` rather than a value that looks binding.
 
 Usage
 -----
@@ -42,27 +48,38 @@ EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.exam
 CHANGE_MODEL_DOC = REPO_ROOT / "docs" / "fp-boot-1" / "FP_BOOT_1_ENTRY_STATE.md"
 REPLAY_MODULE = REPO_ROOT / "research" / "fp" / "replay.py"
 
-SCHEMA_VERSION = "1.0.0"
-SPEC_VERSION = "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07"
+SCHEMA_VERSION = "2.0.0"
+SPEC_VERSION = "TL-FP-BOOT-1 v2.0 FINAL 2026-09-07"
+
+# The BASELINE-1 closure lineage named by the canonical directive (v2.0 section
+# 1.1). It is authoritative only once it is an ancestor of merged main.
+BASELINE_CLOSURE_COMMIT = "1dfb69604bb87856b75c8c90957f2acc8e1fab7f"
 
 PASS, FAIL, UNPROVEN = "PASS", "FAIL", "UNPROVEN"
 
-# Section 5, verbatim requirements in order.
+# Section 9 of the v2.0 directive, verbatim and in order. This replaces the
+# fourteen conditions of the superseded v1.1 section 5: the single "no leverage,
+# futures, margin or shorts" condition is split into four, and condition 18 —
+# project integrity — is new.
 REQUIREMENTS = (
-    "candidate identity is frozen",
-    "MEASUREMENT_VALIDITY = PASS",
-    "applicable qualification is complete",
-    "required deep-validation gates are complete",
-    "no unresolved lookahead exists",
-    "no unresolved timestamp-knowability defect exists",
-    "current runtime remains Binance Spot only",
-    "no leverage, futures execution, margin, or shorts are required",
-    "source/config/params/engine/data contracts are frozen",
-    "paper execution rights are acceptable",
-    "every decision-time feature has a prospective availability contract",
+    "candidate family identified",
+    "frozen configuration identified",
+    "measurement validity PASS",
+    "qualification/deep validation complete as required",
+    "no unresolved lookahead",
+    "no unresolved timestamp-knowability defect",
+    "Binance Spot only",
+    "no leverage",
+    "no futures execution",
+    "no margin",
+    "no shorts",
+    "source/config/params/engine identity frozen",
+    "paper execution rights acceptable",
+    "every required decision-time feature has a prospective availability contract",
     "deterministic or explainable replay exists",
     "outage behavior is predeclared",
-    "semantic-change rules are predeclared",
+    "semantic-change policy is predeclared",
+    "no unresolved P0 project-integrity issue",
 )
 
 
@@ -131,14 +148,121 @@ def _spot_only() -> tuple[str, str]:
     return PASS, f"paper guard PASS; exchange=binance, trading_mode=spot, dry_run={config.get('dry_run')}"
 
 
-def _no_derivatives() -> tuple[str, str]:
+def _guarded(field_summary: str, extra: "callable | None" = None) -> tuple[str, str]:
+    """Shared shape for the four separate section-9 derivative prohibitions.
+
+    Conditions 8-11 are distinct requirements that happen to share one enforcer.
+    Each gets its own row and its own evidence sentence, so that if the guard
+    ever stops covering one of them the gap shows up against that condition
+    rather than hiding inside a combined verdict.
+    """
     ok, violations = _guard_result()
     if not ok:
         return FAIL, "paper guard rejected the shipped config: " + "; ".join(violations[:3])
-    return PASS, (
-        "paper guard enforces margin_mode empty, no leverage, no shorting, no leveraged-token pairs, "
-        "and rejects can_short/leverage/non-spot trading_mode in every strategy file"
+    if extra is not None:
+        problem = extra()
+        if problem:
+            return FAIL, problem
+    return PASS, field_summary
+
+
+def _no_leverage() -> tuple[str, str]:
+    def check() -> str | None:
+        config = _load_json(EXAMPLE_CONFIG) or {}
+        if config.get("leverage") or config.get("max_leverage"):
+            return f"config declares leverage: {config.get('leverage') or config.get('max_leverage')!r}"
+        return None
+
+    return _guarded(
+        "paper guard rejects any leverage key in the config and any `leverage`/`can_leverage` "
+        "declaration in a strategy file; the shipped config declares none",
+        check,
     )
+
+
+def _no_futures() -> tuple[str, str]:
+    def check() -> str | None:
+        mode = (_load_json(EXAMPLE_CONFIG) or {}).get("trading_mode")
+        if mode != "spot":
+            return f"trading_mode is {mode!r}, so futures execution is not excluded"
+        return None
+
+    return _guarded(
+        "trading_mode must be explicitly 'spot'; the guard rejects any other value in the config and "
+        "any non-spot trading_mode declared in a strategy file",
+        check,
+    )
+
+
+def _no_margin() -> tuple[str, str]:
+    def check() -> str | None:
+        margin = (_load_json(EXAMPLE_CONFIG) or {}).get("margin_mode")
+        if margin not in (None, ""):
+            return f"margin_mode is {margin!r}, not empty"
+        return None
+
+    return _guarded(
+        "margin_mode must be empty; the guard rejects any populated margin mode",
+        check,
+    )
+
+
+def _no_shorts() -> tuple[str, str]:
+    def check() -> str | None:
+        config = _load_json(EXAMPLE_CONFIG) or {}
+        if config.get("can_short"):
+            return "config enables can_short"
+        return None
+
+    return _guarded(
+        "the guard rejects shorting in the config, `can_short = True` in any strategy file, and "
+        "derivative or leveraged-token pairs in the whitelist; BaselineEmaRegimeV1 sets can_short = False",
+        check,
+    )
+
+
+def _frozen_configuration() -> tuple[str, str]:
+    """Condition 2 — is the candidate's frozen configuration identified?"""
+    registry = _load_json(COHORT_REGISTRY)
+    if registry is None:
+        return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
+    identified = [
+        item
+        for item in registry.get("instances", [])
+        if item.get("role") != "FP-CONTROL-1" and (item.get("runtime_identity") or {}).get("config_sha256")
+    ]
+    if not identified:
+        return UNPROVEN, (
+            "no candidate instance names a frozen configuration hash; a configuration cannot be identified "
+            "for a candidate that does not exist"
+        )
+    return PASS, f"{len(identified)} candidate instance(s) name a frozen configuration hash"
+
+
+def dataset_v2_fingerprints(lock: dict) -> dict[str, str]:
+    """Content digests out of a Dataset V2 lock, whichever layout it uses.
+
+    The authoritative lock written by the BASELINE-1 acquisition lineage keys
+    its digests as ``canonical_hashes`` / ``raw_file_hashes``. The
+    pre-acquisition stub on this branch has neither and carries an empty
+    ``files``. Reading only one layout would report a fully frozen, audited
+    dataset as unfingerprinted — a false block on real evidence — so the
+    canonical digests are preferred, the raw hashes are the fallback, and
+    ``files`` is still understood.
+    """
+    for key in ("canonical_hashes", "raw_file_hashes"):
+        found = lock.get(key)
+        if isinstance(found, dict) and found:
+            return dict(found)
+    files = lock.get("files")
+    if isinstance(files, dict) and files:
+        return {
+            name: (entry.get("canonical_candle_content_sha256") or entry.get("raw_file_sha256") or "")
+            if isinstance(entry, dict)
+            else str(entry)
+            for name, entry in files.items()
+        }
+    return {}
 
 
 def _contracts_frozen() -> tuple[str, str]:
@@ -146,14 +270,15 @@ def _contracts_frozen() -> tuple[str, str]:
     if lock is None:
         return FAIL, "dataset_v2.lock.json is missing or unreadable"
     status = lock.get("status")
-    files = lock.get("files") or {}
-    if status != "frozen" or not files:
+    fingerprints = dataset_v2_fingerprints(lock)
+    if status != "frozen" or not fingerprints:
         return FAIL, (
-            f"data contract is not frozen: dataset_v2.status={status!r} with {len(files)} fingerprinted files. "
-            "Source, config and engine may be pinned, but a data contract cannot be frozen over data that has "
-            "not been acquired."
+            f"data contract is not frozen: dataset_v2.status={status!r} with {len(fingerprints)} fingerprints. "
+            "Source, config and engine may be pinned, but a data contract cannot be frozen over data this "
+            "branch has not got. The authoritative frozen lock lives in the BASELINE-1 closure lineage and "
+            "reaches here by merge, never by reacquisition."
         )
-    return PASS, f"dataset_v2 frozen with {len(files)} fingerprinted files"
+    return PASS, f"dataset_v2 frozen with {len(fingerprints)} content fingerprints: {', '.join(sorted(fingerprints))}"
 
 
 def _paper_execution_rights() -> tuple[str, str]:
@@ -287,25 +412,81 @@ def _timestamp_knowability() -> tuple[str, str]:
     return PASS, "a passing gate record demonstrates timestamp knowability against real candles"
 
 
+def _baseline_lineage_is_authoritative() -> tuple[bool, str]:
+    """Is the BASELINE-1 closure commit an ancestor of merged main?
+
+    Section 3.1 of the v2.0 directive makes this the activation proof for the
+    whole stage: "If this proof fails: TL-FP-BOOT-1 = BLOCKED." It is checked
+    with git rather than asserted, so it flips by itself the moment the merge
+    lands.
+    """
+    for ref in ("origin/main", "main"):
+        try:
+            subprocess.check_output(
+                ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", f"{ref}^{{commit}}"],
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:  # noqa: BLE001
+            continue
+        try:
+            subprocess.check_output(
+                ["git", "-C", str(REPO_ROOT), "cat-file", "-e", f"{BASELINE_CLOSURE_COMMIT}^{{commit}}"],
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:  # noqa: BLE001
+            return False, f"{BASELINE_CLOSURE_COMMIT[:7]} is not present in this checkout"
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "merge-base", "--is-ancestor", BASELINE_CLOSURE_COMMIT, ref],
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return True, f"{BASELINE_CLOSURE_COMMIT[:7]} is an ancestor of {ref}"
+        return False, f"{BASELINE_CLOSURE_COMMIT[:7]} is NOT an ancestor of {ref}"
+    return False, "no main ref is available in this checkout to prove ancestry against"
+
+
+def _project_integrity() -> tuple[str, str]:
+    """Condition 18 — no unresolved P0 project-integrity issue.
+
+    While the authoritative BASELINE-1 lineage is unmerged, project state is
+    split across branches and no entry state computed here is authoritative
+    (v2.0 section 7). That is an unresolved integrity issue by the directive's
+    own terms, so this condition fails until the merge lands.
+    """
+    merged, detail = _baseline_lineage_is_authoritative()
+    if not merged:
+        return FAIL, (
+            f"authoritative lineage is not consolidated: {detail}. Section 3.1 requires the BASELINE-1 "
+            "closure lineage merged to main with green CI before FP admission is judged; until then "
+            "TL-FP-BOOT-1 = BLOCKED and this branch's entry state is not authoritative."
+        )
+    return PASS, f"authoritative lineage consolidated: {detail}"
+
+
 def evaluate() -> dict:
-    """Evaluate all fourteen section-5 conditions against repository state."""
+    """Evaluate all eighteen section-9 conditions against repository state."""
     contract, feature_result, feature_detail = _feature_availability()
+    lineage_ok, lineage_detail = _baseline_lineage_is_authoritative()
 
     results: list[tuple[str, str]] = [
         _candidate_identity_frozen(),
+        _frozen_configuration(),
         _from_gate_records("", "MEASUREMENT_VALIDITY"),
-        _from_gate_records("", "candidate qualification"),
-        _from_gate_records("lookahead", "deep-validation gates"),
+        _from_gate_records("lookahead", "qualification / deep validation"),
         _from_gate_records("lookahead", "lookahead analysis"),
         _timestamp_knowability(),
         _spot_only(),
-        _no_derivatives(),
+        _no_leverage(),
+        _no_futures(),
+        _no_margin(),
+        _no_shorts(),
         _contracts_frozen(),
         _paper_execution_rights(),
         (feature_result, feature_detail),
         _replay_available(),
         _outage_predeclared(contract),
         _semantic_change_rules(),
+        _project_integrity(),
     ]
 
     conditions = [
@@ -317,18 +498,29 @@ def evaluate() -> dict:
     blocking = [item["id"] for item in conditions if item["result"] != PASS]
 
     if admitted:
-        reason = "every section-5 condition is independently satisfied"
+        reason = "every section-9 condition is independently satisfied"
     else:
         reason = (
-            "PAPER_ADMISSION = BLOCKED. Section 5 conditions not satisfied: "
+            "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: "
             + ", ".join(str(i) for i in blocking)
-            + ". No benchmark sprint has closed, Dataset V2 is not acquired, and BASELINE-1 has never been "
-            "run, so no candidate can be frozen for forward paper."
+            + ". This branch is the parked FP scaffold, not authoritative project state: "
+            + lineage_detail
+            + ". The Dataset V2 lock visible here is the pre-acquisition stub; the frozen lock lives in the "
+            "BASELINE-1 closure lineage and reaches this branch by merge, never by reacquisition."
         )
 
     return {
         "schema_version": SCHEMA_VERSION,
         "spec_version": SPEC_VERSION,
+        "supersedes": [
+            "TRADING_LAB_OS_FP1_PROSPECTIVE_FORWARD_PAPER_v1.0_2026-09-07.md",
+            "TRADING_LAB_OS_FP_BOOT1_AND_FP_RUN_v1.1_FINAL_2026-09-07.md",
+        ],
+        "authoritative_lineage": {
+            "baseline_closure_commit": BASELINE_CLOSURE_COMMIT,
+            "is_ancestor_of_main": lineage_ok,
+            "detail": lineage_detail,
+        },
         "evaluated_utc": _utc_now(),
         "code_commit": _git_commit(),
         "candidate": {
@@ -339,7 +531,10 @@ def evaluate() -> dict:
             "config_files": ["freqtrade/user_data/config.paper.json.example"],
             "config_hash": None,
         },
-        "entry_state": "C",
+        # Section 7: entry state is recomputed from authoritative merged main, never
+        # inherited from this branch. Until the lineage is consolidated, the only
+        # honest value is the one that says so.
+        "entry_state": "C" if lineage_ok else "NOT_AUTHORITATIVE",
         "conditions": conditions,
         "paper_admission": "ADMITTED" if admitted else "BLOCKED",
         "feature_availability": contract if not admitted else contract,

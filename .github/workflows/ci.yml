@@ -141,9 +141,9 @@ jobs:
 
       - name: Paper admission must be BLOCKED while no candidate is admitted
         # The committed record is regenerated and compared, so it cannot drift
-        # from what the evaluator actually says. Entry state C: an ADMITTED
-        # verdict here would mean a candidate was let into forward paper without
-        # a benchmark sprint, which is the failure this gate exists to prevent.
+        # from what the evaluator actually says. An ADMITTED verdict here would
+        # mean a candidate was let into forward paper before the authoritative
+        # lineage was even consolidated, which is the failure this gate prevents.
         run: |
           set -euo pipefail
           python3 research/fp/admission.py evaluate -o "$RUNNER_TEMP/admission.json"
@@ -162,6 +162,48 @@ jobs:
               print(f"  evaluated: {fresh_results}")
               sys.exit(1)
           print(f"PAPER_ADMISSION = {fresh['paper_admission']} — {fresh['reason']}")
+          PY
+
+      - name: Dataset V2 lock must not fork from main
+        # TL-FP-BOOT-1 v2.0 section 2: DO NOT REACQUIRE DATASET V2. A second set
+        # of authoritative hashes is a provenance fork, and a later archive
+        # revision would make the two impossible to reconcile. The only legal way
+        # for this file to change on a branch is by merging main, so any
+        # divergence from main is either a reacquisition or a hand edit.
+        run: |
+          set -euo pipefail
+          LOCK=research/datasets/dataset_v2.lock.json
+          git fetch --depth=1 origin main
+          if git cat-file -e "origin/main:$LOCK" 2>/dev/null; then
+            if git diff --quiet origin/main -- "$LOCK"; then
+              echo "dataset_v2 lock is identical to origin/main"
+            else
+              echo "::error::$LOCK differs from origin/main. Section 2 forbids reacquiring or hand-editing"
+              echo "::error::Dataset V2; the frozen lock reaches a branch by merge only."
+              git diff --stat origin/main -- "$LOCK"
+              exit 1
+            fi
+          else
+            echo "origin/main carries no $LOCK yet; nothing to fork from"
+          fi
+
+      - name: Report the section 3.1 activation gate
+        # Not a failing gate: this branch is the parked scaffold and the merge is
+        # a project-level decision. It is reported on every run so the blocker
+        # stays visible rather than being rediscovered.
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib
+          record = json.loads(pathlib.Path("research/fp/records/paper_candidate_admission.json").read_text())
+          lineage = record["authoritative_lineage"]
+          state = "CONSOLIDATED" if lineage["is_ancestor_of_main"] else "NOT CONSOLIDATED"
+          print(f"BASELINE_CLOSURE_COMMIT = {lineage['baseline_closure_commit']}")
+          print(f"AUTHORITATIVE_LINEAGE   = {state} — {lineage['detail']}")
+          print(f"ENTRY_STATE             = {record['entry_state']}")
+          print(f"PAPER_ADMISSION         = {record['paper_admission']}")
+          if not lineage["is_ancestor_of_main"]:
+              print("::notice::TL-FP-BOOT-1 is BLOCKED at section 3.1 until the BASELINE-1 lineage is merged to main.")
           PY
 
       - name: FP-BOOT-1 preflight must not permit a T0

@@ -1,5 +1,16 @@
 # FP-BOOT-1 — closure record
 
+> **SUPERSEDED FOR THE NEXT STAGE.** This document was written against
+> `TRADING_LAB_OS_FP_BOOT1_AND_FP_RUN_v1.1_FINAL_2026-09-07.md`, which
+> `TRADING_LAB_OS_TL_FP_BOOT1_v2.0_FINAL_20260907.md` supersedes. It is kept as
+> the record of what was determined under v1.1 and is deliberately not rewritten.
+> Two of its statements are corrected by
+> [`TL_FP_BOOT_1_V2_ADOPTION.md`](TL_FP_BOOT_1_V2_ADOPTION.md): Dataset V2 **is**
+> acquired and frozen in the BASELINE-1 closure lineage and must not be
+> reacquired, and BASELINE-1 **has** been run on both protocol windows. Under
+> v2.0 §7 the `ENTRY_STATE = C` below is **not authoritative** and must be
+> recomputed from merged main.
+
 **Specification:** `TRADING_LAB_OS_FP_BOOT1_AND_FP_RUN_v1.1_FINAL_20260907.md`
 **Branch:** `claude/new-session-pvkkbj`
 **Environment:** cloud sandbox — no Windows host, no WSL, no Docker Desktop, no

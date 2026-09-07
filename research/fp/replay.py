@@ -50,6 +50,20 @@ STRATEGY_PATH = REPO_ROOT / "freqtrade" / "user_data" / "strategies" / "Baseline
 # job is ever removed.
 EMA_PARITY_STATUS = "VERIFIED_IN_CI"
 
+# Section 14 of the v2.0 directive bounds what that evidence means, and the
+# bound must be preserved in every report rather than left for a reader to
+# infer. Passing the parity job establishes exactly one thing:
+EMA_PARITY_MEANING = "EMA_IMPLEMENTATION_PARITY = PASS"
+
+# It establishes none of these, and no combination of synthetic evidence can:
+EMA_PARITY_DOES_NOT_PROVE = (
+    "exchange input parity",
+    "strategy-level parity",
+    "position-state parity",
+    "execution parity",
+    "paper-runtime readiness",
+)
+
 REPLAY_ENGINE_VERSION = "FP_EVENT_TIME_REPLAY_V1"
 
 SIGNAL_LONG = "long"

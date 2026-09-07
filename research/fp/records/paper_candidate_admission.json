@@ -1,8 +1,17 @@
 {
-  "schema_version": "1.0.0",
-  "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "evaluated_utc": "2026-09-07T09:25:16Z",
-  "code_commit": "4419dfd755f48987b33b358a3d16c2e9ba32686d",
+  "schema_version": "2.0.0",
+  "spec_version": "TL-FP-BOOT-1 v2.0 FINAL 2026-09-07",
+  "supersedes": [
+    "TRADING_LAB_OS_FP1_PROSPECTIVE_FORWARD_PAPER_v1.0_2026-09-07.md",
+    "TRADING_LAB_OS_FP_BOOT1_AND_FP_RUN_v1.1_FINAL_2026-09-07.md"
+  ],
+  "authoritative_lineage": {
+    "baseline_closure_commit": "1dfb69604bb87856b75c8c90957f2acc8e1fab7f",
+    "is_ancestor_of_main": false,
+    "detail": "1dfb696 is NOT an ancestor of origin/main"
+  },
+  "evaluated_utc": "2026-09-07T09:41:57Z",
+  "code_commit": "7b29ef4f3db132d4817aea81e5af58a43fc37cb6",
   "candidate": {
     "role": "FP-CANDIDATE-A",
     "name": null,
@@ -13,91 +22,115 @@
     ],
     "config_hash": null
   },
-  "entry_state": "C",
+  "entry_state": "NOT_AUTHORITATIVE",
   "conditions": [
     {
       "id": 1,
-      "requirement": "candidate identity is frozen",
+      "requirement": "candidate family identified",
       "result": "UNPROVEN",
       "evidence": "no forward_paper_cohort_registry.json entry names a frozen candidate (entry state C, paper_alpha_cohort='NONE'); no survivor exists to freeze"
     },
     {
       "id": 2,
-      "requirement": "MEASUREMENT_VALIDITY = PASS",
+      "requirement": "frozen configuration identified",
+      "result": "UNPROVEN",
+      "evidence": "no candidate instance names a frozen configuration hash; a configuration cannot be identified for a candidate that does not exist"
+    },
+    {
+      "id": 3,
+      "requirement": "measurement validity PASS",
       "result": "UNPROVEN",
       "evidence": "MEASUREMENT_VALIDITY: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
     },
     {
-      "id": 3,
-      "requirement": "applicable qualification is complete",
-      "result": "UNPROVEN",
-      "evidence": "candidate qualification: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
-    },
-    {
       "id": 4,
-      "requirement": "required deep-validation gates are complete",
+      "requirement": "qualification/deep validation complete as required",
       "result": "UNPROVEN",
-      "evidence": "deep-validation gates: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
+      "evidence": "qualification / deep validation: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
     },
     {
       "id": 5,
-      "requirement": "no unresolved lookahead exists",
+      "requirement": "no unresolved lookahead",
       "result": "UNPROVEN",
       "evidence": "lookahead analysis: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
     },
     {
       "id": 6,
-      "requirement": "no unresolved timestamp-knowability defect exists",
+      "requirement": "no unresolved timestamp-knowability defect",
       "result": "UNPROVEN",
       "evidence": "the strategy sets process_only_new_candles=True and reads only bars t and t-1, but timestamp knowability has not been demonstrated by a run against real candles"
     },
     {
       "id": 7,
-      "requirement": "current runtime remains Binance Spot only",
+      "requirement": "Binance Spot only",
       "result": "PASS",
       "evidence": "paper guard PASS; exchange=binance, trading_mode=spot, dry_run=True"
     },
     {
       "id": 8,
-      "requirement": "no leverage, futures execution, margin, or shorts are required",
+      "requirement": "no leverage",
       "result": "PASS",
-      "evidence": "paper guard enforces margin_mode empty, no leverage, no shorting, no leveraged-token pairs, and rejects can_short/leverage/non-spot trading_mode in every strategy file"
+      "evidence": "paper guard rejects any leverage key in the config and any `leverage`/`can_leverage` declaration in a strategy file; the shipped config declares none"
     },
     {
       "id": 9,
-      "requirement": "source/config/params/engine/data contracts are frozen",
-      "result": "FAIL",
-      "evidence": "data contract is not frozen: dataset_v2.status='pending_acquisition' with 0 fingerprinted files. Source, config and engine may be pinned, but a data contract cannot be frozen over data that has not been acquired."
+      "requirement": "no futures execution",
+      "result": "PASS",
+      "evidence": "trading_mode must be explicitly 'spot'; the guard rejects any other value in the config and any non-spot trading_mode declared in a strategy file"
     },
     {
       "id": 10,
-      "requirement": "paper execution rights are acceptable",
+      "requirement": "no margin",
+      "result": "PASS",
+      "evidence": "margin_mode must be empty; the guard rejects any populated margin mode"
+    },
+    {
+      "id": 11,
+      "requirement": "no shorts",
+      "result": "PASS",
+      "evidence": "the guard rejects shorting in the config, `can_short = True` in any strategy file, and derivative or leveraged-token pairs in the whitelist; BaselineEmaRegimeV1 sets can_short = False"
+    },
+    {
+      "id": 12,
+      "requirement": "source/config/params/engine identity frozen",
+      "result": "FAIL",
+      "evidence": "data contract is not frozen: dataset_v2.status='pending_acquisition' with 0 fingerprints. Source, config and engine may be pinned, but a data contract cannot be frozen over data this branch has not got. The authoritative frozen lock lives in the BASELINE-1 closure lineage and reaches here by merge, never by reacquisition."
+    },
+    {
+      "id": 13,
+      "requirement": "paper execution rights acceptable",
       "result": "PASS",
       "evidence": "dry_run=true with empty exchange key/secret; no private credential is required to run paper"
     },
     {
-      "id": 11,
-      "requirement": "every decision-time feature has a prospective availability contract",
+      "id": 14,
+      "requirement": "every required decision-time feature has a prospective availability contract",
       "result": "UNPROVEN",
       "evidence": "BASELINE-1 has exactly one decision-time feature (the closed 1h OHLCV candle) and no external non-market feature, so no post-facto archive is being used as a real-time feed. The contract is declared, but its retrieval path has not been exercised by a running paper instance."
     },
     {
-      "id": 12,
+      "id": 15,
       "requirement": "deterministic or explainable replay exists",
       "result": "PASS",
       "evidence": "FP_EVENT_TIME_REPLAY_V1 derives BASELINE-1 decisions from the captured input ledger; periods are read from the frozen strategy by AST, not copied; EMA parity vs TA-Lib is VERIFIED_IN_CI"
     },
     {
-      "id": 13,
+      "id": 16,
       "requirement": "outage behavior is predeclared",
       "result": "PASS",
       "evidence": "predeclared per section 17, one of NO_NEW_ENTRY / SAFE_HOLD / INSTANCE_PAUSE / FORCED_EXIT: closed 1h OHLCV candle (open, high, low, close, volume) -> NO_NEW_ENTRY"
     },
     {
-      "id": 14,
-      "requirement": "semantic-change rules are predeclared",
+      "id": 17,
+      "requirement": "semantic-change policy is predeclared",
       "result": "PASS",
       "evidence": "section 15 change model O/R/S is written into docs/fp-boot-1/FP_BOOT_1_ENTRY_STATE.md, and the cohort registry schema requires every post-T0 change to carry its class"
+    },
+    {
+      "id": 18,
+      "requirement": "no unresolved P0 project-integrity issue",
+      "result": "FAIL",
+      "evidence": "authoritative lineage is not consolidated: 1dfb696 is NOT an ancestor of origin/main. Section 3.1 requires the BASELINE-1 closure lineage merged to main with green CI before FP admission is judged; until then TL-FP-BOOT-1 = BLOCKED and this branch's entry state is not authoritative."
     }
   ],
   "paper_admission": "BLOCKED",
@@ -118,5 +151,5 @@
   },
   "paper_alpha_cohort": "NONE",
   "real_money_authorized": false,
-  "reason": "PAPER_ADMISSION = BLOCKED. Section 5 conditions not satisfied: 1, 2, 3, 4, 5, 6, 9, 11. No benchmark sprint has closed, Dataset V2 is not acquired, and BASELINE-1 has never been run, so no candidate can be frozen for forward paper."
+  "reason": "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: 1, 2, 3, 4, 5, 6, 12, 14, 18. This branch is the parked FP scaffold, not authoritative project state: 1dfb696 is NOT an ancestor of origin/main. The Dataset V2 lock visible here is the pre-acquisition stub; the frozen lock lives in the BASELINE-1 closure lineage and reaches this branch by merge, never by reacquisition."
 }

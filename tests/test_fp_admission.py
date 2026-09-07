@@ -35,8 +35,8 @@ def registry(request) -> dict:
 # -- the evaluator --------------------------------------------------------
 
 
-def test_all_fourteen_conditions_are_evaluated(record):
-    assert [c["id"] for c in record["conditions"]] == list(range(1, 15))
+def test_all_eighteen_conditions_are_evaluated(record):
+    assert [c["id"] for c in record["conditions"]] == list(range(1, 19))
     assert [c["requirement"] for c in record["conditions"]] == list(admission.REQUIREMENTS)
 
 
@@ -47,14 +47,37 @@ def test_every_condition_carries_evidence(record):
 
 def test_admission_is_blocked_in_the_current_repository_state(record):
     assert record["paper_admission"] == "BLOCKED"
-    assert record["entry_state"] == "C"
     assert record["paper_alpha_cohort"] == "NONE"
+
+
+def test_entry_state_is_not_authoritative_off_a_parked_branch(record):
+    """Section 7: the entry state is recomputed from authoritative merged main.
+
+    While the BASELINE-1 closure lineage is unmerged, reporting a plain "C" here
+    would look binding when it is not.
+    """
+    lineage = record["authoritative_lineage"]
+    if lineage["is_ancestor_of_main"]:
+        assert record["entry_state"] in {"A", "B", "C"}
+    else:
+        assert record["entry_state"] == "NOT_AUTHORITATIVE"
+
+
+def test_the_lineage_proof_is_computed_not_asserted(record):
+    """Condition 18 must agree with the recorded ancestry proof."""
+    lineage = record["authoritative_lineage"]
+    assert lineage["baseline_closure_commit"] == admission.BASELINE_CLOSURE_COMMIT
+    integrity = record["conditions"][17]
+    assert integrity["result"] == ("PASS" if lineage["is_ancestor_of_main"] else "FAIL")
 
 
 def _force_all_pass(monkeypatch):
     """Make every mechanical check report PASS, so one condition can be isolated."""
     monkeypatch.setattr(admission, "_spot_only", lambda: ("PASS", "stub"))
-    monkeypatch.setattr(admission, "_no_derivatives", lambda: ("PASS", "stub"))
+    for name in ("_no_leverage", "_no_futures", "_no_margin", "_no_shorts"):
+        monkeypatch.setattr(admission, name, lambda: ("PASS", "stub"))
+    monkeypatch.setattr(admission, "_frozen_configuration", lambda: ("PASS", "stub"))
+    monkeypatch.setattr(admission, "_project_integrity", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_contracts_frozen", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_paper_execution_rights", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_replay_available", lambda: ("PASS", "stub"))
@@ -70,7 +93,7 @@ def _force_all_pass(monkeypatch):
     )
 
 
-def test_admission_is_granted_when_all_fourteen_pass(monkeypatch):
+def test_admission_is_granted_when_all_eighteen_pass(monkeypatch):
     """The gate is not simply wired shut: forced all-PASS must yield ADMITTED.
 
     Without this, every other assertion in this file would be satisfied by an
@@ -78,13 +101,15 @@ def test_admission_is_granted_when_all_fourteen_pass(monkeypatch):
     """
     _force_all_pass(monkeypatch)
     record = admission.evaluate()
-    assert [c["result"] for c in record["conditions"]] == ["PASS"] * 14
+    assert [c["result"] for c in record["conditions"]] == ["PASS"] * 18
     assert record["paper_admission"] == "ADMITTED"
     assert record["real_money_authorized"] is False
 
 
 @pytest.mark.parametrize("blocked_result", ["UNPROVEN", "FAIL"])
-@pytest.mark.parametrize("target", ["_candidate_identity_frozen", "_replay_available", "_contracts_frozen"])
+@pytest.mark.parametrize(
+    "target", ["_candidate_identity_frozen", "_replay_available", "_contracts_frozen", "_project_integrity"]
+)
 def test_a_single_non_passing_condition_blocks_admission(monkeypatch, target, blocked_result):
     """UNPROVEN must block exactly as FAIL does, whichever condition it is."""
     _force_all_pass(monkeypatch)
@@ -104,8 +129,8 @@ def test_the_data_contract_condition_tracks_the_dataset_lock(request, record):
     lock = json.loads(
         (request.config.rootpath / "research/datasets/dataset_v2.lock.json").read_text(encoding="utf-8")
     )
-    condition = record["conditions"][8]
-    frozen = lock.get("status") == "frozen" and bool(lock.get("files"))
+    condition = record["conditions"][11]
+    frozen = lock.get("status") == "frozen" and bool(admission.dataset_v2_fingerprints(lock))
     if frozen:
         assert condition["result"] == "PASS"
     else:
@@ -114,9 +139,24 @@ def test_the_data_contract_condition_tracks_the_dataset_lock(request, record):
 
 
 def test_safety_conditions_pass_on_their_own_evidence(record):
-    """Conditions 7, 8 and 10 are mechanically checkable and must not be UNPROVEN."""
-    for index in (6, 7, 9):
+    """Conditions 7-11 and 13 are mechanically checkable and must not be UNPROVEN."""
+    for index in (6, 7, 8, 9, 10, 12):
         assert record["conditions"][index]["result"] == "PASS", record["conditions"][index]
+
+
+def test_the_four_derivative_prohibitions_have_distinct_evidence(record):
+    """Section 9 splits leverage, futures, margin and shorts into four conditions.
+
+    One enforcer answers all four, so the evidence must still say which
+    prohibition each row is about; otherwise a gap in one hides inside the
+    others.
+    """
+    evidence = [record["conditions"][i]["evidence"] for i in (7, 8, 9, 10)]
+    assert len(set(evidence)) == 4
+    assert "leverage" in evidence[0]
+    assert "spot" in evidence[1]
+    assert "margin_mode" in evidence[2]
+    assert "can_short" in evidence[3]
 
 
 def test_example_records_cannot_satisfy_a_condition(monkeypatch, tmp_path):
@@ -140,11 +180,31 @@ def test_no_committed_record_claims_a_passing_gate_yet():
     assert admission._gate_records() == []
 
 
-def test_no_override_flag_exists():
-    """Section 5 has no escape hatch, and neither may the implementation."""
-    source = (admission.REPO_ROOT / "research" / "fp" / "admission.py").read_text(encoding="utf-8")
-    for flag in ("--force", "--override", "--allow-blocked", "--assume-pass"):
-        assert flag not in source
+@pytest.mark.parametrize("flag", ["--force", "--override", "--allow-blocked", "--assume-pass"])
+def test_no_override_flag_is_accepted(flag):
+    """Section 9 names these four and says do not provide them.
+
+    Tested through the CLI rather than by grepping the source, so that merely
+    documenting the prohibition does not fail the test while an actual
+    implementation of it would pass.
+    """
+    with pytest.raises(SystemExit) as excinfo:
+        admission.main(["evaluate", flag])
+    assert excinfo.value.code != 0
+
+
+def test_no_environment_variable_can_flip_the_verdict(monkeypatch):
+    """Section 9 also forbids a *silent environment override*."""
+    for name in (
+        "FP_FORCE",
+        "FP_ADMISSION",
+        "PAPER_ADMISSION",
+        "FP_ALLOW_BLOCKED",
+        "FP_ASSUME_PASS",
+        "FP_OVERRIDE",
+    ):
+        monkeypatch.setenv(name, "ADMITTED")
+    assert admission.evaluate()["paper_admission"] == "BLOCKED"
 
 
 def test_record_is_schema_valid(record):
