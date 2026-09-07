@@ -20,6 +20,19 @@ name: External benchmark (POST-BASELINE-EXTBENCH-1)
 # Manual dispatch only. No order-placing command is ever issued; dry_run stays
 # true throughout and the paper guard is run over every config actually used.
 
+# Two triggers, because workflow_dispatch alone cannot reach this file.
+# GitHub only registers a workflow for manual dispatch once it is on the default
+# branch, which is why dataset-v2.yml had to land on main in PR #2 before
+# BASELINE-1 could run it, and why funding-probe.yml has never been runnable
+# from this branch. A push trigger runs the workflow *as it exists on the pushed
+# ref*, with no default-branch requirement, so the sprint can execute without
+# merging benchmark infrastructure to main ahead of its own closure.
+#
+# The run request is the branch name, which makes it auditable: pushing
+#   extbench/run/H1_DATASET_V2_DEVELOPMENT     executes that lane
+#   extbench/gates/H1_DATASET_V2_DEVELOPMENT   runs the gates and stops
+# The lane is validated against the frozen registry; an unregistered lane fails
+# the run rather than silently benchmarking something nobody preregistered.
 on:
   workflow_dispatch:
     inputs:
@@ -35,12 +48,16 @@ on:
         description: "Run the validity gates and stop before the backtest"
         type: boolean
         default: false
+  push:
+    branches:
+      - "extbench/run/**"
+      - "extbench/gates/**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: extbench-${{ inputs.lane }}
+  group: extbench-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -58,7 +75,7 @@ env:
 
 jobs:
   benchmark:
-    name: ${{ inputs.lane }}
+    name: External benchmark
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -78,7 +95,22 @@ jobs:
         id: lane
         run: |
           set -euo pipefail
-          case "${{ inputs.lane }}" in
+          # The run request comes either from a dispatch input or from the pushed
+          # ref: refs/heads/extbench/{run,gates}/<LANE>.
+          if [ -n "${{ inputs.lane }}" ]; then
+            LANE="${{ inputs.lane }}"
+            GATES_ONLY="${{ inputs.gates_only }}"
+          else
+            LANE="${GITHUB_REF_NAME##*/}"
+            case "$GITHUB_REF_NAME" in
+              extbench/gates/*) GATES_ONLY=true ;;
+              *)                GATES_ONLY=false ;;
+            esac
+          fi
+          echo "lane=$LANE"             >> "$GITHUB_OUTPUT"
+          echo "gates_only=$GATES_ONLY" >> "$GITHUB_OUTPUT"
+          echo "LANE=$LANE | GATES_ONLY=$GATES_ONLY"
+          case "$LANE" in
             H1_DATASET_V2_DEVELOPMENT)
               echo "strategy=EmaCross"        >> "$GITHUB_OUTPUT"
               echo "config_id=H1_EMACROSS"    >> "$GITHUB_OUTPUT" ;;
@@ -250,12 +282,12 @@ jobs:
             2>&1 | tee artifacts/v7_warmup_join.log
 
       - name: Stop here if only the gates were requested
-        if: inputs.gates_only
+        if: steps.lane.outputs.gates_only == 'true'
         run: |
           echo "gates_only requested: validity gates ran, no candidate was executed"
 
       - name: Pull the pinned Freqtrade image
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         timeout-minutes: 12
         run: |
           set -uo pipefail
@@ -267,7 +299,7 @@ jobs:
 
       # ---- V2_LOAD_AND_CONFIG + the run ----------------------------------
       - name: 'Gate V2 + backtest on Dataset V2 Development'
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         timeout-minutes: 40
         run: |
           set -euo pipefail
@@ -286,7 +318,7 @@ jobs:
 
       # ---- V5_LOOKAHEAD ---------------------------------------------------
       - name: 'Gate V5: lookahead analysis'
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         timeout-minutes: 30
         run: |
           set -euo pipefail
@@ -300,7 +332,7 @@ jobs:
           STRATEGY: ${{ steps.lane.outputs.strategy }}
 
       - name: 'Gate V5: recursive analysis'
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         timeout-minutes: 30
         run: |
           set -euo pipefail
@@ -315,7 +347,7 @@ jobs:
 
       # ---- fair controls + metrics ---------------------------------------
       - name: Passive controls on the same window (BTC only)
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         run: |
           set -euo pipefail
           python3 freqtrade/user_data/baseline_benchmarks.py \
@@ -328,7 +360,7 @@ jobs:
             2>&1 | tee artifacts/passive_development.log
 
       - name: Normalise metrics
-        if: '!inputs.gates_only'
+        if: steps.lane.outputs.gates_only != 'true'
         timeout-minutes: 10
         run: |
           set -uo pipefail
@@ -369,7 +401,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: extbench-${{ inputs.lane }}
+          name: extbench-${{ steps.lane.outputs.lane }}
           path: artifacts
           if-no-files-found: warn
           retention-days: 30
