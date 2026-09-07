@@ -241,9 +241,13 @@ jobs:
         timeout-minutes: 45
         run: |
           set -euo pipefail
-          if [ ! -f "$DATA_DIR/BTC_USDT-1h.feather" ]; then
+          # Both pairs, not just the lane's. V4 asks whether the underlying data
+          # is the frozen dataset, and the frozen lock names BTC and ETH at 1h
+          # and 5m; asserting a slice of it would be a weaker gate wearing the
+          # same name. The lane's universe is narrowed in the config, not here.
+          if [ ! -f "$DATA_DIR/BTC_USDT-1h.feather" ] || [ ! -f "$DATA_DIR/ETH_USDT-1h.feather" ]; then
             python3 scripts/fetch_binance_public_data.py \
-              --symbol BTCUSDT --timeframe 1h --timeframe 5m \
+              --symbol BTCUSDT --symbol ETHUSDT --timeframe 1h --timeframe 5m \
               --start 2020-12-01 --end 2026-08-31 \
               --out-dir "$DATA_DIR" --manifest artifacts/acquisition_dataset_v2.json
           else
@@ -263,7 +267,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/audit_data.py \
-            --data-dir "$DATA_DIR" --pair BTC/USDT --timeframe 1h --timeframe 5m \
+            --data-dir "$DATA_DIR" \
+            --pair BTC/USDT --pair ETH/USDT --timeframe 1h --timeframe 5m \
             --lock research/datasets/dataset_v2.lock.json --gate lock \
             2>&1 | tee artifacts/v4_dataset_lock_check.log
           echo "V4_DATA_INTEGRITY = PASS (canonical digests match the frozen lock)"
