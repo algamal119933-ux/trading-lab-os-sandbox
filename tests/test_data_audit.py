@@ -414,3 +414,41 @@ def test_committed_dataset_lock_matches_the_recorded_audit(repo_root):
     # Dataset V1 is immutable historical evidence: raw-file hashes only.
     assert lock["dataset_hashes"] == from_audit
     assert audit["overall_pass"] is True
+
+
+def test_dataset_v2_lock_is_frozen_with_every_fingerprint(repo_root):
+    """A lock missing half its fingerprints is not a drift gate.
+
+    Dataset V2 spent several runs in `frozen_pending_hash_transcription` with
+    only the ETH series recorded, which meant a BTC file could have changed
+    without the lock check noticing. Pin the closed state.
+    """
+    lock = json.loads((repo_root / "research/datasets/dataset_v2.lock.json").read_text())
+    assert lock["status"] == "frozen"
+    assert "hashes_pending" not in lock
+    expected = {f"{pair} {tf}" for pair in ("BTC/USDT", "ETH/USDT") for tf in ("5m", "1h")}
+    assert set(lock["raw_file_hashes"]) == expected
+    assert set(lock["canonical_hashes"]) == expected
+    for series in (lock["raw_file_hashes"], lock["canonical_hashes"]):
+        for name, digest in series.items():
+            assert len(digest) == 64 and set(digest) <= set("0123456789abcdef"), name
+    # Raw and canonical fingerprints answer different questions; they must not
+    # be the same value copied twice.
+    assert set(lock["raw_file_hashes"].values()).isdisjoint(lock["canonical_hashes"].values())
+
+
+def test_dataset_v1_lock_is_untouched_by_dataset_v2(repo_root):
+    """V2 must not rewrite V1. These are the hashes CLAUDE.md records."""
+    lock = json.loads((repo_root / "research/datasets/dataset_v1.lock.json").read_text())
+    assert lock["dataset_hashes"]["BTC/USDT 1h"] == (
+        "b29689f5d0c0e86c95b5ec15e63e6bcfbcb8ad4596408dcc0f9040b3bbdfb4f9"
+    )
+    assert lock["dataset_hashes"]["BTC/USDT 5m"] == (
+        "2ab332f23d2376677b61d5a02492b5a4b67f2d37ac68f89a925697252cc7b908"
+    )
+    assert lock["dataset_hashes"]["ETH/USDT 1h"] == (
+        "a5de3ae5e9c3c73439eb8aec8ff496f9e9d5ebc7cec83842b2b2827880201ccf"
+    )
+    assert lock["dataset_hashes"]["ETH/USDT 5m"] == (
+        "4fa5ca782864ee84aff0e02786be3ca663de159288a7fb4baf12398fcdcca5c4"
+    )

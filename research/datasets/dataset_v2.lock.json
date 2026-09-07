@@ -1,6 +1,6 @@
 {
   "dataset_id": "dataset_v2",
-  "status": "frozen_pending_hash_transcription",
+  "status": "frozen",
   "spec_frozen_utc": "2026-09-06T22:00:00Z",
   "spec_frozen_before_any_active_baseline_outcome": true,
   "supersedes": null,
@@ -85,12 +85,16 @@
     ]
   },
   "raw_file_hashes": {
-    "ETH/USDT 5m": "57450540e59a574333760423bdd8540fddc5f9630cc1cb952b6705a5728acfdf",
-    "ETH/USDT 1h": "dc058dc4647d8bd4ed4fe94f741fe71c6fa7274c86f4d773b969ada802f5ac28"
+    "BTC/USDT 1h": "d8e2ffd5cd78c6bdf24f41e5e71d463f2343b3fb099f6546e2bc6c68b48b67e4",
+    "BTC/USDT 5m": "f818ce29774375545bbf6b044f9d3db2306cd991156aa3c306d89baeb71bc66d",
+    "ETH/USDT 1h": "dc058dc4647d8bd4ed4fe94f741fe71c6fa7274c86f4d773b969ada802f5ac28",
+    "ETH/USDT 5m": "57450540e59a574333760423bdd8540fddc5f9630cc1cb952b6705a5728acfdf"
   },
   "canonical_hashes": {
-    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560",
-    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f"
+    "BTC/USDT 1h": "9e564a7d5738821757202263bf98f12062e43021c6a810020f4d9d9907ca9763",
+    "BTC/USDT 5m": "c4f9130d1be079b0a1ada78ef97fb9f61b86b6eba1b5084fcd502b74a34be59e",
+    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
+    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
   },
   "coverage": {
     "1h": {
@@ -115,14 +119,7 @@
     "route": "GitHub Actions runner via .github/workflows/dataset-v2.yml, using the pinned freqtradeorg/freqtrade image. Evidence returns as workflow artifacts and is committed here.",
     "command": "freqtrade download-data --exchange binance --pairs BTC/USDT ETH/USDT --timeframes 5m 1h --timerange 20201201-20260901 --data-format-ohlcv feather"
   },
-  "frozen_utc": "2026-09-06T22:43:00Z",
-  "hashes_pending": {
-    "pairs": [
-      "BTC/USDT 5m",
-      "BTC/USDT 1h"
-    ],
-    "reason": "The audit computed and printed all four fingerprints, but the BTC lines fell outside the readable tail of the job log and workflow artifact storage is blocked from the analysis environment. They are recorded in the dataset_v2_audit.json artifact of the run named above and must be transcribed before the lock is used as a drift gate."
-  },
+  "frozen_utc": "2026-09-07T03:10:00Z",
   "integrity_result": {
     "structural_integrity": "PASS",
     "structural_checks": {
@@ -185,5 +182,11 @@
     "max_exposure_invested_fraction": 0.2,
     "evidence": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34064741989",
     "note": "Dataset V2's Development window is strongly BULLISH \u2014 the opposite of Dataset V1's, which was bearish end to end. A long-only strategy that sits in cash will look bad here for the same structural reason it looked good there. Judge against the exposure-matched line, not buy-and-hold, in both directions."
+  },
+  "hash_provenance": {
+    "source": "the deep-audit step's machine-generated lock fragment, printed verbatim to the job log",
+    "workflow_run": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34076077058",
+    "code_commit": "78f1f5ea848787d81cf8d283712f6a4e1c70ab0b",
+    "note": "Workflow artifact storage is unreachable from the analysis environment, so the fragment reaches the record through the job log rather than through the dataset_v2_audit.json artifact. It is the same bytes the audit emitted. The ETH fingerprints in this lock had already been asserted green by the CI lock check across earlier runs; the BTC fingerprints in the same fragment are transcribed here, and the next run's lock check verifies all four rather than two."
   }
 }
