@@ -433,9 +433,14 @@ jobs:
           for f in artifacts/*.log; do
             [ -f "$f" ] || continue
             HITS="$(grep -nE 'ERROR|CRITICAL|Traceback|Exception|OperationalException|No data found|not found|Impossible|usage:|error:' "$f" | head -12 || true)"
+            echo "--- $f ---"
             if [ -n "$HITS" ]; then
-              echo "--- $f ---"
               echo "$HITS"
+            else
+              # No recognised error line. A step can fail without printing one -
+              # a non-zero exit from a clean run, a pipefail, a killed process -
+              # so show the tail rather than reporting nothing at all.
+              tail -8 "$f"
             fi
           done
           echo "########## END DIGEST ##########"
