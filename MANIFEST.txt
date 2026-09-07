@@ -4,7 +4,7 @@
 # MANIFEST.txt itself is excluded (it cannot contain its own hash).
 0ecc898927b94017aca56c7d33f53faa1f90797695fc19126422c3d93b864b0a  .env.example
 04381e43173f53216bf8288831e2cf185b0ead6bffc454eec56e71eb43a6e6f5  .github/workflows/ci.yml
-4c7e9dc8b9a0f1d80b64702d850b5108e75053b64f5aa8682311dbd09edb10a3  .github/workflows/dataset-v2.yml
+b6d34085c4f1899cd9f9f0a0e14f7cdec9c6e7e613f4420182ce1bc5b4ec0b59  .github/workflows/dataset-v2.yml
 29d76a34478d742381343001e13b71ed4a1025e470576c1e21d9742b9edec4c7  .gitignore
 4050b64a7c36cab91dc95c27db1c6cd4e2617ba1e12db735ff1f4e9dcbd53f41  CLAUDE.md
 4c6b5a128920cffc8c9de043bdcf522b77895c3c02ec51c5a0a099256baac448  README.md

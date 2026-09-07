@@ -329,8 +329,10 @@ jobs:
               --timeframe-detail 5m \
               --enable-protections \
               --export trades \
-              --export-filename /freqtrade/user_data/backtest_results/dev.json \
             2>&1 | tee artifacts/backtest_development.log
+          # No --export-filename: 2026.7 ignores it and writes
+          # backtest_results/backtest-result-<ts>.zip regardless. The metrics
+          # step selects the newest result of either shape.
           # Freqtrade exits 0 on a configuration error, so check the output too.
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_development.log
 
@@ -349,7 +351,6 @@ jobs:
               --timeframe-detail 5m \
               --enable-protections \
               --export trades \
-              --export-filename /freqtrade/user_data/backtest_results/val.json \
             2>&1 | tee artifacts/backtest_validation.log
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_validation.log
 
