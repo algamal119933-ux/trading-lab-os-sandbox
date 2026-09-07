@@ -1,0 +1,375 @@
+name: External benchmark (POST-BASELINE-EXTBENCH-1)
+
+# Wave 1 runner for the frozen POST-BASELINE-EXTBENCH-1 sprint.
+#
+# The research sandbox cannot execute a candidate: Freqtrade, Docker, pandas and
+# Dataset V2 market data are all absent, api.binance.com is blocked, and
+# github.com answers 403 so there is no clone. Only raw.githubusercontent.com is
+# reachable. So every candidate run is a GitHub Actions job, exactly as
+# BASELINE-1 was, and upstream code arrives as hash-verified individual blobs at
+# a pinned commit rather than as a checkout.
+#
+# One parameterised workflow, not one per candidate: the preflight findings
+# budget Wave 1 as six candidates x (acquire -> verify -> backtest -> lookahead
+# -> recursive -> metrics), which is CI minutes, not a local loop.
+#
+# Nothing here is vendored. Two pinned projects carry GPL-3.0 and three carry no
+# license at all, so upstream bytes live only in this runner's scratch space and
+# are never committed.
+#
+# Manual dispatch only. No order-placing command is ever issued; dry_run stays
+# true throughout and the paper guard is run over every config actually used.
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "Frozen evaluation lane to execute"
+        type: choice
+        required: true
+        default: H1_DATASET_V2_DEVELOPMENT
+        options:
+          - H1_DATASET_V2_DEVELOPMENT
+          - H2_DATASET_V2_DEVELOPMENT
+      gates_only:
+        description: "Run the validity gates and stop before the backtest"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extbench-${{ inputs.lane }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: freqtradeorg/freqtrade:2026.7
+  DATA_DIR: freqtrade/user_data/data/binance
+  OVERLAY_DIR: overlay-data/binance
+  STRATEGY_DIR: freqtrade/user_data/strategies
+  # Dataset V2 Development, identical to the window BASELINE-1 was scored on.
+  DEV_TIMERANGE: "20210101-20250101"
+  DEV_START: "2021-01-01T00:00:00Z"
+  DEV_END: "2024-12-31T23:00:00Z"
+  FIRST_SCORED_UTC: "2021-01-01T00:00:00Z"
+  WALLET: "100"
+  FEE: "0.001"
+
+jobs:
+  benchmark:
+    name: ${{ inputs.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install "pandas==2.2.3" "pyarrow==18.1.0"
+
+      - name: Resolve the frozen lane
+        id: lane
+        run: |
+          set -euo pipefail
+          case "${{ inputs.lane }}" in
+            H1_DATASET_V2_DEVELOPMENT)
+              echo "strategy=EmaCross"        >> "$GITHUB_OUTPUT"
+              echo "config_id=H1_EMACROSS"    >> "$GITHUB_OUTPUT" ;;
+            H2_DATASET_V2_DEVELOPMENT)
+              echo "strategy=EmaCrossFunding" >> "$GITHUB_OUTPUT"
+              echo "config_id=H2_EMACROSSFUNDING" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::unregistered lane"; exit 1 ;;
+          esac
+
+      # ---- V3B_EXECUTION_RIGHTS ------------------------------------------
+      - name: 'Gate V3B: execution rights at the pinned commit'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, sys
+          pins = json.loads(pathlib.Path("research/external/upstream_pins.json").read_text())
+          src = pins["sources"]["btc_strategy_lab"]
+          lic = src["license"]
+          print(f"repo   {src['repo']} @ {src['commit']}")
+          print(f"license {lic.get('spdx')!r}  file_present={lic.get('license_file_present')}")
+          print(f"vendoring_authorised={lic.get('vendoring_authorised')}")
+          if not lic.get("spdx"):
+              print("::error::V3B_EXECUTION_RIGHTS FAIL - no recognised license at the pinned commit")
+              sys.exit(1)
+          if lic.get("vendoring_authorised"):
+              print("::error::vendoring is not authorised for this sprint; upstream stays out of the repo")
+              sys.exit(1)
+          print("V3B_EXECUTION_RIGHTS = PASS (execute and evaluate; do not vendor)")
+          PY
+
+      # ---- pinned upstream, fetched and hash-verified ---------------------
+      - name: Verify and materialise the pinned upstream candidate
+        run: |
+          set -euo pipefail
+          python3 research/external/pin_upstream.py --verify --cache-dir "$RUNNER_TEMP/upstream-cache" \
+            2>&1 | tee artifacts-pin.log || { mkdir -p artifacts; cp artifacts-pin.log artifacts/; exit 1; }
+          rm -rf "$RUNNER_TEMP/upstream-ws"
+          python3 research/external/pin_upstream.py --verify \
+            --cache-dir "$RUNNER_TEMP/upstream-cache" \
+            --materialize "$RUNNER_TEMP/upstream-ws" >/dev/null
+          mkdir -p artifacts "$STRATEGY_DIR"
+          mv artifacts-pin.log artifacts/upstream_pin_gate.log
+          S="${{ steps.lane.outputs.strategy }}"
+          WS="$RUNNER_TEMP/upstream-ws/btc_strategy_lab/user_data/strategies"
+          cp "$WS/$S.py"   "$STRATEGY_DIR/$S.py"
+          cp "$WS/$S.json" "$STRATEGY_DIR/$S.json"
+          chmod u+w "$STRATEGY_DIR/$S.py" "$STRATEGY_DIR/$S.json"
+          echo "materialised $S.py and $S.json (params file the engine auto-loads)"
+
+      # ---- V3_SAFETY_COMPATIBILITY ---------------------------------------
+      - name: 'Gate V3: safety compatibility (read the source before running)'
+        run: |
+          set -euo pipefail
+          S="${{ steps.lane.outputs.strategy }}"
+          echo "--- $S.py ---"; cat "$STRATEGY_DIR/$S.py"
+          echo "--- $S.json ---"; cat "$STRATEGY_DIR/$S.json"
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example \
+            2>&1 | tee artifacts/paper_guard_with_candidate.log
+          echo "V3_SAFETY_COMPATIBILITY = PASS (guard scans every strategy file present, candidate included)"
+
+      # ---- V1_REPRODUCTION_IDENTITY --------------------------------------
+      - name: 'Gate V1: pin all five identity components'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          def sha(p): return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+          strategy = os.environ["STRATEGY"]
+          sdir = os.environ["STRATEGY_DIR"]
+          reg = json.loads(pathlib.Path("research/external/candidate_registry.json").read_text())
+          want = None
+          for fam in reg.get("hypothesis_families", []):
+              for cfg in fam.get("frozen_configurations", []):
+                  if cfg.get("strategy") == strategy:
+                      want = cfg
+          if want is None:
+              print(f"::error::{strategy} is not a frozen configuration in the registry"); sys.exit(1)
+          identity = {
+              "configuration_id": want["configuration_id"],
+              "strategy_source": {"file": f"{sdir}/{strategy}.py", "sha256": sha(f"{sdir}/{strategy}.py")},
+              "parameter_file": {"file": f"{sdir}/{strategy}.json", "sha256": sha(f"{sdir}/{strategy}.json")},
+              "config": {"file": "freqtrade/user_data/config.research.json"},
+              "engine_version": os.environ["IMAGE"],
+              "data_contract": "research/datasets/dataset_v2.lock.json (normalized lane)",
+              "warmup_overlay": "research/datasets/warmup_overlay.lock.json",
+              "fee_model_per_side": float(os.environ["FEE"]),
+              "code_commit": os.environ["GITHUB_SHA"],
+          }
+          expected = want["strategy_sha256"]
+          got = identity["strategy_source"]["sha256"]
+          if got != expected:
+              print(f"::error::V1 FAIL strategy sha {got} != registry {expected}"); sys.exit(1)
+          pathlib.Path("artifacts/reproduction_identity.json").write_text(json.dumps(identity, indent=2) + "\n")
+          print(json.dumps(identity, indent=2))
+          print("V1_REPRODUCTION_IDENTITY = PASS (source, params, config, engine, data contract all pinned)")
+          PY
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: Create and guard the research config
+        run: |
+          set -euo pipefail
+          cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+          python3 - <<'PY'
+          import json, pathlib
+          base = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
+          overlay = json.loads(pathlib.Path("freqtrade/user_data/config.binance-data-mirror.json.example").read_text())
+          base.update(overlay)
+          # The frozen lane is BTC only.
+          base.setdefault("exchange", {})["pair_whitelist"] = ["BTC/USDT"]
+          pathlib.Path("freqtrade/user_data/config.research.json").write_text(json.dumps(base, indent=2) + "\n")
+          PY
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.research.json
+          mkdir -p "$DATA_DIR" "$OVERLAY_DIR" artifacts freqtrade/user_data/backtest_results freqtrade/user_data/logs
+          chmod -R a+rwX freqtrade/user_data artifacts
+
+      - name: Restore the market-data cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            freqtrade/user_data/data
+            overlay-data
+          key: extbench-data-v1-${{ hashFiles('research/datasets/dataset_v2.lock.json') }}
+          restore-keys: extbench-data-v1-
+
+      - name: Acquire Dataset V2 and the warm-up overlay from the public archive
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          if [ ! -f "$DATA_DIR/BTC_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --timeframe 1h --timeframe 5m \
+              --start 2020-12-01 --end 2026-08-31 \
+              --out-dir "$DATA_DIR" --manifest artifacts/acquisition_dataset_v2.json
+          else
+            echo "Dataset V2 restored from cache"
+          fi
+          if [ ! -f "$OVERLAY_DIR/BTC_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --timeframe 1h \
+              --start 2020-10-01 --end 2020-11-30 \
+              --out-dir "$OVERLAY_DIR" --manifest artifacts/acquisition_overlay.json
+          else
+            echo "overlay restored from cache"
+          fi
+
+      # ---- V4_DATA_INTEGRITY ---------------------------------------------
+      - name: 'Gate V4: data integrity against the frozen lock'
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_data.py \
+            --data-dir "$DATA_DIR" --pair BTC/USDT --timeframe 1h --timeframe 5m \
+            --lock research/datasets/dataset_v2.lock.json --gate lock \
+            2>&1 | tee artifacts/v4_dataset_lock_check.log
+          echo "V4_DATA_INTEGRITY = PASS (canonical digests match the frozen lock)"
+
+      # ---- V7_WINDOW_PARITY, part one: the warm-up overlay ---------------
+      - name: 'Gate V7a: join the warm-up overlay under its canonical-identity gate'
+        run: |
+          set -euo pipefail
+          python3 scripts/join_warmup_overlay.py \
+            --data-dir "$DATA_DIR" --overlay-dir "$OVERLAY_DIR" \
+            --lock research/datasets/dataset_v2.lock.json \
+            --pair BTC/USDT --timeframe 1h \
+            --first-scored-utc "$FIRST_SCORED_UTC" \
+            --required-candles 1300 \
+            --out artifacts/v7_warmup_join.json \
+            2>&1 | tee artifacts/v7_warmup_join.log
+
+      - name: Stop here if only the gates were requested
+        if: inputs.gates_only
+        run: |
+          echo "gates_only requested: validity gates ran, no candidate was executed"
+
+      - name: Pull the pinned Freqtrade image
+        if: '!inputs.gates_only'
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then echo "pulled on attempt $attempt"; exit 0; fi
+            echo "pull attempt $attempt failed; Docker Hub may be rate limiting"; sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts"; exit 1
+
+      # ---- V2_LOAD_AND_CONFIG + the run ----------------------------------
+      - name: 'Gate V2 + backtest on Dataset V2 Development'
+        if: '!inputs.gates_only'
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" backtesting \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" --timeframe-detail 5m \
+            --enable-protections --export trades \
+            2>&1 | tee artifacts/backtest_development.log
+          # Freqtrade exits 0 on a configuration error, so the log is the real check.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error|OperationalException' \
+            artifacts/backtest_development.log
+          echo "V2_LOAD_AND_CONFIG = PASS"
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      # ---- V5_LOOKAHEAD ---------------------------------------------------
+      - name: 'Gate V5: lookahead analysis'
+        if: '!inputs.gates_only'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" lookahead-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" \
+            2>&1 | tee artifacts/lookahead_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: 'Gate V5: recursive analysis'
+        if: '!inputs.gates_only'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" recursive-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" -p BTC/USDT \
+            2>&1 | tee artifacts/recursive_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      # ---- fair controls + metrics ---------------------------------------
+      - name: Passive controls on the same window (BTC only)
+        if: '!inputs.gates_only'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock research/datasets/dataset_v2.lock.json \
+            --period development \
+            --universe btc \
+            --fee "$FEE" --wallet "$WALLET" --stake 10 --max-open-trades 2 \
+            --out artifacts/passive_development.json \
+            2>&1 | tee artifacts/passive_development.log
+
+      - name: Normalise metrics
+        if: '!inputs.gates_only'
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          (
+            set -euo pipefail
+            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in list(d.glob("*.zip")) + list(d.glob("*.json")) if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
+            if [ -z "$RESULT" ]; then echo "::error::no backtest result produced"; exit 1; fi
+            echo "using result file: $RESULT"
+            python3 research/summarize_backtest.py \
+              --result "$RESULT" \
+              --window-start "$DEV_START" --window-end "$DEV_END" \
+              --wallet "$WALLET" --fee "$FEE" \
+              --passive artifacts/passive_development.json \
+              --out artifacts/metrics_development.json --md artifacts/metrics_development.md
+            cat artifacts/metrics_development.md
+          ) 2>&1 | tee artifacts/metrics_step.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Collect raw evidence into the job log
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/backtest_results
+          cp -r freqtrade/user_data/backtest_results/. artifacts/backtest_results/ 2>/dev/null || true
+          # Artifact blob storage is unreachable from the analysis environment, so
+          # the job log is the delivery channel.
+          echo "===== UPSTREAM PIN GATE ====="; tail -30 artifacts/upstream_pin_gate.log 2>/dev/null || echo "(none)"
+          echo "===== REPRODUCTION IDENTITY ====="; cat artifacts/reproduction_identity.json 2>/dev/null || echo "(none)"
+          echo "===== V4 DATASET LOCK CHECK ====="; cat artifacts/v4_dataset_lock_check.log 2>/dev/null || echo "(none)"
+          echo "===== V7a WARMUP JOIN ====="; cat artifacts/v7_warmup_join.json 2>/dev/null || echo "(none)"
+          echo "===== PASSIVE CONTROLS ====="; cat artifacts/passive_development.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS ====="; cat artifacts/metrics_development.json 2>/dev/null || echo "(none)"
+          echo "===== BACKTEST (tail) ====="; tail -70 artifacts/backtest_development.log 2>/dev/null || echo "(none)"
+          echo "===== LOOKAHEAD (tail) ====="; tail -30 artifacts/lookahead_development.log 2>/dev/null || echo "(none)"
+          echo "===== RECURSIVE (tail) ====="; tail -30 artifacts/recursive_development.log 2>/dev/null || echo "(none)"
+          echo "===== METRICS STEP LOG ====="; tail -40 artifacts/metrics_step.log 2>/dev/null || echo "(none)"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extbench-${{ inputs.lane }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30

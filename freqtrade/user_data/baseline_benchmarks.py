@@ -109,22 +109,29 @@ def period_return(df: pd.DataFrame, start: str, end: str, fee: float) -> dict:
 def compute_period(
     name: str,
     btc: pd.DataFrame,
-    eth: pd.DataFrame,
+    eth: pd.DataFrame | None,
     fee: float,
     periods: dict[str, tuple[str, str]],
     wallet: float = 100.0,
     stake: float = 10.0,
     max_open_trades: int = 2,
 ) -> dict:
+    """Passive controls for one protocol window.
+
+    ``eth`` may be ``None`` for a single-asset universe. A BTC-specialist
+    candidate must be compared against BTC's own buy-and-hold and BTC's own
+    exposure-matched passive line: the frozen sprint is explicit that a combined
+    BTC+ETH control is not a fair sole opponent for it. The two-asset path is
+    untouched, so BASELINE-1's recorded numbers are reproduced bit-for-bit by the
+    same code that produced them.
+    """
     start, end = periods[name]
     btc_r = period_return(btc, start, end, fee)
-    eth_r = period_return(eth, start, end, fee)
+    eth_r = period_return(eth, start, end, fee) if eth is not None else None
 
-    half = wallet / 2.0
-    full_final = (
-        half * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
-        + half * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
-    )
+    legs = [btc_r] if eth_r is None else [btc_r, eth_r]
+    share = wallet / len(legs)
+    full_final = sum(share * (1.0 + leg["net_return_after_entry_and_exit_fee"]) for leg in legs)
 
     # Structural max-exposure-matched passive: the most capital the sizing rules
     # can ever have in the market (max_open_trades x stake), split evenly across
@@ -132,18 +139,19 @@ def compute_period(
     # strategy's exposure, not its realised exposure -- the realised-exposure
     # comparison needs the backtest and is computed after it.
     invested = min(float(stake) * int(max_open_trades), wallet)
-    per_pair = invested / 2.0
+    per_pair = invested / len(legs)
     cash = wallet - invested
-    exposure_final = (
-        cash
-        + per_pair * (1.0 + btc_r["net_return_after_entry_and_exit_fee"])
-        + per_pair * (1.0 + eth_r["net_return_after_entry_and_exit_fee"])
+    exposure_final = cash + sum(
+        per_pair * (1.0 + leg["net_return_after_entry_and_exit_fee"]) for leg in legs
     )
 
     return {
         "period": name,
         "window_start": start,
         "window_end": end,
+        "universe": [leg["pair"] for leg in legs] if all("pair" in leg for leg in legs) else (
+            ["BTC/USDT"] if eth_r is None else ["BTC/USDT", "ETH/USDT"]
+        ),
         "BTC": btc_r,
         "ETH": eth_r,
         "full_50_50_wallet_start": wallet,
@@ -151,7 +159,7 @@ def compute_period(
         "full_50_50_return": full_final / wallet - 1.0,
         "max_exposure_matched_methodology": (
             f"{invested:.2f} of a {wallet:.2f} wallet invested for the whole window "
-            f"({per_pair:.2f} BTC + {per_pair:.2f} ETH), {cash:.2f} held in cash; "
+            f"({per_pair:.2f} each across {len(legs)} leg(s)), {cash:.2f} held in cash; "
             f"invested fraction {invested / wallet:.4f} = max_open_trades({max_open_trades}) "
             f"x stake({stake}) capped at the wallet"
         ),
@@ -173,6 +181,17 @@ def main() -> int:
         "--lock",
         default=None,
         help="Dataset lock defining the protocol windows. Defaults to the Dataset V1 windows.",
+    )
+    parser.add_argument(
+        "--universe",
+        choices=("btc-eth", "btc"),
+        default="btc-eth",
+        help=(
+            "Which passive controls to compute. 'btc-eth' (default) is the two-asset "
+            "line BASELINE-1 was scored against and is unchanged. 'btc' gives a "
+            "BTC-specialist candidate its own buy-and-hold and exposure-matched "
+            "passive, which the frozen sprint requires as a fair control."
+        ),
     )
     parser.add_argument("--wallet", type=float, default=100.0)
     parser.add_argument("--stake", type=float, default=10.0)
@@ -214,7 +233,10 @@ def main() -> int:
     base = Path(args.data_dir)
     out = Path(args.out)
     btc = load("BTC/USDT", base)
-    eth = load("ETH/USDT", base)
+    # A single-pair universe is a deliberate request, not a missing file: the
+    # BTC-specialist lanes need BTC's own controls, and an ETH file that happens
+    # to be absent must still be an error rather than a silent universe change.
+    eth = None if args.universe == "btc" else load("ETH/USDT", base)
     result = compute_period(
         args.period,
         btc,
