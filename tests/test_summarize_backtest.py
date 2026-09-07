@@ -163,3 +163,68 @@ def test_markdown_renders_every_metric(tmp_path):
     assert "total_return_pct" in markdown and "1.5" in markdown
     assert "BTC/USDT=1" in markdown
     assert "| missing | — |" in markdown
+
+
+def test_load_result_reads_a_plain_json_export(tmp_path):
+    path = tmp_path / "backtest-result.json"
+    path.write_text(json.dumps({"strategy": {"S": {"total_trades": 3}}}), encoding="utf-8")
+    assert sb.load_result(path)["strategy"]["S"]["total_trades"] == 3
+
+
+def test_load_result_reads_freqtrades_zip_export(tmp_path):
+    """Freqtrade 2026.7 writes the result inside a zip, beside a small meta json.
+
+    A `*.json` glob therefore finds only the meta file, which carries no trades -
+    the exact failure that stalled this protocol. The loader must reach inside.
+    """
+    import zipfile
+
+    path = tmp_path / "backtest-result-2026-09-07_02-24-33.zip"
+    meta = json.dumps({"S": {"backtest_start_time": 1}})
+    result = json.dumps({"strategy": {"S": {"total_trades": 211, "trades": []}}})
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("backtest-result-2026-09-07_02-24-33.meta.json", meta)
+        archive.writestr("backtest-result-2026-09-07_02-24-33.json", result)
+
+    loaded = sb.load_result(path)
+    assert loaded["strategy"]["S"]["total_trades"] == 211
+
+
+def test_load_result_rejects_a_zip_with_no_result_member(tmp_path):
+    import zipfile
+
+    path = tmp_path / "empty.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("backtest-result.meta.json", "{}")
+    with pytest.raises(SystemExit):
+        sb.load_result(path)
+
+
+def test_per_pair_attribution_prefers_the_engine_table():
+    block = {"results_per_pair": [
+        {"key": "BTC/USDT", "profit_total_pct": 9.10},
+        {"key": "ETH/USDT", "profit_total_pct": 18.70},
+        {"key": "TOTAL", "profit_total_pct": 27.80},
+    ]}
+    values, note = sb.per_pair_returns(block, [], wallet=100.0)
+    assert values == {"BTC/USDT": 9.10, "ETH/USDT": 18.70}  # TOTAL is not a pair
+    assert "engine" in note
+
+
+def test_per_pair_attribution_falls_back_to_the_trade_list():
+    """Attribution is a protocol requirement, so losing the engine table must
+    degrade to a derived figure rather than to nothing - clearly labelled."""
+    trades = [
+        {"pair": "BTC/USDT", "profit_abs": 6.0},
+        {"pair": "BTC/USDT", "profit_abs": 3.0},
+        {"pair": "ETH/USDT", "profit_abs": 18.7},
+    ]
+    values, note = sb.per_pair_returns({}, trades, wallet=100.0)
+    assert values == {"BTC/USDT": 9.0, "ETH/USDT": 18.7}
+    assert note.startswith("derived here")
+
+
+def test_per_pair_attribution_reports_when_it_has_nothing():
+    values, note = sb.per_pair_returns({}, [], wallet=100.0)
+    assert values == {}
+    assert note.startswith("unavailable")

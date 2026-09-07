@@ -388,12 +388,15 @@ jobs:
 
       - name: Normalise backtest metrics
         timeout-minutes: 10
-        # Three silent failures here all came from the same class of bug: a
-        # heredoc whose terminator was not at column 0 once nested, which makes
-        # bash exit 2 before producing any output at all. There is no heredoc in
-        # this step any more, and everything it prints is captured to a file the
-        # collect step echoes at the very end of the job, because artifact
-        # storage is unreachable from the analysis environment.
+        # Two distinct bugs made this step fail silently before. First, a heredoc
+        # whose terminator was not at column 0 once nested, which makes bash exit
+        # 2 before producing any output at all; there is no heredoc here any more.
+        # Second, Freqtrade 2026.7 writes the result as `backtest-result-<ts>.zip`
+        # with only a small `.meta.json` beside it, so a *.json glob found nothing
+        # substantive. Both file shapes are accepted now. Everything this step
+        # prints is captured to a file the collect step echoes at the end of the
+        # job, because artifact storage is unreachable from the analysis
+        # environment.
         if: startsWith(inputs.stage, 'baseline-')
         run: |
           set -uo pipefail
@@ -403,14 +406,14 @@ jobs:
             ls -la freqtrade/user_data/backtest_results/ || true
 
             shopt -s nullglob
-            for f in freqtrade/user_data/backtest_results/*.json; do
+            for f in freqtrade/user_data/backtest_results/*.json freqtrade/user_data/backtest_results/*.zip; do
               echo "=== schema of $f ==="
               python3 research/summarize_backtest.py --result "$f" --dump-schema || true
             done
 
-            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in d.glob("*.json") if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
+            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in list(d.glob("*.zip")) + list(d.glob("*.json")) if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
             if [ -z "$RESULT" ]; then
-              echo "::error::no backtest result JSON was produced"
+              echo "::error::no backtest result (zip or json) was produced"
               exit 1
             fi
             echo "using result file: $RESULT"

@@ -11,7 +11,7 @@ does not report the exposure figures this protocol needs. This script therefore:
   spends much of its life in cash.
 
 Usage:
-    python3 research/summarize_backtest.py --result backtest_results/x.json \\
+    python3 research/summarize_backtest.py --result backtest_results/x.zip \\
         --window-start 2021-01-01T00:00:00Z --window-end 2024-12-31T23:59:59Z \\
         --wallet 100 --fee 0.001 --passive passive_development.json \\
         --out metrics.json --md summary.md
@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -65,6 +66,29 @@ def as_float(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return None if math.isnan(float(value)) or math.isinf(float(value)) else float(value)
     return None
+
+
+def load_result(path: Path) -> dict:
+    """Read a Freqtrade backtest result from either a plain JSON or a zip export.
+
+    Freqtrade 2026.7 writes `backtest-result-<ts>.zip` next to a small
+    `.meta.json`; the substantive result is a JSON member inside the archive.
+    Older releases wrote the JSON directly. Accept both so the protocol does not
+    depend on the engine's packaging choice.
+    """
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            members = [
+                name
+                for name in archive.namelist()
+                if name.endswith(".json") and not name.endswith(".meta.json")
+            ]
+            if not members:
+                raise SystemExit(f"{path}: zip export contains no result JSON member")
+            # A multi-strategy export can hold several; the largest is the result.
+            member = max(members, key=lambda name: archive.getinfo(name).file_size)
+            return json.loads(archive.read(member).decode("utf-8"))
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_strategy_block(result: dict) -> tuple[str, dict]:
@@ -204,7 +228,13 @@ def trade_derived_stats(trades: list[dict], fee: float) -> dict:
     }
 
 
-def per_pair_returns(block: dict) -> dict:
+def per_pair_returns(block: dict, trades: list[dict], wallet: float) -> tuple[dict, str]:
+    """Per-pair attribution, preferring the engine's own table.
+
+    Returns the attribution and a note saying where it came from, because a
+    figure the engine reported and one derived here are not equally strong
+    evidence and the record should not blur them.
+    """
     out: dict[str, float] = {}
     rows = pick(block, "results_per_pair", "pair_results", default=[]) or []
     for row in rows:
@@ -216,11 +246,31 @@ def per_pair_returns(block: dict) -> dict:
         value = as_float(pick(row, "profit_total_pct", "profit_sum_pct", "profit_mean_pct"))
         if value is not None:
             out[str(key)] = value
-    return out
+    if out:
+        return out, "reported by the engine (results_per_pair.profit_total_pct)"
+
+    # Fall back to the trade list so the protocol still gets attribution if a
+    # future release drops or renames that table.
+    if not trades or not wallet:
+        return {}, "unavailable: the engine reported no per-pair table and no usable trades"
+    totals: dict[str, float] = {}
+    for row in trades:
+        pair = row.get("pair")
+        profit = as_float(row.get("profit_abs"))
+        if pair is None or profit is None:
+            continue
+        totals[str(pair)] = totals.get(str(pair), 0.0) + profit
+    if not totals:
+        return {}, "unavailable: no trade carried both a pair and an absolute profit"
+    return (
+        {pair: round(100.0 * value / wallet, 6) for pair, value in sorted(totals.items())},
+        "derived here: sum of per-trade profit_abs by pair, as a percentage of the "
+        "starting wallet; the engine reported no per-pair table",
+    )
 
 
 def build(args) -> dict:
-    result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+    result = load_result(Path(args.result))
     name, block = load_strategy_block(result)
     trades = find_trades(block, result, Path(args.trades) if args.trades else None)
 
@@ -239,6 +289,7 @@ def build(args) -> dict:
 
     exposure = exposure_profile(trades, window_start, window_end, float(args.wallet))
     derived = trade_derived_stats(trades, float(args.fee))
+    per_pair, per_pair_note = per_pair_returns(block, trades, float(args.wallet))
 
     engine_trade_count = as_float(pick(block, "total_trades", "trade_count"))
     if not derived["trade_count"] and engine_trade_count is not None:
@@ -296,7 +347,8 @@ def build(args) -> dict:
             if as_float(pick(block, "market_change")) is not None
             else None
         ),
-        "per_pair_return_pct": per_pair_returns(block),
+        "per_pair_return_pct": per_pair,
+        "per_pair_return_note": per_pair_note,
         "backtest_days": as_float(pick(block, "backtest_days")),
         **exposure,
         "return_per_exposure_unit": return_per_exposure,
@@ -357,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.dump_schema:
-        result = json.loads(Path(args.result).read_text(encoding="utf-8"))
+        result = load_result(Path(args.result))
         name, block = load_strategy_block(result)
         print("top-level keys:", sorted(result)[:60])
         print("strategy name:", name)
