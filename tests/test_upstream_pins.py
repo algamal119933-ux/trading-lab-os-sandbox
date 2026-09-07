@@ -117,24 +117,17 @@ def test_unlicensed_sources_are_marked_and_expect_no_license_file(pins):
             assert license_entries[0].get("expect_missing") is True, key
 
 
-def test_registry_strategy_hashes_match_the_pin_manifest(registry, pins):
-    by_path = {
-        (key, entry["path"]): entry.get("sha256")
-        for key, _, entry in all_files(pins)
-    }
-    checks = [
-        ("H1_NATIVE_REPRODUCTION", "btc_strategy_lab", "user_data/strategies/EmaCross.py"),
-        ("H1_DATASET_V2_DEVELOPMENT", "btc_strategy_lab", "user_data/strategies/EmaCross.py"),
-        ("BTCLAB_EMACROSSFUNDING_H2", "btc_strategy_lab", "user_data/strategies/EmaCrossFunding.py"),
-        ("GENETICENGINEV1_CLAIM_CHALLENGE", "genetic_engine_v1", "GeneticEngineV1.py"),
-        ("E0V1E_NATIVE_HISTORICAL_RECONSTRUCTION", "e0v1e_historical", "strategies/e0v1e/E0V1E.py"),
-    ]
-    candidates = {
-        c["candidate_id"]: c
-        for c in registry["candidates"] + registry["claim_and_method_reference_track"]["candidates"]
-    }
-    for candidate_id, source_key, path in checks:
-        assert candidates[candidate_id]["strategy_sha256"] == by_path[(source_key, path)], candidate_id
+def test_frozen_configuration_hashes_match_the_pin_manifest(registry, pins):
+    by_path = {(key, entry["path"]): entry.get("sha256") for key, _, entry in all_files(pins)}
+    configs = {c["configuration_id"]: c for c in registry["hypothesis_families"][0]["frozen_configurations"]}
+    assert configs["H1_EMACROSS"]["strategy_sha256"] == by_path[
+        ("btc_strategy_lab", "user_data/strategies/EmaCross.py")]
+    assert configs["H2_EMACROSSFUNDING"]["strategy_sha256"] == by_path[
+        ("btc_strategy_lab", "user_data/strategies/EmaCrossFunding.py")]
+
+    demoted = {c["candidate_id"]: c for c in registry["claim_and_method_reference_track"]["candidates"]}
+    assert demoted["GENETICENGINEV1_CLAIM_CHALLENGE"]["strategy_sha256"] == by_path[
+        ("genetic_engine_v1", "GeneticEngineV1.py")]
 
 
 def test_claims_snapshot_readme_hashes_match_the_pin_manifest(claims, pins):
@@ -273,32 +266,30 @@ def test_funding_ablation_cannot_run_on_a_substitute_series(ablations):
 # --- pre-Wave-1 review corrections -----------------------------------------------
 
 
-def test_reproduction_identity_pins_all_five_components(registry):
-    """A source-code SHA alone is not an identity: the same source under different
-    params, config, engine or data is a different experiment."""
+def test_reproduction_identity_pins_every_component(registry):
+    """Sprint v1.3 section 5 plus the addendum: nine components, not a source SHA."""
     required = {
         "strategy_source", "parameter_files", "config", "engine_version", "data_contract",
         "fee_model", "pair_universe", "timeframe", "position_semantics",
+        "data_cutoff", "execution_invocation", "environment_overrides",
     }
-    for candidate in registry["candidates"]:
-        identity = candidate["reproduction_identity"]
-        assert required <= set(identity), f"{candidate['candidate_id']} missing {required - set(identity)}"
+    configs = registry["hypothesis_families"][0]["frozen_configurations"]
+    assert configs, "fixture sanity: the family must carry frozen configurations"
+    for config in configs:
+        missing = required - set(config["reproduction_identity"])
+        assert not missing, f"{config['configuration_id']} missing {missing}"
 
 
-def test_executable_track_carries_only_licensed_candidates(registry, pins):
-    """V3B_EXECUTION_RIGHTS: a source with no recognised license leaves this track."""
-    unlicensed = {
-        key for key, source in pins["sources"].items() if source["license"]["spdx"] is None
-    }
+def test_executable_family_is_licensed(registry, pins):
+    """V3B_EXECUTION_RIGHTS: a source with no recognised license leaves this lane."""
+    unlicensed = {k for k, s in pins["sources"].items() if s["license"]["spdx"] is None}
     assert unlicensed, "fixture sanity: some pinned sources are expected to be unlicensed"
+    unlicensed_projects = {pins["sources"][k]["project"].split(" (")[0] for k in unlicensed}
 
-    executable_projects = {c["project"] for c in registry["candidates"]}
-    unlicensed_projects = {
-        pins["sources"][key]["project"].split(" (")[0] for key in unlicensed
-    }
-    assert not (executable_projects & unlicensed_projects), (
-        f"unlicensed project on the executable track: {executable_projects & unlicensed_projects}"
-    )
+    executable_projects = {f["project"] for f in registry["hypothesis_families"]}
+    executable_projects.add(registry["negative_control"]["project"])
+    assert not (executable_projects & unlicensed_projects)
+    assert registry["hypothesis_families"][0]["license"] == "GPL-3.0"
 
 
 def test_no_license_candidates_are_demoted_not_deleted(registry):
@@ -312,39 +303,6 @@ def test_no_license_candidates_are_demoted_not_deleted(registry):
         assert candidate["track"] == "CLAIM_AND_METHOD_REFERENCE"
         assert "rights" in candidate["demotion_reason"].lower()
         assert "priority_order" not in candidate
-
-
-def test_executable_priority_is_the_v1_3_order(registry):
-    order = [c["candidate_id"] for c in sorted(registry["candidates"], key=lambda c: c["priority_order"])]
-    assert order == [
-        "H1_NATIVE_REPRODUCTION",
-        "H1_DATASET_V2_DEVELOPMENT",
-        "H1_ETH_GENERALIZATION_CHALLENGE",
-        "BTCLAB_EMACROSSFUNDING_H2",
-        "POSTMORTEM_NEGATIVE_CONTROL",
-        "NFI_NATIVE_SPOT_QUALIFICATION",
-    ]
-
-
-def test_native_reproduction_never_runs_against_dataset_v2(registry):
-    """A native historical reproduction must not silently become a Dataset V2 experiment."""
-    native = next(c for c in registry["candidates"] if c["candidate_id"] == "H1_NATIVE_REPRODUCTION")
-    assert "BTSL_NATIVE_DATASET_v1" in native["data_contract_override"]
-    assert "Dataset V2" not in native["reproduction_identity"]["data_contract"].split("Separate from")[0]
-
-
-def test_h1_is_not_blocked_on_funding_availability(registry):
-    """Sprint v1.3 section 9: Track A and Track B run in parallel."""
-    h2 = next(c for c in registry["candidates"] if c["candidate_id"] == "BTCLAB_EMACROSSFUNDING_H2")
-    assert "NOT blocked on funding" in h2["blocking_rule"]
-    opening = registry["execution_order"]["parallel_opening"]
-    assert "never blocks" in opening["track_B"]
-
-
-def test_eth_failure_does_not_kill_a_btc_specialist(registry):
-    eth = next(c for c in registry["candidates"] if c["candidate_id"] == "H1_ETH_GENERALIZATION_CHALLENGE")
-    assert "does NOT automatically kill" in eth["rule"]
-    assert set(eth["classification_outcomes"]) == {"BTC_SPECIALIST", "UNIVERSAL", "PAIR_SPECIFIC"}
 
 
 def test_same_hour_funding_is_not_presumed_to_be_lookahead(gates):
@@ -375,3 +333,98 @@ def test_overlay_gate_is_candle_count_not_calendar_date():
     proofs = " ".join(lock["canonical_identity_gate"]["per_run_proofs"])
     assert "byte-identical" in proofs and "strictly pre-score" in proofs
     assert lock["overlap_policy"]["policy"] == "DISJOINT_BY_CONSTRUCTION"
+
+
+# --- final pre-execution addendum -------------------------------------------------
+
+
+def test_evaluation_lanes_are_not_counted_as_candidates(registry):
+    """Re-evaluating one frozen configuration five ways is not five candidates."""
+    family = registry["hypothesis_families"][0]
+    configs = family["frozen_configurations"]
+    assert [c["configuration_id"] for c in configs] == ["H1_EMACROSS", "H2_EMACROSSFUNDING"]
+    assert all(c["counts_as_tested_configuration"] for c in configs)
+    # the lanes exist, but live under a configuration rather than beside it
+    assert len(configs[0]["evaluation_lanes"]) >= 4
+    assert registry["candidates"] == []
+
+
+def test_local_trial_count_counts_configurations_not_lanes(registry):
+    accounting = registry["multiple_testing_accounting"]
+    assert accounting["LOCAL_TRIAL_COUNT"]["value"] == 2
+    assert "not an additional trial" in accounting["LOCAL_TRIAL_COUNT"]["excluded"]
+
+
+def test_dsr_pbo_may_not_be_certified_from_local_trial_count(registry):
+    """The configurations arrive pre-selected from a 42-way benchmark and a 21-point sweep."""
+    total = registry["multiple_testing_accounting"]["TOTAL_SELECTION_PROVENANCE"]
+    assert total["status"] == "PARTIALLY_DOCUMENTED"
+    assert "Do NOT claim DSR or PBO certification from LOCAL_TRIAL_COUNT alone" in total["hard_rule"]
+    debt = registry["multiple_testing_accounting"]["UPSTREAM_SELECTION_DEBT"]["basis"]
+    assert any("42-strategy benchmark" in b for b in debt)
+
+
+def test_negative_control_is_not_survivor_eligible(registry):
+    assert registry["negative_control"]["survivor_eligible"] is False
+
+
+def test_claim_snapshot_is_separated_from_current_replay(registry):
+    """The upstream command is open-ended, so a run today is not the historical claim."""
+    lanes = {
+        lane["lane_id"]: lane
+        for lane in registry["hypothesis_families"][0]["frozen_configurations"][0]["evaluation_lanes"]
+    }
+    assert "CLAIM_SNAPSHOT_RECONSTRUCTION" in lanes and "CURRENT_NATIVE_REPLAY" in lanes
+    snapshot = lanes["CLAIM_SNAPSHOT_RECONSTRUCTION"]
+    assert snapshot["data_cutoff"].startswith("UNKNOWN")
+    assert "BELOW_EXACT" in snapshot["reproduction_grade_ceiling"]
+    assert "NOT an exact reproduction" in snapshot["rule"]
+
+
+def test_funding_parameter_selection_is_only_partially_documented(registry):
+    """55 is the published value but is absent from the public sweep grid."""
+    h2 = registry["hypothesis_families"][0]["frozen_configurations"][1]
+    provenance = h2["parameter_provenance"]
+    assert provenance["EXECUTION_PARAMETER_PROVENANCE"] == "VERIFIED"
+    assert provenance["PARAMETER_SELECTION_PROVENANCE"] == "PARTIALLY_DOCUMENTED"
+    assert "[40, 50, 60, 70, 80, 90, 100]" in provenance["selection_evidence"]
+    assert "55 is NOT in that grid" in provenance["selection_evidence"]
+    assert "Do not invent missing sweep evidence" in provenance["rule"]
+
+
+def test_identity_records_cutoff_invocation_and_overrides(registry):
+    """The upstream headline passes --fee 0.001 by CLI, so command identity is load-bearing."""
+    for config in registry["hypothesis_families"][0]["frozen_configurations"]:
+        identity = config["reproduction_identity"]
+        assert {"data_cutoff", "execution_invocation", "environment_overrides"} <= set(identity)
+        assert "--fee 0.001" in identity["execution_invocation"]
+        assert "--timerange 20191001-" in identity["execution_invocation"]
+
+
+def test_h1_is_not_blocked_on_funding_availability(registry):
+    """Sprint v1.3 section 9: Track A and Track B run in parallel."""
+    opening = registry["execution_order"]["parallel_opening"]
+    assert "never blocks" in opening["track_B"]
+    assert "immediately" in opening["track_A"]
+
+
+def test_eth_generalization_is_a_lane_and_failure_classifies_rather_than_kills(registry):
+    lanes = {
+        lane["lane_id"]: lane
+        for lane in registry["hypothesis_families"][0]["frozen_configurations"][0]["evaluation_lanes"]
+    }
+    eth = lanes["ETH_GENERALIZATION_CHALLENGE"]
+    assert "does NOT automatically kill" in eth["rule"]
+    assert set(eth["outcomes"]) == {"BTC_SPECIALIST", "UNIVERSAL", "PAIR_SPECIFIC"}
+
+
+def test_mature_feature_truncates_both_sides_of_the_ablation():
+    """Comparing a truncated H2 against a full-period H1 would read as a component effect."""
+    reg = json.loads(
+        (EXTERNAL / "ablation_registry.json").read_text(encoding="utf-8")
+    )
+    mature = next(
+        s for s in reg["ablations"][0]["sensitivities"] if s["id"] == "MATURE_FEATURE"
+    )
+    assert mature["comparison"] == "H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL"
+    assert mature["forbidden"] == "truncated H2 vs full-period H1"

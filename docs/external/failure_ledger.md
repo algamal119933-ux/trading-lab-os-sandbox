@@ -63,6 +63,46 @@ engine loads, and §5 extends that to fee model, universe, timeframe and positio
 
 **This is the near-miss that justifies the whole identity gate.**
 
+### F5 — The published funding threshold is not in the public sweep grid
+**Status:** open (recorded, not resolved) · **Configuration:** `H2_EMACROSSFUNDING`
+
+`research/sweep_funding.py` at the pinned commit sweeps
+`funding_max_pct = [40, 50, 60, 70, 80, 90, 100]` and `ema_period = [500, 600, 700]`.
+The published, executed value is **55**, which is not in that grid.
+
+Upstream states the rationale — *"The filter is set to 55, not the best-performing 60.
+Picking the exact peak of a sweep is how you fool yourself; 50, 55 and 60 all work, so take
+the middle."* — so 55 is a documented midpoint between two swept values. But the sweep
+evidence for 55 itself is not public.
+
+```
+EXECUTION_PARAMETER_PROVENANCE = VERIFIED               (the params file pins 55)
+PARAMETER_SELECTION_PROVENANCE = PARTIALLY_DOCUMENTED   (55 was never swept publicly)
+```
+
+We execute the published 55 and record the gap. **We do not invent the missing sweep.**
+
+### F6 — The upstream headline command has no end date
+**Status:** open · **Configuration:** `H1_EMACROSS`, `H2_EMACROSSFUNDING`
+
+The README's own invocation is:
+
+```
+freqtrade backtesting -c config.json -s EmaCrossFunding \
+  --timeframe 1h --timerange 20191001- --fee 0.001
+```
+
+`--timerange 20191001-` is open-ended, so the +1,604% / +1,353% claims end on whatever date
+upstream happened to run them — a date not published anywhere in the repository.
+
+A present-day open-ended run therefore covers a **different, longer** period than the claim
+did. Calling it an exact reproduction would be false. Split into
+`CLAIM_SNAPSHOT_RECONSTRUCTION` (grade ceiling below EXACT until the cutoff can be proven)
+and `CURRENT_NATIVE_REPLAY`.
+
+Also note `--fee 0.001` is passed **by CLI**, not by config, which is why the execution
+invocation is now part of the frozen identity.
+
 ---
 
 ## Errata — this lab's own corrected errors
@@ -102,6 +142,30 @@ disagreement remains fatal; "could not check" and "checked and they disagree" ar
 distinct verdicts, which is the part I had collapsed.
 
 **The ask for a manual API sample is withdrawn** (§28).
+
+### E5 — Evaluation lanes counted as if they were candidates
+**Corrected in:** this revision
+
+I listed native reproduction, Dataset V2 BTC, ETH generalization, `STRICT_1H_DELAY` and
+`MATURE_FEATURE` alongside H1 and H2 as peer entries in the candidate list. They are
+evaluation lanes and robustness analyses over **two** frozen configurations, not six
+candidates.
+
+Left uncorrected this would have inflated the candidate list and, worse, corrupted
+multiple-testing accounting in the flattering direction — six "trials" where there are two,
+while the real selection pressure sits upstream in a 42-strategy benchmark and a 21-point
+sweep that our trial count cannot see. `LOCAL_TRIAL_COUNT`, `UPSTREAM_SELECTION_DEBT` and
+`TOTAL_SELECTION_PROVENANCE` are now recorded separately, and no DSR or PBO figure may be
+certified from the local count alone.
+
+### E6 — Mature-feature comparison would have been unfair
+**Corrected in:** this revision
+
+The `MATURE_FEATURE` diagnostic truncates H2 to the interval where the funding percentile is
+fully populated. I had not said to truncate H1 to the same interval, so the comparison would
+have been a truncated H2 against a full-period H1 — and the interval difference would have
+been read as an effect of the funding component. Both sides are now truncated to
+`H1_MATURE_INTERVAL` vs `H2_MATURE_INTERVAL`.
 
 ---
 

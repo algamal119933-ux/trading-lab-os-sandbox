@@ -31,6 +31,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
+import stat
 import sys
 import urllib.error
 import urllib.request
@@ -136,17 +139,73 @@ def process(pins: dict, cache_dir: Path, refresh: bool) -> tuple[list[str], list
 
         destination = cache_dir / key / path
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            destination.chmod(stat.S_IRUSR | stat.S_IWUSR)  # allow refresh of an existing pin
         destination.write_bytes(data)
+        # The cache is evidence, not a working copy. Anything that wants to run these
+        # files must materialise its own disposable workspace first.
+        destination.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
         print(f"  OK   {label}  sha256={got_sha256[:16]}...  {len(data)} bytes")
 
     return failures, changes
+
+
+# Credential-shaped environment variables. An isolated upstream execution must not
+# inherit any of them: the workspace runs third-party code, and it needs no identity.
+CREDENTIAL_ENV_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "APIKEY", "API_KEY",
+                          "PRIVATE_KEY", "CREDENTIAL", "SESSION", "COOKIE")
+
+
+def credential_env_present(environ=None) -> list[str]:
+    """Names of credential-shaped variables visible to this process."""
+    environ = os.environ if environ is None else environ
+    return sorted(
+        name for name in environ
+        if any(marker in name.upper() for marker in CREDENTIAL_ENV_MARKERS)
+    )
+
+
+def materialize(pins: dict, cache_dir: Path, workspace: Path) -> list[Path]:
+    """Copy verified pinned files into a disposable execution workspace.
+
+    Upstream scripts are mutable and are not ours. Running them where the evidence
+    lives would let a candidate rewrite the very bytes it is being judged against, so
+    the cache stays read-only and every execution gets a throwaway copy.
+
+    The workspace must not already exist and be populated: reusing one silently carries
+    state between candidates, which is the contamination this separation exists to stop.
+    """
+    cache_dir, workspace = cache_dir.resolve(), workspace.resolve()
+    if workspace == cache_dir or cache_dir in workspace.parents:
+        raise SystemExit(
+            f"refusing to materialise inside the pin cache ({cache_dir}): "
+            "the cache is read-only evidence, not a working directory"
+        )
+    if workspace.exists() and any(workspace.iterdir()):
+        raise SystemExit(f"refusing to reuse a non-empty workspace: {workspace}")
+
+    written: list[Path] = []
+    for key, _, entry in iter_files(pins):
+        if entry.get("expect_missing"):
+            continue
+        source = cache_dir / key / entry["path"]
+        if not source.exists():
+            raise SystemExit(f"not in cache: {source}. Run --verify first.")
+        destination = workspace / key / entry["path"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        destination.chmod(stat.S_IRUSR | stat.S_IWUSR)  # writable in the workspace only
+        written.append(destination)
+    return written
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true", help="fail if any pin does not match")
     parser.add_argument("--refresh", action="store_true", help="record hashes that are not yet pinned")
-    parser.add_argument("--cache-dir", default=None, help="directory for fetched bytes")
+    parser.add_argument("--cache-dir", default=None, help="directory for fetched bytes (read-only evidence)")
+    parser.add_argument("--materialize", default=None, metavar="DIR",
+                        help="copy verified pins into a fresh disposable execution workspace")
     args = parser.parse_args()
 
     if not args.verify and not args.refresh:
@@ -170,6 +229,19 @@ def main() -> int:
         return 1
 
     print("\nUPSTREAM_PIN_GATE = PASS")
+
+    if args.materialize:
+        leaked = credential_env_present()
+        if leaked:
+            print(f"\nISOLATION_GATE = FAIL: credential-shaped environment present: {leaked}",
+                  file=sys.stderr)
+            print("  An isolated upstream execution needs no identity. Scrub these before "
+                  "materialising a workspace.", file=sys.stderr)
+            return 1
+        written = materialize(pins, cache_dir, Path(args.materialize))
+        print(f"ISOLATION_GATE = PASS")
+        print(f"  materialised {len(written)} file(s) into {args.materialize}")
+        print("  cache stays read-only; discard this workspace after hashing its artifacts")
     return 0
 
 

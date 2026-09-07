@@ -64,9 +64,19 @@
           "method": "report H2 restricted to bars at which the rolling(24*180) percentile is fully populated, alongside the unrestricted native run",
           "record": "separate diagnostic record",
           "purpose": "the percentile is computed from min_periods=24*30 onward, so early bars use a feature built on a thinner window than the rule intends",
-          "rule": "Diagnostic and robustness evidence. It does NOT replace the native run and may not be substituted for it when reporting the increment."
+          "rule": "Diagnostic and robustness evidence. It does NOT replace the native run and may not be substituted for it when reporting the increment.",
+          "fairness_rule": "CORRECTED: truncate BOTH H1 and H2 to the same post-maturity scored interval, then compare H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL. Comparing a truncated H2 against a full-period H1 would attribute the interval difference to the funding component and read as a component effect.",
+          "comparison": "H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL",
+          "forbidden": "truncated H2 vs full-period H1"
         }
-      ]
+      ],
+      "taxonomy": {
+        "hypothesis_family": "BTSL_EMA_REGIME",
+        "parent_configuration": "H1_EMACROSS",
+        "child_configuration": "H2_EMACROSSFUNDING",
+        "note": "Both are FROZEN_CONFIGURATIONS. The lanes and robustness analyses below are not additional configurations."
+      },
+      "multiple_testing_note": "This ablation adds no trial: it compares two already-counted frozen configurations. See candidate_registry.multiple_testing_accounting for LOCAL_TRIAL_COUNT and the upstream selection debt."
     }
   ],
   "candidate_components_not_yet_ablatable": {
@@ -108,5 +118,5 @@
     "rejected": "component is recorded in the failure ledger with the measurement that rejected it",
     "no_component_survives": "NEW_CANDIDATE=NO is a valid and complete result"
   },
-  "revision": "v2 - REVIEW CORRECTION BEFORE WAVE 1 (2026-09-07)"
+  "revision": "v3 - FINAL PRE-EXECUTION ADDENDUM to v1.3 (2026-09-07)"
 }

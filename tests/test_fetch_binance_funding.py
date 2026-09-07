@@ -225,3 +225,36 @@ def test_missing_months_are_fatal_even_with_a_clean_integrity_report():
     v = ff.classify(CLEAN, {"status": "PASS"}, ["2021-03"])
     assert v["admissible"] is False
     assert "2021-03" in v["reason"]
+
+
+# --- isolated upstream execution (final pre-execution addendum section 6) ----------
+
+def test_pin_cache_is_read_only_and_workspace_rules_hold(tmp_path):
+    """Upstream scripts are mutable and are not ours. Running them where the evidence
+    lives would let a candidate rewrite the bytes it is judged against."""
+    import pin_upstream as pin
+
+    pins = {"sources": {"demo": {"files": [{"path": "a.py", "sha256": "x" * 64}]}}}
+    cache, workspace = tmp_path / "cache", tmp_path / "ws"
+    (cache / "demo").mkdir(parents=True)
+    (cache / "demo" / "a.py").write_text("print('upstream')\n")
+
+    written = pin.materialize(pins, cache, workspace)
+    assert len(written) == 1 and written[0].read_text() == "print('upstream')\n"
+
+    # a populated workspace is never reused: that would carry state between candidates
+    with pytest.raises(SystemExit, match="refusing to reuse"):
+        pin.materialize(pins, cache, workspace)
+
+    # and the cache is never the working directory
+    with pytest.raises(SystemExit, match="refusing to materialise inside the pin cache"):
+        pin.materialize(pins, cache, cache / "sub")
+
+
+def test_credential_shaped_environment_is_detected():
+    """An isolated upstream execution needs no identity, so it inherits none."""
+    import pin_upstream as pin
+
+    assert pin.credential_env_present({"PATH": "/usr/bin", "HOME": "/root"}) == []
+    found = pin.credential_env_present({"GITHUB_TOKEN": "x", "AWS_SECRET_ACCESS_KEY": "y", "PATH": "/usr/bin"})
+    assert found == ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"]

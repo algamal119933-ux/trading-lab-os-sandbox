@@ -83,6 +83,32 @@ config/config.json   e6f930f1476c8aebc8a3a7f6100e431f711b5fe3   match
 - `GeneticEngineV1` — ceyhanmolla.
 - `kronos-gauntlet` — thotbreakerr.
 
+## Isolated execution — the cache is evidence, not a workspace
+
+Upstream scripts are mutable and are not ours. Running them where the pinned bytes live
+would let a candidate rewrite the very bytes it is being judged against, so:
+
+```
+PIN CACHE = READ ONLY
+```
+
+Cached files land at mode `444`. Execution happens in a **disposable workspace**
+materialised from verified pins:
+
+```bash
+python3 research/external/pin_upstream.py --verify --materialize /path/to/fresh/workspace
+```
+
+Four rules are enforced rather than documented:
+
+1. The workspace may not be inside the cache.
+2. A non-empty workspace is never reused — that would carry state between candidates.
+3. Materialisation refuses to run when credential-shaped environment variables are visible.
+   An isolated upstream execution needs no identity: no secrets, no exchange keys, no
+   repository write token, no persistent credentials. The matcher is deliberately
+   over-inclusive; over-blocking is recoverable with `env -i`, a missed credential is not.
+4. Result artifacts are hashed and preserved; the workspace is then discarded.
+
 ## Verifying this yourself
 
 ```bash

@@ -85,6 +85,20 @@
           "sha256": "2312dc978cc62b8b3acd1f75226bd1f51292704d2758fb01eb4d9ead06d876bf",
           "size_bytes": 2289,
           "git_blob_sha1": "bce4df4ee8b1225134ba41ac10998cab6efa7f83"
+        },
+        {
+          "path": "research/sweep_funding.py",
+          "purpose": "PARAMETER_SELECTION_PROVENANCE evidence: the public grid tests funding_max_pct [40,50,60,70,80,90,100] and does not include the published 55",
+          "sha256": "1227276e1ea11a46c9036e7cc2feece956ca3c5706e4cf1c3c9da95adae49bc3",
+          "size_bytes": 3426,
+          "git_blob_sha1": "77a28d1a5ea76c90cebfc878ebf2d46b16106ab2"
+        },
+        {
+          "path": "research/sweep_emacross.py",
+          "purpose": "parameter selection provenance for the EMA core",
+          "sha256": "0e90f1e7c95d8d9fd7a5c2b91cc4d474b4155ec903a775c8d9a79c124b275ba2",
+          "size_bytes": 3321,
+          "git_blob_sha1": "9f00b57ac9d7252767df0a16b6505c31e3a09549"
         }
       ]
     },
