@@ -215,14 +215,28 @@ jobs:
           set -euo pipefail
           cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
           python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+          # Recursive merge, matching dataset-v2.yml. A shallow update replaces the
+          # whole "exchange" block with the overlay's, which carries no "name" -
+          # and Freqtrade then fails with "This command requires a configured
+          # exchange" rather than anything that names the real cause.
           python3 - <<'PY'
-          import json, pathlib
+          import copy, json, pathlib
+          def merge(base, overlay):
+              out = copy.deepcopy(base)
+              for k, v in overlay.items():
+                  if k.startswith("_"):
+                      continue
+                  out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+              return out
           base = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
           overlay = json.loads(pathlib.Path("freqtrade/user_data/config.binance-data-mirror.json.example").read_text())
-          base.update(overlay)
-          # The frozen lane is BTC only.
-          base.setdefault("exchange", {})["pair_whitelist"] = ["BTC/USDT"]
-          pathlib.Path("freqtrade/user_data/config.research.json").write_text(json.dumps(base, indent=2) + "\n")
+          merged = merge(base, overlay)
+          # The frozen H1/H2 lanes are BTC only; the universe is narrowed here,
+          # never in the data acquisition, so V4 still asserts the whole lock.
+          merged["exchange"]["pair_whitelist"] = ["BTC/USDT"]
+          pathlib.Path("freqtrade/user_data/config.research.json").write_text(json.dumps(merged, indent=2) + "\n")
+          print("exchange.name =", merged["exchange"].get("name"),
+                "| whitelist =", merged["exchange"]["pair_whitelist"])
           PY
           python3 scripts/paper_guard.py --config freqtrade/user_data/config.research.json
           mkdir -p "$DATA_DIR" "$OVERLAY_DIR" artifacts freqtrade/user_data/backtest_results freqtrade/user_data/logs
@@ -384,6 +398,14 @@ jobs:
           ) 2>&1 | tee artifacts/metrics_step.log
           exit "${PIPESTATUS[0]}"
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: extbench-${{ steps.lane.outputs.lane }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Collect raw evidence into the job log
         if: always()
         run: |
@@ -419,10 +441,3 @@ jobs:
           done
           echo "########## END DIGEST ##########"
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: extbench-${{ steps.lane.outputs.lane }}
-          path: artifacts
-          if-no-files-found: warn
-          retention-days: 30
