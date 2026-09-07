@@ -41,15 +41,18 @@
       "start_utc": "2021-01-01T00:00:00Z",
       "end_utc": "2024-12-31T23:59:59Z",
       "freqtrade_timerange": "20210101-20250101",
-      "status": "open",
+      "status": "closed - protocol PASS, performance NEUTRAL, recorded in research/records/baseline1_development_datasetv2.json",
       "purpose": "Four years. The only window BASELINE-1 may be examined on before its logic is frozen."
     },
     "validation": {
       "start_utc": "2025-01-01T00:00:00Z",
       "end_utc": "2026-08-31T23:59:59Z",
       "freqtrade_timerange": "20250101-20260901",
-      "status": "closed until the baseline implementation and Development protocol are frozen",
-      "purpose": "Twenty months. Run once, unchanged, after the freeze. Not a pristine holdout - see locked_oos below."
+      "status": "spent - run once on 2026-09-07, unchanged, and not reusable for tuning",
+      "purpose": "Twenty months. Run once, unchanged, after the freeze. Not a pristine holdout - see locked_oos below.",
+      "opened_utc": "2026-09-07T02:47:35Z",
+      "opened_by_run": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34077370180",
+      "preconditions_met": "BASELINE-1's logic was frozen (strategy sha256 8c0bc6c5..., byte-identical to the Development evaluation) and the Development protocol had closed as PASS before this window was touched."
     }
   },
   "locked_oos": {

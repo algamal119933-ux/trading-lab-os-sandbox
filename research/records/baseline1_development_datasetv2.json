@@ -12,6 +12,8 @@
     "freqtrade/user_data/config.binance-data-mirror.json.example"
   ],
   "dataset_hashes": {
+    "BTC/USDT 1h": "9e564a7d5738821757202263bf98f12062e43021c6a810020f4d9d9907ca9763",
+    "BTC/USDT 5m": "c4f9130d1be079b0a1ada78ef97fb9f61b86b6eba1b5084fcd502b74a34be59e",
     "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
     "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
   },
@@ -92,13 +94,10 @@
   },
   "analyses": {
     "lookahead": "pass",
-    "lookahead_detail": "20 signals; 0 biased entries, 0 biased exits, 0 biased indicators",
     "recursive": "pass",
-    "recursive_detail": "no lookahead bias on indicators; drift at the strategy's 600 startup candles is 0.000% (ema_fast) and -0.003% (ema_slow)",
-    "detail_timeframe_simulation": "pass",
-    "detail_timeframe_detail": "1h entry/exit signals simulated against 5m candles"
+    "detail_timeframe_simulation": "pass"
   },
   "gate": "PASS",
   "reason": "BASELINE_PROTOCOL_RESULT = PASS, BASELINE_PERFORMANCE_CLASSIFICATION = NEUTRAL. All seven pre-registered protocol criteria are met on real, checksum-verified Binance spot data: Dataset V2 structural integrity passes with exact 5m->1h price reconciliation; strategy and config hashes were frozen before the run; the backtest completed over the full four-year window with 5m detail simulation and no configuration error; lookahead analysis found no bias over 20 signals; recursive analysis found no indicator bias, with drift of 0.000% (ema_fast) and -0.003% (ema_slow) at the strategy's 600 startup candles; exposure, per-pair attribution, turnover and fee figures were computed rather than assumed; and no rule changed between the specification freeze and the evaluation. On performance, +27.80% against a realised-exposure-matched passive line of +29.18% gives E = -1.38 percentage points, well inside the NEUTRAL band pre-registered before any result existed. The strategy underperformed a passive position of the same average size, which is a legitimate result for a reference, not a protocol failure.",
-  "notes": "Metrics evidence: run 34076735190 at commit 1a2514c, the first run in which the metrics normaliser completed. Its failure in four earlier runs was Freqtrade 2026.7 exporting the result as backtest-result-<ts>.zip while the step globbed for *.json. The strategy and config are byte-identical to the earlier evaluation runs (strategy sha256 8c0bc6c5..., config example sha256 d1d078c6...), so the correctness analyses and backtest figures recorded here are the same evidence, now with the exposure and attribution numbers the protocol requires. Dataset V2's lock now carries all four raw and all four canonical fingerprints and is marked frozen."
+  "notes": "Metrics evidence: run 34076735190 at commit 1a2514c, the first run in which the metrics normaliser completed. Its failure in four earlier runs was Freqtrade 2026.7 exporting the result as backtest-result-<ts>.zip while the step globbed for *.json. The strategy and config are byte-identical to the earlier evaluation runs (strategy sha256 8c0bc6c5..., config example sha256 d1d078c6...), so the correctness analyses and backtest figures recorded here are the same evidence, now with the exposure and attribution numbers the protocol requires. Dataset V2's lock now carries all four raw and all four canonical fingerprints and is marked frozen. CANONICAL_CANDLE_V1 content digests, all four, matching research/datasets/dataset_v2.lock.json. The raw Feather file hashes are in the lock; a raw mismatch with a matching canonical digest is a serialization difference, not drift. Analyses: lookahead pass - 20 signals; 0 biased entries, 0 biased exits, 0 biased indicators; recursive pass - no lookahead bias on indicators; drift at the strategy's 600 startup candles is 0.000% (ema_fast) and -0.003% (ema_slow); detail-timeframe pass - 1h entry/exit signals simulated against 5m candles."
 }
