@@ -1,26 +1,35 @@
 {
   "dataset_id": "dataset_v2",
-  "status": "pending_acquisition",
+  "status": "frozen",
   "spec_frozen_utc": "2026-09-06T22:00:00Z",
   "spec_frozen_before_any_active_baseline_outcome": true,
   "supersedes": null,
   "relationship_to_dataset_v1": "Dataset V1 is preserved unchanged as immutable historical evidence. V2 does not replace or rewrite it.",
-
   "exchange": "binance",
   "market_type": "spot",
-  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
   "primary_timeframe": "1h",
   "detail_timeframe": "5m",
-  "timeframes": ["5m", "1h"],
+  "timeframes": [
+    "5m",
+    "1h"
+  ],
   "data_format": "feather",
-
   "acquisition": {
     "start_utc": "2020-12-01T00:00:00Z",
     "end_utc": "2026-08-31T23:59:59Z",
     "freqtrade_timerange": "20201201-20260901",
-    "note": "Freqtrade timeranges are start-inclusive and end-exclusive, so 20260901 is the exclusive bound for a window ending 2026-08-31."
+    "note": "Freqtrade timeranges are start-inclusive and end-exclusive, so 20260901 is the exclusive bound for a window ending 2026-08-31.",
+    "evidence": {
+      "workflow_run": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34064374896",
+      "archives_downloaded": 396,
+      "archives_checksum_verified": 396,
+      "note": "every archive was verified against Binance's published .CHECKSUM before use"
+    }
   },
-
   "protocol_windows": {
     "warmup": {
       "start_utc": "2020-12-01T00:00:00Z",
@@ -32,37 +41,36 @@
       "start_utc": "2021-01-01T00:00:00Z",
       "end_utc": "2024-12-31T23:59:59Z",
       "freqtrade_timerange": "20210101-20250101",
-      "status": "open",
+      "status": "closed - protocol PASS, performance NEUTRAL, recorded in research/records/baseline1_development_datasetv2.json",
       "purpose": "Four years. The only window BASELINE-1 may be examined on before its logic is frozen."
     },
     "validation": {
       "start_utc": "2025-01-01T00:00:00Z",
       "end_utc": "2026-08-31T23:59:59Z",
       "freqtrade_timerange": "20250101-20260901",
-      "status": "closed until the baseline implementation and Development protocol are frozen",
-      "purpose": "Twenty months. Run once, unchanged, after the freeze. Not a pristine holdout - see locked_oos below."
+      "status": "spent - run once on 2026-09-07, unchanged, and not reusable for tuning",
+      "purpose": "Twenty months. Run once, unchanged, after the freeze. Not a pristine holdout - see locked_oos below.",
+      "opened_utc": "2026-09-07T02:47:35Z",
+      "opened_by_run": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34077370180",
+      "preconditions_met": "BASELINE-1's logic was frozen (strategy sha256 8c0bc6c5..., byte-identical to the Development evaluation) and the Development protocol had closed as PASS before this window was touched."
     }
   },
-
   "locked_oos": {
     "designated": false,
     "reason": "No period of this dataset qualifies as pristine Locked OOS. Dataset V1 work already inspected 2025-09 through 2026-09 (its development, validation and OOS windows all fall inside 2025-2026), so designating any 2025-2026 span as untouched holdout would be false. The Validation window here is therefore labelled Validation, not OOS.",
     "first_strict_prospective_holdout": "forward paper / prospective OOS, beginning only after the strategy and protocol are frozen, over data that did not exist at freeze time"
   },
-
   "fee_assumption": {
     "per_side_ratio": 0.001,
     "source": "Binance spot taker fee, 0.1% per side, set explicitly in the config rather than inherited from an exchange default",
     "slippage_note": "no slippage model applied; entry and exit use the configured order-book pricing"
   },
-
   "sizing": {
     "dry_run_wallet": 100,
     "stake_amount": 10,
     "stake_currency": "USDT",
     "max_open_trades": 2
   },
-
   "integrity_contract": {
     "canonical_digest_version": "CANONICAL_CANDLE_V1",
     "canonical_digest_definition": "sha256 over the version tag followed by one line per candle, candles sorted by timestamp, each line 'ts|open|high|low|close|volume' with integer milliseconds and Python's shortest round-tripping float repr",
@@ -77,16 +85,112 @@
       "monotonic timestamps",
       "completed-candle boundaries",
       "5m -> 1h reconciliation"
-    ]
+    ],
+    "gate_on_later_runs": "Every run after the freeze asserts with `scripts/audit_data.py --gate lock`, which passes only if the structural checks still pass and all eight fingerprints still match this lock. It deliberately does not re-run the acquisition gate: the continuity gaps and the four volume-only reconciliation hours below were examined and accepted in writing before any baseline outcome was seen, so re-deciding them on every run would fail forever while answering the wrong question. Because the canonical digests pin the candle content exactly, matching digests mean the gaps and reconciliation figures are necessarily unchanged too - a new gap or a fifth mismatched hour would move a digest and fail this gate. The acquisition verdict is still printed on every run alongside the lock verdict."
   },
-
-  "raw_file_hashes": {},
-  "canonical_hashes": {},
-  "coverage": {},
-
+  "raw_file_hashes": {
+    "BTC/USDT 1h": "d8e2ffd5cd78c6bdf24f41e5e71d463f2343b3fb099f6546e2bc6c68b48b67e4",
+    "BTC/USDT 5m": "f818ce29774375545bbf6b044f9d3db2306cd991156aa3c306d89baeb71bc66d",
+    "ETH/USDT 1h": "dc058dc4647d8bd4ed4fe94f741fe71c6fa7274c86f4d773b969ada802f5ac28",
+    "ETH/USDT 5m": "57450540e59a574333760423bdd8540fddc5f9630cc1cb952b6705a5728acfdf"
+  },
+  "canonical_hashes": {
+    "BTC/USDT 1h": "9e564a7d5738821757202263bf98f12062e43021c6a810020f4d9d9907ca9763",
+    "BTC/USDT 5m": "c4f9130d1be079b0a1ada78ef97fb9f61b86b6eba1b5084fcd502b74a34be59e",
+    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
+    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
+  },
+  "coverage": {
+    "1h": {
+      "start": "2020-12-01T00:00:00+00:00",
+      "end": "2026-08-31T23:00:00+00:00",
+      "rows": 50382,
+      "expected_rows": 50400,
+      "missing": 18,
+      "missing_ratio": 0.000357
+    },
+    "5m": {
+      "start": "2020-12-01T00:00:00+00:00",
+      "end": "2026-08-31T23:55:00+00:00",
+      "rows": 604529,
+      "expected_rows": 604800,
+      "missing": 271,
+      "missing_ratio": 0.000448
+    }
+  },
   "acquisition_route": {
     "environment": "The cloud sandbox cannot reach Binance: the egress policy answers 403 to CONNECT for api.binance.com, data-api.binance.vision, api1.binance.com and fapi.binance.com.",
     "route": "GitHub Actions runner via .github/workflows/dataset-v2.yml, using the pinned freqtradeorg/freqtrade image. Evidence returns as workflow artifacts and is committed here.",
     "command": "freqtrade download-data --exchange binance --pairs BTC/USDT ETH/USDT --timeframes 5m 1h --timerange 20201201-20260901 --data-format-ohlcv feather"
+  },
+  "frozen_utc": "2026-09-07T03:10:00Z",
+  "integrity_result": {
+    "structural_integrity": "PASS",
+    "structural_checks": {
+      "coverage_start_exact": true,
+      "coverage_end_exact": true,
+      "duplicate_timestamps": 0,
+      "off_grid_timestamps": 0,
+      "nan_cells": 0,
+      "invalid_ohlc_rows": 0,
+      "prices_positive": true,
+      "volume_nonnegative": true,
+      "monotonic_timestamps": true,
+      "last_candle_complete": true,
+      "btc_eth_range_alignment_1h": "PASS",
+      "btc_eth_range_alignment_5m": "PASS"
+    },
+    "price_reconciliation_5m_to_1h": {
+      "result": "PASS",
+      "buckets_compared": 50374,
+      "open_high_low_close_mismatches": 0,
+      "note": "every complete hour's OHLC aggregates exactly from its twelve 5m candles"
+    },
+    "continuity": {
+      "result": "GAPS PRESENT \u2014 recorded, not tolerated silently",
+      "cause": "Binance halted trading; these candles are absent from Binance's own archive too",
+      "clusters_per_pair": 9,
+      "dates": [
+        "2020-12-21",
+        "2020-12-25",
+        "2021-02-11",
+        "2021-03-06",
+        "2021-04-20",
+        "2021-04-25",
+        "2021-08-13",
+        "2021-09-29",
+        "2023-03-24"
+      ],
+      "largest_gap_1h_candles": 4,
+      "largest_gap_5m_candles": 56,
+      "all_gaps_before": "2023-03-25, i.e. none in the Validation window"
+    },
+    "volume_reconciliation_5m_to_1h": {
+      "result": "DISCREPANCY \u2014 recorded, material only to volume-dependent strategies",
+      "mismatched_hours_per_pair": 4,
+      "of_hours_compared": 50374,
+      "worst_relative_deviation_btc": 0.0414,
+      "worst_relative_deviation_eth": 0.0812,
+      "worst_example": "2021-04-23T02:00:00Z: BTC aggregated 14866.699423 vs stored 15482.244353",
+      "interpretation": "Binance's own 1h bar reports more volume than the twelve 5m bars of the same hour contain, in four hours clustered around the April 2021 outages. This is a discrepancy inside the exchange's published data, not an acquisition error: prices reconcile exactly in the same hours. It does not affect BASELINE-1, which uses no volume filter and fills on price, but any future volume-dependent candidate must treat these hours as suspect."
+    },
+    "gate": "DATA_INTEGRITY_GATE = PASS for price-based research on Dataset V2. Structural integrity and price reconciliation both pass outright; continuity gaps and the volume discrepancy are real properties of the exchange's data, recorded here in full rather than absorbed into a tolerance."
+  },
+  "known_passive_development_benchmark": {
+    "window": "2021-01-01 to 2024-12-31",
+    "fee_per_side": 0.001,
+    "btc_net_buy_and_hold": 2.22084921074677,
+    "eth_net_buy_and_hold": 3.537861209121746,
+    "full_50_50_return": 2.8793552099342583,
+    "max_exposure_matched_return": 0.5758710419868516,
+    "max_exposure_invested_fraction": 0.2,
+    "evidence": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34064741989",
+    "note": "Dataset V2's Development window is strongly BULLISH \u2014 the opposite of Dataset V1's, which was bearish end to end. A long-only strategy that sits in cash will look bad here for the same structural reason it looked good there. Judge against the exposure-matched line, not buy-and-hold, in both directions."
+  },
+  "hash_provenance": {
+    "source": "the deep-audit step's machine-generated lock fragment, printed verbatim to the job log",
+    "workflow_run": "https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34076077058",
+    "code_commit": "78f1f5ea848787d81cf8d283712f6a4e1c70ab0b",
+    "note": "Workflow artifact storage is unreachable from the analysis environment, so the fragment reaches the record through the job log rather than through the dataset_v2_audit.json artifact. It is the same bytes the audit emitted. The ETH fingerprints in this lock had already been asserted green by the CI lock check across earlier runs; the BTC fingerprints in the same fragment are transcribed here, and the next run's lock check verifies all four rather than two."
   }
 }

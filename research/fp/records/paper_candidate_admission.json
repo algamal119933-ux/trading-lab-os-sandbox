@@ -10,8 +10,8 @@
     "is_ancestor_of_main": true,
     "detail": "1dfb696 is an ancestor of origin/main"
   },
-  "evaluated_utc": "2026-09-07T09:53:53Z",
-  "code_commit": "6c00b2b3c554eb9b199e95205c4d4c76ab4af302",
+  "evaluated_utc": "2026-09-07T13:54:24Z",
+  "code_commit": "939e6b51c6177421dcc3301872e61658b846604c",
   "candidate": {
     "role": "FP-CANDIDATE-A",
     "name": null,
@@ -22,10 +22,11 @@
     ],
     "config_hash": null
   },
-  "entry_state": "NOT_AUTHORITATIVE",
+  "entry_state": "C",
+  "entry_state_reason": "No paper-admissible survivor exists, because the benchmark sprint was terminated by Owner amendment before a survivor decision was reached - not because a survivor decision rejected every candidate. SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. Read as 'none available', never as 'none survived'.",
   "benchmark_closure": {
-    "state": "NOT_MERGED",
-    "detail": "no POST-BASELINE-EXTBENCH-1 artifacts on origin/main; the sprint lineage has not been merged (section 3.2)"
+    "state": "OWNER_TERMINATED_INCONCLUSIVE",
+    "detail": "the sprint on origin/main was terminated by Owner amendment before every preregistered arm ran: SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. It is over, so an entry state can be determined, but it is not a closure and declares no survivor"
   },
   "conditions": [
     {
@@ -44,25 +45,25 @@
       "id": 3,
       "requirement": "measurement validity PASS",
       "result": "UNPROVEN",
-      "evidence": "MEASUREMENT_VALIDITY: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
+      "evidence": "MEASUREMENT_VALIDITY: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
     },
     {
       "id": 4,
       "requirement": "qualification/deep validation complete as required",
       "result": "UNPROVEN",
-      "evidence": "qualification / deep validation: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
+      "evidence": "qualification / deep validation: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
     },
     {
       "id": 5,
       "requirement": "no unresolved lookahead",
       "result": "UNPROVEN",
-      "evidence": "lookahead analysis: no committed experiment record carries gate=PASS. research/records/ holds only the schema example."
+      "evidence": "lookahead analysis: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
     },
     {
       "id": 6,
       "requirement": "no unresolved timestamp-knowability defect",
       "result": "UNPROVEN",
-      "evidence": "the strategy sets process_only_new_candles=True and reads only bars t and t-1, but timestamp knowability has not been demonstrated by a run against real candles"
+      "evidence": "timestamp knowability: no candidate is identified, so there is nothing whose validity could be established. Records in research/records/ belong to BASELINE-1, the operational control; a control's evidence never satisfies a candidate's admission condition."
     },
     {
       "id": 7,
@@ -97,8 +98,8 @@
     {
       "id": 12,
       "requirement": "source/config/params/engine identity frozen",
-      "result": "FAIL",
-      "evidence": "data contract is not frozen: dataset_v2.status='pending_acquisition' with 0 fingerprints. Source, config and engine may be pinned, but a data contract cannot be frozen over data this branch has not got. The authoritative frozen lock lives in the BASELINE-1 closure lineage and reaches here by merge, never by reacquisition."
+      "result": "PASS",
+      "evidence": "dataset_v2 frozen with 4 content fingerprints: BTC/USDT 1h, BTC/USDT 5m, ETH/USDT 1h, ETH/USDT 5m"
     },
     {
       "id": 13,
@@ -155,5 +156,5 @@
   },
   "paper_alpha_cohort": "NONE",
   "real_money_authorized": false,
-  "reason": "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: 1, 2, 3, 4, 5, 6, 12, 14. This branch is the parked FP scaffold, not authoritative project state. BASELINE-1 lineage: 1dfb696 is an ancestor of origin/main. Benchmark closure: NOT_MERGED \u2014 no POST-BASELINE-EXTBENCH-1 artifacts on origin/main; the sprint lineage has not been merged (section 3.2). The Dataset V2 lock visible on this branch is the pre-acquisition stub; the frozen lock reaches it by merging main, never by reacquisition."
+  "reason": "PAPER_ADMISSION = BLOCKED. Section 9 conditions not satisfied: 1, 2, 3, 4, 5, 6, 14. This branch is the parked FP scaffold, not authoritative project state. BASELINE-1 lineage: 1dfb696 is an ancestor of origin/main. Benchmark closure: OWNER_TERMINATED_INCONCLUSIVE \u2014 the sprint on origin/main was terminated by Owner amendment before every preregistered arm ran: SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. It is over, so an entry state can be determined, but it is not a closure and declares no survivor. The Dataset V2 lock visible on this branch is the pre-acquisition stub; the frozen lock reaches it by merging main, never by reacquisition."
 }

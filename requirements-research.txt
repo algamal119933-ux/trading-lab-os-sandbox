@@ -1,0 +1,4 @@
+# Research/data dependencies, needed only where market data is read or written.
+# Pinned so an acquisition run is reproducible.
+pandas==2.3.3
+pyarrow==22.0.0

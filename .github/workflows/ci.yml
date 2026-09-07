@@ -111,6 +111,12 @@ jobs:
       - name: Validate committed experiment records
         run: python3 research/record_experiment.py validate research/records/*.json
 
+      - name: External upstream pin gate
+        # Fetches every pinned candidate file from raw.githubusercontent.com at its
+        # frozen commit and fails if any byte moved. This is what stops a candidate
+        # being benchmarked against source other than the one that was reviewed.
+        run: python3 research/external/pin_upstream.py --verify --cache-dir "$RUNNER_TEMP/upstream"
+
       - name: Validate the forward-paper records against their schemas
         run: |
           set -euo pipefail

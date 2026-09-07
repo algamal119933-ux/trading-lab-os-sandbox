@@ -312,18 +312,50 @@ def _replay_available() -> tuple[str, str]:
     return PASS, detail
 
 
+def identified_candidate() -> str | None:
+    """The candidate strategy name under evaluation, or None if there is none.
+
+    Conditions 3-6 are questions about *the candidate*. Answering them from any
+    passing record in the repository would let one strategy's deep validation
+    satisfy another's admission - and after the BASELINE-1 lineage merged, that
+    is exactly what happened: lookahead and timestamp-knowability reported PASS
+    on the control's records while no candidate existed at all.
+    """
+    registry = _load_json(COHORT_REGISTRY)
+    if registry is None:
+        return None
+    for item in registry.get("instances", []):
+        if item.get("role") == "FP-CONTROL-1":
+            continue
+        identity = item.get("runtime_identity") or {}
+        family = identity.get("candidate_family")
+        if family and identity.get("strategy_sha256"):
+            return family
+    return None
+
+
 def _from_gate_records(key: str, description: str) -> tuple[str, str]:
-    records = _gate_records()
+    candidate = identified_candidate()
+    if candidate is None:
+        return UNPROVEN, (
+            f"{description}: no candidate is identified, so there is nothing whose validity could be "
+            "established. Records in research/records/ belong to BASELINE-1, the operational control; "
+            "a control's evidence never satisfies a candidate's admission condition."
+        )
+
+    records = [r for r in _gate_records() if ((r.get("strategy") or {}).get("name") == candidate)]
     if not records:
         return UNPROVEN, (
-            f"{description}: no committed experiment record carries gate=PASS. "
-            "research/records/ holds only the schema example."
+            f"{description}: no committed experiment record with gate=PASS names the candidate "
+            f"{candidate!r}."
         )
     for record in records:
         analyses = record.get("analyses") or {}
-        if key and analyses.get(key) not in (None, "not_run"):
-            return PASS, f"{description}: {key}={analyses.get(key)} in {record.get('run_name')}"
-    return UNPROVEN, f"{description}: no passing record reports {key or 'this analysis'}"
+        if not key:
+            return PASS, f"{description}: gate=PASS recorded for {candidate} in {record.get('run_name')}"
+        if analyses.get(key) not in (None, "not_run"):
+            return PASS, f"{description}: {key}={analyses.get(key)} for {candidate} in {record.get('run_name')}"
+    return UNPROVEN, f"{description}: no passing record for {candidate} reports {key or 'this analysis'}"
 
 
 def _feature_availability() -> tuple[dict, str, str]:
@@ -405,13 +437,7 @@ def _candidate_identity_frozen() -> tuple[str, str]:
 
 def _timestamp_knowability() -> tuple[str, str]:
     """Condition 6 — was every value used at bar t actually knowable at bar t?"""
-    records = _gate_records()
-    if not records:
-        return UNPROVEN, (
-            "the strategy sets process_only_new_candles=True and reads only bars t and t-1, but timestamp "
-            "knowability has not been demonstrated by a run against real candles"
-        )
-    return PASS, "a passing gate record demonstrates timestamp knowability against real candles"
+    return _from_gate_records("", "timestamp knowability")
 
 
 def _baseline_lineage_is_authoritative() -> tuple[bool, str]:
@@ -472,9 +498,33 @@ def benchmark_closure_state() -> tuple[str, str]:
     * ``NOT_MERGED``  - the sprint's artifacts are not on main at all;
     * ``MERGED_NOT_EXECUTED`` - registry present, but the scorecard has no rows,
       which is the pre-registration state the sprint freezes before running;
-    * ``CLOSED`` - the scorecard carries at least one experiment row.
+    * ``OWNER_TERMINATED_INCONCLUSIVE`` - ended by Owner amendment before every
+      preregistered arm ran. It declares no survivor and establishes no
+      no-survivor claim, but it *is* over, so an entry state may be determined;
+    * ``CLOSED`` - the scorecard carries at least one experiment row and no
+      amendment says otherwise.
     """
     for ref in ("origin/main", "main"):
+        # An Owner amendment can end a sprint without closing it. That state is
+        # recorded additively in sprint_closure.json rather than by editing the
+        # frozen preregistration, and it must be read *before* the scorecard:
+        # a terminated sprint has executed rows, so row-counting alone would
+        # report it CLOSED and quietly grant it an authority it does not have.
+        closure = _git_show(ref, "research/external/sprint_closure.json")
+        if closure:
+            try:
+                status = json.loads(closure).get("status")
+            except json.JSONDecodeError:
+                status = None
+            if status == "OWNER_TERMINATED_INCONCLUSIVE":
+                return status, (
+                    f"the sprint on {ref} was terminated by Owner amendment before every preregistered arm "
+                    "ran: SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. It is over, so an "
+                    "entry state can be determined, but it is not a closure and declares no survivor"
+                )
+            if status and status != "CLOSED":
+                return status, f"sprint_closure.json on {ref} records status {status!r}"
+
         scorecard = _git_show(ref, "research/external/qualification_scorecard.csv")
         registry = _git_show(ref, "research/external/candidate_registry.json")
         if scorecard is None and registry is None:
@@ -546,6 +596,28 @@ def evaluate() -> dict:
         for index, (result, evidence) in enumerate(results)
     ]
 
+    # Section 7: the entry state is determined from authoritative merged main.
+    # Both merges must have landed, and the sprint must actually be over -
+    # either closed, or ended by an Owner amendment that says so in Repo Truth.
+    sprint_over = benchmark_state in ("CLOSED", "OWNER_TERMINATED_INCONCLUSIVE")
+    if not (lineage_ok and sprint_over):
+        entry_state = "NOT_AUTHORITATIVE"
+        entry_state_reason = (
+            f"BASELINE-1 lineage consolidated: {lineage_ok}; benchmark closure: {benchmark_state}. "
+            "Section 3 requires both before any entry state is binding."
+        )
+    elif benchmark_state == "OWNER_TERMINATED_INCONCLUSIVE":
+        entry_state = "C"
+        entry_state_reason = (
+            "No paper-admissible survivor exists, because the benchmark sprint was terminated by Owner "
+            "amendment before a survivor decision was reached - not because a survivor decision rejected "
+            "every candidate. SURVIVOR_STATE = NOT_DETERMINED, NO_SURVIVOR = NOT_ESTABLISHED. Read as "
+            "'none available', never as 'none survived'."
+        )
+    else:
+        entry_state = "C"
+        entry_state_reason = "benchmark closure reached and no paper-admissible survivor was recorded"
+
     admitted = all(item["result"] == PASS for item in conditions)
     blocking = [item["id"] for item in conditions if item["result"] != PASS]
 
@@ -588,7 +660,8 @@ def evaluate() -> dict:
         # never inherited from this branch. Section 3 makes *both* merges the
         # precondition — BASELINE-1 closure and benchmark closure — so §3.1 alone
         # is not enough to make any value here binding.
-        "entry_state": "NOT_AUTHORITATIVE" if not (lineage_ok and benchmark_state == "CLOSED") else "C",
+        "entry_state": entry_state,
+        "entry_state_reason": entry_state_reason,
         "benchmark_closure": {"state": benchmark_state, "detail": benchmark_detail},
         "conditions": conditions,
         "paper_admission": "ADMITTED" if admitted else "BLOCKED",

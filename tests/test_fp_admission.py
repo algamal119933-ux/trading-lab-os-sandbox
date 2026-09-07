@@ -53,15 +53,57 @@ def test_admission_is_blocked_in_the_current_repository_state(record):
 def test_entry_state_requires_both_merges(record):
     """Section 3 + 7: the entry state is recomputed from authoritative merged main.
 
-    Both merges are the precondition — BASELINE-1 closure (3.1) and benchmark
-    closure (3.2). Passing 3.1 alone must not make the entry state look binding.
+    Both merges are the precondition — BASELINE-1 closure (3.1) and the benchmark
+    lineage (3.2). The sprint must also actually be over: closed, or ended by an
+    Owner amendment that says so in Repo Truth.
     """
     lineage_ok = record["authoritative_lineage"]["is_ancestor_of_main"]
-    closed = record["benchmark_closure"]["state"] == "CLOSED"
-    if lineage_ok and closed:
+    over = record["benchmark_closure"]["state"] in {"CLOSED", "OWNER_TERMINATED_INCONCLUSIVE"}
+    if lineage_ok and over:
         assert record["entry_state"] in {"A", "B", "C"}
     else:
         assert record["entry_state"] == "NOT_AUTHORITATIVE"
+    assert record["entry_state_reason"].strip()
+
+
+def test_a_terminated_sprint_is_not_a_closed_one(monkeypatch):
+    """An Owner amendment ends a sprint without closing it.
+
+    A terminated sprint has executed rows, so counting rows alone would report it
+    CLOSED and grant it an authority it does not have.
+    """
+    import json as _json
+
+    closure = _json.dumps({"status": "OWNER_TERMINATED_INCONCLUSIVE"})
+    scorecard = "candidate_id,lane\n# comment\nH1_EMACROSS,H1_DEV\n"
+
+    def fake_show(ref, path):
+        if path.endswith("sprint_closure.json"):
+            return closure
+        if path.endswith(".csv"):
+            return scorecard
+        return "{}"
+
+    monkeypatch.setattr(admission, "_git_show", fake_show)
+    state, detail = admission.benchmark_closure_state()
+    assert state == "OWNER_TERMINATED_INCONCLUSIVE"
+    assert "NOT_DETERMINED" in detail
+
+    # Without the amendment the same scorecard reads as closure.
+    monkeypatch.setattr(
+        admission, "_git_show",
+        lambda ref, path: None if path.endswith("sprint_closure.json") else (scorecard if path.endswith(".csv") else "{}"),
+    )
+    assert admission.benchmark_closure_state()[0] == "CLOSED"
+
+
+def test_entry_state_c_says_which_kind_of_c_it_is(record):
+    """'No survivor available' and 'no survivor survived' are different facts."""
+    if record["benchmark_closure"]["state"] == "OWNER_TERMINATED_INCONCLUSIVE":
+        assert record["entry_state"] == "C"
+        reason = record["entry_state_reason"]
+        assert "terminated by Owner amendment" in reason
+        assert "never as 'none survived'" in reason
 
 
 def test_a_merged_but_unexecuted_sprint_is_not_closure(monkeypatch, tmp_path):
@@ -108,7 +150,9 @@ def test_the_lineage_proof_is_computed_not_asserted(record):
 
 
 def test_the_benchmark_closure_state_is_recorded(record):
-    assert record["benchmark_closure"]["state"] in {"NOT_MERGED", "MERGED_NOT_EXECUTED", "CLOSED"}
+    assert record["benchmark_closure"]["state"] in {
+        "NOT_MERGED", "MERGED_NOT_EXECUTED", "OWNER_TERMINATED_INCONCLUSIVE", "CLOSED",
+    }
     assert record["benchmark_closure"]["detail"].strip()
 
 
@@ -125,6 +169,7 @@ def _force_all_pass(monkeypatch):
     monkeypatch.setattr(admission, "_semantic_change_rules", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_outage_predeclared", lambda contract: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_from_gate_records", lambda key, desc: ("PASS", "stub"))
+    monkeypatch.setattr(admission, "_timestamp_knowability", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_candidate_identity_frozen", lambda: ("PASS", "stub"))
     monkeypatch.setattr(admission, "_timestamp_knowability", lambda: ("PASS", "stub"))
     monkeypatch.setattr(
@@ -203,22 +248,55 @@ def test_the_four_derivative_prohibitions_have_distinct_evidence(record):
 def test_example_records_cannot_satisfy_a_condition(monkeypatch, tmp_path):
     """A schema template must never be mistaken for a passing gate result."""
     (tmp_path / "EXAMPLE_experiment_record.json").write_text(
-        json.dumps({"gate": "PASS", "run_name": "template", "analyses": {"lookahead": "pass"}}),
+        json.dumps({"gate": "PASS", "run_name": "template",
+                    "strategy": {"name": "Cand"}, "analyses": {"lookahead": "pass"}}),
         encoding="utf-8",
     )
     monkeypatch.setattr(admission, "RECORDS_DIR", tmp_path)
+    monkeypatch.setattr(admission, "identified_candidate", lambda: "Cand")
     assert admission._gate_records() == []
     assert admission._from_gate_records("lookahead", "lookahead analysis")[0] == "UNPROVEN"
 
     (tmp_path / "real_record.json").write_text(
-        json.dumps({"gate": "PASS", "run_name": "real", "analyses": {"lookahead": "pass"}}),
+        json.dumps({"gate": "PASS", "run_name": "real",
+                    "strategy": {"name": "Cand"}, "analyses": {"lookahead": "pass"}}),
         encoding="utf-8",
     )
     assert admission._from_gate_records("lookahead", "lookahead analysis")[0] == "PASS"
 
 
-def test_no_committed_record_claims_a_passing_gate_yet():
-    assert admission._gate_records() == []
+def test_a_controls_evidence_never_satisfies_a_candidates_condition(monkeypatch, tmp_path):
+    """The bug this scoping fixes, pinned.
+
+    After the BASELINE-1 lineage merged, research/records/ carried passing
+    records for the *control*. Unscoped, they made the candidate's lookahead and
+    timestamp-knowability conditions report PASS while no candidate existed.
+    """
+    (tmp_path / "baseline1_development.json").write_text(
+        json.dumps({"gate": "PASS", "run_name": "baseline-1-development",
+                    "strategy": {"name": "BaselineEmaRegimeV1"},
+                    "analyses": {"lookahead": "pass", "recursive": "pass"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(admission, "RECORDS_DIR", tmp_path)
+
+    monkeypatch.setattr(admission, "identified_candidate", lambda: None)
+    result, evidence = admission._from_gate_records("lookahead", "lookahead analysis")
+    assert result == "UNPROVEN"
+    assert "control" in evidence
+
+    monkeypatch.setattr(admission, "identified_candidate", lambda: "SomeCandidate")
+    result, evidence = admission._from_gate_records("lookahead", "lookahead analysis")
+    assert result == "UNPROVEN"
+    assert "SomeCandidate" in evidence
+
+    monkeypatch.setattr(admission, "identified_candidate", lambda: "BaselineEmaRegimeV1")
+    assert admission._from_gate_records("lookahead", "lookahead analysis")[0] == "PASS"
+
+
+def test_no_candidate_is_identified_yet():
+    """Entry state C: there is no survivor to admit."""
+    assert admission.identified_candidate() is None
 
 
 @pytest.mark.parametrize("flag", ["--force", "--override", "--allow-blocked", "--assume-pass"])

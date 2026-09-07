@@ -1,0 +1,122 @@
+{
+  "schema_version": "ABLATION_REGISTRY_V1",
+  "pre_registered_utc": "2026-09-07T07:30:00Z",
+  "pre_registered_before_any_candidate_result": true,
+  "authority": "directive v1.1 sections 13 and 14",
+  "rule": {
+    "form": "Frozen parent versus frozen parent plus exactly ONE component.",
+    "held_constant": [
+      "data",
+      "scored window",
+      "fees",
+      "pair universe",
+      "risk and sizing",
+      "execution model",
+      "engine version"
+    ],
+    "one_at_a_time": "No kitchen-sink candidate. A component that only helps in combination with another untested change has not been measured.",
+    "rejection": "Reject non-repeatable improvements. An improvement that appears in one window and not in an independent one is noise until shown otherwise.",
+    "acceptance_requires": [
+      "the parent passes every kill gate",
+      "the parent-plus-component passes every kill gate",
+      "the difference is measured on the same bars, not merely on the same window label",
+      "the direction of the difference repeats across independent sub-windows",
+      "the component's value is stated on the axis it actually moves, which is not always return"
+    ]
+  },
+  "ablations": [
+    {
+      "ablation_id": "ABL_FUNDING_FILTER",
+      "status": "PRE_REGISTERED_NOT_RUN",
+      "parent": "BTCLAB_EMACROSS_H1",
+      "parent_plus_component": "BTCLAB_EMACROSSFUNDING_H2",
+      "component": "one-sided perpetual-funding froth filter: skip entries when the trailing-180-day percentile of 3-day mean funding exceeds 55",
+      "question": "Does the funding filter add anything once the EMA timing it sits on top of is held fixed?",
+      "upstream_claim_being_tested": "Upstream states the rule buys drawdown, not return: +1,353% at -49.4% drawdown becomes +1,604% at -33.8%, and 6 of 6 independent checks showed reduced drawdown.",
+      "predeclared_primary_axis": "max drawdown, not return",
+      "why_that_axis": "Upstream itself frames the component as a drawdown tool. Judging it on return would be testing a claim nobody made, and would let a return improvement that is really noise count as a win.",
+      "predeclared_secondary_axes": [
+        "E versus exposure-matched passive",
+        "time in market",
+        "trade count",
+        "worst month"
+      ],
+      "prerequisites": [
+        "the data.binance.vision futures/um fundingRate archive route is proven in CI and passes every equivalence check",
+        "FUNDING_TIMESTAMP_KNOWABILITY is discharged per observation as funding_available_at <= signal_decision_time",
+        "both sides run with their params files loaded, so the filter threshold is 55 and not the .py default of 90",
+        "at least 1300 valid completed 1h startup candles precede the first scored Development candle, supplied by the immutable warm-up overlay"
+      ],
+      "kill_condition": "If the funding series cannot be acquired with provably knowable timestamps, this ablation is not run and H2 is recorded as NOT_MEASURABLE. It is not approximated with a substitute series: a different settlement convention would silently change the component being tested.",
+      "upstream_self_reported_weakness": "Upstream reports the sign of the funding signal flipped in 2023. A component whose direction reverses mid-sample is a prime candidate for regime dependence, so per-regime attribution is required, not optional.",
+      "sensitivities": [
+        {
+          "id": "STRICT_1H_DELAY",
+          "question": "Does the funding increment survive if every funding value is held back a further full hour beyond its native availability?",
+          "method": "re-run H2 with the funding series shifted one 1h bar later than native timing",
+          "record": "separate experiment record; never merged with the native-timing record",
+          "purpose": "robustness against any residual uncertainty in publication timing, not a correction to the native run",
+          "rule": "Native timing is the reproduction. Delayed timing is a stress test. A disagreement between them is reported, not resolved by preferring one."
+        },
+        {
+          "id": "MATURE_FEATURE",
+          "question": "Does the increment hold once the funding percentile has a full 180-day trailing history rather than its 30-day minimum?",
+          "method": "report H2 restricted to bars at which the rolling(24*180) percentile is fully populated, alongside the unrestricted native run",
+          "record": "separate diagnostic record",
+          "purpose": "the percentile is computed from min_periods=24*30 onward, so early bars use a feature built on a thinner window than the rule intends",
+          "rule": "Diagnostic and robustness evidence. It does NOT replace the native run and may not be substituted for it when reporting the increment.",
+          "fairness_rule": "CORRECTED: truncate BOTH H1 and H2 to the same post-maturity scored interval, then compare H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL. Comparing a truncated H2 against a full-period H1 would attribute the interval difference to the funding component and read as a component effect.",
+          "comparison": "H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL",
+          "forbidden": "truncated H2 vs full-period H1"
+        }
+      ],
+      "taxonomy": {
+        "hypothesis_family": "BTSL_EMA_REGIME",
+        "parent_configuration": "H1_EMACROSS",
+        "child_configuration": "H2_EMACROSSFUNDING",
+        "note": "Both are FROZEN_CONFIGURATIONS. The lanes and robustness analyses below are not additional configurations."
+      },
+      "multiple_testing_note": "This ablation adds no trial: it compares two already-counted frozen configurations. See candidate_registry.multiple_testing_accounting for LOCAL_TRIAL_COUNT and the upstream selection debt."
+    }
+  ],
+  "candidate_components_not_yet_ablatable": {
+    "note": "Mined as hypotheses per section 13, but not registered as ablations until a parent passes its gates and the component is expressible as a single change.",
+    "from_btc_strategy_lab": [
+      "EMA regime timing as a cash/exposure switch",
+      "PBO and deflated Sharpe as selection gates",
+      "parameter-sweep smoothness as an overfitting signal"
+    ],
+    "from_passivbot": [
+      "shared live/backtest planner parity",
+      "hard exposure limits",
+      "fill accounting",
+      "recovery-time metrics"
+    ],
+    "from_nfi": [
+      "universe and listing controls",
+      "informative-timeframe discipline",
+      "DCA accounting edge cases"
+    ],
+    "from_trendrider": [
+      "public forward ledger",
+      "version-to-performance provenance",
+      "backtest-to-paper drift measurement"
+    ],
+    "from_postmortem": [
+      "exit diagnostics split by exit reason",
+      "activity versus expectancy",
+      "fee-floor economics"
+    ],
+    "from_kronos": [
+      "pre-registered kill gates",
+      "preserved failure ledger with errata",
+      "deterministic replay"
+    ]
+  },
+  "outcome_rule": {
+    "accepted": "component is added to a new explicitly versioned candidate, never folded silently into BASELINE-1",
+    "rejected": "component is recorded in the failure ledger with the measurement that rejected it",
+    "no_component_survives": "NEW_CANDIDATE=NO is a valid and complete result"
+  },
+  "revision": "v3 - FINAL PRE-EXECUTION ADDENDUM to v1.3 (2026-09-07)"
+}

@@ -1,0 +1,415 @@
+{
+  "schema_version": "CANDIDATE_REGISTRY_V1",
+  "frozen_utc": "2026-09-07T06:30:00Z",
+  "frozen_before_any_candidate_result": true,
+  "authority": "POST-BASELINE EXTERNAL BENCHMARK DIRECTIVE v1.1 section 7, with VERIFIED UPSTREAM PINNING ADDENDUM v1.2",
+  "hashes_live_in": "research/external/upstream_pins.json (verified by research/external/pin_upstream.py --verify)",
+  "sprint_activation": {
+    "gate": "directive v1.1 section 0 / addendum section 1",
+    "requirement": "1dfb69604bb87856b75c8c90957f2acc8e1fab7f must be an ancestor of main via a merge commit, with merged-main CI green",
+    "status_at_freeze": "NOT MET - open in PR #3",
+    "consequence": "No candidate in this registry may be executed until the gate passes. Registration is explicitly pre-execution work required by section 7."
+  },
+  "control": {
+    "candidate_id": "BASELINE1_FROZEN_CONTROL",
+    "project": "Trading Lab OS",
+    "strategy": "BaselineEmaRegimeV1",
+    "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
+    "commit": "1dfb69604bb87856b75c8c90957f2acc8e1fab7f",
+    "role": "frozen operational control; every comparison is stated against this and against the exposure-matched passive line, never against raw return",
+    "evidence_class": "OWN_FROZEN_EVIDENCE",
+    "native_market": "binance spot",
+    "pair_universe": [
+      "BTC/USDT",
+      "ETH/USDT"
+    ],
+    "timeframe": "1h",
+    "detail_timeframe": "5m",
+    "fee_per_side": 0.001,
+    "development_return_pct": 27.8,
+    "development_excess_vs_matched_passive_pp": -1.38,
+    "validation_return_pct": -0.07,
+    "validation_excess_vs_matched_passive_pp": 1.97,
+    "classification": "BASELINE_PROTOCOL=PASS, BASELINE_PERFORMANCE=NEUTRAL, DURABLE_ALPHA=NOT_PROVEN",
+    "safety_compatible": true
+  },
+  "candidates": [],
+  "method_mining_only": [
+    {
+      "project": "Passivbot",
+      "repo": "enarjord/passivbot",
+      "license": "Unlicense",
+      "role": "P0 real-money external evidence, method mining only",
+      "never": "no derivative execution, no Martingale-style averaging, no raw ROI comparison against spot-long systems"
+    },
+    {
+      "project": "TrendRider",
+      "url": "https://trendrider.net/live",
+      "role": "P1 public forward dry-run reference",
+      "classification": "PUBLIC_FORWARD_PAPER=YES, LIVE_MONEY=NO"
+    },
+    {
+      "project": "Hummingbot",
+      "repo": "hummingbot/hummingbot",
+      "role": "P2 execution / market-making method reference",
+      "never": "no core dependency, no unfair ROI comparison in this sprint"
+    },
+    {
+      "project": "Kronos Gauntlet",
+      "repo": "thotbreakerr/kronos-gauntlet",
+      "commit": "67a47713be6e9ec1ec279640f9ef2e0340ee91eb",
+      "license": null,
+      "role": "P1 process negative control - method reference only",
+      "never": "CODE_COPY_INTO_CORE = NOT AUTHORIZED; no execution or integration until rights are resolved"
+    }
+  ],
+  "invariants": {
+    "real_money_authorized": false,
+    "primary_value_metric": "incremental return over a fair exposure-matched passive control, with drawdown, exposure, costs and robustness",
+    "win_rate_is_not_a_success_metric": true,
+    "validation_window": "Dataset V2 Validation is SHARED_NON_PRISTINE_VALIDATION, already spent by BASELINE-1. At most one unchanged run per frozen candidate. Never tuned against.",
+    "recommit_rule": "Any post-validation change creates a new candidate ID and forfeits an untouched-validation claim."
+  },
+  "revision": "v4 - FINAL PRE-EXECUTION ADDENDUM to v1.3 (2026-09-07)",
+  "claim_and_method_reference_track": {
+    "note": "Directive-corrected. These must not block Wave 1. Reading source, freezing published claims and extracting method remain in scope; executing them as ranked candidates does not, until rights are resolved.",
+    "candidates": [
+      {
+        "candidate_id": "GENETICENGINEV1_CLAIM_CHALLENGE",
+        "wave": "deferred",
+        "project": "GeneticEngineV1",
+        "repo": "ceyhanmolla/freqtrade-strategies",
+        "commit": "937fefc25ef209120fa2a59d2f520f52d991f26b",
+        "retrieved_utc": "2026-09-07T06:20:00Z",
+        "strategy": "GeneticEngineV1",
+        "strategy_sha256": "7a22d1a184c5c75481ed421470758627c1079980cf9da8640ed5aa878ad4f62f",
+        "license": null,
+        "license_note": "No LICENSE, LICENSE.md or COPYING at the pinned commit. Ephemeral claim challenge only; never vendored.",
+        "vendoring_authorised": false,
+        "hypothesis": "Adversarial. A 98.9% win rate at 1.65% drawdown is the shape the postmortem and btc-strategy-lab both identify as the win-rate trap. Test for fee destruction, concentration and leakage before treating the return as real.",
+        "native_market": "binance spot",
+        "native_timeframe": "5m",
+        "evidence_class": "BACKTEST_CLAIM",
+        "safety_compatible": "PENDING_SOURCE_REVIEW",
+        "claimed_live": "Upstream says 'Live Testing'. Classified as an unverified project statement, not real-money evidence, per addendum section 7 point 8.",
+        "track": "CLAIM_AND_METHOD_REFERENCE",
+        "demotion_reason": "No recognised license at the pinned commit, so execution and integration rights are unresolved (V3B_EXECUTION_RIGHTS). Analysed as a published claim and as method; not queued ahead of licensed work and never vendored into core. Returns to the executable track only if rights are explicitly resolved. This is a rights finding, not a judgement on the project."
+      },
+      {
+        "candidate_id": "E0V1E_NATIVE_HISTORICAL_RECONSTRUCTION",
+        "wave": "deferred",
+        "project": "E0V1E",
+        "repo": "TheoBrigitte/freqtrade",
+        "commit": "ebc58b15c279d20d923c38bd2691d34f8be0aaa5",
+        "retrieved_utc": "2026-09-07T06:20:00Z",
+        "strategy": "E0V1E",
+        "strategy_sha256": "160f9d81b07a7cb85d57f2b5cd2080a369abce35bdaa9938e7d110552417bddb",
+        "params_sha256": "1f927271d3cdd1347d1c6a1867879b48a144f2d732ab68db9fd1cb7091ec53d7",
+        "config_sha256": "4fdc90f084b5fa32e681a72b12153bb35034301f0eb9c92f5bf85405855e7954",
+        "license": null,
+        "vendoring_authorised": false,
+        "hypothesis": "Reconstruct the +496.37% claim on its own terms, not ours.",
+        "native_market": "binance spot",
+        "native_stake_currency": "BUSD",
+        "native_timeframe": "5m",
+        "native_pair_universe": "DYNAMIC - VolumePairList + AgeFilter + VolatilityFilter, static whitelist empty",
+        "evidence_class": "BEST_RECONSTRUCTABLE_HISTORICAL_CLAIM",
+        "safety_compatible": true,
+        "predeclared_verdict_option": "NOT_ENOUGH_PUBLIC_INPUTS is an allowed and expected outcome. Preflight already identifies three independent obstacles; see the preflight document. Reaching that verdict is not a failure to try.",
+        "prohibited": "Do not normalise this to BTC/ETH Dataset V2 and then call the public +496% claim false. That comparison is a separate candidate.",
+        "track": "CLAIM_AND_METHOD_REFERENCE",
+        "demotion_reason": "No recognised license at the pinned commit, so execution and integration rights are unresolved (V3B_EXECUTION_RIGHTS). Analysed as a published claim and as method; not queued ahead of licensed work and never vendored into core. Returns to the executable track only if rights are explicitly resolved. This is a rights finding, not a judgement on the project."
+      },
+      {
+        "candidate_id": "E0V1E_NORMALIZED_LAB_CHALLENGE",
+        "wave": "deferred",
+        "project": "E0V1E",
+        "repo": "TheoBrigitte/freqtrade",
+        "commit": "ebc58b15c279d20d923c38bd2691d34f8be0aaa5",
+        "strategy": "E0V1E",
+        "hypothesis": "Separate question: does E0V1E retain any edge on our frozen BTC/ETH Dataset V2 universe, judged against the exposure-matched passive line?",
+        "evidence_class": "NORMALIZED_LAB_COMPARISON",
+        "conditional": "Run only if the semantics remain meaningful once the native dynamic 5m altcoin universe is replaced by two 1h majors. A verdict of SEMANTICS_NOT_PRESERVED is allowed.",
+        "safety_compatible": true,
+        "track": "CLAIM_AND_METHOD_REFERENCE",
+        "demotion_reason": "No recognised license at the pinned commit, so execution and integration rights are unresolved (V3B_EXECUTION_RIGHTS). Analysed as a published claim and as method; not queued ahead of licensed work and never vendored into core. Returns to the executable track only if rights are explicitly resolved. This is a rights finding, not a judgement on the project."
+      }
+    ]
+  },
+  "executable_priority": [
+    "H1 EmaCross (native, then normalized)",
+    "H2 EmaCrossFunding as an ablation",
+    "licensed Freqtrade negative control",
+    "NFI native Spot"
+  ],
+  "stage_label": "POST-BASELINE-EXTBENCH-1",
+  "execution_order": {
+    "authority": "sprint v1.3 section 29",
+    "parallel_opening": {
+      "track_A": "H1 EmaCross - executable immediately",
+      "track_B": "funding archive verification - concurrent, never blocks Track A"
+    },
+    "then": [
+      "H2 if admissible",
+      "H1-vs-H2 ablation",
+      "licensed negative control",
+      "cheap survivor decision",
+      "NFI native qualification",
+      "deep validation for 2-3 survivors only",
+      "component mining",
+      "one-component ablations",
+      "TradingLabCandidateV1 only if justified",
+      "shared non-pristine Validation where semantically valid",
+      "forward paper as each qualifies"
+    ]
+  },
+  "taxonomy": {
+    "authority": "final pre-execution addendum, section 1",
+    "why": "Evaluation lanes were previously listed alongside frozen configurations as if they were peer candidates. They are not: re-evaluating one frozen configuration in five ways is not five candidates, and counting it that way would both inflate the candidate list and corrupt multiple-testing accounting.",
+    "levels": {
+      "HYPOTHESIS_FAMILY": "a research idea that may contain several frozen configurations",
+      "FROZEN_CONFIGURATION": "one exact, hash-pinned effective identity - the unit that counts as a tested configuration",
+      "EVALUATION_LANE": "one way of evaluating a frozen configuration; never a new configuration",
+      "ROBUSTNESS_ANALYSIS": "a sensitivity applied to an existing lane; never a new configuration",
+      "NEGATIVE_CONTROL": "a lab-calibration case; NOT survivor-eligible",
+      "METHOD_REFERENCE": "studied for method only; never executed as a ranked candidate"
+    }
+  },
+  "hypothesis_families": [
+    {
+      "family_id": "BTSL_EMA_REGIME",
+      "project": "btc-strategy-lab",
+      "repo": "wiktorj137/btc-strategy-lab",
+      "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "license": "GPL-3.0",
+      "vendoring_authorised": false,
+      "frozen_configurations": [
+        {
+          "configuration_id": "H1_EMACROSS",
+          "counts_as_tested_configuration": true,
+          "strategy": "EmaCross",
+          "strategy_sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+          "params": "user_data/strategies/EmaCross.json (ema_period=600, exit_threshold=2.0)",
+          "reproduction_identity": {
+            "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+            "strategy_source": "user_data/strategies/EmaCross.py sha256 387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+            "parameter_files": [
+              "user_data/strategies/EmaCross.json sha256 9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee (pins ema_period=600, exit_threshold=2.0)"
+            ],
+            "config": "Trading Lab OS research config under the paper-safety invariant; upstream config.json pinned for reference, not used for execution",
+            "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+            "data_contract": "research/datasets/btsl_native_dataset_v1.lock.json - official public Binance spot klines with recorded provenance and checksums. Separate from Dataset V2 by design.",
+            "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+            "fee_model": "0.001 per side, the upstream headline benchmark fee",
+            "pair_universe": [
+              "BTC/USDT"
+            ],
+            "timeframe": "1h",
+            "position_semantics": "long-only, single position, no leverage (can_short=False)",
+            "data_cutoff": "PER LANE - see evaluation_lanes; the upstream command has no end date",
+            "execution_invocation": "freqtrade backtesting -c config.json -s EmaCrossFunding --timeframe 1h --timerange 20191001- --fee 0.001   (README line 28-29 at the pinned commit; -s EmaCross for H1)",
+            "environment_overrides": "none; recorded per run even when empty"
+          },
+          "evaluation_lanes": [
+            {
+              "lane_id": "CLAIM_SNAPSHOT_RECONSTRUCTION",
+              "question": "Reconstruct the historical +1,353% claim as published",
+              "data_cutoff": "UNKNOWN - the upstream command is open-ended (--timerange 20191001-), so the claim's end date is whatever date upstream ran it",
+              "reproduction_grade_ceiling": "BELOW_EXACT until the historical cutoff can be proven",
+              "rule": "A present-day open-ended run is NOT an exact reproduction of the historical claim."
+            },
+            {
+              "lane_id": "CURRENT_NATIVE_REPLAY",
+              "question": "Run the same frozen identity open-ended to today",
+              "data_cutoff": "recorded at run time; this lane defines its own cutoff",
+              "rule": "Reported as a current replay, never as the historical claim reproduced."
+            },
+            {
+              "lane_id": "H1_DATASET_V2_DEVELOPMENT",
+              "question": "Normalized qualification on our frozen Development window",
+              "data_cutoff": "Dataset V2 Development boundary, 2024-12-31",
+              "universe": "BTC only",
+              "fair_controls": [
+                "cash",
+                "BTC buy-and-hold",
+                "BTC realised exposure-matched passive",
+                "BASELINE-1 as an optional lab reference, explicitly labelled non-identical"
+              ]
+            },
+            {
+              "lane_id": "ETH_GENERALIZATION_CHALLENGE",
+              "runs_only_after": "the BTC configuration is frozen",
+              "outcomes": [
+                "BTC_SPECIALIST",
+                "UNIVERSAL",
+                "PAIR_SPECIFIC"
+              ],
+              "rule": "ETH failure does NOT automatically kill a robust BTC-specialist candidate. Upstream already reports that cross-asset generalization fails, so an ETH failure here is a confirmation to classify honestly, not a kill."
+            }
+          ]
+        },
+        {
+          "configuration_id": "H2_EMACROSSFUNDING",
+          "counts_as_tested_configuration": true,
+          "strategy": "EmaCrossFunding",
+          "strategy_sha256": "0f0d3d4677647da2e11d4dc8195adbb95fce201ce400300df0a78741cf9a9564",
+          "params": "user_data/strategies/EmaCrossFunding.json (funding_max_pct=55, ema_period=600, exit_threshold=2.0)",
+          "relationship_to_h1": "ABLATION ONLY - H2 minus H1 is the measurement; H2 is never ranked standalone",
+          "reproduction_identity": {
+            "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+            "strategy_source": "user_data/strategies/EmaCrossFunding.py sha256 0f0d3d4677647da2e11d4dc8195adbb95fce201ce400300df0a78741cf9a9564",
+            "parameter_files": [
+              "user_data/strategies/EmaCrossFunding.json sha256 1641ce3122ccc0c216aaae1af77bedb15dd77670643201d1c7453066eca38f0b (pins funding_max_pct=55, NOT the .py default of 90)"
+            ],
+            "config": "Trading Lab OS research config under the paper-safety invariant",
+            "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+            "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
+            "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+            "external_series_contract": "research/webdata/funding.feather, built only from the verified data.binance.vision futures/um fundingRate archive; its own lock entry records coverage, ordering, fundingTime semantics and the API-equivalence result.",
+            "fee_model": "Dataset V2 frozen assumption: 0.001 per side",
+            "pair_universe": [
+              "BTC/USDT"
+            ],
+            "timeframe": "1h",
+            "position_semantics": "long-only, single position, no leverage; perpetual funding consumed as a read-only feature, no derivative order placed",
+            "data_cutoff": "PER LANE",
+            "execution_invocation": "freqtrade backtesting -c config.json -s EmaCrossFunding --timeframe 1h --timerange 20191001- --fee 0.001   (README line 28-29 at the pinned commit; -s EmaCross for H1)",
+            "environment_overrides": "none; recorded per run even when empty"
+          },
+          "parameter_provenance": {
+            "EXECUTION_PARAMETER_PROVENANCE": "VERIFIED",
+            "execution_evidence": "EmaCrossFunding.json pins funding_max_pct=55, sha256 1641ce3122ccc0c216aaae1af77bedb15dd77670643201d1c7453066eca38f0b, and Freqtrade auto-loads it",
+            "PARAMETER_SELECTION_PROVENANCE": "PARTIALLY_DOCUMENTED",
+            "selection_evidence": "The pinned public grid in research/sweep_funding.py tests funding_max_pct [40, 50, 60, 70, 80, 90, 100] and ema_period [500, 600, 700]. 55 is NOT in that grid. Upstream's README states the rationale - 'The filter is set to 55, not the best-performing 60. Picking the exact peak of a sweep is how you fool yourself; 50, 55 and 60 all work, so take the middle.' - so 55 is a documented midpoint between two swept values, but the sweep evidence for 55 itself is not public.",
+            "rule": "Do not invent missing sweep evidence. Execute the published 55; record that its selection is only partially documented."
+          },
+          "evaluation_lanes": [
+            {
+              "lane_id": "H2_NATIVE_RESULT",
+              "question": "The funding increment on its own terms"
+            },
+            {
+              "lane_id": "H2_DATASET_V2_DEVELOPMENT",
+              "question": "Normalized ablation against H1 on the same bars"
+            }
+          ],
+          "robustness_analyses": [
+            {
+              "analysis_id": "STRICT_1H_DELAY",
+              "applies_to": "H2_NATIVE_RESULT",
+              "rule": "Robustness test, not a correction. A valid native result with a degraded delayed result reads LOOKAHEAD=NO, TIMING_SENSITIVITY=HIGH."
+            },
+            {
+              "analysis_id": "MATURE_FEATURE",
+              "applies_to": "the H1-vs-H2 ablation",
+              "fairness_rule": "CORRECTED: truncate BOTH H1 and H2 to the same post-maturity scored interval and compare H1_MATURE_INTERVAL vs H2_MATURE_INTERVAL. Comparing a truncated H2 against a full-period H1 would attribute the interval difference to the funding component.",
+              "rule": "Diagnostic evidence; never replaces the native result."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "negative_control": {
+    "candidate_id": "POSTMORTEM_NEGATIVE_CONTROL",
+    "wave": 1,
+    "priority_order": 5,
+    "project": "crypto-trading-bot-postmortem",
+    "repo": "francisx1999/crypto-trading-bot-postmortem",
+    "commit": "53babe6c478934c91491366078c8600c5616e07d",
+    "retrieved_utc": "2026-09-07T06:20:00Z",
+    "strategy": "to be selected from the seven documented failure families",
+    "license": "GPL-3.0",
+    "vendoring_authorised": false,
+    "hypothesis": "Lab calibration. A strategy documented upstream as losing money must be reproduced as losing money. If our harness cannot reproduce a known failure, the harness is wrong, not the strategy.",
+    "native_market": "binance and bybit spot",
+    "native_timeframe": "mixed across the seven families",
+    "evidence_class": "BACKTEST_ONLY_DOCUMENTED_FAILURE",
+    "safety_compatible": true,
+    "expected_verdict": "NEGATIVE - a positive result here is a lab defect signal, not a discovery",
+    "reproduction_identity": {
+      "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+      "strategy_source": "to be selected from the seven documented failure families; pinned before the run",
+      "parameter_files": [
+        "as published by upstream, if any"
+      ],
+      "config": "Trading Lab OS research config under the paper-safety invariant",
+      "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+      "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
+      "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+      "fee_model": "recorded per selected case",
+      "pair_universe": [
+        "as published upstream"
+      ],
+      "timeframe": "as published upstream",
+      "position_semantics": "long-only spot"
+    },
+    "track": "EXECUTABLE",
+    "license_basis": "GPL-3.0 at the pinned commit - a licensed negative control, which is why it stays on the executable track",
+    "pre_registration_required": [
+      "exact commit",
+      "exact strategy and config",
+      "the specific public failure claim",
+      "what failure mode the lab is expected to detect"
+    ],
+    "purpose": "Not to match one headline percentage. The lab must demonstrate it can DETECT and PRESERVE known-bad behaviour. If a known negative control appears exceptionally strong, LAB_CALIBRATION=SUSPECT and positive candidates are not trusted until it is investigated.",
+    "survivor_eligible": false,
+    "rule": "A negative control calibrates the lab. It is never a survivor and never enters the Pareto frontier."
+  },
+  "wave_2_qualification": {
+    "candidate_id": "NFI_NATIVE_SPOT_QUALIFICATION",
+    "wave": 2,
+    "priority_order": 6,
+    "project": "NostalgiaForInfinity",
+    "repo": "iterativv/NostalgiaForInfinity",
+    "commit": "UNPINNED - Wave 2, pin before execution",
+    "license": "GPL-3.0",
+    "vendoring_authorised": false,
+    "evidence_class": "BACKTEST_ONLY",
+    "safety_compatible": "PENDING_SOURCE_REVIEW",
+    "constraint": "Native Spot first. A BTC/ETH 1h reduction must never be labelled 'NFI' when native behaviour is 5m and broad-universe. Timeboxed; must not block cheaper candidates.",
+    "reproduction_identity": {
+      "note": "Sprint v1.3 section 5: source + params + config + engine + data contract + fee model + universe + timeframe + position semantics. A source SHA alone is not an identity.",
+      "strategy_source": "UNPINNED - Wave 2, pin before execution",
+      "parameter_files": [
+        "UNPINNED"
+      ],
+      "config": "Native Spot config, pinned before execution",
+      "engine_version": "freqtradeorg/freqtrade:2026.7 (same pinned image that produced BASELINE-1)",
+      "data_contract": "research/datasets/dataset_v2.lock.json (frozen, canonical digests) PLUS research/datasets/warmup_overlay.lock.json (immutable warm-up overlay, never scored). Dataset V2 is not mutated; the overlay is additive and precedes the Development window.",
+      "pinned_in": "research/external/upstream_pins.json (source, params, config); this record (engine, data contract)",
+      "fee_model": "native",
+      "pair_universe": "broad native pair universe",
+      "timeframe": "5m",
+      "position_semantics": "native NFI semantics, multiple open slots"
+    },
+    "track": "EXECUTABLE",
+    "data_contract_override": "NFI_NATIVE_DATASET_v1 with historical pair availability, listing dates, delistings and survivorship controls",
+    "rule": "Do not reshape Dataset V2 to fit NFI. Timeboxed qualification, not immediate deep validation.",
+    "survivor_eligible": "pending qualification"
+  },
+  "candidates_note": "Superseded by hypothesis_families / negative_control / wave_2_qualification. Frozen configurations, not evaluation lanes, are the countable units.",
+  "multiple_testing_accounting": {
+    "authority": "final pre-execution addendum, section 1",
+    "LOCAL_TRIAL_COUNT": {
+      "value": 2,
+      "basis": "H1_EMACROSS and H2_EMACROSSFUNDING - the frozen configurations this lab selects and tests",
+      "excluded": "evaluation lanes and robustness analyses; re-evaluating one frozen configuration is not an additional trial"
+    },
+    "UPSTREAM_SELECTION_DEBT": {
+      "value": "substantial and only partly quantified",
+      "basis": [
+        "EmaCross was selected as the winner of a 42-strategy benchmark (33 lost money outright)",
+        "the funding rule was then added to that already-selected winner - upstream names both selection steps itself",
+        "the public grid sweeps 3 ema_period x 7 funding_max_pct = 21 combinations",
+        "the published funding_max_pct=55 is not in that grid, so at least one further selection step is undocumented",
+        "upstream discarded a prior strategy at PBO 1.00 before arriving at this one"
+      ]
+    },
+    "TOTAL_SELECTION_PROVENANCE": {
+      "status": "PARTIALLY_DOCUMENTED",
+      "rule": "A low LOCAL_TRIAL_COUNT does not make the family lightly-tested. The configurations we run arrive pre-selected from a 42-way benchmark plus a 21-point sweep plus an undocumented midpoint choice, and that history is not reset by our re-evaluating them.",
+      "hard_rule": "Do NOT claim DSR or PBO certification from LOCAL_TRIAL_COUNT alone. Any deflated-Sharpe or PBO figure must state which trial count it used and acknowledge the upstream selection debt it cannot observe."
+    }
+  }
+}

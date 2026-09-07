@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-09-07T02:37:06Z",
+  "experiment": "baseline-1",
+  "run_name": "baseline-1-development-datasetv2",
+  "command": "freqtrade backtesting --config config.research.json --strategy BaselineEmaRegimeV1 --timerange 20210101-20250101 --timeframe-detail 5m --enable-protections --export trades",
+  "code_commit": "1a2514c928191fce3263dd8a038b924f4bc77fd2",
+  "code_dirty": false,
+  "config_hash": "fc00865bce6b3e937c2e745814898fbf77f999eced5b80d04da1968155db0839",
+  "config_files": [
+    "freqtrade/user_data/config.paper.json.example",
+    "freqtrade/user_data/config.binance-data-mirror.json.example"
+  ],
+  "dataset_hashes": {
+    "BTC/USDT 1h": "9e564a7d5738821757202263bf98f12062e43021c6a810020f4d9d9907ca9763",
+    "BTC/USDT 5m": "c4f9130d1be079b0a1ada78ef97fb9f61b86b6eba1b5084fcd502b74a34be59e",
+    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
+    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
+  },
+  "dataset_audit_pass": true,
+  "strategy": {
+    "name": "BaselineEmaRegimeV1",
+    "file": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
+    "sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc"
+  },
+  "freqtrade_version": "2026.7",
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
+  "timeframe": "1h",
+  "detail_timeframe": "5m",
+  "timerange": "20210101-20250101",
+  "period_label": "development",
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "Binance spot taker fee, set explicitly in the config",
+    "slippage_note": "no slippage model; market orders priced on the far side of the book"
+  },
+  "wallet": 100.0,
+  "stake": 10.0,
+  "max_open_trades": 2,
+  "metrics": {
+    "total_return_pct": 27.79744881,
+    "total_return_abs": 27.79744881,
+    "max_drawdown_pct_wallet_basis": 11.67,
+    "max_drawdown_abs_wallet_basis": 13.842,
+    "max_drawdown_pct_closed_trade_basis": 10.17221667458373,
+    "drawdown_duration_days": 419,
+    "drawdown_start": "2021-11-10T17:00:00Z",
+    "drawdown_end": "2023-01-03T17:00:00Z",
+    "min_wallet_balance": 97.68,
+    "max_wallet_balance": 130.472,
+    "sharpe_daily_wallet": 0.8,
+    "sortino_daily_wallet": 0.97,
+    "calmar_daily_wallet": 3.12,
+    "sharpe_closed_trades": 0.3231311064427786,
+    "sortino_closed_trades": 1.6537976737239393,
+    "calmar_closed_trades": 3.573432254225562,
+    "profit_factor": 1.5108184784936007,
+    "trade_count": 211,
+    "winning_trades": 62,
+    "losing_trades": 149,
+    "win_rate_pct": 29.383886255924168,
+    "avg_profit_pct_per_trade": 1.32,
+    "avg_trade_duration_days": 7.1264,
+    "max_consecutive_losses": 12,
+    "max_consecutive_wins": 3,
+    "backtest_days": 1461,
+    "market_change_pct": 291.9009507192284,
+    "per_pair_return_pct": {
+      "BTC/USDT": 9.1,
+      "ETH/USDT": 18.7
+    },
+    "per_pair_return_note": "reported by the engine (results_per_pair.profit_total_pct)",
+    "time_exposure_pct": 59.642368713419025,
+    "avg_capital_exposure_pct": 10.1346003885942,
+    "peak_capital_exposure_pct": 19.956759000000005,
+    "peak_concurrent_trades": 2,
+    "trades_with_usable_timestamps": 211,
+    "return_per_exposure_unit": 274.2826331986817,
+    "turnover_stake": 4150.02652,
+    "turnover_note": "entry notional plus exit notional, approximated as 2x total stake",
+    "total_fees_stake": 4.150026520000001,
+    "fees_note": "derived as 2 x fee(0.001) x total stake; the engine reported no per-trade fee fields",
+    "passive_btc_buy_and_hold_pct": 222.084921074677,
+    "passive_eth_buy_and_hold_pct": 353.7861209121746,
+    "passive_full_50_50_return_pct": 287.9355209934258,
+    "passive_max_exposure_matched_return_pct": 57.587104198685154,
+    "passive_realised_exposure_matched_return_pct": 29.181114429500465,
+    "passive_realised_exposure_matched_note": "50/50 passive return scaled to the strategy's realised average capital exposure; an approximation that ignores when that exposure occurred",
+    "excess_over_realised_exposure_matched_pp": -1.3836656185004652,
+    "provenance_note": "Engine figures come from Freqtrade's own backtest export; exposure, turnover, fee and realised-exposure-matched figures are computed by research/summarize_backtest.py from the exported trade list. Both are recorded, and which is which is stated, because they are not equally strong evidence. Sharpe/Sortino/Calmar are reported on both of Freqtrade's bases rather than one being silently chosen."
+  },
+  "analyses": {
+    "lookahead": "pass",
+    "recursive": "pass",
+    "detail_timeframe_simulation": "pass"
+  },
+  "gate": "PASS",
+  "reason": "BASELINE_PROTOCOL_RESULT = PASS, BASELINE_PERFORMANCE_CLASSIFICATION = NEUTRAL. All seven pre-registered protocol criteria are met on real, checksum-verified Binance spot data: Dataset V2 structural integrity passes with exact 5m->1h price reconciliation; strategy and config hashes were frozen before the run; the backtest completed over the full four-year window with 5m detail simulation and no configuration error; lookahead analysis found no bias over 20 signals; recursive analysis found no indicator bias, with drift of 0.000% (ema_fast) and -0.003% (ema_slow) at the strategy's 600 startup candles; exposure, per-pair attribution, turnover and fee figures were computed rather than assumed; and no rule changed between the specification freeze and the evaluation. On performance, +27.80% against a realised-exposure-matched passive line of +29.18% gives E = -1.38 percentage points, well inside the NEUTRAL band pre-registered before any result existed. The strategy underperformed a passive position of the same average size, which is a legitimate result for a reference, not a protocol failure.",
+  "notes": "Metrics evidence: run 34076735190 at commit 1a2514c, the first run in which the metrics normaliser completed. Its failure in four earlier runs was Freqtrade 2026.7 exporting the result as backtest-result-<ts>.zip while the step globbed for *.json. The strategy and config are byte-identical to the earlier evaluation runs (strategy sha256 8c0bc6c5..., config example sha256 d1d078c6...), so the correctness analyses and backtest figures recorded here are the same evidence, now with the exposure and attribution numbers the protocol requires. Dataset V2's lock now carries all four raw and all four canonical fingerprints and is marked frozen. CANONICAL_CANDLE_V1 content digests, all four, matching research/datasets/dataset_v2.lock.json. The raw Feather file hashes are in the lock; a raw mismatch with a matching canonical digest is a serialization difference, not drift. Analyses: lookahead pass - 20 signals; 0 biased entries, 0 biased exits, 0 biased indicators; recursive pass - no lookahead bias on indicators; drift at the strategy's 600 startup candles is 0.000% (ema_fast) and -0.003% (ema_slow); detail-timeframe pass - 1h entry/exit signals simulated against 5m candles."
+}

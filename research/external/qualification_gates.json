@@ -1,0 +1,201 @@
+{
+  "schema_version": "QUALIFICATION_GATES_V1",
+  "pre_registered_utc": "2026-09-07T07:30:00Z",
+  "pre_registered_before_any_candidate_result": true,
+  "authority": "directive v1.1 sections 5, 8 and 15; classification bands inherited unchanged from docs/research/BASELINE_1_PROTOCOL.md",
+  "why_this_file_exists": "Thresholds chosen after seeing a result are not thresholds, they are commentary. Kronos Gauntlet is mined precisely for this discipline: pre-register the rule, then let it kill things. These gates are fixed before any external candidate has been executed.",
+  "validity_gates": {
+    "note": "Binary and methodological, never performance-based. Any FAIL kills the candidate for this sprint regardless of return. A candidate killed here is not 'bad', it is 'not measurable', and the ledger must say which. One gate, V3B_EXECUTION_RIGHTS, kills only for the executable track: a candidate failing it moves to the claim/method-reference track rather than out of the sprint.",
+    "gates": [
+      {
+        "id": "V1_REPRODUCTION_IDENTITY",
+        "question": "Is the complete effective strategy identity pinned, not just the source file?",
+        "method": "pin and verify ALL FIVE components: (1) strategy source, (2) parameter files the engine auto-loads, (3) config, (4) engine version, (5) data contract - the dataset lock plus any overlay lock. research/external/pin_upstream.py --verify covers 1-3; the record carries 4 and 5.",
+        "fail_rule": "any of the five components unpinned, unrecorded, or mismatched at run time",
+        "kill": true,
+        "note": "A source-code SHA alone is insufficient. EmaCrossFunding proves it: its .py default is 90 and its params file pins 55, so two runs of identical source can test different rules. Engine version and data contract matter for the same reason - the same source on a different Freqtrade or a different dataset is a different experiment."
+      },
+      {
+        "id": "V2_LOAD_AND_CONFIG",
+        "question": "Does the candidate load and run under our safety-constrained config without engine error?",
+        "method": "freqtrade backtesting completes; paper_guard.py passes on the config used",
+        "fail_rule": "engine configuration error, or any config that would fail the paper guard",
+        "kill": true
+      },
+      {
+        "id": "V3_SAFETY_COMPATIBILITY",
+        "question": "Does it stay inside the paper-safety boundary?",
+        "method": "read the source before running: can_short, trading_mode, margin_mode, leverage, any order-placing path",
+        "fail_rule": "requires shorts, futures, margin or leverage",
+        "kill": true,
+        "note": "A candidate that fails here is not run at all. It is recorded as OUT_OF_SCOPE, not as a result. Consuming perpetual funding as a read-only feature is explicitly permitted by section 11 and does not fail this gate."
+      },
+      {
+        "id": "V3B_EXECUTION_RIGHTS",
+        "question": "Do we have the rights to execute and integrate this candidate, not merely to read it?",
+        "method": "repository license status at the pinned commit, recorded in research/external/upstream_pins.json",
+        "fail_rule": "no recognised license at the pinned commit",
+        "kill": true,
+        "kill_scope": "EXECUTABLE_TRACK_ONLY",
+        "note": "Directive-corrected. A no-license candidate does not block Wave 1 and is not queued ahead of licensed work. It is demoted to the claim/method-reference track, where source inspection and method extraction remain allowed, and is never vendored into core. It returns to the executable track only if execution and integration rights are explicitly resolved. This is a rights finding, never a quality judgement about the project."
+      },
+      {
+        "id": "V4_DATA_INTEGRITY",
+        "question": "Is the underlying data the frozen, verified dataset?",
+        "method": "scripts/audit_data.py --gate lock against research/datasets/dataset_v2.lock.json",
+        "fail_rule": "any canonical digest mismatch",
+        "kill": true
+      },
+      {
+        "id": "V5_LOOKAHEAD",
+        "question": "Does the candidate see the future?",
+        "method": "freqtrade lookahead-analysis and recursive-analysis, plus, for any externally joined series, a per-observation proof that the value was available before the decision it informs",
+        "fail_rule": "any biased entry, exit or indicator; any external observation for which funding_available_at > signal_decision_time",
+        "kill": true,
+        "special_case_funding": "Directive-corrected. Same-hour funding is NOT automatically lookahead. Freqtrade evaluates signals on candle close and enters at the next candle open, so signal_decision_time for a candle opening at T is T+1h. A funding value settled at T is therefore already published when the decision is taken. The gate is discharged by proving, per observation, that funding_available_at <= signal_decision_time - not by assuming a shared timestamp means leakage. A value whose availability cannot be established, or which fails the inequality, is a FAIL. STRICT_1H_DELAY is run afterwards as a separate robustness record and never replaces the native-timing run."
+      },
+      {
+        "id": "V6_REALISTIC_COSTS",
+        "question": "Does the result survive the fee assumption the control faced?",
+        "method": "the fee model declared in the candidate's own reproduction identity, applied consistently; for a native reproduction that is the upstream headline fee, for a normalized run it is Dataset V2's frozen 0.001 per side",
+        "fail_rule": "result only holds at a lower fee than the candidate's own declared fee model, or the fee model is not recorded",
+        "kill": true,
+        "note": "Three independent upstreams already identify the cost floor as the dominant retail failure mode. Report fees paid as a percentage of starting capital alongside return, always."
+      },
+      {
+        "id": "V7_WINDOW_PARITY",
+        "question": "Were the candidate and the control scored on the same bars, each with a fully warmed indicator?",
+        "method": "compare first and last scored timestamp against BASELINE-1's; assert the count of VALID completed 1h candles preceding the first scored Development candle meets the candidate's declared startup_candle_count",
+        "fail_rule": "scored window differs without being stated and quantified, or fewer valid startup candles than the candidate declares",
+        "kill": true,
+        "note": "Promoted to a kill. EmaCross declares 1300 and Dataset V2 alone supplies 744. The fix is the immutable warm-up overlay, never mutating Dataset V2 and never lowering the candidate's declared startup_candle_count, which would make the run a different strategy."
+      },
+      {
+        "id": "V8_CONCENTRATION",
+        "question": "Does the result depend on one window, one pair or a handful of trades?",
+        "method": "per-pair attribution; per-regime attribution; contribution of the single best window and the single best trade",
+        "fail_rule": "not a kill, but a result whose excess disappears when the single best window is removed is reported as REGIME_DEPENDENT and may not be called durable",
+        "kill": false,
+        "note": "btc-strategy-lab reports this against itself: drop H2-2020 and the remaining walk-forward compounds to +335% against BTC's +734%, i.e. it loses to buy-and-hold. Any candidate must face the same subtraction."
+      },
+      {
+        "id": "V9_EXPOSURE_AND_TURNOVER",
+        "question": "Is the return explained by exposure rather than by skill?",
+        "method": "time in market, average and peak capital exposure, return per unit of exposure, turnover",
+        "fail_rule": "not a kill; a candidate whose E is inside the NEUTRAL band is reported as reproducing its own exposure, not as having an edge",
+        "kill": false
+      }
+    ]
+  },
+  "evidence_grade": {
+    "note": "What kind of evidence the number is, kept separate from how good the number is. Directive section 15 requires both.",
+    "A_PROSPECTIVE_PAPER": "forward paper over data that did not exist at freeze time",
+    "B_SHARED_NON_PRISTINE_VALIDATION": "one unchanged run on Dataset V2 Validation, already spent by BASELINE-1 and never pristine",
+    "C_DEVELOPMENT": "Dataset V2 Development, the research arena",
+    "D_UPSTREAM_CLAIM": "a number published by the upstream project and not independently reproduced here"
+  },
+  "reproduction_grade": {
+    "EXACT": "same source, same data, same costs, same universe; our number is comparable to the published one",
+    "RECONSTRUCTED": "same source and costs, but at least one published input was unavailable and was substituted with a stated, documented choice",
+    "NOT_ENOUGH_PUBLIC_INPUTS": "the published claim cannot be checked from public inputs. Not a verdict on the strategy, and must never be written up as one.",
+    "SEMANTICS_NOT_PRESERVED": "the candidate can be run on our universe but the run no longer answers the same question"
+  },
+  "survivor_selection": {
+    "no_single_score": "Directive section 15 forbids one opaque weighted score. Selection is: pass every kill gate, then sit on the Pareto frontier, then be graded on evidence and reproduction quality.",
+    "pareto_axes": [
+      "excess return over exposure-matched passive",
+      "max drawdown",
+      "robustness across windows and regimes",
+      "cost load",
+      "capital exposure",
+      "evidence grade"
+    ],
+    "max_deep_survivors": 3,
+    "valid_outcome": "NEW_CANDIDATE=NO. If no component survives ablation, that is a result, not a failure to find one."
+  },
+  "lab_calibration": {
+    "rule": "The postmortem's seven strategy families are documented losers over a 24-month window. If our harness reproduces them as profitable, the harness is wrong.",
+    "verdict_if_everything_passes": "LAB_CALIBRATION=SUSPECT",
+    "note": "This gate points at us, not at the candidates, and it is the reason the negative control runs early rather than last."
+  },
+  "prohibited": [
+    "win rate as a primary success metric",
+    "ranking candidates by raw return",
+    "comparing a spot-long system's ROI against a leveraged perpetual system's",
+    "tuning anything against Dataset V2 Validation",
+    "re-pinning an upstream commit after seeing our result",
+    "normalising a native historical claim onto our universe and then calling the public claim false"
+  ],
+  "revision": "v3 - SPRINT v1.3 FINAL (2026-09-07); supersedes v1.1/v1.2 where they conflict",
+  "verdict_model": {
+    "authority": "sprint v1.3 section 4",
+    "rule": "Every executable experiment produces TWO verdicts, reported separately and never conflated.",
+    "MEASUREMENT_VALIDITY": {
+      "values": [
+        "PASS",
+        "FAIL",
+        "BLOCKED"
+      ],
+      "meaning": "Can this experiment support a performance conclusion at all?",
+      "failures": [
+        "source/config identity mismatch",
+        "missing load-bearing parameter file",
+        "hash mismatch",
+        "data corruption",
+        "unresolved scored-window mutation",
+        "lookahead",
+        "future information leakage",
+        "funding timestamp unknowability",
+        "unsafe market mode",
+        "non-determinism where determinism is required",
+        "invalid fee/execution assumptions",
+        "execution-rights restriction on the executable track"
+      ]
+    },
+    "CANDIDATE_QUALITY": {
+      "values": [
+        "PASS",
+        "FAIL",
+        "FRAGILE",
+        "DOMINATED",
+        "INCONCLUSIVE"
+      ],
+      "meaning": "How did a validly measured candidate actually do?",
+      "critical_rule": "Poor return, poor Sharpe, high drawdown, passive underperformance or concentration do NOT invalidate the measurement. MEASUREMENT_VALIDITY=PASS with CANDIDATE_QUALITY=FAIL is a complete, publishable result, and that negative evidence is preserved rather than discarded."
+    }
+  },
+  "performance_classification": {
+    "authority": "sprint v1.3 sections 2 and 17 - CORRECTED",
+    "correction": "Earlier revisions of this file inherited BASELINE-1's numeric bands verbatim and applied them to every candidate. v1.3 forbids that: the bands were calibrated on a 1h BTC+ETH long-only spot reference and are not meaningful kill thresholds for a materially different strategy. The combined BTC+ETH BASELINE-1 return is also not the universal financial opponent.",
+    "rule": "Each candidate is judged against controls appropriate to ITS OWN asset, universe, timeframe, exposure, market type and position semantics. BASELINE-1 may appear alongside as a clearly labelled non-identical lab reference, never as the yardstick.",
+    "required_controls_per_candidate": [
+      "cash",
+      "the appropriate buy-and-hold for that candidate's own universe",
+      "realised exposure-matched passive on that same universe",
+      "the appropriate native benchmark where one exists"
+    ],
+    "excess_definition": "E = total_return_pct - passive_realised_exposure_matched_return_pct, both over the same window",
+    "baseline_1_reference_bands": {
+      "status": "LAB REFERENCE ONLY - not a universal kill threshold",
+      "applies_to": "BASELINE-1 itself, and only candidates with materially equivalent semantics (1h spot long-only on the same universe)",
+      "STRONG": "E > +10 pp AND Sharpe > 0.5 AND max drawdown < 35% AND at least 30 closed trades",
+      "WEAK": "E < -10 pp OR profit factor < 0.8",
+      "NEUTRAL": "anything else",
+      "small_sample_rule": "Fewer than 30 closed trades cannot support STRONG or WEAK. Report NEUTRAL and label it statistically inconclusive."
+    },
+    "example_of_the_error_this_prevents": "H1 EmaCross is BTC-only, single-position, with a ~600h regime filter. Scoring it against a BTC+ETH two-slot reference's bands would measure universe and exposure differences and call the result a verdict on the strategy."
+  },
+  "fail_fast": {
+    "authority": "sprint v1.3 section 18",
+    "rule": "Hard validity failures stop interpretation entirely. For validly measured candidates, fail fast only when the conclusion is robust.",
+    "robust_dominance_signals": [
+      "realistic fees erase the entire edge",
+      "worse than the appropriate passive control on BOTH return and drawdown with no compensating predeclared advantage",
+      "one trade, month or regime explains most of the result",
+      "modest execution delay destroys the result",
+      "pair/universe survivorship explains the result",
+      "unstable under a reasonable parameter neighbourhood check where such a check is valid"
+    ],
+    "never": "a single weighted magic score"
+  }
+}

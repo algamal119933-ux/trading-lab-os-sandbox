@@ -18,7 +18,8 @@
     "real_money_authorized",
     "reason",
     "authoritative_lineage",
-    "benchmark_closure"
+    "benchmark_closure",
+    "entry_state_reason"
   ],
   "properties": {
     "schema_version": {
@@ -262,6 +263,7 @@
           "enum": [
             "NOT_MERGED",
             "MERGED_NOT_EXECUTED",
+            "OWNER_TERMINATED_INCONCLUSIVE",
             "CLOSED"
           ]
         },
@@ -270,6 +272,11 @@
           "minLength": 1
         }
       }
+    },
+    "entry_state_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the entry state is what it is. A bare 'C' cannot distinguish 'no survivor was found' from 'no survivor decision was ever reached'."
     }
   }
 }

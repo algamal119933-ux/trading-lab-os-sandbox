@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Overlay applied on top of config.paper.json.example for RESEARCH runs only.",
+    "Binance's trading API answers HTTP 451 ('Service unavailable from a restricted",
+    "location') to both this project's cloud sandbox and GitHub-hosted runners, so",
+    "Freqtrade cannot load markets from api.binance.com there. Binance serves the",
+    "same public spot market data from data-api.binance.vision, which carries no",
+    "eligibility check. This overlay points ccxt's public endpoint at that mirror",
+    "and limits market loading to spot, so backtesting can run offline-ish against",
+    "already-downloaded candles.",
+    "It changes NOTHING about safety: dry_run stays true, the exchange key and",
+    "secret stay empty, and no order-placing command is ever issued."
+  ],
+  "exchange": {
+    "skip_pair_validation": true,
+    "ccxt_config": {
+      "options": {
+        "fetchMarkets": ["spot"]
+      },
+      "urls": {
+        "api": {
+          "public": "https://data-api.binance.vision/api/v3"
+        }
+      }
+    }
+  }
+}
