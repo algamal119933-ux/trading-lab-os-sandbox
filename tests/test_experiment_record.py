@@ -169,3 +169,34 @@ def test_committed_example_record_is_not_presented_as_evidence():
     record = json.loads(EXAMPLE_RECORD.read_text(encoding="utf-8"))
     assert record["gate"] == "INFORMATIONAL"
     assert record["period_label"] != "oos"
+
+
+def test_every_committed_record_validates(repo_root):
+    """Catch a malformed record locally, not three commits later in CI.
+
+    Both baseline records were committed with keys the schema forbids and
+    `analyses` values outside its enum. CI's own "Validate committed experiment
+    records" step did catch it — the gap was here: no test in this suite ever
+    fed a real record to the validator, so three pushes went out red before
+    anyone looked at the CI result.
+    """
+    records = sorted((repo_root / "research" / "records").glob("*.json"))
+    assert records, "no experiment records found to validate"
+    failures = {}
+    for path in records:
+        problems = rec.validate(json.loads(path.read_text(encoding="utf-8")))
+        if problems:
+            failures[path.name] = problems
+    assert not failures, failures
+
+
+def test_both_baseline_records_are_present_and_agree_on_the_frozen_strategy(repo_root):
+    """Validation is only meaningful if it ran the same code Development did."""
+    base = repo_root / "research" / "records"
+    dev = json.loads((base / "baseline1_development_datasetv2.json").read_text(encoding="utf-8"))
+    val = json.loads((base / "baseline1_validation_datasetv2.json").read_text(encoding="utf-8"))
+    assert dev["strategy"]["sha256"] == val["strategy"]["sha256"]
+    assert dev["config_hash"] == val["config_hash"]
+    assert dev["dataset_hashes"] == val["dataset_hashes"]
+    assert dev["period_label"] == "development"
+    assert val["period_label"] == "validation"

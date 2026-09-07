@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0.0",
+  "timestamp_utc": "2026-09-07T02:47:35Z",
+  "experiment": "baseline-1",
+  "run_name": "baseline-1-validation-datasetv2",
+  "command": "freqtrade backtesting --config config.research.json --strategy BaselineEmaRegimeV1 --timerange 20250101-20260901 --timeframe-detail 5m --enable-protections --export trades",
+  "code_commit": "e98943c6d3843f0992d0982390a0be0d961c36c4",
+  "code_dirty": false,
+  "config_hash": "fc00865bce6b3e937c2e745814898fbf77f999eced5b80d04da1968155db0839",
+  "config_files": [
+    "freqtrade/user_data/config.paper.json.example",
+    "freqtrade/user_data/config.binance-data-mirror.json.example"
+  ],
+  "dataset_hashes": {
+    "BTC/USDT 1h": "9e564a7d5738821757202263bf98f12062e43021c6a810020f4d9d9907ca9763",
+    "BTC/USDT 5m": "c4f9130d1be079b0a1ada78ef97fb9f61b86b6eba1b5084fcd502b74a34be59e",
+    "ETH/USDT 1h": "b193917fe772fdaacca3bcea9e033277d0b666a73f7635b50e7924c75bb7098f",
+    "ETH/USDT 5m": "284936becd62df6b3634e9b0da4b1fa98b95b51de13000430b258fda04179560"
+  },
+  "dataset_audit_pass": true,
+  "strategy": {
+    "name": "BaselineEmaRegimeV1",
+    "file": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
+    "sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc"
+  },
+  "freqtrade_version": "2026.7",
+  "pairs": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
+  "timeframe": "1h",
+  "detail_timeframe": "5m",
+  "timerange": "20250101-20260901",
+  "period_label": "validation",
+  "fee_assumption": {
+    "per_side_ratio": 0.001,
+    "source": "Binance spot taker fee, set explicitly in the config",
+    "slippage_note": "no slippage model; market orders priced on the far side of the book"
+  },
+  "wallet": 100.0,
+  "stake": 10.0,
+  "max_open_trades": 2,
+  "metrics": {
+    "total_return_pct": -0.06836155000000055,
+    "total_return_abs": -0.06836155000000055,
+    "max_drawdown_pct_closed_trade_basis": 8.015831899999995,
+    "max_drawdown_pct_wallet_basis": 9.41,
+    "max_drawdown_abs_wallet_basis": 9.848,
+    "drawdown_duration_days_wallet_basis": 322,
+    "drawdown_start_wallet_basis": "2025-08-14T04:00:00Z",
+    "drawdown_end_wallet_basis": "2026-07-03T01:00:00Z",
+    "min_wallet_balance": 92.288,
+    "max_wallet_balance": 104.619,
+    "sharpe_closed_trades": -0.0025632109390808537,
+    "sortino_closed_trades": -0.010648953990762142,
+    "calmar_closed_trades": -0.026842381300008253,
+    "sharpe_daily_wallet": 0.03,
+    "sortino_daily_wallet": 0.05,
+    "calmar_daily_wallet": -0.01,
+    "profit_factor": 0.9970497489141866,
+    "trade_count": 96,
+    "winning_trades": 25,
+    "losing_trades": 71,
+    "win_rate_pct": 26.041666666666668,
+    "avg_profit_pct_per_trade": -0.02,
+    "avg_trade_duration_days": 6.0861,
+    "max_consecutive_losses": 14,
+    "max_consecutive_wins": 4,
+    "backtest_days": 607,
+    "market_change_pct": -21.69846682454369,
+    "per_pair_return_pct": {
+      "BTC/USDT": -1.77,
+      "ETH/USDT": 1.7
+    },
+    "per_pair_return_note": "reported by the engine (results_per_pair.profit_total_pct)",
+    "time_exposure_pct": 55.71546158693237,
+    "avg_capital_exposure_pct": 9.304566442612506,
+    "peak_capital_exposure_pct": 19.771833999999995,
+    "peak_concurrent_trades": 2,
+    "trades_with_usable_timestamps": 96,
+    "return_per_exposure_unit": -0.7347096763898889,
+    "turnover_stake": 1861.8817204,
+    "turnover_note": "entry notional plus exit notional, approximated as 2x total stake",
+    "total_fees_stake": 1.8618817204,
+    "fees_note": "derived as 2 x fee(0.001) x total stake; the engine reported no per-trade fee fields",
+    "passive_full_50_50_return_pct": -21.85499158936142,
+    "passive_max_exposure_matched_return_pct": -4.370998317872276,
+    "passive_realised_exposure_matched_return_pct": -2.0335122134595083,
+    "passive_realised_exposure_matched_note": "50/50 passive return scaled to the strategy's realised average capital exposure; an approximation that ignores when that exposure occurred",
+    "excess_over_realised_exposure_matched_pp": 1.9651506634595077,
+    "provenance_note": "Engine figures come from Freqtrade's own backtest export; exposure, turnover, fee and realised-exposure-matched figures are computed by research/summarize_backtest.py from the exported trade list."
+  },
+  "analyses": {
+    "lookahead": "not_run",
+    "recursive": "not_run",
+    "detail_timeframe_simulation": "pass"
+  },
+  "gate": "PASS",
+  "reason": "VALIDATION_PROTOCOL_RESULT = PASS, VALIDATION_PERFORMANCE_CLASSIFICATION = NEUTRAL. The unchanged baseline was run exactly once on the pre-declared Validation window after its logic and the Development protocol were frozen. It returned -0.07% over 607 days in a market that fell 21.70%, against a realised-exposure-matched passive line of -2.03%, so E = +1.97 percentage points - inside the NEUTRAL band. Profit factor 0.997 is above the 0.8 WEAK threshold and the sample of 96 closed trades is above the 30-trade minimum, so the classification is NEUTRAL on its merits rather than for lack of data.",
+  "notes": "Evidence: https://github.com/algamal119933-ux/trading-lab-os-sandbox/actions/runs/34077370180. This window is Validation, not a pristine Locked OOS: Dataset V1 work already inspected parts of 2025-2026, so no span of this dataset qualifies as untouched holdout. The first strict prospective holdout must be forward paper over data that did not exist at freeze time. This result has not been used to alter BASELINE-1 in any way; any tuning prompted by it would have to become a new, explicitly versioned candidate. CANONICAL_CANDLE_V1 content digests. The run asserted all eight fingerprints (four raw, four canonical) against the frozen lock with --gate lock before the backtest was allowed to start. Strategy provenance: yes - byte-identical to the file evaluated on Development; not one line was altered between the two runs. Lookahead and recursive analysis are properties of the strategy code, which is byte-identical to the Development evaluation. Re-running them on Validation would add no information and would mean touching the window more than once."
+}

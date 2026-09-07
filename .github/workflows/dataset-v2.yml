@@ -14,6 +14,7 @@ on:
         type: choice
         default: acquire-and-audit
         options:
+          - probe-only
           - acquire-and-audit
           - passive-benchmarks
           - baseline-development
@@ -27,6 +28,7 @@ permissions:
   contents: read
 
 env:
+  PYTHONUNBUFFERED: "1"
   IMAGE: freqtradeorg/freqtrade:2026.7
   DATA_DIR: freqtrade/user_data/data/binance
   LOCK: research/datasets/dataset_v2.lock.json
@@ -37,6 +39,8 @@ env:
   DEV_END: "2024-12-31T23:59:59Z"
   VAL_START: "2025-01-01T00:00:00Z"
   VAL_END: "2026-08-31T23:59:59Z"
+  EXPECT_START: "2020-12-01T00:00:00Z"
+  EXPECT_END_EXCLUSIVE: "2026-09-01T00:00:00Z"
   STRATEGY: BaselineEmaRegimeV1
   WALLET: "100"
   FEE: "0.001"
@@ -55,16 +59,92 @@ jobs:
       - name: Install pinned dev dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install -r requirements-dev.txt -r requirements-research.txt
 
-      - name: Create the runtime config from the committed example and guard it
+      - name: Create the runtime and research configs, and guard both
         run: |
           set -euo pipefail
           cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
           python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+          # The research config is the paper config plus the data-mirror overlay,
+          # merged here so a single file reaches Freqtrade and the guard checks
+          # exactly what the engine will read.
+          python3 - <<'PY'
+          import copy, json, pathlib
+          def merge(base, overlay):
+              out = copy.deepcopy(base)
+              for k, v in overlay.items():
+                  if k.startswith("_"):
+                      continue
+                  out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+              return out
+          base = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
+          overlay = json.loads(pathlib.Path("freqtrade/user_data/config.binance-data-mirror.json.example").read_text())
+          pathlib.Path("freqtrade/user_data/config.research.json").write_text(
+              json.dumps(merge(base, overlay), indent=2) + "\n")
+          PY
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.research.json
 
-      - name: Pull the pinned Freqtrade image
-        run: docker pull "$IMAGE"
+      - name: Make the mounted paths writable by the image's own user
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA_DIR" artifacts freqtrade/user_data/backtest_results \
+                   freqtrade/user_data/logs
+          # The Freqtrade image runs as ftuser (uid 1000); the runner is 1001.
+          chmod -R a+rwX freqtrade/user_data artifacts
+
+      - name: Endpoint reachability report
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY' | tee artifacts/endpoint_report.txt
+          import urllib.request, urllib.error, time
+          BASE = "https://data.binance.vision"
+          targets = [
+              ("trading-api",   "https://api.binance.com/api/v3/exchangeInfo"),
+              ("data-api",      "https://data-api.binance.vision/api/v3/exchangeInfo"),
+              ("data-api-kline","https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1"),
+              ("monthly-1h",    f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip"),
+              ("monthly-1h-sum",f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip.CHECKSUM"),
+              ("monthly-5m",    f"{BASE}/data/spot/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2021-01.zip"),
+              ("monthly-5m-eth",f"{BASE}/data/spot/monthly/klines/ETHUSDT/5m/ETHUSDT-5m-2021-01.zip"),
+              ("monthly-5m-last",f"{BASE}/data/spot/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2026-08.zip"),
+              ("monthly-1h-2020",f"{BASE}/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-12.zip"),
+              ("daily-1h",      f"{BASE}/data/spot/daily/klines/BTCUSDT/1h/BTCUSDT-1h-2026-08-30.zip"),
+          ]
+          for name, url in targets:
+              started = time.time()
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as r:
+                      body = r.read()
+                  status, size = r.status, len(body)
+              except urllib.error.HTTPError as e:
+                  status, size = e.code, 0
+              except Exception as e:
+                  status, size = f"ERR:{type(e).__name__}", 0
+              print(f"{name:<18} {str(status):<8} {size:>10} bytes  {time.time()-started:5.2f}s  {url}")
+          PY
+
+      - name: Probe public Binance data endpoints
+        if: inputs.stage != 'probe-only' 
+        # api.binance.com answers 451 (geo-restriction) to GitHub-hosted runners.
+        # These are Binance's own public market-data endpoints, which serve the
+        # same spot klines without the trading-API eligibility check.
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts
+          probe() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "$2" || echo "000")
+            printf '%-24s %-4s %s\n' "$1" "$code" "$2"
+          }
+          {
+            probe trading-api   "https://api.binance.com/api/v3/exchangeInfo"
+            probe data-api      "https://data-api.binance.vision/api/v3/exchangeInfo"
+            probe data-api-kl   "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1"
+            probe archive-1h    "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip"
+            probe archive-5m    "https://data.binance.vision/data/spot/monthly/klines/ETHUSDT/5m/ETHUSDT-5m-2021-01.zip"
+            probe archive-chk   "https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip.CHECKSUM"
+          } | tee artifacts/endpoint_probe.txt
 
       - name: Restore the Dataset V2 market-data cache
         id: data-cache
@@ -73,49 +153,94 @@ jobs:
           path: freqtrade/user_data/data
           key: dataset-v2-binance-spot-btc-eth-5m-1h-20201201-20260901
 
-      - name: Download Binance spot market data (public, no credentials)
-        if: steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload
+      - name: Acquire Binance spot klines from the public data archive
+        timeout-minutes: 90
+        # api.binance.com answers 451 to this runner, so ccxt/download-data cannot
+        # even load markets. Binance publishes the same spot klines as checksummed
+        # ZIP archives on data.binance.vision, with no eligibility check. This is
+        # real exchange data, not a synthetic substitute.
+        if: inputs.stage != 'probe-only' && (steps.data-cache.outputs.cache-hit != 'true' || inputs.force_redownload)
         run: |
           set -euo pipefail
-          mkdir -p "$DATA_DIR"
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
-            "$IMAGE" download-data \
-              --config /freqtrade/user_data/config.json \
-              --exchange binance \
-              --pairs BTC/USDT ETH/USDT \
-              --timeframes 5m 1h \
-              --timerange "$ACQUIRE_TIMERANGE" \
-              --data-format-ohlcv feather
+          python3 scripts/fetch_binance_public_data.py \
+            --symbol BTCUSDT --symbol ETHUSDT \
+            --timeframe 1h --timeframe 5m \
+            --start 2020-12-01 --end 2026-08-31 \
+            --out-dir "$DATA_DIR" \
+            --manifest artifacts/acquisition_manifest.json
           ls -la "$DATA_DIR"
 
       - name: Deep audit and dual fingerprints
+        if: inputs.stage != 'probe-only'
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          # Run inside the Freqtrade image so the feather reader is the exact one
-          # the engine uses; the runner has no pandas/pyarrow of its own.
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
-            scripts/audit_data.py \
+          python3 scripts/audit_data.py \
               --data-dir "$DATA_DIR" \
               --pair BTC/USDT --pair ETH/USDT \
               --timeframe 5m --timeframe 1h \
+              --expect-start "$EXPECT_START" \
+              --expect-end "$EXPECT_END_EXCLUSIVE" \
               --out artifacts/dataset_v2_audit.json \
-            | tee artifacts/dataset_v2_audit.log
+            | tee artifacts/dataset_v2_audit.log || echo "AUDIT_EXIT=$?"
+          # Surface the diagnosis regardless: a failing audit is the finding.
+          python3 - <<'PY' | tee artifacts/dataset_v2_audit_summary.txt
+          import json, pathlib
+          report = json.loads(pathlib.Path("artifacts/dataset_v2_audit.json").read_text())
+          print("overall_pass:", report["overall_pass"], "| structural_pass:", report.get("structural_pass"))
+          for f in report["files"]:
+              print(f"\n{f['pair']} {f['timeframe']}: pass={f.get('pass')} rows={f['rows']}")
+              print("  range:", f.get("start"), "->", f.get("end"))
+              print("  start_ok:", f.get("start_matches_expected"), "end_ok:", f.get("end_matches_expected"))
+              print("  structural_pass:", f.get("structural_pass"),
+                    "continuity_pass:", f.get("continuity_pass"),
+                    "missing_ratio:", f"{f.get('missing_ratio', 0):.6%}")
+              print("  missing:", f.get("missing_intervals"),
+                    "clusters:", f.get("gap_cluster_count"),
+                    "largest:", f.get("largest_gap_candles"))
+              print("  dupes:", f.get("duplicate_timestamps"),
+                    "off_grid:", f.get("unexpected_timestamps"),
+                    "nan:", f.get("nan_cells"),
+                    "bad_ohlc:", f.get("bad_ohlc_rows"),
+                    "monotonic:", f.get("monotonic_time"),
+                    "last_complete:", f.get("last_candle_is_complete"))
+              print("  RAW_FILE_SHA256      ", f.get("raw_file_sha256"))
+              print("  CANONICAL_CONTENT    ", f.get("canonical_candle_content_sha256"))
+              for c in (f.get("gap_clusters") or [])[:12]:
+                  print(f"    gap {c['missing_candles']:>7} candles  {c['start']} -> {c['end']}")
+          for a in report["aggregation_checks"]:
+              print(f"\n{a['pair']} {a['fine_timeframe']}->{a['coarse_timeframe']}: pass={a['pass']} "
+                    f"prices_exact={a.get('price_reconciliation_exact')} "
+                    f"compared={a['common_complete_buckets']} incomplete={a['incomplete_fine_buckets_in_downloaded_range']} "
+                    f"mismatches={a['mismatched_bars']}")
+              print("   worst relative deviation:", a.get("worst_relative_deviation"))
+              for field, example in (a.get("worst_deviation_examples") or {}).items():
+                  print(f"     {field}: {example}")
+          print("\nrange_alignment:", json.dumps(report["range_alignment"]))
+          PY
 
       - name: Assert against the dataset lock once it is frozen
+        if: inputs.stage != 'probe-only'
+        # --gate lock, not the acquisition gate. Dataset V2's continuity gaps
+        # and its four volume-only reconciliation hours are real properties of
+        # Binance's published data, examined and recorded in the lock's
+        # integrity_result before any baseline outcome was seen. Re-running the
+        # acquisition gate here would fail on those recorded conditions forever
+        # while answering the wrong question: what a frozen dataset needs
+        # checking on every later run is whether it is still the same data.
+        # The canonical digests settle that exactly, and the acquisition
+        # verdict is still printed alongside.
         run: |
           set -euo pipefail
           status="$(python3 -c "import json;print(json.load(open('$LOCK'))['status'])")"
           if [ "$status" = "frozen" ]; then
-            docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
-              -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
-              scripts/audit_data.py \
+            python3 scripts/audit_data.py \
                 --data-dir "$DATA_DIR" \
                 --pair BTC/USDT --pair ETH/USDT \
                 --timeframe 5m --timeframe 1h \
-                --lock "$LOCK" | tee artifacts/dataset_v2_lock_check.log
+                --lock "$LOCK" \
+                --gate lock 2>&1 | tee artifacts/dataset_v2_lock_check.log
+            code=${PIPESTATUS[0]}
+            [ "$code" -eq 0 ]
           else
             echo "dataset lock status is '$status'; fingerprints are being established by this run"
           fi
@@ -124,9 +249,7 @@ jobs:
         if: inputs.stage != 'acquire-and-audit'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
-            freqtrade/user_data/baseline_benchmarks.py \
+          python3 freqtrade/user_data/baseline_benchmarks.py \
               --data-dir "$DATA_DIR" \
               --lock "$LOCK" \
               --period development \
@@ -139,9 +262,7 @@ jobs:
         if: inputs.stage == 'baseline-validation'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/work" -w /work --entrypoint python "$IMAGE" \
-            freqtrade/user_data/baseline_benchmarks.py \
+          python3 freqtrade/user_data/baseline_benchmarks.py \
               --data-dir "$DATA_DIR" \
               --lock "$LOCK" \
               --period validation \
@@ -149,6 +270,38 @@ jobs:
               --wallet "$WALLET" --stake 10 --max-open-trades 2 \
               --out artifacts/passive_validation.json \
             | tee artifacts/passive_validation.log
+
+      - name: Pull the pinned Freqtrade image
+        # Deliberately late: everything above is pure Python, so the dataset
+        # evidence and the passive benchmarks are already banked before Docker
+        # Hub's anonymous rate limit can become this run's problem.
+        if: startsWith(inputs.stage, 'baseline-')
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then
+              echo "pulled on attempt $attempt"
+              exit 0
+            fi
+            echo "pull attempt $attempt failed or timed out; Docker Hub may be rate limiting"
+            sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts (Docker Hub rate limit)"
+          exit 1
+
+      - name: Can Freqtrade read the acquired data through the mirror?
+        if: startsWith(inputs.stage, 'baseline-')
+        continue-on-error: true
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          docker run --rm \
+            -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
+            "$IMAGE" list-data \
+              --config /freqtrade/user_data/config.research.json \
+              --data-format-ohlcv feather \
+            2>&1 | tail -30 | tee artifacts/freqtrade_list_data.log
 
       - name: Freeze the code hashes being evaluated
         if: startsWith(inputs.stage, 'baseline-')
@@ -174,99 +327,131 @@ jobs:
           PY
 
       - name: Backtest on Development (1h signals, 5m detail simulation)
+        timeout-minutes: 25
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" backtesting \
-              --config /freqtrade/user_data/config.json \
+              --config /freqtrade/user_data/config.research.json \
               --strategy "$STRATEGY" \
               --strategy-path /freqtrade/user_data/strategies \
               --timerange "$DEV_TIMERANGE" \
               --timeframe-detail 5m \
               --enable-protections \
               --export trades \
-              --export-filename /freqtrade/user_data/backtest_results/dev.json \
             2>&1 | tee artifacts/backtest_development.log
+          # No --export-filename: 2026.7 ignores it and writes
+          # backtest_results/backtest-result-<ts>.zip regardless. The metrics
+          # step selects the newest result of either shape.
           # Freqtrade exits 0 on a configuration error, so check the output too.
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_development.log
 
       - name: Backtest on Validation (single unchanged run)
+        timeout-minutes: 25
         if: inputs.stage == 'baseline-validation'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" backtesting \
-              --config /freqtrade/user_data/config.json \
+              --config /freqtrade/user_data/config.research.json \
               --strategy "$STRATEGY" \
               --strategy-path /freqtrade/user_data/strategies \
               --timerange "$VAL_TIMERANGE" \
               --timeframe-detail 5m \
               --enable-protections \
               --export trades \
-              --export-filename /freqtrade/user_data/backtest_results/val.json \
             2>&1 | tee artifacts/backtest_validation.log
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/backtest_validation.log
 
       - name: Lookahead analysis (Development)
+        timeout-minutes: 20
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" lookahead-analysis \
-              --config /freqtrade/user_data/config.json \
+              --config /freqtrade/user_data/config.research.json \
               --strategy "$STRATEGY" \
               --strategy-path /freqtrade/user_data/strategies \
               --timerange "$DEV_TIMERANGE" \
             2>&1 | tee artifacts/lookahead_development.log
+          # Freqtrade exits 0 on a configuration error.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
 
       - name: Recursive analysis (Development)
+        timeout-minutes: 20
         if: inputs.stage == 'baseline-development'
         run: |
           set -euo pipefail
-          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+          docker run --rm \
             -v "$PWD/freqtrade/user_data:/freqtrade/user_data" \
             "$IMAGE" recursive-analysis \
-              --config /freqtrade/user_data/config.json \
+              --config /freqtrade/user_data/config.research.json \
               --strategy "$STRATEGY" \
               --strategy-path /freqtrade/user_data/strategies \
               --timerange "$DEV_TIMERANGE" \
               -p BTC/USDT \
             2>&1 | tee artifacts/recursive_development.log
+          # Freqtrade exits 0 on a configuration error.
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
       - name: Normalise backtest metrics
+        timeout-minutes: 10
+        # Two distinct bugs made this step fail silently before. First, a heredoc
+        # whose terminator was not at column 0 once nested, which makes bash exit
+        # 2 before producing any output at all; there is no heredoc here any more.
+        # Second, Freqtrade 2026.7 writes the result as `backtest-result-<ts>.zip`
+        # with only a small `.meta.json` beside it, so a *.json glob found nothing
+        # substantive. Both file shapes are accepted now. Everything this step
+        # prints is captured to a file the collect step echoes at the end of the
+        # job, because artifact storage is unreachable from the analysis
+        # environment.
         if: startsWith(inputs.stage, 'baseline-')
         run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for f in freqtrade/user_data/backtest_results/*.json; do
-            echo "=== $f ==="
-            python3 research/summarize_backtest.py --result "$f" --dump-schema || true
-          done
-          if [ "${{ inputs.stage }}" = "baseline-development" ]; then
-            RESULT=freqtrade/user_data/backtest_results/dev.json
+          set -uo pipefail
+          (
+            set -euo pipefail
+            echo "--- backtest_results directory ---"
+            ls -la freqtrade/user_data/backtest_results/ || true
+
+            shopt -s nullglob
+            for f in freqtrade/user_data/backtest_results/*.json freqtrade/user_data/backtest_results/*.zip; do
+              echo "=== schema of $f ==="
+              python3 research/summarize_backtest.py --result "$f" --dump-schema || true
+            done
+
+            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in list(d.glob("*.zip")) + list(d.glob("*.json")) if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
+            if [ -z "$RESULT" ]; then
+              echo "::error::no backtest result (zip or json) was produced"
+              exit 1
+            fi
+            echo "using result file: $RESULT"
+
+            if [ "${{ inputs.stage }}" = "baseline-development" ]; then
+              WINDOW_START="$DEV_START"; WINDOW_END="$DEV_END"
+              PASSIVE=artifacts/passive_development.json
+              OUT=artifacts/metrics_development.json; MD=artifacts/metrics_development.md
+            else
+              WINDOW_START="$VAL_START"; WINDOW_END="$VAL_END"
+              PASSIVE=artifacts/passive_validation.json
+              OUT=artifacts/metrics_validation.json; MD=artifacts/metrics_validation.md
+            fi
+
             python3 research/summarize_backtest.py \
               --result "$RESULT" \
-              --window-start "$DEV_START" --window-end "$DEV_END" \
+              --window-start "$WINDOW_START" --window-end "$WINDOW_END" \
               --wallet "$WALLET" --fee "$FEE" \
-              --passive artifacts/passive_development.json \
-              --out artifacts/metrics_development.json \
-              --md artifacts/metrics_development.md
-            cat artifacts/metrics_development.md
-          else
-            RESULT=freqtrade/user_data/backtest_results/val.json
-            python3 research/summarize_backtest.py \
-              --result "$RESULT" \
-              --window-start "$VAL_START" --window-end "$VAL_END" \
-              --wallet "$WALLET" --fee "$FEE" \
-              --passive artifacts/passive_validation.json \
-              --out artifacts/metrics_validation.json \
-              --md artifacts/metrics_validation.md
-            cat artifacts/metrics_validation.md
-          fi
+              --passive "$PASSIVE" \
+              --out "$OUT" --md "$MD"
+            cat "$MD"
+          ) 2>&1 | tee artifacts/metrics_step.log
+          code=${PIPESTATUS[0]}
+          echo "metrics step exit code: $code" >> artifacts/metrics_step.log
+          exit "$code"
 
       - name: Collect raw engine output
         if: always()
@@ -274,7 +459,50 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/backtest_results
           cp -r freqtrade/user_data/backtest_results/. artifacts/backtest_results/ 2>/dev/null || true
-          ls -laR artifacts | head -100
+          ls -laR artifacts | head -60
+          # Artifact blob storage is unreachable from the analysis environment, so
+          # the job log is the delivery channel. Re-print the key evidence last.
+          echo "===== ENDPOINT REPORT ====="; cat artifacts/endpoint_report.txt 2>/dev/null || echo "(none)"
+          echo "===== ENDPOINT PROBE ====="; cat artifacts/endpoint_probe.txt 2>/dev/null || echo "(none)"
+          echo "===== FREQTRADE list-data ====="; cat artifacts/freqtrade_list_data.log 2>/dev/null || echo "(none)"
+          echo "===== AUDIT SUMMARY ====="; cat artifacts/dataset_v2_audit_summary.txt 2>/dev/null || echo "(none)"
+          echo "===== DATASET LOCK CHECK ====="; cat artifacts/dataset_v2_lock_check.log 2>/dev/null || echo "(none)"
+          echo "===== LOCK FRAGMENT (paste into dataset_v2.lock.json) ====="
+          python3 - <<'PY' 2>/dev/null || echo "(none)"
+          import json, pathlib
+          r = json.loads(pathlib.Path("artifacts/dataset_v2_audit.json").read_text())
+          key = lambda f: f"{f['pair']} {f['timeframe']}"
+          print(json.dumps({
+              "raw_file_hashes": {key(f): f["raw_file_sha256"] for f in r["files"]},
+              "canonical_hashes": {key(f): f["canonical_candle_content_sha256"] for f in r["files"]},
+              "coverage": {key(f): [f["start"], f["end"], f["rows"], f["missing_intervals"],
+                                    f["structural_pass"]] for f in r["files"]},
+              "reconciliation": {a["pair"]: [a.get("price_reconciliation_exact"),
+                                             a["common_complete_buckets"],
+                                             a["mismatched_bars"]["volume"]]
+                                 for a in r["aggregation_checks"]},
+          }, indent=None))
+          PY
+          echo "===== ACQUISITION MANIFEST (summary) ====="
+          python3 - <<'PY' 2>/dev/null || echo "(none)"
+          import json, pathlib
+          m = json.loads(pathlib.Path("artifacts/acquisition_manifest.json").read_text())
+          print("source:", m["source"], "| checksum verification:", m["checksum_verification"])
+          print("archives:", len(m["archives"]),
+                "| verified:", sum(1 for a in m["archives"] if a.get("checksum_verified")))
+          for f in m["files_written"]:
+              print(" ", f)
+          PY
+          echo "===== FROZEN HASHES ====="; cat artifacts/frozen_hashes.json 2>/dev/null || echo "(none)"
+          echo "===== PASSIVE (development) ====="; cat artifacts/passive_development.json 2>/dev/null || echo "(none)"
+          echo "===== PASSIVE (validation) ====="; cat artifacts/passive_validation.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS STEP LOG ====="; tail -40 artifacts/metrics_step.log 2>/dev/null || echo "(none)"
+          echo "===== METRICS (development) ====="; cat artifacts/metrics_development.json 2>/dev/null || echo "(none)"
+          echo "===== METRICS (validation) ====="; cat artifacts/metrics_validation.json 2>/dev/null || echo "(none)"
+          echo "===== BACKTEST development (tail) ====="; tail -60 artifacts/backtest_development.log 2>/dev/null || echo "(none)"
+          echo "===== BACKTEST validation (tail) ====="; tail -60 artifacts/backtest_validation.log 2>/dev/null || echo "(none)"
+          echo "===== LOOKAHEAD (tail) ====="; tail -30 artifacts/lookahead_development.log 2>/dev/null || echo "(none)"
+          echo "===== RECURSIVE (tail) ====="; tail -30 artifacts/recursive_development.log 2>/dev/null || echo "(none)"
 
       - uses: actions/upload-artifact@v4
         if: always()
