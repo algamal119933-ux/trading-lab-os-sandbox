@@ -26,6 +26,13 @@ freqtrade/user_data/plot/
 freqtrade/user_data/notebooks/
 freqtrade/user_data/hyperopt.lock
 
+# FP-CONTROL-1 forward-paper runtime state. The evidence ledgers are the
+# cohort's live evidence lane: they are append-only, they grow for the whole
+# window, and a runtime that kept the worktree dirty would trip the protocol's
+# own clean-worktree stop condition. They stay on the host and are published
+# deliberately as closure artifacts, not swept in by an incidental commit.
+freqtrade/user_data/fp-control-1/
+
 # ---------------------------------------------------------------------------
 # Market data and derived artifacts.
 # Datasets are reproduced via scripts/download_data.sh and pinned by

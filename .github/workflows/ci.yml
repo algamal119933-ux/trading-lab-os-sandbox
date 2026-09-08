@@ -252,6 +252,14 @@ jobs:
           docker compose config
           docker compose config --services
 
+      - name: Render the FP-CONTROL-1 overlay and assert it stays paper-safe
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.fp.yml config > /tmp/fp-rendered.yml
+          docker compose -f docker-compose.yml -f docker-compose.fp.yml config --services
+          python3 -m pip install --quiet "PyYAML==6.0.3"
+          python3 scripts/check_fp_overlay.py /tmp/fp-rendered.yml
+
       - name: Build the read-only exporter image
         run: docker build -t tradinglab-exporter:ci monitoring/exporter
 

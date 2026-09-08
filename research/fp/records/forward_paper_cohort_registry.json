@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-07T00:00:00Z",
+  "registry_updated_utc": "2026-09-08T00:00:00Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
   "fp_run_active": false,
@@ -17,31 +17,67 @@
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
         "source_commit": null,
-        "strategy_sha256": null,
+        "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
         "params_sha256": null,
-        "config_sha256": null,
+        "config_sha256": "d1d078c63adc5e4283632a1c3e65df8cd0d7c23a249575054491c6356d97a9ff",
         "engine_version": "freqtradeorg/freqtrade:2026.7",
-        "image_digest": null,
-        "python_version": null,
-        "pairs": ["BTC/USDT", "ETH/USDT"],
+        "image_digest": "sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643",
+        "python_version": "3.14.6",
+        "pairs": [
+          "BTC/USDT",
+          "ETH/USDT"
+        ],
         "timeframe": "1h",
         "detail_timeframe": "5m",
-        "fee_model": { "per_side_ratio": 0.001, "slippage": "none modelled" },
-        "sizing": { "dry_run_wallet": 100, "stake_amount": 10, "stake_currency": "USDT" },
+        "fee_model": {
+          "per_side_ratio": 0.001,
+          "slippage": "none modelled"
+        },
+        "sizing": {
+          "dry_run_wallet": 100,
+          "stake_amount": 10,
+          "stake_currency": "USDT"
+        },
         "max_open_trades": 2,
-        "order_policy": null,
-        "feature_sources": ["binance spot public OHLCV 1h"],
-        "paper_fill_model_version": null,
-        "environment_variable_allowlist": [],
-        "bot_name": null,
-        "db_path": null,
+        "order_policy": {
+          "execution": "freqtrade dry-run simulation only; no live order route exists",
+          "entry_pricing": "order book, price_side 'other', order_book_top 1",
+          "exit_pricing": "order book, price_side 'other', order_book_top 1",
+          "unfilled_timeout_minutes": 10,
+          "fee_per_side_ratio": 0.001,
+          "slippage_model": "none modelled",
+          "latency_model": "none modelled",
+          "partial_fill_model": "none modelled",
+          "risk_limits": "stoploss -0.25 and max_open_trades 2 only",
+          "additional_risk_limits": "none. No further limit is introduced before T0: an untested parameter added here would be presented as a control while never having been evaluated."
+        },
+        "feature_sources": [
+          "binance spot public OHLCV 1h"
+        ],
+        "paper_fill_model_version": "FREQTRADE_2026.7_DRYRUN_ORDERBOOK_V1",
+        "environment_variable_allowlist": [
+          "FREQTRADE_API_USER",
+          "FREQTRADE_API_PASSWORD",
+          "FREQTRADE_JWT_SECRET",
+          "FREQTRADE_WS_TOKEN",
+          "FREQTRADE_IMAGE"
+        ],
+        "bot_name": "fp-control-1",
+        "db_path": "/freqtrade/user_data/fp-control-1/tradesv3.sqlite",
         "wallet": 100,
-        "log_path": null,
-        "evidence_dir": null
+        "log_path": "/freqtrade/user_data/fp-control-1/logs/freqtrade.log",
+        "evidence_dir": "/freqtrade/user_data/fp-control-1/evidence"
       },
-      "change_log": []
+      "change_log": [
+        {
+          "utc": "2026-09-08T00:00:00Z",
+          "class": "O",
+          "description": "S19 pre-T0 binding: paper_fill_model_version, bot_name, db_path, log_path, evidence_dir, image_digest, python_version, order_policy and the environment allowlist bound once before T0. strategy_sha256 and config_sha256 record hashes already frozen in Repo Truth and verified byte-identical to the activation pack's declared values. cohort_id, t0_utc and source_commit remain null: those are frozen by the Owner-authorised T0 act, not by this build. Observability only - no trading semantics are changed.",
+          "replay_parity_before_after": null
+        }
+      ]
     }
   ],
   "real_money_authorized": false,
-  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE and no T0 has been created. The FP-CONTROL-1 row is a declaration of intent, not a running instance: every hash and path is null precisely because nothing has been frozen. Section 3 permits a bounded BASELINE-1 control-only runtime-hardening check, and section 3 also states that BASELINE-1 control operation is not candidate-quality evidence. Populating this row is the first act of FP-BOOT-1 proper, and it may happen only after preflight (section 12) returns PASS."
+  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE. The FP-CONTROL-1 row is BASELINE-1 as operational control - not a candidate, not a survivor, and not candidate-quality evidence. Its per-instance runtime identity is now bound so that duplicate-instance and DB-isolation risk can be checked rather than assumed, and so a running instance's hashes can be compared against a frozen declaration. cohort_id, t0_utc and source_commit stay null until preflight returns PASS and the Owner-authorised T0 freeze is performed; populating them earlier would make warm-up look like prospective evidence."
 }
