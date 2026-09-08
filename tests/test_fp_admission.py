@@ -8,6 +8,7 @@ failed closed while the entry conditions are genuinely absent.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -382,18 +383,70 @@ def test_no_feature_is_forward_filled(record):
 # -- the cohort registry (sections 3, 4, 7) -------------------------------
 
 
-def test_registry_records_state_c_with_no_cohort(registry):
+def test_registry_records_state_c_with_no_candidate_cohort(registry):
+    """State C holds regardless of whether the control is running.
+
+    ``fp_run_active`` says a *control* is running; it must never imply a
+    paper-alpha cohort exists. Conflating the two is how a control-only run
+    would quietly acquire candidate standing.
+    """
     assert registry["entry_state"] == "C"
     assert registry["paper_alpha_cohort"] == "NONE"
-    assert registry["fp_run_active"] is False
     assert registry["real_money_authorized"] is False
 
 
-def test_no_instance_has_a_t0(registry):
-    """No T0 may exist while preflight is blocked."""
+def test_a_t0_exists_only_for_a_started_instance(registry):
+    """No T0 may exist for an instance that has not started, and vice versa.
+
+    This replaces a flat "no instance has a T0" assertion, which was true only
+    while the pack was parked and would have to be deleted the moment a
+    legitimate, preflight-gated freeze happened — deleting the guard exactly
+    when it starts to matter. The invariant that actually protects the protocol
+    is the *correspondence*: t0_utc, cohort_id, status and source_commit are
+    frozen together by one authorised act, or not at all.
+    """
     for instance in registry["instances"]:
-        assert instance["t0_utc"] is None
-        assert instance["status"] == "NOT_STARTED"
+        started = instance["status"] in ("RUNNING", "PAUSED", "CLOSED")
+        if not started:
+            assert instance["status"] == "NOT_STARTED"
+            assert instance["t0_utc"] is None, "an unstarted instance must not carry a T0"
+            assert instance["cohort_id"] is None
+            assert instance["runtime_identity"]["source_commit"] is None
+            continue
+
+        assert instance["t0_utc"] is not None, "a started instance must carry its frozen T0"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", instance["t0_utc"]), instance["t0_utc"]
+        assert instance["cohort_id"], "a started instance must carry its frozen cohort id"
+        # The cohort id is derived from T0, so a mismatch means one of the two
+        # was edited after the freeze.
+        stamp = instance["t0_utc"].replace(":", "").replace("-", "")
+        assert instance["cohort_id"].endswith(stamp), (
+            f"cohort_id {instance['cohort_id']} does not derive from t0 {instance['t0_utc']}"
+        )
+        identity = instance["runtime_identity"]
+        assert re.fullmatch(r"[0-9a-f]{40}", identity["source_commit"] or ""), identity["source_commit"]
+        for field in ("strategy_sha256", "config_sha256"):
+            assert re.fullmatch(r"[0-9a-f]{64}", identity[field] or ""), f"{field} not frozen"
+
+
+def test_a_running_control_never_becomes_a_candidate(registry):
+    """FP-CONTROL-1 may run, but it must not be readable as a candidate.
+
+    Section 3: BASELINE-1 control operation is not candidate-quality evidence.
+    The admission evaluator excludes the FP-CONTROL-1 role by name, so a running
+    control must never satisfy conditions 1 or 2.
+    """
+    running = [i for i in registry["instances"] if i["status"] == "RUNNING"]
+    for instance in running:
+        assert instance["role"] == "FP-CONTROL-1", (
+            f"{instance['role']} is running, but only the control may run in state C"
+        )
+    assert registry["paper_alpha_cohort"] == "NONE"
+
+    record = admission.evaluate()
+    assert record["paper_admission"] == "BLOCKED"
+    assert record["candidate"]["name"] is None
+    assert admission.identified_candidate() is None
 
 
 def test_cohort_size_respects_the_section_4_maximum(registry):
