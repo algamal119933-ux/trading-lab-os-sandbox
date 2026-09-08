@@ -28,9 +28,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,10 +44,80 @@ for extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
 
+# Imported lazily-but-eagerly: these three are what let a check speak about a
+# real runtime instead of a synthetic sample. They must not be optional, or a
+# missing module would quietly downgrade a provable check back to UNPROVEN.
+from fp import capture as fp_capture  # noqa: E402
+from fp import market as fp_market  # noqa: E402
+from fp import reconcile as fp_reconcile  # noqa: E402
+
 EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 PASS, FAIL, UNPROVEN = "PASS", "FAIL", "UNPROVEN"
+
+
+@dataclass
+class RuntimeContext:
+    """A live paper runtime that some checks may interrogate.
+
+    The scaffold deliberately reports UNPROVEN for anything that needs a
+    running candidate, and that must stay true in CI, where none exists. This
+    object is how a real host says "there is one, here it is" — so the same
+    check reports UNPROVEN in CI and PASS or FAIL on the authoritative host,
+    without either verdict being asserted by hand.
+
+    ``None`` everywhere is the CI case and changes nothing.
+    """
+
+    evidence_dir: Path | None = None
+    freqtrade_url: str | None = None
+    api_user: str | None = None
+    api_password: str | None = None
+    exporter_url: str | None = None
+    prometheus_url: str | None = None
+    check_market_route: bool = False
+
+    @property
+    def has_evidence(self) -> bool:
+        return self.evidence_dir is not None and Path(self.evidence_dir).is_dir()
+
+    def client(self):
+        if not self.freqtrade_url:
+            return None
+        return fp_capture.FreqtradeClient(self.freqtrade_url, self.api_user, self.api_password)
+
+
+def _http_ok(url: str, timeout: int = 8) -> tuple[bool, str]:
+    """Is ``url`` serving? Returns (ok, detail) and never raises."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310
+            body = response.read(2048)
+            return 200 <= response.status < 300, f"HTTP {response.status}, {len(body)}+ bytes"
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)[:200]
+
+
+def _real_records(evidence_dir: Path) -> dict:
+    """Counts and provenance of genuinely captured (non-synthetic) evidence."""
+    ledgers = fp_ledger.open_ledgers(evidence_dir)
+    inputs = [r for r in ledgers["input"].records() if not r.payload.get("erratum")]
+    decisions = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+    sources = {r.payload.get("source_id") for r in inputs if r.payload.get("source_id")}
+    hosts = {r.payload.get("source_host") for r in inputs if r.payload.get("source_host")}
+    pairs = sorted({r.payload.get("pair") for r in inputs if r.payload.get("pair")})
+    return {
+        "ledgers": ledgers,
+        "inputs": inputs,
+        "decisions": decisions,
+        "sources": sources,
+        "hosts": hosts,
+        "pairs": pairs,
+        "exchange_sourced": bool(sources) and all(s == fp_market.SOURCE_ID for s in sources),
+    }
 
 # The mechanisms this environment can exercise, as opposed to the checks that
 # need a live candidate. Section 1.3 keeps the two verdicts apart: validating
@@ -205,19 +277,44 @@ def _check_spot_mode() -> tuple[str, str]:
     return PASS, "trading_mode='spot' with margin_mode empty"
 
 
-def _check_clock_tolerance() -> tuple[str, str]:
+def _check_clock_tolerance(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
     """Section 16.14 — is clock and timestamp handling within tolerance?
 
-    What the scaffold enforces structurally can be stated; what it cannot state
-    is the skew between this machine and the exchange, which needs a runtime
-    talking to the exchange.
+    What the scaffold enforces structurally can be stated; the skew between this
+    machine and the exchange cannot be, without asking the exchange. When a
+    runtime with a market route is present the skew is *measured*, and stop
+    condition S16 — skew beyond one candle period — is evaluated against the
+    measurement rather than waived.
     """
+    if runtime is not None and runtime.check_market_route:
+        try:
+            reading = fp_market.measure_clock_skew()
+        except Exception as exc:  # noqa: BLE001
+            return FAIL, f"clock skew could not be measured against the exchange: {exc}", {}
+        payload = reading.as_payload()
+        if not reading.within_tolerance:
+            return (
+                FAIL,
+                f"S16: local-versus-exchange skew {reading.skew_ms} ms exceeds one candle period "
+                f"({fp_market.CLOCK_SKEW_STOP_MS} ms)",
+                {"clock": payload},
+            )
+        severity = "within warn threshold" if abs(reading.skew_ms) <= fp_market.CLOCK_SKEW_WARN_MS else "elevated but tolerable"
+        return (
+            PASS,
+            f"measured against {reading.host}: skew {reading.skew_ms:+d} ms ({severity}), round trip "
+            f"{reading.round_trip_ms} ms, tolerance {fp_market.CLOCK_SKEW_STOP_MS} ms. Structurally, the "
+            "ledger refuses any recorded_utc that is not UTC ISO-8601 ending in Z, replay refuses "
+            "out-of-order or duplicate candle timestamps, and the capture loop refuses a candle whose "
+            "receipt precedes its close.",
+            {"clock": payload},
+        )
     return UNPROVEN, (
         "structurally enforced: the ledger refuses any recorded_utc that is not UTC ISO-8601 ending in Z, "
         "and replay refuses out-of-order or duplicate candle timestamps. Exchange-versus-local clock skew "
         "cannot be measured without a runtime that talks to the exchange, and section 21 makes serious skew "
         "an INSTANCE_PAUSE condition rather than something to tolerate silently."
-    )
+    ), {}
 
 
 def _check_evidence_persistence(evidence_dir: Path) -> tuple[str, str, dict]:
@@ -242,6 +339,64 @@ def _check_evidence_persistence(evidence_dir: Path) -> tuple[str, str, dict]:
         f"reopened from disk by fresh readers and re-verified: {counts}; "
         f"daily-pack digest {digest[:16]}... binds the ledger tips",
         {"mechanism_persistence": PASS},
+    )
+
+
+def _check_restart_drill_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
+    """Section 16.16 / 17 — a real restart drill against the live evidence.
+
+    The synthetic drill below proves a fresh writer continues a chain. This asks
+    the harder question of the actual runtime: did it in fact stop and start
+    again, and did the restart re-decide anything it had already decided?
+    """
+    evidence_dir = Path(runtime.evidence_dir)
+    ledgers = fp_ledger.open_ledgers(evidence_dir)
+    incidents = ledgers["incident"].records()
+    starts = [r for r in incidents if r.payload.get("category") == "run_started"]
+
+    if len(starts) < 2:
+        return UNPROVEN, (
+            f"the runtime has recorded {len(starts)} start(s); a restart drill needs the instance stopped and "
+            "started again so the second run is visible in the evidence"
+        ), {}
+
+    counters = [(r.payload.get("full_identity") or {}).get("restart_counter") for r in starts]
+    if not all(isinstance(c, int) for c in counters) or any(b <= a for a, b in zip(counters, counters[1:])):
+        return FAIL, f"restart counters are not strictly increasing across runs: {counters}", {}
+
+    run_ids = [(r.payload.get("full_identity") or {}).get("run_id") for r in starts]
+    if len(set(run_ids)) != len(run_ids):
+        return FAIL, f"two recorded starts share a run_id: {run_ids}", {}
+
+    for kind, led in sorted(ledgers.items()):
+        problems = led.verify()
+        if problems:
+            return FAIL, f"the {kind} chain broke across a restart: {problems[0]}", {"mechanism_restart": FAIL}
+
+    decisions = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+    bars = [(r.payload.get("pair"), r.payload.get("candle_ts")) for r in decisions]
+    if len(bars) != len(set(bars)):
+        duplicated = [bar for bar in set(bars) if bars.count(bar) > 1]
+        return FAIL, f"a restart re-decided bars it had already decided: {duplicated[:3]}", {"mechanism_restart": FAIL}
+
+    trade_events = [
+        r.payload.get("trade_event_id") for r in ledgers["trade"].records() if not r.payload.get("erratum")
+    ]
+    if len(trade_events) != len(set(trade_events)):
+        return FAIL, "a restart re-recorded a paper execution", {"mechanism_restart": FAIL}
+
+    recovered = fp_capture.recover_state(evidence_dir)
+    return (
+        PASS,
+        f"the instance was stopped and restarted {len(starts) - 1} time(s) (restart counters {counters}); "
+        f"every chain still verifies, {len(bars)} decisions remain unique per bar, no paper execution was "
+        f"re-recorded, and {len(recovered.open_positions)} open position(s) plus "
+        f"{len(recovered.captured_events)} captured market events were recovered from the ledgers",
+        {
+            "mechanism_restart": PASS,
+            "restart_counters": counters,
+            "recovered_open_positions": sorted(recovered.open_positions),
+        },
     )
 
 
@@ -301,10 +456,16 @@ def _check_no_secret() -> tuple[str, str]:
     return PASS, "exchange key and secret are empty; paper runs without any private credential"
 
 
-def _check_hashes_match_registry() -> tuple[str, str]:
+def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
+    """Section 16.5 — do the running instance's hashes match the registry?
+
+    The comparison is between three independent things, and agreement of only
+    two would hide the interesting failure: what the registry froze, what is on
+    disk now, and what the running capture loop stamped onto its own evidence.
+    """
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
-        return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
+        return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
     frozen = [
         item
         for item in registry.get("instances", [])
@@ -314,14 +475,98 @@ def _check_hashes_match_registry() -> tuple[str, str]:
         return UNPROVEN, (
             "the registry declares no frozen runtime identity to compare against "
             f"(paper_alpha_cohort={registry.get('paper_alpha_cohort')!r})"
-        )
-    return UNPROVEN, "hash comparison requires the running instance; not executed here"
+        ), {}
+
+    if runtime is None or not runtime.has_evidence:
+        return UNPROVEN, "hash comparison requires the running instance; not executed here", {}
+
+    on_disk = {
+        "strategy_sha256": fp_capture.sha256_file(fp_capture.STRATEGY_PATH),
+        "config_sha256": fp_capture.sha256_file(EXAMPLE_CONFIG),
+    }
+
+    ledgers = fp_ledger.open_ledgers(Path(runtime.evidence_dir))
+    stamped = {
+        (r.payload.get("identity") or {}).get("strategy_sha256")
+        for r in ledgers["decision"].records()
+        if not r.payload.get("erratum")
+    }
+    stamped.discard(None)
+    if not stamped:
+        return UNPROVEN, "the runtime has stamped no strategy hash onto its evidence yet", {}
+    if len(stamped) > 1:
+        return FAIL, f"the running instance changed strategy hash mid-run: {sorted(stamped)}", {}
+
+    mismatches = []
+    for item in frozen:
+        identity = item.get("runtime_identity") or {}
+        for field, actual in on_disk.items():
+            declared = identity.get(field)
+            if declared and actual and declared != actual:
+                mismatches.append(f"{item.get('role')}.{field}: registry {declared[:12]} vs on-disk {actual[:12]}")
+        declared_strategy = identity.get("strategy_sha256")
+        running = next(iter(stamped))
+        if declared_strategy and running != declared_strategy:
+            mismatches.append(
+                f"{item.get('role')}.strategy_sha256: registry {declared_strategy[:12]} vs running {running[:12]}"
+            )
+    if mismatches:
+        return FAIL, "runtime identity does not match the frozen registry: " + "; ".join(mismatches[:3]), {}
+
+    return (
+        PASS,
+        f"registry, working tree and the running instance agree: strategy {on_disk['strategy_sha256'][:12]}..., "
+        f"config {on_disk['config_sha256'][:12]}... across {len(frozen)} frozen instance(s)",
+        {"runtime_hashes": {"on_disk": on_disk, "running_strategy_sha256": next(iter(stamped))}},
+    )
 
 
-def _check_market_data_ingestion() -> tuple[str, str]:
-    return UNPROVEN, (
-        "no paper runtime exists and this sandbox cannot reach Binance (egress returns 403 to CONNECT for "
-        "api.binance.com). Ingestion must be proven on a host that has the exchange route."
+def _check_market_data_ingestion(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
+    """Section 16.6 — does real market-data ingestion work?
+
+    Two things must both hold, and proving only one would be the easy mistake:
+    the route must be reachable *now*, and candles must actually have been
+    ingested through it into the evidence. A reachable host with an empty input
+    ledger is not ingestion.
+    """
+    if runtime is None or not runtime.check_market_route:
+        return UNPROVEN, (
+            "no paper runtime is attached. Ingestion must be proven on a host that has the exchange route."
+        ), {}
+
+    probes = fp_market.probe_hosts()
+    reachable = [item for item in probes if item.get("reachable")]
+    if not reachable:
+        return FAIL, f"S8: no public market host is reachable: {probes}", {"market_probe": probes}
+
+    if not runtime.has_evidence:
+        return UNPROVEN, (
+            f"the market route is reachable ({', '.join(item['host'] for item in reachable)}) but no "
+            "evidence directory was given, so nothing proves a candle was ingested through it"
+        ), {"market_probe": probes}
+
+    facts = _real_records(Path(runtime.evidence_dir))
+    if not facts["inputs"]:
+        return FAIL, "the market route is reachable but the input ledger is empty: nothing was ingested", {
+            "market_probe": probes
+        }
+    if not facts["exchange_sourced"]:
+        return FAIL, (
+            f"captured inputs do not all come from the live exchange route: sources {facts['sources']}"
+        ), {"market_probe": probes}
+
+    newest = max(r.payload.get("receive_ts_ms", 0) for r in facts["inputs"])
+    lags = [r.payload.get("receive_lag_ms") for r in facts["inputs"] if r.payload.get("receive_lag_ms") is not None]
+    return (
+        PASS,
+        f"{len(reachable)} of {len(probes)} public hosts reachable; {len(facts['inputs'])} candles ingested "
+        f"for {', '.join(facts['pairs'])} through {', '.join(sorted(facts['hosts']))}, newest received "
+        f"{fp_market.iso_from_ms(newest)}, minimum receipt lag {min(lags) if lags else 'n/a'} ms",
+        {
+            "market_probe": probes,
+            "ingested_candles": len(facts["inputs"]),
+            "ingest_pairs": facts["pairs"],
+        },
     )
 
 
@@ -329,6 +574,60 @@ def _check_external_features() -> tuple[str, str]:
     return PASS, (
         "BASELINE-1 requires no external non-market feature: its only decision-time input is the closed 1h "
         "OHLCV candle, so section 6's post-facto-archive hazard does not arise for this candidate"
+    )
+
+
+def _check_input_ledger_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
+    """Section 16.8 on real incoming data, when a runtime supplied some.
+
+    The synthetic path below proves the mechanism. This proves the requirement:
+    that the mechanism ran against candles an exchange actually sent.
+    """
+    facts = _real_records(Path(runtime.evidence_dir))
+    inputs = facts["inputs"]
+    if not inputs:
+        return FAIL, "the runtime evidence directory holds no input records", {}
+    if not facts["exchange_sourced"]:
+        return FAIL, f"captured inputs are not all exchange-sourced: {facts['sources']}", {}
+
+    problems = facts["ledgers"]["input"].verify()
+    if problems:
+        return FAIL, "; ".join(problems[:3]), {}
+
+    # Negative control against the real ledger: altering a captured candle must
+    # break the chain. Proving it on real evidence, not only on a synthetic
+    # copy, is the point of this check.
+    lines = facts["ledgers"]["input"].path.read_text(encoding="utf-8").splitlines()
+    target = len(lines) // 2
+    tampered_path = Path(runtime.evidence_dir) / "tampered_real_input.jsonl"
+    record = json.loads(lines[target])
+    record["payload"]["candle"]["close"] = float(record["payload"]["candle"]["close"]) + 1.0
+    lines[target] = json.dumps(record, sort_keys=True, ensure_ascii=False)
+    tampered_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    detected = bool(fp_ledger.Ledger(tampered_path, "input").verify())
+    tampered_path.unlink(missing_ok=True)
+    if not detected:
+        return FAIL, "the input ledger did not detect an altered real candle payload", {}
+
+    missing_ts = [
+        r.seq for r in inputs
+        if not isinstance(r.payload.get("source_ts_ms"), int)
+        or not isinstance(r.payload.get("receive_ts_ms"), int)
+    ]
+    if missing_ts:
+        return FAIL, f"real input records without both timestamps: {missing_ts[:5]}", {}
+
+    return (
+        PASS,
+        f"{len(inputs)} candles captured from {fp_market.SOURCE_ID} for {', '.join(facts['pairs'])}; the "
+        "chain verifies, every record carries both a source and a receive timestamp, and altering a real "
+        "captured candle is detected",
+        {
+            "input_records": len(inputs),
+            "input_tip": facts["ledgers"]["input"].tip_digest(),
+            "input_sample": "real",
+            "mechanism_input_ledger": PASS,
+        },
     )
 
 
@@ -411,11 +710,103 @@ def _check_db_isolation() -> tuple[str, str]:
     return PASS, f"{len(populated)} instances declare distinct {', '.join(fields)}"
 
 
-def _check_monitoring() -> tuple[str, str]:
-    return UNPROVEN, (
-        "the exporter image builds and serves /metrics in CI, but 'monitoring is alive' is a statement about a "
-        "running instance. Section 18: monitoring health and candidate-runtime health are distinct states, and "
-        "neither is observable here."
+def _check_monitoring(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
+    """Section 16.11 / 18 — is monitoring alive?
+
+    Section 18 keeps monitoring health and candidate-runtime health apart, so
+    both are probed and both are reported. A live exporter in front of a dead
+    bot is not a healthy runtime, and saying so requires asking twice.
+    """
+    if runtime is None or not (runtime.exporter_url or runtime.freqtrade_url):
+        return UNPROVEN, (
+            "the exporter image builds and serves /metrics in CI, but 'monitoring is alive' is a statement "
+            "about a running instance. Section 18: monitoring health and candidate-runtime health are "
+            "distinct states, and neither is observable here."
+        ), {}
+
+    probes: dict = {}
+    failures: list[str] = []
+
+    if runtime.exporter_url:
+        ok, detail = _http_ok(runtime.exporter_url)
+        probes["exporter"] = {"url": runtime.exporter_url, "ok": ok, "detail": detail}
+        if not ok:
+            failures.append(f"exporter {runtime.exporter_url}: {detail}")
+
+    if runtime.prometheus_url:
+        ok, detail = _http_ok(runtime.prometheus_url)
+        probes["prometheus"] = {"url": runtime.prometheus_url, "ok": ok, "detail": detail}
+        if not ok:
+            failures.append(f"prometheus {runtime.prometheus_url}: {detail}")
+
+    client = runtime.client()
+    if client is not None:
+        try:
+            probes["freqtrade_ping"] = client.ping()
+        except Exception as exc:  # noqa: BLE001
+            probes["freqtrade_ping"] = {"error": str(exc)[:200]}
+            failures.append(f"freqtrade API: {exc}")
+
+    if failures:
+        return FAIL, "monitoring is not alive: " + "; ".join(failures[:3]), {"monitoring": probes}
+    return (
+        PASS,
+        "monitoring and candidate runtime are separately alive: "
+        + ", ".join(f"{name} ok" for name in probes),
+        {"monitoring": probes},
+    )
+
+
+def _check_replay_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
+    """Section 16.12 — event-time replay on a bounded *real-data* sample."""
+    report = fp_reconcile.reconcile(Path(runtime.evidence_dir))
+    if report["reconciliation"] != PASS:
+        return FAIL, f"reconciliation of the real capture failed: {report['failing_checks']}", {
+            "reconciliation": report["reconciliation"],
+            "failing_checks": report["failing_checks"],
+        }
+
+    replays = report["replays"]
+    compared = sum(item.get("decisions_compared", 0) for item in replays.values())
+    if compared == 0:
+        return FAIL, "no decision was replayed against the captured inputs", {}
+
+    # Negative control on the real sample: flip one recorded action and require
+    # the replay to catch it.
+    ledgers = fp_ledger.open_ledgers(Path(runtime.evidence_dir))
+    inputs = [r for r in ledgers["input"].records() if not r.payload.get("erratum")]
+    decisions = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+    pair = report["pairs"][0]
+    corrupted, flipped = [], False
+    for record in decisions:
+        payload = dict(record.payload)
+        if payload.get("pair") == pair and not flipped and payload.get("intended_action") == fp_replay.ACTION_HOLD:
+            payload["intended_action"] = fp_replay.ACTION_ENTER_LONG
+            flipped = True
+        corrupted.append(
+            fp_ledger.Record(record.seq, record.kind, record.recorded_utc, record.prev_digest, record.digest, payload)
+        )
+    if not flipped:
+        return FAIL, "the real sample contained no bar to use as a negative control", {}
+    negative = fp_replay.event_time_replay(inputs, corrupted, pair)
+    if negative["status"] == PASS:
+        return FAIL, "event-time replay accepted a decision that contradicts the frozen logic", {}
+
+    return (
+        PASS,
+        f"{compared} decisions replayed from real captured inputs across {', '.join(report['pairs'])} with "
+        f"0 mismatches, and a single flipped action is detected ({negative['mismatch_count']} mismatch). "
+        f"EMA parity vs TA-Lib is {fp_replay.EMA_PARITY_STATUS}, which per section 14 means "
+        "EMA_IMPLEMENTATION_PARITY = PASS only: it does not prove exchange-input, strategy-level, "
+        "position-state or execution parity.",
+        {
+            "decisions_compared": compared,
+            "negative_control": "detected",
+            "replay_sample": "real",
+            "reconciliation": report["reconciliation"],
+            "daily_pack_digest": report["daily_pack_digest"],
+            "mechanism_event_time_replay": PASS,
+        },
     )
 
 
@@ -461,20 +852,67 @@ def _check_replay(evidence_dir: Path) -> tuple[str, str, dict]:
     )
 
 
-def _check_duplicate_instance() -> tuple[str, str]:
+def _check_duplicate_instance(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
+    """Section 16.13 — is duplicate-instance risk excluded?
+
+    Registry-level role uniqueness is necessary but weak: two processes can
+    share a role by accident. So when a runtime is present, process-level
+    exclusion is *demonstrated* — a second writer is attempted against the live
+    evidence directory and must be refused.
+    """
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
-        return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
-    running = [item for item in registry.get("instances", []) if item.get("status") == "RUNNING"]
+        return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
+    instances = registry.get("instances", [])
+    running = [item for item in instances if item.get("status") == "RUNNING"]
     roles = [item.get("role") for item in running]
     if len(roles) != len(set(roles)):
-        return FAIL, f"two running instances share a role: {roles}"
-    if not running:
-        return UNPROVEN, (
-            "no instance is running, so duplicate-instance risk cannot be observed. A single-writer lock on "
-            "each db_path must be demonstrated before T0."
-        )
-    return UNPROVEN, "role uniqueness holds in the registry, but process-level exclusion was not observed"
+        return FAIL, f"two running instances share a role: {roles}", {}
+
+    if runtime is None or not runtime.has_evidence:
+        if not running:
+            return UNPROVEN, (
+                "no instance is running, so duplicate-instance risk cannot be observed. A single-writer lock "
+                "on each db_path must be demonstrated before T0."
+            ), {}
+        return UNPROVEN, "role uniqueness holds in the registry, but process-level exclusion was not observed", {}
+
+    evidence_dir = Path(runtime.evidence_dir)
+    lock_path = evidence_dir / fp_capture.LOCK_FILENAME
+    held_by_live_runtime = False
+    try:
+        probe = fp_capture.EvidenceLock(evidence_dir).acquire()
+    except fp_capture.DuplicateInstanceError as exc:
+        # The best possible evidence: a live capture loop already holds it and
+        # this second attempt was refused.
+        held_by_live_runtime = True
+        detail = str(exc)
+    else:
+        probe.release()
+        detail = "no live holder; exclusion demonstrated against a self-acquired lock"
+
+    if not held_by_live_runtime:
+        # Demonstrate it anyway rather than merely asserting the mechanism.
+        first = fp_capture.EvidenceLock(evidence_dir).acquire()
+        try:
+            try:
+                second = fp_capture.EvidenceLock(evidence_dir).acquire()
+            except fp_capture.DuplicateInstanceError:
+                excluded = True
+            else:
+                second.release()
+                excluded = False
+        finally:
+            first.release()
+        if not excluded:
+            return FAIL, f"a second writer was able to open {lock_path}: single-writer exclusion is absent", {}
+
+    return (
+        PASS,
+        f"role uniqueness holds in the registry ({len(running)} running) and process-level exclusion is "
+        f"demonstrated on {lock_path}: {detail}",
+        {"duplicate_instance": {"lock_path": str(lock_path), "held_by_live_runtime": held_by_live_runtime}},
+    )
 
 
 # --------------------------------------------------------------------------
@@ -482,14 +920,29 @@ def _check_duplicate_instance() -> tuple[str, str]:
 # --------------------------------------------------------------------------
 
 
-def run(evidence_dir: Path | None = None) -> dict:
+def run(evidence_dir: Path | None = None, runtime: RuntimeContext | None = None) -> dict:
+    """Run the sixteen preflight checks.
+
+    ``evidence_dir`` is scratch space for the synthetic self-tests. ``runtime``
+    is entirely separate: it points at a *live* paper instance, and when it is
+    given, the checks that section 16 requires to be proven against a real
+    runtime are answered from that runtime instead of reporting UNPROVEN. With
+    no runtime — the CI case — behaviour is unchanged, which is the point: the
+    gate must not become easier to pass by being run somewhere with less
+    evidence available.
+    """
     temp_dir = None
     if evidence_dir is None:
         temp_dir = Path(tempfile.mkdtemp(prefix="fp-preflight-"))
         evidence_dir = temp_dir
 
+    live = runtime if (runtime is not None and runtime.has_evidence) else None
+
     try:
         details: dict = {}
+        # The synthetic mechanism self-tests always run: they are what
+        # FP_INFRASTRUCTURE_SCAFFOLD_VALIDATION reports on, and a live runtime
+        # does not excuse the scaffold from proving its own mechanisms.
         input_result, input_evidence, input_extra = _check_input_ledger(evidence_dir)
         details.update(input_extra)
         decision_result, decision_evidence, decision_extra = _check_decision_ledger(evidence_dir)
@@ -503,21 +956,43 @@ def run(evidence_dir: Path | None = None) -> dict:
         restart_result, restart_evidence, restart_extra = _check_restart_drill(evidence_dir)
         details.update(restart_extra)
 
+        # Where a live runtime exists, its verdict replaces the synthetic one for
+        # the three checks section 16 says must be about real data, and for the
+        # real restart drill. The synthetic mechanism verdicts survive in
+        # ``details`` regardless.
+        if live is not None:
+            real_input_result, real_input_evidence, real_input_extra = _check_input_ledger_real(live)
+            details.update(real_input_extra)
+            input_result, input_evidence = real_input_result, real_input_evidence
+
+            real_replay_result, real_replay_evidence, real_replay_extra = _check_replay_real(live)
+            details.update(real_replay_extra)
+            replay_result, replay_evidence = real_replay_result, real_replay_evidence
+
+            real_restart_result, real_restart_evidence, real_restart_extra = _check_restart_drill_real(live)
+            details.update(real_restart_extra)
+            restart_result, restart_evidence = real_restart_result, real_restart_evidence
+
+        def _drop_extra(outcome):
+            result, evidence, extra = outcome
+            details.update(extra)
+            return result, evidence
+
         outcomes = [
             _check_guard(),
             _check_dry_run(),
             _check_spot_mode(),
             _check_no_secret(),
-            _check_hashes_match_registry(),
-            _check_market_data_ingestion(),
+            _drop_extra(_check_hashes_match_registry(runtime)),
+            _drop_extra(_check_market_data_ingestion(runtime)),
             _check_external_features(),
             (input_result, input_evidence),
             (decision_result, decision_evidence),
             _check_db_isolation(),
-            _check_monitoring(),
+            _drop_extra(_check_monitoring(runtime)),
             (replay_result, replay_evidence),
-            _check_duplicate_instance(),
-            _check_clock_tolerance(),
+            _drop_extra(_check_duplicate_instance(runtime)),
+            _drop_extra(_check_clock_tolerance(runtime)),
             (persistence_result, persistence_evidence),
             (restart_result, restart_evidence),
         ]
@@ -561,9 +1036,38 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--json", action="store_true", help="emit the report as JSON")
     parser.add_argument("--require-pass", action="store_true", help="exit 2 unless every check passes")
+    parser.add_argument(
+        "--evidence-dir",
+        default=None,
+        help="a live capture-loop evidence directory; enables the real-runtime checks",
+    )
+    parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL") or None)
+    parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER") or None)
+    parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD") or None)
+    parser.add_argument("--exporter-url", default=os.environ.get("EXPORTER_URL") or None)
+    parser.add_argument("--prometheus-url", default=os.environ.get("PROMETHEUS_URL") or None)
+    parser.add_argument(
+        "--check-market-route",
+        action="store_true",
+        help="probe the public market route and measure clock skew against the exchange",
+    )
     args = parser.parse_args(argv)
 
-    report = run()
+    runtime = None
+    if any(
+        (args.evidence_dir, args.freqtrade_url, args.exporter_url, args.prometheus_url, args.check_market_route)
+    ):
+        runtime = RuntimeContext(
+            evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+            freqtrade_url=args.freqtrade_url,
+            api_user=args.api_user,
+            api_password=args.api_password,
+            exporter_url=args.exporter_url,
+            prometheus_url=args.prometheus_url,
+            check_market_route=args.check_market_route,
+        )
+
+    report = run(runtime=runtime)
 
     if args.json:
         json.dump(report, sys.stdout, indent=2)

@@ -145,20 +145,26 @@ def test_report_without_require_pass_exits_zero():
 
 def test_preflight_passes_when_every_check_passes(monkeypatch):
     """Otherwise a permanently-BLOCKED gate would satisfy every test above."""
+    # Checks that answer from the repository alone keep their two-value shape.
     for name in (
         "_check_guard",
         "_check_dry_run",
         "_check_spot_mode",
         "_check_no_secret",
-        "_check_hashes_match_registry",
-        "_check_market_data_ingestion",
         "_check_external_features",
         "_check_db_isolation",
+    ):
+        monkeypatch.setattr(preflight, name, lambda: ("PASS", "stub"))
+    # Checks that may interrogate a live runtime take the runtime and return
+    # their own evidence detail alongside the verdict.
+    for name in (
+        "_check_hashes_match_registry",
+        "_check_market_data_ingestion",
         "_check_monitoring",
         "_check_duplicate_instance",
         "_check_clock_tolerance",
     ):
-        monkeypatch.setattr(preflight, name, lambda: ("PASS", "stub"))
+        monkeypatch.setattr(preflight, name, lambda runtime=None: ("PASS", "stub", {}))
     monkeypatch.setattr(preflight, "_check_input_ledger", lambda d: ("PASS", "stub", {"mechanism_input_ledger": "PASS"}))
     monkeypatch.setattr(
         preflight, "_check_decision_ledger", lambda d: ("PASS", "stub", {"mechanism_decision_ledger": "PASS"})
@@ -215,7 +221,7 @@ def test_duplicate_instance_check_fails_on_two_running_instances(tmp_path, monke
     path = tmp_path / "registry.json"
     path.write_text(json.dumps(registry), encoding="utf-8")
     monkeypatch.setattr(preflight, "COHORT_REGISTRY", path)
-    result, evidence = preflight._check_duplicate_instance()
+    result, evidence, _ = preflight._check_duplicate_instance()
     assert result == "FAIL"
     assert "share a role" in evidence
 
@@ -233,3 +239,82 @@ def test_guard_check_fails_on_an_unsafe_config(tmp_path, monkeypatch):
     assert preflight._check_guard()[0] == "FAIL"
     assert preflight._check_dry_run()[0] == "FAIL"
     assert preflight._check_spot_mode()[0] == "FAIL"
+
+
+# -- a live runtime can prove what the scaffold cannot ---------------------
+
+
+def test_runtime_context_is_absent_by_default():
+    """With no runtime the gate must behave exactly as it did before.
+
+    This is the property that keeps the gate honest: running preflight
+    somewhere with less evidence available must never make it easier to pass.
+    """
+    report = preflight.run()
+    for check_id in (5, 6, 8, 11, 12, 13, 14, 16):
+        assert report["checks"][check_id - 1]["result"] == "UNPROVEN", check_id
+
+
+def test_empty_runtime_context_changes_nothing():
+    runtime = preflight.RuntimeContext()
+    assert runtime.has_evidence is False
+    assert runtime.client() is None
+    report = preflight.run(runtime=runtime)
+    for check_id in (5, 6, 8, 11, 12, 13, 14, 16):
+        assert report["checks"][check_id - 1]["result"] == "UNPROVEN", check_id
+
+
+def test_real_input_check_fails_on_synthetic_provenance(tmp_path):
+    """Evidence that did not come from the exchange must not satisfy check 8."""
+    from fp import ledger as fp_ledger
+
+    ledgers = fp_ledger.open_ledgers(tmp_path)
+    ledgers["input"].append(
+        {
+            "pair": "BTC/USDT",
+            "timeframe": "1h",
+            "candle": {"ts": 1, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            "market_event_id": "BTC/USDT|1h|1",
+            "source_ts_ms": 1,
+            "receive_ts_ms": 2,
+            "source_id": "synthetic:not-an-exchange",
+        }
+    )
+    runtime = preflight.RuntimeContext(evidence_dir=tmp_path)
+    result, evidence, _ = preflight._check_input_ledger_real(runtime)
+    assert result == "FAIL"
+    assert "exchange-sourced" in evidence
+
+
+def test_real_restart_drill_is_unproven_before_a_second_run(tmp_path):
+    from fp import ledger as fp_ledger
+
+    ledgers = fp_ledger.open_ledgers(tmp_path)
+    ledgers["incident"].append(
+        {"category": "run_started", "full_identity": {"run_id": "a", "restart_counter": 0}}
+    )
+    runtime = preflight.RuntimeContext(evidence_dir=tmp_path)
+    result, evidence, _ = preflight._check_restart_drill_real(runtime)
+    assert result == "UNPROVEN"
+    assert "1 start" in evidence
+
+
+def test_real_restart_drill_fails_when_counters_do_not_advance(tmp_path):
+    from fp import ledger as fp_ledger
+
+    ledgers = fp_ledger.open_ledgers(tmp_path)
+    for run_id in ("a", "b"):
+        ledgers["incident"].append(
+            {"category": "run_started", "full_identity": {"run_id": run_id, "restart_counter": 0}}
+        )
+    runtime = preflight.RuntimeContext(evidence_dir=tmp_path)
+    result, evidence, _ = preflight._check_restart_drill_real(runtime)
+    assert result == "FAIL"
+    assert "not strictly increasing" in evidence
+
+
+def test_monitoring_check_fails_when_a_probe_is_dead(tmp_path):
+    runtime = preflight.RuntimeContext(exporter_url="http://127.0.0.1:9/metrics")
+    result, evidence, _ = preflight._check_monitoring(runtime)
+    assert result == "FAIL"
+    assert "not alive" in evidence

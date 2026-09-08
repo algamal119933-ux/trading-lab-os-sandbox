@@ -1,0 +1,152 @@
+"""The FP-CONTROL-1 compose overlay guard.
+
+The overlay decides what the forward-paper control actually runs. These tests
+exist because a guard that cannot fail is not a guard: each one injects the
+specific defect the check claims to catch, and requires it to be caught.
+"""
+
+from __future__ import annotations
+
+import copy
+
+import pytest
+import yaml
+
+import check_fp_overlay
+
+SAFE = {
+    "services": {
+        "freqtrade": {
+            "command": [
+                "trade",
+                "--logfile", "/freqtrade/user_data/fp-control-1/logs/freqtrade.log",
+                "--db-url", "sqlite:////freqtrade/user_data/fp-control-1/tradesv3.sqlite",
+                "--config", "/freqtrade/user_data/config.json",
+                "--strategy", "BaselineEmaRegimeV1",
+            ],
+            "environment": {"FREQTRADE__API_SERVER__JWT_SECRET_KEY": "local-only"},
+        },
+        "fp-capture": {
+            "volumes": [
+                {"source": "./research", "target": "/app/research", "read_only": True},
+                {"source": "./freqtrade", "target": "/app/freqtrade", "read_only": True},
+                {
+                    "source": "./freqtrade/user_data/fp-control-1",
+                    "target": "/freqtrade/user_data/fp-control-1",
+                    "read_only": False,
+                },
+            ],
+        },
+    }
+}
+
+
+@pytest.fixture
+def rendered() -> dict:
+    return copy.deepcopy(SAFE)
+
+
+def test_the_safe_overlay_passes(rendered):
+    assert check_fp_overlay.check(rendered) == []
+
+
+def test_local_api_secrets_are_not_mistaken_for_exchange_credentials(rendered):
+    """The stack passes its own REST-API secrets between services legitimately."""
+    rendered["services"]["freqtrade"]["environment"]["FREQTRADE__API_SERVER__PASSWORD"] = "x"
+    assert check_fp_overlay.check(rendered) == []
+
+
+def test_the_smoke_strategy_is_rejected(rendered):
+    command = rendered["services"]["freqtrade"]["command"]
+    command[command.index("BaselineEmaRegimeV1")] = "PlumbingSmokeStrategy"
+    problems = check_fp_overlay.check(rendered)
+    assert any("BASELINE-1" in p for p in problems)
+    assert any("smoke strategy" in p for p in problems)
+
+
+def test_shared_paths_are_rejected(rendered):
+    """The control must not write into the base stack's database."""
+    rendered["services"]["freqtrade"]["command"] = [
+        "trade", "--db-url", "sqlite:////freqtrade/user_data/tradesv3.sqlite",
+        "--strategy", "BaselineEmaRegimeV1",
+    ]
+    problems = check_fp_overlay.check(rendered)
+    assert any("isolated paths" in p for p in problems)
+
+
+def test_a_writable_code_mount_is_rejected(rendered):
+    rendered["services"]["fp-capture"]["volumes"][0]["read_only"] = False
+    problems = check_fp_overlay.check(rendered)
+    assert any("writable mount" in p for p in problems)
+
+
+def test_a_missing_capture_service_is_rejected(rendered):
+    del rendered["services"]["fp-capture"]
+    problems = check_fp_overlay.check(rendered)
+    assert any("no fp-capture" in p for p in problems)
+
+
+@pytest.mark.parametrize("endpoint", ["forcebuy", "forceenter", "forcesell", "forceexit"])
+def test_an_execution_endpoint_anywhere_is_rejected(rendered, endpoint):
+    rendered["services"]["freqtrade"]["command"].append(f"--{endpoint}")
+    problems = check_fp_overlay.check(rendered)
+    assert any(endpoint in p for p in problems)
+
+
+def test_an_exchange_credential_is_rejected(rendered):
+    rendered["services"]["freqtrade"]["environment"]["BINANCE_API_SECRET"] = "nope"
+    problems = check_fp_overlay.check(rendered)
+    assert any("exchange credential" in p for p in problems)
+
+
+def test_a_live_trading_flag_is_rejected(rendered):
+    rendered["services"]["freqtrade"]["command"].extend(["--dry-run", "false"])
+    problems = check_fp_overlay.check(rendered)
+    assert any("live-trading flag" in p for p in problems)
+
+
+# -- the committed overlay file itself -------------------------------------
+
+
+def test_the_committed_overlay_declares_baseline_and_the_capture_loop(repo_root):
+    overlay = yaml.safe_load((repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8"))
+    services = overlay["services"]
+    assert "fp-capture" in services
+    assert "BaselineEmaRegimeV1" in services["freqtrade"]["command"]
+    assert "PlumbingSmokeStrategy" not in services["freqtrade"]["command"]
+
+
+def test_the_overlay_paths_match_the_frozen_registry(repo_root):
+    """The overlay and the registry must not drift apart.
+
+    If they do, the runtime writes its database somewhere the registry does not
+    describe, and preflight's hash and isolation checks are comparing against a
+    declaration that no longer refers to the running instance.
+    """
+    import json
+
+    overlay = yaml.safe_load((repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8"))
+    registry = json.loads(
+        (repo_root / "research" / "fp" / "records" / "forward_paper_cohort_registry.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    identity = next(
+        i for i in registry["instances"] if i["role"] == "FP-CONTROL-1"
+    )["runtime_identity"]
+
+    command = overlay["services"]["freqtrade"]["command"]
+    assert identity["db_path"] in command
+    assert identity["log_path"] in command
+
+    capture_command = " ".join(overlay["services"]["fp-capture"]["command"])
+    assert identity["evidence_dir"] in capture_command
+
+
+def test_the_capture_service_never_restarts_into_a_different_strategy(repo_root):
+    overlay = yaml.safe_load((repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8"))
+    capture = overlay["services"]["fp-capture"]
+    # It must come back by itself: the runtime has to survive the session that
+    # started it.
+    assert capture["restart"] == "unless-stopped"
+    assert overlay["services"]["freqtrade"].get("container_name") == "tradinglab-fp-freqtrade"
