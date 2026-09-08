@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0.0",
+  "purpose": "Selection-bias accounting. Strategy names are not independent experiments: counting A1, A2 and A3 as three discoveries would inflate the independent trial count and deflate every later Deflated Sharpe / PBO correction.",
+  "baseline": {
+    "strategy": "BaselineEmaRegimeV1",
+    "trial_family_id": "F0_DUAL_EMA_REGIME_CROSS",
+    "signal_construction": "EMA50 crosses EMA200 (EMA-vs-EMA), long-only, 1h, no trend gate, no trailing",
+    "role": "operational control (FP-CONTROL-1), not a candidate"
+  },
+  "families": [
+    {
+      "trial_family_id": "F1_PRICE_VS_SINGLE_EMA",
+      "description": "Price crosses a single long EMA up; exit when price closes a fixed % below that EMA.",
+      "members": [
+        "A3",
+        "A1",
+        "A2"
+      ],
+      "family_original": "A3"
+    },
+    {
+      "trial_family_id": "F2_FAST_DUAL_EMA_WITH_TREND_GATE",
+      "description": "Fast EMA crosses slow EMA, gated by price above a long trend EMA.",
+      "members": [
+        "A5"
+      ],
+      "family_original": "A5"
+    },
+    {
+      "trial_family_id": "F3_RSI_DIRECTIONAL_WITH_TREND_GATE",
+      "description": "RSI threshold cross, gated by price above a long trend EMA.",
+      "members": [
+        "A6"
+      ],
+      "family_original": "A6"
+    },
+    {
+      "trial_family_id": "F4_MA_CROSS_WITH_RESAMPLED_SMA_GATE",
+      "description": "Fast/medium EMA cross gated by a higher-timeframe resampled SMA.",
+      "members": [
+        "A4"
+      ],
+      "family_original": "A4"
+    },
+    {
+      "trial_family_id": "F5_MULTI_PAIR_COMPOSITE",
+      "description": "Large multi-signal, multi-timeframe, multi-pair composite with position adjustment.",
+      "members": [
+        "A7"
+      ],
+      "family_original": "A7"
+    }
+  ],
+  "candidates": [
+    {
+      "candidate_id": "A1",
+      "strategy": "EmaCross",
+      "trial_family_id": "F1_PRICE_VS_SINGLE_EMA",
+      "parent_strategy": "EMAPriceCrossoverWithThreshold",
+      "derived_from": "A3",
+      "derivation_type": "PARAMETER_VARIANT",
+      "evidence": "Source NOTICE and the file docstring both state it: 'Logika identyczna' - identical logic, with the three hardcoded numbers (EMA period, exit threshold, stoploss) exposed as parameters. Shipped params ema_period=600, exit_threshold=2.0 differ from A3's hardcoded 800 / 1.0, and were chosen by research/sweep_emacross.py.",
+      "semantic_duplicate_of_current_baseline": "NO",
+      "duplicate_reasoning": "Baseline crosses EMA50 against EMA200 (EMA-vs-EMA). A1 crosses price against one EMA600 (price-vs-EMA). Same broad trend-following intent, different signal construction and different exit geometry.",
+      "independent_trial": "NO",
+      "independent_trial_reasoning": "Same family as A3; a parameterisation, not a separate discovery.",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A2",
+      "strategy": "EmaCrossFunding",
+      "trial_family_id": "F1_PRICE_VS_SINGLE_EMA",
+      "parent_strategy": "EmaCross",
+      "derived_from": "A1",
+      "derivation_type": "FILTER_ADDITION",
+      "evidence": "Byte-level diff of intent: identical EMA logic and identical exit; entry gains one extra condition, funding_pct < funding_max_pct. Source README calls it 'Rule 4' and names A1 as the correct baseline for testing it.",
+      "semantic_duplicate_of_current_baseline": "NO",
+      "independent_trial": "NO",
+      "independent_trial_reasoning": "An ablation arm of A1, not an unrelated strategy.",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A3",
+      "strategy": "EMAPriceCrossoverWithThreshold",
+      "trial_family_id": "F1_PRICE_VS_SINGLE_EMA",
+      "parent_strategy": null,
+      "derived_from": null,
+      "derivation_type": "ORIGINAL",
+      "evidence": "Family original. Won the 42-strategy benchmark in btc-strategy-lab.",
+      "semantic_duplicate_of_current_baseline": "NO",
+      "independent_trial": "YES",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A4",
+      "strategy": "ReinforcedAverageStrategy",
+      "trial_family_id": "F4_MA_CROSS_WITH_RESAMPLED_SMA_GATE",
+      "parent_strategy": null,
+      "derived_from": null,
+      "derivation_type": "INDEPENDENT_FAMILY",
+      "semantic_duplicate_of_current_baseline": "PARTIAL",
+      "duplicate_reasoning": "Entry is EMA8 crossing EMA21 - an EMA-vs-EMA crossover like the baseline - but gated by a 12x-resampled SMA50 and run at 4h, so the regime logic and the bar clock both differ.",
+      "independent_trial": "YES",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A5",
+      "strategy": "DoubleEMACrossoverWithTrend",
+      "trial_family_id": "F2_FAST_DUAL_EMA_WITH_TREND_GATE",
+      "parent_strategy": null,
+      "derived_from": null,
+      "derivation_type": "INDEPENDENT_FAMILY",
+      "semantic_duplicate_of_current_baseline": "PARTIAL",
+      "duplicate_reasoning": "The closest relative to BaselineEmaRegimeV1 in the whole pool: both are fast-EMA-crosses-slow-EMA on 1h spot long-only. It differs by much faster periods (9/21 vs 50/200) and by adding a low>EMA200 trend gate and an OR-exit on that gate. This makes it the highest-information probe of our own baseline's family.",
+      "independent_trial": "YES",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A6",
+      "strategy": "RSIDirectionalWithTrendSlow",
+      "trial_family_id": "F3_RSI_DIRECTIONAL_WITH_TREND_GATE",
+      "parent_strategy": null,
+      "derived_from": null,
+      "derivation_type": "FAMILY_RELATIVE",
+      "family_relative_of": "RSIDirectionalWithTrend (same repo, faster RSI variant)",
+      "semantic_duplicate_of_current_baseline": "NO",
+      "independent_trial": "YES",
+      "control_lineage_reference": false
+    },
+    {
+      "candidate_id": "A7",
+      "strategy": "NostalgiaForInfinityX8",
+      "trial_family_id": "F5_MULTI_PAIR_COMPOSITE",
+      "parent_strategy": "NostalgiaForInfinityX7",
+      "derived_from": "NFI X-generation lineage",
+      "derivation_type": "FAMILY_RELATIVE",
+      "evidence": "X2..X8 are maintained side by side and X7 and X8 received the same change six seconds apart on the pinned day, so the generations are one evolving codebase, not independent strategies.",
+      "semantic_duplicate_of_current_baseline": "NO",
+      "independent_trial": "YES",
+      "control_lineage_reference": false
+    }
+  ],
+  "independent_candidate_count": 5,
+  "independent_candidate_reasoning": "A3, A4, A5, A6, A7 are five distinct families. A1 and A2 sit inside A3's family and must not be counted as separate discoveries.",
+  "full_trial_count_preparation": {
+    "status": "PREPARED_NOT_FINAL",
+    "F1_PRICE_VS_SINGLE_EMA": {
+      "benchmark_selection_trials": 42,
+      "benchmark_selection_note": "A3 was selected as the winner of a 42-strategy benchmark. The selection step itself is a trial and belongs in the count.",
+      "a1_parameter_sweep_trials": 25,
+      "a1_parameter_sweep_note": "Source states the Deflated Sharpe deflates for 25 EmaCross variants.",
+      "a2_funding_sweep_trials": "UNKNOWN",
+      "minimum_family_trials": 67,
+      "source_self_assessment": "The source states plainly that neither the 42-way selection nor the added fourth rule is in its own trial count, and that under a realistic spread of trial Sharpes 'the shipped strategy does not clear this gate'."
+    },
+    "our_own_trials_to_add": "Every configuration Trading Lab OS itself evaluates must be added on top, including runs that are discarded.",
+    "rule": "The full trial count must include lineage, source-selection and parameter-selection steps, not only the final visible runs."
+  }
+}

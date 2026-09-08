@@ -1,0 +1,261 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "A1",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "spdx": "GPL-3.0-only"
+        },
+        {
+          "file": "NOTICE",
+          "sha256": "0a752cb6005fa77aab1c1af262d37bd1e22fbafb62b8d3b47fb3ca83016bceca",
+          "spdx": "NOTICE (attribution file, not a licence grant)"
+        }
+      ],
+      "source_commit_date": "2026-08-22T05:18:19+02:00",
+      "source_commit_sha": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "source_config_bytes": 1236,
+      "source_config_file": "config.json",
+      "source_config_sha256": "a20cfbf8c9efa36b06f336ef772e8be905e9c236b6f7bed38a4a0a810879ecda",
+      "source_file_bytes": 2183,
+      "source_file_git_mode": "100644",
+      "source_file_path": "user_data/strategies/EmaCross.py",
+      "source_file_sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+      "source_last_material_update": "2026-08-22T00:09:34+02:00 0a3f134 Benchmark 42 public BTC strategies and ship the one that survives validation",
+      "source_parameters_bytes": 168,
+      "source_parameters_file": "user_data/strategies/EmaCross.json",
+      "source_parameters_sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee",
+      "source_repo": "btc-strategy-lab",
+      "source_url": "https://github.com/wiktorj137/btc-strategy-lab",
+      "strategy_name": "EmaCross"
+    },
+    {
+      "candidate_id": "A2",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "spdx": "GPL-3.0-only"
+        },
+        {
+          "file": "NOTICE",
+          "sha256": "0a752cb6005fa77aab1c1af262d37bd1e22fbafb62b8d3b47fb3ca83016bceca",
+          "spdx": "NOTICE (attribution file, not a licence grant)"
+        }
+      ],
+      "source_commit_date": "2026-08-22T05:18:19+02:00",
+      "source_commit_sha": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "source_config_bytes": 1236,
+      "source_config_file": "config.json",
+      "source_config_sha256": "a20cfbf8c9efa36b06f336ef772e8be905e9c236b6f7bed38a4a0a810879ecda",
+      "source_file_bytes": 3366,
+      "source_file_git_mode": "100644",
+      "source_file_path": "user_data/strategies/EmaCrossFunding.py",
+      "source_file_sha256": "0f0d3d4677647da2e11d4dc8195adbb95fce201ce400300df0a78741cf9a9564",
+      "source_last_material_update": "2026-08-22T00:09:34+02:00 0a3f134 Benchmark 42 public BTC strategies and ship the one that survives validation",
+      "source_parameters_bytes": 198,
+      "source_parameters_file": "user_data/strategies/EmaCrossFunding.json",
+      "source_parameters_sha256": "1641ce3122ccc0c216aaae1af77bedb15dd77670643201d1c7453066eca38f0b",
+      "source_repo": "btc-strategy-lab",
+      "source_url": "https://github.com/wiktorj137/btc-strategy-lab",
+      "strategy_name": "EmaCrossFunding"
+    },
+    {
+      "candidate_id": "A3",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "876b0759d6085f07dac04471968d31c3bab4f8d278845d2c0e4c3dc581e790c6",
+          "spdx": "MIT"
+        }
+      ],
+      "source_commit_date": "2021-06-14T20:26:21+04:00",
+      "source_commit_sha": "1e154a2f6b9aeecbaacb7db5ed6b866603daee2c",
+      "source_config_file": null,
+      "source_config_sha256": null,
+      "source_file_bytes": 2281,
+      "source_file_git_mode": "100644",
+      "source_file_path": "EMAPriceCrossoverWithThreshold.py",
+      "source_file_sha256": "4bdf1cc26bb32bcae7b745c8d23482f39b73bcb0b1192a1b899f3362b0847df2",
+      "source_last_material_update": "2021-06-14T20:26:21+04:00 1e154a2 #1 fix classname spelling in EMAPriceCrossoverWithThreshold",
+      "source_parameters_file": null,
+      "source_parameters_sha256": null,
+      "source_repo": "freqtrade-strategies-that-work",
+      "source_url": "https://github.com/paulcpk/freqtrade-strategies-that-work",
+      "strategy_name": "EMAPriceCrossoverWithThreshold"
+    },
+    {
+      "candidate_id": "A4",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "spdx": "GPL-3.0-only"
+        }
+      ],
+      "source_commit_date": "2026-08-12T06:41:25+02:00",
+      "source_commit_sha": "eff78d3ce3456b52c68a4e9a33cc055a56b801ff",
+      "source_config_file": null,
+      "source_config_sha256": null,
+      "source_file_bytes": 3502,
+      "source_file_git_mode": "100644",
+      "source_file_path": "user_data/strategies/berlinguyinca/ReinforcedAverageStrategy.py",
+      "source_file_sha256": "50c8e88441ffead38fd1e1b3d49b151a001068f5eff01a23c10178b1f2c87e38",
+      "source_last_material_update": "2023-07-15T19:06:51+01:00 6fce5f3 Update example strategies to use process_only_new_candles=True",
+      "source_parameters_file": null,
+      "source_parameters_sha256": null,
+      "source_repo": "freqtrade-strategies",
+      "source_url": "https://github.com/freqtrade/freqtrade-strategies",
+      "strategy_name": "ReinforcedAverageStrategy"
+    },
+    {
+      "candidate_id": "A5",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "876b0759d6085f07dac04471968d31c3bab4f8d278845d2c0e4c3dc581e790c6",
+          "spdx": "MIT"
+        }
+      ],
+      "source_commit_date": "2021-06-14T20:26:21+04:00",
+      "source_commit_sha": "1e154a2f6b9aeecbaacb7db5ed6b866603daee2c",
+      "source_config_file": null,
+      "source_config_sha256": null,
+      "source_file_bytes": 2497,
+      "source_file_git_mode": "100644",
+      "source_file_path": "DoubleEMACrossoverWithTrend.py",
+      "source_file_sha256": "d21d384643620fcef42071a3db9e80d06621a3eccb37c09e082e5df45be2202d",
+      "source_last_material_update": "2020-11-29T22:59:11+01:00 d57afeb update strategy credits",
+      "source_parameters_file": null,
+      "source_parameters_sha256": null,
+      "source_repo": "freqtrade-strategies-that-work",
+      "source_url": "https://github.com/paulcpk/freqtrade-strategies-that-work",
+      "strategy_name": "DoubleEMACrossoverWithTrend"
+    },
+    {
+      "candidate_id": "A6",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "876b0759d6085f07dac04471968d31c3bab4f8d278845d2c0e4c3dc581e790c6",
+          "spdx": "MIT"
+        }
+      ],
+      "source_commit_date": "2021-06-14T20:26:21+04:00",
+      "source_commit_sha": "1e154a2f6b9aeecbaacb7db5ed6b866603daee2c",
+      "source_config_file": null,
+      "source_config_sha256": null,
+      "source_file_bytes": 2558,
+      "source_file_git_mode": "100644",
+      "source_file_path": "RSIDirectionalWithTrendSlow.py",
+      "source_file_sha256": "2660268fb9e3207fcdacb9e2f2d58676bc0fdcc91acf72977f0c86dc147389cf",
+      "source_last_material_update": "2020-11-29T22:59:11+01:00 d57afeb update strategy credits",
+      "source_parameters_file": null,
+      "source_parameters_sha256": null,
+      "source_repo": "freqtrade-strategies-that-work",
+      "source_url": "https://github.com/paulcpk/freqtrade-strategies-that-work",
+      "strategy_name": "RSIDirectionalWithTrendSlow"
+    },
+    {
+      "candidate_id": "A7",
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "spdx": "GPL-3.0-only"
+        }
+      ],
+      "source_commit_date": "2026-09-08T17:56:06+03:00",
+      "source_commit_sha": "3a5beec3d3fd72669e8b286d8de208bc8d650b4b",
+      "source_config_bytes": 2498,
+      "source_config_file": "configs/exampleconfig.json",
+      "source_config_sha256": "cf5cdf05d256001326f750047e7f81fc7f91c7a206ee13f1c8746bfa5851aa5f",
+      "source_file_bytes": 2499616,
+      "source_file_git_mode": "100644",
+      "source_file_path": "NostalgiaForInfinityX8.py",
+      "source_file_sha256": "4fba6a6412d17c9e975354e389919607af9a58a0abf29b5499b210439129d9bb",
+      "source_last_material_update": "2026-09-08T17:56:06+03:00 3a5beec3 X8: signal 141: add protection.",
+      "source_parameters_file": null,
+      "source_parameters_sha256": null,
+      "source_repo": "NostalgiaForInfinity",
+      "source_url": "https://github.com/iterativv/NostalgiaForInfinity",
+      "strategy_name": "NostalgiaForInfinityX8"
+    }
+  ],
+  "generated_by": "scripts/capture_source_lock.py",
+  "identity_contract": "commit SHA + file SHA256 + effective config + parameters",
+  "note": "Branch names are not identity. NostalgiaForInfinity rewrites its canonical strategy file daily, so a lock taken against 'main' would name different code tomorrow.",
+  "repositories": [
+    {
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "spdx": "GPL-3.0-only"
+        }
+      ],
+      "source_commit_date": "2026-09-08T17:56:06+03:00",
+      "source_commit_sha": "3a5beec3d3fd72669e8b286d8de208bc8d650b4b",
+      "source_repo": "NostalgiaForInfinity",
+      "source_url": "https://github.com/iterativv/NostalgiaForInfinity"
+    },
+    {
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+          "spdx": "GPL-3.0-only"
+        },
+        {
+          "file": "NOTICE",
+          "sha256": "0a752cb6005fa77aab1c1af262d37bd1e22fbafb62b8d3b47fb3ca83016bceca",
+          "spdx": "NOTICE (attribution file, not a licence grant)"
+        }
+      ],
+      "source_commit_date": "2026-08-22T05:18:19+02:00",
+      "source_commit_sha": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "source_repo": "btc-strategy-lab",
+      "source_url": "https://github.com/wiktorj137/btc-strategy-lab"
+    },
+    {
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "spdx": "GPL-3.0-only"
+        }
+      ],
+      "source_commit_date": "2026-08-12T06:41:25+02:00",
+      "source_commit_sha": "eff78d3ce3456b52c68a4e9a33cc055a56b801ff",
+      "source_repo": "freqtrade-strategies",
+      "source_url": "https://github.com/freqtrade/freqtrade-strategies"
+    },
+    {
+      "default_branch": "main",
+      "licenses": [
+        {
+          "file": "LICENSE",
+          "sha256": "876b0759d6085f07dac04471968d31c3bab4f8d278845d2c0e4c3dc581e790c6",
+          "spdx": "MIT"
+        }
+      ],
+      "source_commit_date": "2021-06-14T20:26:21+04:00",
+      "source_commit_sha": "1e154a2f6b9aeecbaacb7db5ed6b866603daee2c",
+      "source_repo": "freqtrade-strategies-that-work",
+      "source_url": "https://github.com/paulcpk/freqtrade-strategies-that-work"
+    }
+  ],
+  "schema_version": "1.0.0"
+}

@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0.0",
+  "meaning": "Which candidate to investigate FIRST if the governing plan later opens the Alpha Research branch.",
+  "explicitly_not": "Which strategy will make the most money. Historical return is one weak factor among seventeen.",
+  "candidate_execution_authorized": false,
+  "scoring_dimensions": [
+    "provenance",
+    "license clarity",
+    "lineage independence",
+    "information gain",
+    "simplicity",
+    "interpretability",
+    "source sample size",
+    "drawdown evidence",
+    "cost robustness evidence",
+    "regime robustness evidence",
+    "parameter-selection burden",
+    "external-data dependency",
+    "adapter burden",
+    "signal-parity feasibility",
+    "fit with Spot architecture",
+    "native test feasibility",
+    "normalized test feasibility",
+    "expected compute/data cost"
+  ],
+  "priority": {
+    "P1": [
+      "A3",
+      "A5"
+    ],
+    "P2": [
+      "A1",
+      "A2",
+      "A6"
+    ],
+    "P3": [
+      "A4"
+    ],
+    "HOLD": [
+      "A7"
+    ]
+  },
+  "rationale": {
+    "A3": {
+      "priority": "P1",
+      "information_gain": "HIGH",
+      "why": "The family original, and the only member of F1 whose parameters were never fitted: 800 and 1% are hardcoded, so it carries no sweep-selection bias of its own. MIT, so no copyleft question. It won a 42-way benchmark on 210 trades. It answers the sharpest question in the pool - does the unfitted parent generalise, or is the family's headline result an artefact of A1's sweep? Cost: a mechanical legacy-interface adapter whose signal parity must be proven.",
+      "main_risk": "Its 42-way selection is itself a trial and must enter the trial count."
+    },
+    "A5": {
+      "priority": "P1",
+      "information_gain": "HIGH",
+      "why": "The closest relative in the pool to BaselineEmaRegimeV1 - both are fast-EMA-crosses-slow-EMA, 1h, spot, long-only. It is therefore the highest-information probe of our own control's family: it isolates what a trend gate plus much faster periods (9/21 vs 50/200) does to that family. MIT, no external data, 753 trades is the largest sample in the pool.",
+      "main_risk": "753 trades at 1h is ~7x A3's turnover, so it is the most fee-exposed candidate here; cost robustness must be tested early."
+    },
+    "A1": {
+      "priority": "P2",
+      "information_gain": "MEDIUM",
+      "why": "Not an independent discovery - a parameter variant of A3 - so it cannot be counted as a new strategy. Its value is narrow but real: paired against A3 it measures exactly what the sweep bought. Modern interface, so no adapter.",
+      "main_risk": "GPL-3.0 copyleft, fitted parameters, and the source itself reports the family fails the Deflated Sharpe gate under honest trial counting and 'does not generalise to other coins' - while our universe is BTC and ETH."
+    },
+    "A2": {
+      "priority": "P2",
+      "information_gain": "MEDIUM_HIGH",
+      "why": "A clean single-variable ablation on A1, and the source already frames it correctly: the baseline for testing rule 4 is A1, not buy & hold. Its claim is specific and falsifiable - the filter buys drawdown, not return.",
+      "main_risk": "Only interpretable after A1 is run, requires external funding-rate history, and the author reports the funding signal reversed direction in 2023."
+    },
+    "A6": {
+      "priority": "P2",
+      "information_gain": "MEDIUM",
+      "why": "The only momentum-family candidate, so it broadens family coverage rather than re-testing the EMA idea a fourth time. MIT, simple, no external data.",
+      "main_risk": "Weakest source evidence in the pool - +117.7% against BTC buy & hold's +781%, Sharpe 0.054, and its faster sibling lost money."
+    },
+    "A4": {
+      "priority": "P3",
+      "information_gain": "MEDIUM",
+      "why": "Second in the benchmark on 206 trades with the lowest drawdown of the top three.",
+      "main_risk": "Its own author calls it 'just a proof of concept' that 'doesn't really perfom that well', which contradicts the benchmark number; it runs at 4h rather than our 1h; and it needs the 'technical' package plus higher-timeframe resampling. GPL-3.0."
+    },
+    "A7": {
+      "priority": "HOLD",
+      "information_gain": "UNKNOWN",
+      "why": "Would answer whether a large multi-signal system beats simple models - a genuinely interesting question.",
+      "main_risk": "Not researchable under current constraints. It publishes no citable performance claim; its canonical file changed on the same day we locked it and ships an auto-updater that rewrites it daily; a native test needs 40-80 pairs at 5m with four informative timeframes and DCA position adjustment, none of which our dataset or our fixed-stake architecture currently supports. A BTC/ETH-only run would not be native NFI validation and must never be labelled as such."
+    }
+  },
+  "planning_hypothesis_review": {
+    "directive_hypothesis": {
+      "P1": [
+        "EmaCross lineage",
+        "EmaCrossFunding",
+        "EMAPriceCrossoverWithThreshold"
+      ],
+      "P2": [
+        "DoubleEMACrossoverWithTrend",
+        "RSIDirectionalWithTrendSlow",
+        "ReinforcedAverageStrategy"
+      ],
+      "P3": [
+        "NostalgiaForInfinityX8"
+      ]
+    },
+    "verified_changes": [
+      {
+        "change": "A1 and A2 move from P1 to P2",
+        "evidence": "Source NOTICE and docstring prove A1 is a parameter variant of A3 with sweep-fitted values, and the source self-reports a Deflated Sharpe failure under honest trial counting plus explicit failure to generalise to other coins. A3, the unfitted MIT original, should be tested before its fitted GPL derivative."
+      },
+      {
+        "change": "A5 rises from P2 to P1",
+        "evidence": "Lineage analysis shows A5 - not A1 - is the closest relative to BaselineEmaRegimeV1. Both are fast-EMA-crosses-slow-EMA on 1h spot long-only, so A5 carries the most information about our own control's family."
+      },
+      {
+        "change": "A7 moves from P3 to HOLD",
+        "evidence": "No citable source claim, a daily-mutating canonical file, and a native universe our data cannot supply."
+      }
+    ],
+    "unchanged": "A4 and A6 remain mid/low priority; the approved pool itself is not rewritten."
+  },
+  "top_3_future_test_priorities": [
+    "A3",
+    "A5",
+    "A1"
+  ],
+  "top_3_reasoning": "A3 first because it is the unfitted original of the winning family under a permissive licence. A5 second because it is the nearest neighbour to our own baseline and therefore the best probe of that family. A1 third, and only paired with A3, because on its own it measures a sweep rather than a strategy."
+}

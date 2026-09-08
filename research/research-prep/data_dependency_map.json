@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0.0",
+  "current_dataset": {
+    "id": "dataset_v2",
+    "pairs": [
+      "BTC/USDT",
+      "ETH/USDT"
+    ],
+    "timeframes": [
+      "1h",
+      "5m"
+    ],
+    "range": "2020-12-01 .. 2026-08-31",
+    "market": "binance spot",
+    "status": "frozen, lock gate PASS"
+  },
+  "acquisition_policy": "Do NOT acquire large new datasets during the active FP-CONTROL-1 run. Document requirements only.",
+  "candidates": [
+    {
+      "candidate_id": "A1",
+      "current_data_available": "YES",
+      "additional_data_needed": [],
+      "data_acquisition_cost": "NONE",
+      "storage_cost": "NONE",
+      "qa_requirement": "existing dataset_v2 lock gate"
+    },
+    {
+      "candidate_id": "A2",
+      "current_data_available": "NO",
+      "additional_data_needed": [
+        "Binance perpetual funding-rate history covering the full test range"
+      ],
+      "data_acquisition_cost": "LOW",
+      "storage_cost": "LOW (a few MB)",
+      "qa_requirement": "Funding is a futures-venue metric used only as a filter input; no futures execution is implied. Needs its own publication-time audit: the value must be the last PUBLISHED funding value at each decision bar, never an interpolated or future one."
+    },
+    {
+      "candidate_id": "A3",
+      "current_data_available": "YES",
+      "additional_data_needed": [],
+      "data_acquisition_cost": "NONE",
+      "storage_cost": "NONE",
+      "qa_requirement": "existing"
+    },
+    {
+      "candidate_id": "A4",
+      "current_data_available": "PARTIAL",
+      "additional_data_needed": [
+        "4h candles (derivable from 1h by aggregation, subject to a reconciliation audit)"
+      ],
+      "data_acquisition_cost": "LOW",
+      "storage_cost": "LOW",
+      "qa_requirement": "1h->4h aggregation must reconcile exactly on OHLC, as the 5m->1h check already does"
+    },
+    {
+      "candidate_id": "A5",
+      "current_data_available": "YES",
+      "additional_data_needed": [],
+      "data_acquisition_cost": "NONE",
+      "storage_cost": "NONE",
+      "qa_requirement": "existing"
+    },
+    {
+      "candidate_id": "A6",
+      "current_data_available": "YES",
+      "additional_data_needed": [],
+      "data_acquisition_cost": "NONE",
+      "storage_cost": "NONE",
+      "qa_requirement": "existing"
+    },
+    {
+      "candidate_id": "A7",
+      "current_data_available": "NO",
+      "additional_data_needed": [
+        "40-80 (README) up to 160 (shipped static pairlist) Binance spot USDT pairs",
+        "5m candles for every pair across the full range",
+        "15m, 1h, 4h and 1d informative candles for every pair"
+      ],
+      "data_acquisition_cost": "HIGH",
+      "storage_cost": "HIGH",
+      "storage_estimate": "Dataset V2 stores ~21 MB per pair for 5m over ~5.7 years. 80 pairs at 5m is roughly 1.7 GB before informative timeframes; 160 pairs with four extra timeframes is materially larger. An estimate, not a measurement.",
+      "qa_requirement": "Per-pair listing-date handling, delisted-pair survivorship bias, and a full audit per pair",
+      "blocker": "DO NOT BUILD DURING THE ACTIVE FP RUN."
+    }
+  ],
+  "survivorship_warning": "Any multi-pair universe must be built from a point-in-time listing set. Using today's top-volume pairlist over a 2020-2026 backtest would silently select coins that survived and succeeded, which is a far larger effect than any strategy edge under test."
+}
