@@ -1,22 +1,22 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-08T00:00:00Z",
+  "registry_updated_utc": "2026-09-08T12:15:13Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
-  "fp_run_active": false,
+  "fp_run_active": true,
   "adopted_prior_t0": false,
   "instances": [
     {
       "role": "FP-CONTROL-1",
-      "cohort_id": null,
-      "status": "NOT_STARTED",
-      "t0_utc": null,
+      "cohort_id": "FP-CONTROL-1-20260908T121513Z",
+      "status": "RUNNING",
+      "t0_utc": "2026-09-08T12:15:13Z",
       "closed_utc": null,
       "closure_reason": null,
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
-        "source_commit": null,
+        "source_commit": "4b0d7f6326ead0a19f8870f94528a9aa75114e10",
         "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
         "params_sha256": null,
         "config_sha256": "d1d078c63adc5e4283632a1c3e65df8cd0d7c23a249575054491c6356d97a9ff",
@@ -73,6 +73,12 @@
           "utc": "2026-09-08T00:00:00Z",
           "class": "O",
           "description": "S19 pre-T0 binding: paper_fill_model_version, bot_name, db_path, log_path, evidence_dir, image_digest, python_version, order_policy and the environment allowlist bound once before T0. strategy_sha256 and config_sha256 record hashes already frozen in Repo Truth and verified byte-identical to the activation pack's declared values. cohort_id, t0_utc and source_commit remain null: those are frozen by the Owner-authorised T0 act, not by this build. Observability only - no trading semantics are changed.",
+          "replay_parity_before_after": null
+        },
+        {
+          "utc": "2026-09-08T12:15:13Z",
+          "class": "O",
+          "description": "T0 frozen. Every mandatory pre-T0 condition passed on the authoritative host: preflight 16/16 PASS with --require-pass exit 0, entry state C, PAPER_ADMISSION BLOCKED with no candidate admitted (S14 not tripped), reconciliation PASS over 1998 real captured candles across two runs, DATASET_LOCK_GATE PASS, canonical cache unmutated since acquisition, clock skew within tolerance, worktree clean and REPO_CHECK_PASS. This entry records the freeze; it changes no trading semantics.",
           "replay_parity_before_after": null
         }
       ]

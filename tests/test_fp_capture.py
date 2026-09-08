@@ -583,10 +583,61 @@ def test_backfilled_bars_are_warmup_and_not_executable(loop):
     assert all(p["admission"]["result"] == fp_capture.ADMIT_WARMUP for p in warmup)
 
 
-def test_t0_relation_is_not_frozen_before_the_owner_freezes_it(loop):
+def test_t0_relation_reports_the_frozen_boundary_honestly(loop):
+    """Every bar must be filed on the correct side of T0, or as unfrozen.
+
+    Asserting only the unfrozen case would make this test true exactly until
+    the Owner freezes T0 and useless from then on — the moment the boundary
+    starts to matter. So all three states are pinned here, driven off the
+    loop's own view of T0 rather than a hard-coded expectation.
+    """
+    loop.capture_inputs("BTC/USDT", limit=5)
+    loop.capture_decisions("BTC/USDT")
+    records = loop.ledgers["decision"].records()
+    assert records
+
+    if loop.t0_ms is None:
+        assert {r.payload["t0_relation"] for r in records} == {"T0_NOT_FROZEN"}
+        return
+
+    for record in records:
+        close_ts = record.payload["candle_ts"] + HOUR_MS
+        expected = "POST_T0" if close_ts >= loop.t0_ms else "PRE_T0"
+        assert record.payload["t0_relation"] == expected, record.payload["candle_ts"]
+
+
+def test_t0_relation_is_unfrozen_when_the_registry_declares_no_t0(loop, monkeypatch):
+    """The unfrozen case, pinned independently of the live registry."""
+    monkeypatch.setattr(loop, "t0_ms", None)
     loop.capture_inputs("BTC/USDT", limit=5)
     loop.capture_decisions("BTC/USDT")
     assert {r.payload["t0_relation"] for r in loop.ledgers["decision"].records()} == {"T0_NOT_FROZEN"}
+
+
+def test_the_capture_loop_can_never_write_a_t0(tmp_path, stub_market, repo_root):
+    """Freezing T0 is an Owner act; the loop reads it and must not create one.
+
+    A capture loop able to invent a T0 could manufacture prospective evidence
+    out of warm-up, which is the single most damaging thing it could do.
+    """
+    import inspect
+
+    source = inspect.getsource(fp_capture)
+    assert 't0_utc"] =' not in source
+    assert "def _registry_t0_ms" in source
+    # The registry is opened read-only in this module: no write path exists.
+    assert "COHORT_REGISTRY.write_text" not in source
+
+    before = (repo_root / "research" / "fp" / "records" / "forward_paper_cohort_registry.json").read_bytes()
+    loop = fp_capture.CaptureLoop(
+        tmp_path / "evidence", ["BTC/USDT"],
+        config_path=repo_root / "freqtrade" / "user_data" / "config.paper.json.example",
+        market_module=stub_market,
+    )
+    loop.record_run_started()
+    loop.cycle(limit=10)
+    after = (repo_root / "research" / "fp" / "records" / "forward_paper_cohort_registry.json").read_bytes()
+    assert before == after, "the capture loop modified the cohort registry"
 
 
 # --------------------------------------------------------------------------
