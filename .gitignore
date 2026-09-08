@@ -53,6 +53,18 @@ mlruns/
 mlartifacts/
 
 # ---------------------------------------------------------------------------
+# Host-run evidence outputs.
+# The activation pack writes its run evidence here — the acquisition manifest,
+# the dataset audit, preflight and admission reports, and the closure pack.
+# They are regenerated on every run and would keep the worktree permanently
+# dirty during a forward-paper window, which is the protocol's own S2 stop
+# condition. Classified, not discarded (CLOUD-0 C0.2): the files stay on the
+# host, and closure evidence is published deliberately rather than swept in by
+# an incidental commit.
+# ---------------------------------------------------------------------------
+artifacts/
+
+# ---------------------------------------------------------------------------
 # Local research records are evidence, but only the ones deliberately committed
 # under research/records/ belong in Git. Scratch runs stay local.
 # ---------------------------------------------------------------------------
