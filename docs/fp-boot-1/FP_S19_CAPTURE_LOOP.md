@@ -1,5 +1,11 @@
 # S19 — the as-seen capture loop
 
+> **Note, 2026-09-14.** This document describes the capture loop as built for a
+> single FP-CONTROL-1 runtime. That cohort is now closed, the loop requires an
+> explicit `--role`, and the instance it may run as is the pre-T0 successor —
+> see [`FP_PRE_T0_SUCCESSOR_CONTROL.md`](FP_PRE_T0_SUCCESSOR_CONTROL.md).
+> The mechanism described below is unchanged.
+
 **Closes:** activation-pack stop condition `S19` and the known gap in section 0.1
 **Scope:** single cohort (FP-CONTROL-1). Control-only. Paper / dry-run only.
 **Does not change:** BASELINE-1 strategy logic, indicators, entry rules, exit rules,

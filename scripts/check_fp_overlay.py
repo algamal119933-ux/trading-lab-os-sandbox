@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -51,8 +52,18 @@ def check(rendered: dict, instance_dir: str = DEFAULT_INSTANCE_DIR) -> list[str]
     if "BaselineEmaRegimeV1" not in command_text:
         problems.append(f"freqtrade does not run BASELINE-1: {command_text}")
     if "PlumbingSmokeStrategy" in command_text:
-        problems.append("the smoke strategy is running under the FP-CONTROL-1 overlay")
-    if instance_dir not in command_text:
+        problems.append("the smoke strategy is running under the FP control overlay")
+    # Exact path components, not a substring: "fp-control-2" is a substring of
+    # "fp-control-2-evil", so a drifted lane would have passed a containment test.
+    expected_prefix = f"/freqtrade/user_data/{instance_dir}/"
+    used = {
+        token for token in re.findall(r"/freqtrade/user_data/[^\s'\"]+", command_text)
+    }
+    stray = sorted(p for p in used if not p.startswith(expected_prefix) and p != f"/freqtrade/user_data/{instance_dir}"
+                   and p != "/freqtrade/user_data/config.json")
+    if stray:
+        problems.append(f"freqtrade writes outside {instance_dir}: {stray}")
+    if not any(p.startswith(expected_prefix) for p in used):
         problems.append(f"freqtrade is not using the control's isolated paths: {command_text}")
     if "--dry-run false" in command_text or "--dry-run=false" in command_text:
         problems.append("a live-trading flag is present in the freqtrade command")
@@ -64,7 +75,9 @@ def check(rendered: dict, instance_dir: str = DEFAULT_INSTANCE_DIR) -> list[str]
         for volume in capture.get("volumes") or []:
             target = volume.get("target") if isinstance(volume, dict) else str(volume)
             read_only = volume.get("read_only") if isinstance(volume, dict) else ":ro" in str(volume)
-            if not read_only and not str(target).startswith(evidence_target):
+            target_text = str(target)
+            inside = target_text == evidence_target or target_text.startswith(evidence_target + "/")
+            if not read_only and not inside:
                 problems.append(f"capture loop has a writable mount outside the evidence lane: {target}")
 
     text = yaml.dump(rendered)

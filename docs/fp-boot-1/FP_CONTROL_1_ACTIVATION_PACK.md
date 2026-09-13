@@ -1,5 +1,18 @@
 # FP-CONTROL-1 — activation pack
 
+> **SUPERSEDED — DO NOT RUN THE COMMANDS IN THIS PACK.**
+> The cohort this pack activates, `FP-CONTROL-1-20260908T121513Z`, is **CLOSED**
+> ([`FP_CONTROL_1_COHORT_CLOSURE.md`](FP_CONTROL_1_COHORT_CLOSURE.md)). Section
+> A14 below selects the FP-CONTROL-1 row by name and writes `t0_utc`,
+> `cohort_id`, `status` and `source_commit` into it — run today it would rewrite
+> a closed cohort's history. A11's launcher invocation is also stale: the
+> launcher now requires an explicit role and refuses a closed one.
+> The pack is kept unedited as the record of how the closed cohort was
+> activated. For the current host, the runnable instance and the fail-closed
+> selection that guards it, see
+> [`FP_PRE_T0_SUCCESSOR_CONTROL.md`](FP_PRE_T0_SUCCESSOR_CONTROL.md).
+> Freezing a **new** T0 remains an Owner-only act and has no script here.
+
 **Status:** `PROJECT_STATE = PRE_T0_READY`, `FP_RUNTIME_STATE = DEFERRED_BY_OWNER`
 **Authoritative commit:** `ab39a7622bb3567aca493560afd34556d080cfc8` (`main`)
 **Purpose:** the exact commands and pass evidence to activate FP-CONTROL-1 later, on an

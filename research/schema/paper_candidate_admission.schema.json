@@ -48,7 +48,7 @@
       "properties": {
         "role": {
           "enum": [
-            "FP-CONTROL-1",
+            "FP-CONTROL-1", "FP-CONTROL-2",
             "FP-CANDIDATE-A",
             "FP-CANDIDATE-B"
           ]

@@ -240,11 +240,26 @@ def select_instance(role: str, registry: dict | None = None) -> dict:
     return instance
 
 
-def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
-    """Refuse a runtime that would write into another instance's paths.
+def _collides(a: Path, b: Path) -> bool:
+    """True when two paths are the same, or one contains the other.
 
-    Distinct paths in the registry are a declaration; this is the check that the
-    process about to write is actually honouring it.
+    Prefix-string comparison is not enough: ``/x/fp-control-2`` and
+    ``/x/fp-control-2-evil`` share a prefix and are different lanes, while
+    ``/x/lane`` and ``/x/lane/nested`` do not look equal and are the same lane.
+    Comparing resolved path *components* answers both correctly.
+    """
+    if a == b:
+        return True
+    return a in b.parents or b in a.parents
+
+
+def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
+    """Refuse a runtime that would write anywhere another instance declares.
+
+    Every declared path field of every other instance is compared, in both
+    directions, for equality and for containment — not only the evidence
+    directory, and not by string prefix. Distinct paths in the registry are a
+    declaration; this is the check that the process about to write honours it.
     """
     registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
     resolved = Path(evidence_dir).resolve()
@@ -256,29 +271,56 @@ def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | N
             other = identity.get(field)
             if not other:
                 continue
-            other_path = Path(other)
-            if resolved == other_path or other_path in resolved.parents or resolved in other_path.parents:
+            if _collides(resolved, Path(other)):
                 raise InstanceSelectionError(
                     f"{role} would write to {resolved}, which collides with {item.get('role')}.{field} "
                     f"({other})"
                 )
 
 
+def assert_evidence_dir_is_declared(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
+    """The runtime's evidence directory must be the one the registry declares.
+
+    Collision-freedom alone permits an arbitrary third lane: a run could write to
+    a path no instance declares, and its evidence would then belong to no
+    registered instance at all. This is asserted by the launcher and the runtime
+    entry point, where the real declared path is available — unit tests build
+    loops in temporary directories on purpose, and they go through
+    ``assert_paths_are_exclusive`` instead.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    instance = select_instance(role, registry)
+    declared = (instance.get("runtime_identity") or {}).get("evidence_dir")
+    if not declared:
+        raise InstanceSelectionError(f"{role} declares no evidence_dir")
+    if Path(evidence_dir).resolve() != Path(declared):
+        raise InstanceSelectionError(
+            f"{role} must write its evidence to the declared {declared}, not {Path(evidence_dir).resolve()}"
+        )
+
+
 def build_identity(
     evidence_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
-    role: str = "FP-CONTROL-1",
+    *,
+    role: str,
     restart_counter: int = 0,
-    cohort_id: str | None = None,
-    bot_name: str | None = None,
-    db_path: str | None = None,
-    log_path: str | None = None,
 ) -> RuntimeIdentity:
+    """The runtime identity of one selected instance, taken only from the registry.
+
+    Every field that says *which cohort this is* — cohort_id, bot_name, db_path,
+    log_path — comes from the selected row and from nowhere else. They used to be
+    caller-overridable, which meant a caller could stamp a cohort id the registry
+    never froze, or point a run at another instance's database, without the
+    selection gate ever seeing it. A forged identity is indistinguishable from a
+    real one once it is in a ledger, so the parameters are gone rather than
+    guarded.
+    """
     registry = _load_json(COHORT_REGISTRY) or {}
     instance = select_instance(role, registry)
     assert_paths_are_exclusive(role, evidence_dir, registry)
     identity = instance.get("runtime_identity") or {}
-    resolved_bot = bot_name or identity.get("bot_name")
+    resolved_bot = identity.get("bot_name")
     if not resolved_bot:
         raise InstanceSelectionError(f"{role} declares no bot_name; a runtime identity must be bound before use")
     return RuntimeIdentity(
@@ -286,7 +328,7 @@ def build_identity(
         # would collide on, and it survives restarts by construction.
         runtime_id=f"{role}:{resolved_bot}",
         run_id=uuid.uuid4().hex,
-        cohort_id=cohort_id if cohort_id is not None else instance.get("cohort_id"),
+        cohort_id=instance.get("cohort_id"),
         role=role,
         source_commit=git_commit(),
         strategy_name=STRATEGY_PATH.stem,
@@ -297,8 +339,8 @@ def build_identity(
         paper_fill_model_version=PAPER_FILL_MODEL_VERSION,
         bot_name=resolved_bot,
         evidence_dir=str(evidence_dir),
-        db_path=db_path or identity.get("db_path"),
-        log_path=log_path or identity.get("log_path"),
+        db_path=identity.get("db_path"),
+        log_path=identity.get("log_path"),
         host=socket.gethostname(),
         pid=os.getpid(),
         restart_counter=restart_counter,
@@ -319,26 +361,27 @@ def _registry_t0_ms(role: str) -> int | None:
     Owner-authorised act performed once, and a capture loop that could invent
     one could manufacture prospective evidence out of warm-up.
     """
-    registry = _load_json(COHORT_REGISTRY) or {}
-    for instance in registry.get("instances", []):
-        if instance.get("role") != role:
-            continue
+    # Selection, not a scan: an unknown role, a duplicated role or a CLOSED row
+    # raises here exactly as it does everywhere else. A malformed T0 also raises
+    # rather than reading as unfrozen — "the boundary is unreadable" and "there
+    # is no boundary" must never collapse into the same answer, because the
+    # second one silently files post-T0 bars as qualification evidence.
+    instance = select_instance(role)
+    raw = instance.get("t0_utc")
+    if not raw:
         # A NOT_STARTED successor carries no T0, and the loop may never write
         # one: t0_relation then reads T0_NOT_FROZEN and every captured bar is
         # qualification evidence, not prospective evidence.
-        raw = instance.get("t0_utc")
-        if not raw:
-            return None
-        try:
-            return int(
-                datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
-                * 1000
-            )
-        except ValueError:
-            return None
-    return None
+        return None
+    try:
+        return int(
+            datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+            * 1000
+        )
+    except ValueError as exc:
+        raise InstanceSelectionError(f"{role} declares an unparseable t0_utc {raw!r}") from exc
 
 
 # --------------------------------------------------------------------------
@@ -768,9 +811,8 @@ class CaptureLoop:
         timeframe: str = "1h",
         config_path: Path = DEFAULT_CONFIG_PATH,
         client: FreqtradeClient | None = None,
-        identity: RuntimeIdentity | None = None,
         market_module=fp_market,
-        role: str = "FP-CONTROL-1",
+        role: str | None = None,
     ) -> None:
         self.evidence_dir = Path(evidence_dir)
         self.pairs = list(pairs)
@@ -782,7 +824,16 @@ class CaptureLoop:
         self.market = market_module
         self.ledgers = fp_ledger.open_ledgers(self.evidence_dir)
         self.state = recover_state(self.evidence_dir)
-        self.identity = identity or build_identity(
+        # The identity is built here or not at all. It used to be injectable,
+        # and an injected one bypassed selection entirely: a forged FP-CONTROL-1
+        # identity could write into the closed cohort's ledgers with no gate in
+        # its way.
+        if not role:
+            raise InstanceSelectionError(
+                "CaptureLoop requires an explicit role; there is no default, because a default "
+                "would select whichever row came first, including a closed one"
+            )
+        self.identity = build_identity(
             self.evidence_dir, self.config_path, role=role, restart_counter=self.state.restart_counter
         )
         self.t0_ms = _registry_t0_ms(self.identity.role)
@@ -1060,6 +1111,14 @@ def main(argv: list[str] | None = None) -> int:
             "recorded as WARMUP, contributing state and no outcome claim."
         ),
     )
+    parser.add_argument(
+        "--allow-undeclared-evidence-dir",
+        action="store_true",
+        help=(
+            "run against a directory the registry does not declare. For offline drills only: "
+            "the evidence it writes belongs to no registered instance and is not admissible."
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -1073,6 +1132,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         select_instance(args.role)
         assert_paths_are_exclusive(args.role, evidence_dir)
+        if not args.allow_undeclared_evidence_dir:
+            assert_evidence_dir_is_declared(args.role, evidence_dir)
     except InstanceSelectionError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
         return 5

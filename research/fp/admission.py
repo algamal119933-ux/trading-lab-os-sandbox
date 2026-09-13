@@ -231,7 +231,7 @@ def _frozen_configuration() -> tuple[str, str]:
     identified = [
         item
         for item in registry.get("instances", [])
-        if not str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX)
+        if item.get("role") in CANDIDATE_ROLES
         and (item.get("runtime_identity") or {}).get("config_sha256")
     ]
     if not identified:
@@ -314,6 +314,11 @@ def _replay_available() -> tuple[str, str]:
 
 
 CONTROL_ROLE_PREFIX = "FP-CONTROL"
+# Candidacy is decided by an allow-list, not by "anything that is not a control".
+# A prefix test answers the wrong question: an unknown or malformed role would
+# fall through it and be read as a candidate, and a control's records would then
+# satisfy candidate-scoped conditions.
+CANDIDATE_ROLES = ("FP-CANDIDATE-A", "FP-CANDIDATE-B")
 
 
 def identified_candidate() -> str | None:
@@ -334,7 +339,7 @@ def identified_candidate() -> str | None:
         # pre-T0 qualification must not start satisfying candidate conditions
         # the moment it appears — which is precisely what matching a single role
         # literal would have allowed.
-        if str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX):
+        if item.get("role") not in CANDIDATE_ROLES:
             continue
         identity = item.get("runtime_identity") or {}
         family = identity.get("candidate_family")
@@ -430,7 +435,7 @@ def _candidate_identity_frozen() -> tuple[str, str]:
     frozen = [
         item
         for item in registry.get("instances", [])
-        if not str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX)
+        if item.get("role") in CANDIDATE_ROLES
         and (item.get("runtime_identity") or {}).get("strategy_sha256")
         and (item.get("runtime_identity") or {}).get("config_sha256")
         and (item.get("runtime_identity") or {}).get("source_commit")

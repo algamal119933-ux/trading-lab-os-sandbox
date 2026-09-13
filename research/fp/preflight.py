@@ -71,6 +71,10 @@ class RuntimeContext:
     """
 
     evidence_dir: Path | None = None
+    # Which registry instance this runtime is. A runtime that cannot name its
+    # own instance cannot be compared against a frozen identity, and comparing
+    # it against "every row that has hashes" silently includes closed ones.
+    role: str | None = None
     freqtrade_url: str | None = None
     api_user: str | None = None
     api_password: str | None = None
@@ -466,11 +470,20 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
-    frozen = [
-        item
-        for item in registry.get("instances", [])
-        if (item.get("runtime_identity") or {}).get("strategy_sha256")
-    ]
+    if runtime is not None and runtime.role:
+        # Bound: compare against exactly the instance this runtime declares.
+        # select_instance refuses unknown, duplicated and CLOSED rows.
+        try:
+            frozen = [fp_capture.select_instance(runtime.role, registry)]
+        except fp_capture.InstanceSelectionError as exc:
+            return FAIL, f"the runtime names an unusable instance: {exc}", {}
+    else:
+        frozen = [
+            item
+            for item in registry.get("instances", [])
+            if (item.get("runtime_identity") or {}).get("strategy_sha256")
+            and item.get("status") != "CLOSED"
+        ]
     if not frozen:
         return UNPROVEN, (
             "the registry declares no frozen runtime identity to compare against "
@@ -599,13 +612,18 @@ def _check_input_ledger_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     # copy, is the point of this check.
     lines = facts["ledgers"]["input"].path.read_text(encoding="utf-8").splitlines()
     target = len(lines) // 2
-    tampered_path = Path(runtime.evidence_dir) / "tampered_real_input.jsonl"
     record = json.loads(lines[target])
     record["payload"]["candle"]["close"] = float(record["payload"]["candle"]["close"]) + 1.0
     lines[target] = json.dumps(record, sort_keys=True, ensure_ascii=False)
-    tampered_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    detected = bool(fp_ledger.Ledger(tampered_path, "input").verify())
-    tampered_path.unlink(missing_ok=True)
+    # The negative control is written to a throwaway temporary directory, never
+    # into the evidence lane it is testing. A gate that writes a file named
+    # "tampered_..." into a cohort's own lane is one crash away from leaving it
+    # there, and the directory it was handed might not even be the lane it
+    # belongs to.
+    with tempfile.TemporaryDirectory(prefix="fp-preflight-tamper-") as scratch:
+        tampered_path = Path(scratch) / "tampered_real_input.jsonl"
+        tampered_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        detected = bool(fp_ledger.Ledger(tampered_path, "input").verify())
     if not detected:
         return FAIL, "the input ledger did not detect an altered real candle payload", {}
 
@@ -707,7 +725,25 @@ def _check_db_isolation() -> tuple[str, str]:
         values = [item[field] for item in populated if item[field]]
         if len(values) != len(set(values)):
             return FAIL, f"two instances share the same {field}; section 14 forbids shared mutable state"
-    return PASS, f"{len(populated)} instances declare distinct {', '.join(fields)}"
+
+    # Same-field equality is the weakest form of the question. Two lanes also
+    # collide when one path contains the other, and when one instance's log path
+    # sits inside another's evidence directory — so every path field is compared
+    # against every other instance's path fields, in both directions.
+    path_fields = ("db_path", "log_path", "evidence_dir")
+    for i, first in enumerate(populated):
+        for second in populated[i + 1:]:
+            for field_a in path_fields:
+                for field_b in path_fields:
+                    a, b = first[field_a], second[field_b]
+                    if not a or not b:
+                        continue
+                    if fp_capture._collides(Path(a), Path(b)):
+                        return FAIL, (
+                            f"instance paths overlap: {field_a} {a} and {field_b} {b} are the same lane; "
+                            "section 14 forbids shared mutable state"
+                        )
+    return PASS, f"{len(populated)} instances declare distinct, non-overlapping {', '.join(fields)}"
 
 
 def _check_monitoring(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
@@ -864,10 +900,13 @@ def _check_duplicate_instance(runtime: RuntimeContext | None = None) -> tuple[st
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
     instances = registry.get("instances", [])
+    all_roles = [item.get("role") for item in instances]
+    if len(all_roles) != len(set(all_roles)):
+        # Checking only RUNNING rows was too narrow: a duplicated role makes
+        # selection ambiguous before anything starts, and ambiguity is what lets
+        # a runtime pick up the wrong identity.
+        return FAIL, f"two instances share a role: {sorted(r for r in all_roles if r)}", {}
     running = [item for item in instances if item.get("status") == "RUNNING"]
-    roles = [item.get("role") for item in running]
-    if len(roles) != len(set(roles)):
-        return FAIL, f"two running instances share a role: {roles}", {}
 
     if runtime is None or not runtime.has_evidence:
         if not running:
@@ -1041,6 +1080,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="a live capture-loop evidence directory; enables the real-runtime checks",
     )
+    parser.add_argument(
+        "--role",
+        default=None,
+        help=(
+            "the registry instance the attached runtime is. Required whenever --evidence-dir is given: "
+            "an unbound runtime would be compared against every hashed row, closed ones included."
+        ),
+    )
     parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL") or None)
     parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER") or None)
     parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD") or None)
@@ -1053,12 +1100,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Role validation happens before anything else and regardless of which other
+    # flags were passed: a refusal that only fires when a runtime happens to be
+    # attached is not a gate.
+    if args.role:
+        try:
+            fp_capture.select_instance(args.role)
+        except fp_capture.InstanceSelectionError as exc:
+            print(f"PREFLIGHT_REFUSED: {exc}", file=sys.stderr)
+            return 2
+
     runtime = None
     if any(
-        (args.evidence_dir, args.freqtrade_url, args.exporter_url, args.prometheus_url, args.check_market_route)
+        (args.evidence_dir, args.role, args.freqtrade_url, args.exporter_url, args.prometheus_url,
+         args.check_market_route)
     ):
+        if args.evidence_dir and not args.role:
+            print(
+                "PREFLIGHT_REFUSED: --evidence-dir requires --role, so the runtime is compared against "
+                "the instance it actually is",
+                file=sys.stderr,
+            )
+            return 2
         runtime = RuntimeContext(
             evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+            role=args.role,
             freqtrade_url=args.freqtrade_url,
             api_user=args.api_user,
             api_password=args.api_password,

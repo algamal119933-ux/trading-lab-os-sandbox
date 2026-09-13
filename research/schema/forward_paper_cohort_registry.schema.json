@@ -28,8 +28,9 @@
     "adopted_prior_t0": { "type": "boolean" },
     "instances": {
       "type": "array",
-      "maxItems": 3,
-      "description": "Section 4: at most one control plus two survivor candidates.",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "description": "Section 4: control instances plus at most two survivor candidates. Capacity is four because a closed control is kept as history beside the pre-T0 successor that replaced it.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -136,6 +137,19 @@
           }
         },
         "allOf": [
+          {
+            "description": "A NOT_STARTED row has started nothing, so it may carry no T0, no cohort id and no source commit. Without this, a pre-T0 successor could quietly acquire the identity of a run that never happened.",
+            "if": { "required": ["status"], "properties": { "status": { "const": "NOT_STARTED" } } },
+            "then": {
+              "properties": {
+                "t0_utc": { "const": null },
+                "cohort_id": { "const": null },
+                "closed_utc": { "const": null },
+                "closure_reason": { "const": null },
+                "runtime_identity": { "properties": { "source_commit": { "const": null } } }
+              }
+            }
+          },
           {
             "description": "An outcome belongs to a finished window. A row that is not CLOSED must not carry one: an outcome on a live row is a verdict written before the evidence that would support it exists.",
             "if": { "required": ["status"], "properties": { "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED"] } } },

@@ -140,11 +140,28 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
     assert instance["status"] == "NOT_STARTED", "the qualifying instance must be pre-T0"
     instance_dir = identity["evidence_dir"].rsplit("/", 2)[-2]
 
+    # The variables are required-with-message (`${VAR:?...}`), so the overlay
+    # refuses to render at all when no instance has been selected. Substituting
+    # them here mimics what compose does once the launcher has selected one.
+    import re as _re
+
+    values = {
+        "FP_INSTANCE_DIR": instance_dir,
+        "FP_BOT_NAME": identity["bot_name"],
+        "FP_ROLE": instance["role"],
+    }
+
     def render(text: str) -> str:
-        return (
-            text.replace("${FP_INSTANCE_DIR}", instance_dir)
-            .replace("${FP_BOT_NAME}", identity["bot_name"])
-            .replace("${FP_ROLE}", instance["role"])
+        def substitute(match):
+            return values[match.group(1)]
+
+        return _re.sub(r"\$\{(FP_INSTANCE_DIR|FP_BOT_NAME|FP_ROLE)(?::\?[^}]*)?\}", substitute, text)
+
+    raw_overlay = (repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8")
+    for variable in ("FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME"):
+        assert f"${{{variable}:?" in raw_overlay, (
+            f"{variable} must be required, not defaulted: an unset variable renders an unnamed lane "
+            "with the whole of user_data writable"
         )
 
     command = render(overlay["services"]["freqtrade"]["command"])
@@ -169,4 +186,6 @@ def test_the_capture_service_never_restarts_into_a_different_strategy(repo_root)
     # It must come back by itself: the runtime has to survive the session that
     # started it.
     assert capture["restart"] == "unless-stopped"
-    assert overlay["services"]["freqtrade"].get("container_name") == "tradinglab-${FP_BOT_NAME}-freqtrade"
+    container = overlay["services"]["freqtrade"].get("container_name") or ""
+    assert container.startswith("tradinglab-${FP_BOT_NAME"), container
+    assert container.endswith("-freqtrade"), container

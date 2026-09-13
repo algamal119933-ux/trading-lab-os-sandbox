@@ -234,3 +234,134 @@ def test_a_successor_control_is_not_read_as_a_candidate(registry):
     assert record["candidate"]["name"] is None
     assert record["entry_state"] == "C"
     assert registry["paper_alpha_cohort"] == "NONE"
+
+
+# -- bypasses an earlier review found, and must stay closed ---------------
+
+
+def test_a_caller_cannot_forge_a_cohort_id(tmp_path, monkeypatch):
+    """build_identity used to accept cohort_id=, bot_name=, db_path=, log_path=.
+
+    A caller could stamp a cohort the registry never froze — INVENTED-BEFORE-T0
+    in a ledger is indistinguishable from a real one afterwards. The parameters
+    are gone, not guarded.
+    """
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    with pytest.raises(TypeError):
+        capture.build_identity(tmp_path, role=SUCCESSOR, cohort_id="INVENTED-BEFORE-T0")
+    for forbidden in ("bot_name", "db_path", "log_path"):
+        with pytest.raises(TypeError):
+            capture.build_identity(tmp_path, role=SUCCESSOR, **{forbidden: "/tmp/forged"})
+
+
+def test_a_capture_loop_cannot_be_handed_a_forged_identity(tmp_path, monkeypatch):
+    """CaptureLoop(identity=...) bypassed selection completely."""
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    with pytest.raises(TypeError):
+        capture.CaptureLoop(tmp_path, ["BTC/USDT"], identity=object())
+
+
+def test_a_capture_loop_has_no_default_role(tmp_path, monkeypatch):
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    with pytest.raises(capture.InstanceSelectionError):
+        capture.CaptureLoop(tmp_path, ["BTC/USDT"])
+
+
+def test_an_undeclared_evidence_lane_is_refused(tmp_path, registry):
+    """Collision-freedom alone permits a third lane belonging to no instance."""
+    with pytest.raises(capture.InstanceSelectionError) as excinfo:
+        capture.assert_evidence_dir_is_declared(SUCCESSOR, tmp_path, registry)
+    assert "declared" in str(excinfo.value)
+    declared = next(i for i in registry["instances"] if i["role"] == SUCCESSOR)["runtime_identity"]["evidence_dir"]
+    capture.assert_evidence_dir_is_declared(SUCCESSOR, Path(declared), registry)  # must not raise
+
+
+def test_prefix_neighbours_are_not_treated_as_the_same_lane(registry):
+    """`/x/fp-control-2-evil` shares a prefix with `/x/fp-control-2` and is a
+    different lane; `/x/lane/nested` looks different and is the same lane."""
+    assert capture._collides(Path("/x/lane"), Path("/x/lane/nested"))
+    assert capture._collides(Path("/x/lane/nested"), Path("/x/lane"))
+    assert not capture._collides(Path("/x/fp-control-2"), Path("/x/fp-control-2-evil"))
+
+
+def test_a_malformed_t0_is_not_read_as_unfrozen(tmp_path, monkeypatch):
+    """"Unreadable boundary" and "no boundary" must not collapse together."""
+    broken = json.loads(Path(REGISTRY_PATH).read_text(encoding="utf-8"))
+    successor = next(i for i in broken["instances"] if i["role"] == SUCCESSOR)
+    successor["t0_utc"] = "not-a-timestamp"
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(broken), encoding="utf-8")
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", path)
+    with pytest.raises(capture.InstanceSelectionError):
+        capture._registry_t0_ms(SUCCESSOR)
+
+
+def test_the_overlay_refuses_to_render_without_a_selection():
+    """Unset variables used to render an unnamed lane with user_data writable."""
+    overlay = Path("docker-compose.fp.yml").read_text(encoding="utf-8")
+    for variable in ("FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME"):
+        assert f"${{{variable}:?" in overlay, f"{variable} must be required, not defaulted"
+
+
+def test_the_overlay_guard_rejects_a_prefix_neighbour_lane():
+    """Substring checking passed `fp-control-2-evil`; component checking must not."""
+    import check_fp_overlay
+
+    rendered = {
+        "services": {
+            "freqtrade": {
+                "command": [
+                    "trade",
+                    "--logfile", "/freqtrade/user_data/fp-control-2-evil/logs/freqtrade.log",
+                    "--db-url", "sqlite:////freqtrade/user_data/fp-control-2-evil/tradesv3.sqlite",
+                    "--config", "/freqtrade/user_data/config.json",
+                    "--strategy", "BaselineEmaRegimeV1",
+                ],
+            },
+            "fp-capture": {
+                "volumes": [
+                    {"source": "./freqtrade/user_data/fp-control-2-evil",
+                     "target": "/freqtrade/user_data/fp-control-2-evil", "read_only": False},
+                ],
+            },
+        }
+    }
+    assert check_fp_overlay.check(rendered, "fp-control-2"), "a prefix-neighbour lane must be rejected"
+
+
+def test_ci_selects_an_instance_before_rendering_the_overlay():
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "scripts/fp_instance.py FP-CONTROL-2" in workflow
+    assert "An unselected FP overlay render must fail closed" in workflow
+
+
+def test_preflight_refuses_an_unbound_runtime():
+    """--evidence-dir without --role compared a runtime against every hashed row."""
+    from fp import preflight
+
+    assert preflight.main(["--evidence-dir", "/tmp"]) == 2
+    assert preflight.main(["--role", HISTORICAL]) == 2       # CLOSED
+    assert preflight.main(["--role", "FP-CONTROL-404"]) == 2  # unknown
+
+
+def test_preflight_tamper_proof_never_writes_into_the_lane_it_tests():
+    source = Path("research/fp/preflight.py").read_text(encoding="utf-8")
+    assert "tempfile.TemporaryDirectory(prefix=\"fp-preflight-tamper-\")" in source
+    assert "Path(runtime.evidence_dir) / \"tampered_real_input.jsonl\"" not in source
+
+
+def test_an_unknown_role_is_never_read_as_a_candidate(registry):
+    """Candidacy is an allow-list; a prefix test let unknown roles through."""
+    from fp import admission
+
+    assert admission.CANDIDATE_ROLES == ("FP-CANDIDATE-A", "FP-CANDIDATE-B")
+    source = Path("research/fp/admission.py").read_text(encoding="utf-8")
+    assert "item.get(\"role\") not in CANDIDATE_ROLES" in source
+
+
+def test_the_activation_pack_no_longer_offers_to_rewrite_the_closed_row():
+    pack = Path("docs/fp-boot-1/FP_CONTROL_1_ACTIVATION_PACK.md").read_text(encoding="utf-8")
+    assert "SUPERSEDED" in pack.split("\n\n", 3)[1] or "SUPERSEDED" in pack[:2000], (
+        "the pack's A14 writes t0_utc and cohort_id into the FP-CONTROL-1 row and must carry a "
+        "superseded notice at the top"
+    )
