@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# Start the FP-CONTROL-1 paper runtime: BASELINE-1 as operational control.
+# Start an FP control paper runtime: BASELINE-1 as operational control.
+#
+# Usage: scripts/start_fp_control.sh FP-CONTROL-2
+#
+# The role is required and never defaulted. scripts/fp_instance.py is the one
+# place that decides which instance may run, and it refuses a closed one, so a
+# terminated cohort's paths can never be started into.
 #
 # Fails closed at every step. The paper guard runs before anything starts, the
 # strategy and config are checked against the hashes frozen in the cohort
@@ -10,7 +16,24 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.fp.yml)
-FP_DIR="freqtrade/user_data/fp-control-1"
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: scripts/start_fp_control.sh FP-CONTROL-ROLE" >&2
+  echo "  no default role: a default would select whichever row came first, including a closed one." >&2
+  exit 2
+fi
+
+# Fail-closed selection before anything else runs.
+# The substitution's exit status must be checked before eval sees it: `eval
+# "$(...)"` reports eval's success, not the selector's, and a refusal would then
+# surface as an unbound variable several lines later instead of as a refusal.
+if ! FP_SELECTION="$(python3 scripts/fp_instance.py "$1")"; then
+  exit 3
+fi
+eval "$FP_SELECTION"
+export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME
+FP_DIR="freqtrade/user_data/$FP_INSTANCE_DIR"
+echo "FP_ROLE=$FP_ROLE FP_INSTANCE_DIR=$FP_INSTANCE_DIR FP_BOT_NAME=$FP_BOT_NAME T0=$FP_T0"
 
 if [[ ! -f .env ]]; then
   echo "Missing .env. Run: cp .env.example .env and change the placeholder passwords." >&2
@@ -29,12 +52,19 @@ require_paper_config
 # comparison preflight check 5 makes; doing it here too means an identity drift
 # stops the runtime rather than being discovered in a later report.
 python3 - <<'PY' || exit 3
-import hashlib, json, pathlib, sys
+import hashlib, json, os, pathlib, sys
 
 registry = json.loads(
     pathlib.Path("research/fp/records/forward_paper_cohort_registry.json").read_text(encoding="utf-8")
 )
-instance = next(i for i in registry["instances"] if i["role"] == "FP-CONTROL-1")
+sys.path.insert(0, "research")
+from fp.capture import InstanceSelectionError, select_instance
+
+try:
+    instance = select_instance(os.environ["FP_ROLE"], registry)
+except InstanceSelectionError as exc:
+    print(f"FP_IDENTITY_FAIL: {exc}", file=sys.stderr)
+    sys.exit(3)
 identity = instance["runtime_identity"]
 
 expected = {
@@ -68,10 +98,17 @@ FP_SOURCE_COMMIT="$(git rev-parse HEAD)"
 export FP_SOURCE_COMMIT
 echo "FP_SOURCE_COMMIT=$FP_SOURCE_COMMIT"
 
+# The rendered stack — not the source file — is what the engine runs, so that is
+# what gets checked, against the instance actually selected.
+RENDERED="$(mktemp)"
+docker compose "${COMPOSE_FILES[@]}" config > "$RENDERED"
+python3 scripts/check_fp_overlay.py "$RENDERED" "$FP_INSTANCE_DIR" || { rm -f "$RENDERED"; exit 4; }
+rm -f "$RENDERED"
+
 docker compose "${COMPOSE_FILES[@]}" up -d
 
 echo
-echo "Started FP-CONTROL-1 (dry_run=true, paper only)."
+echo "Started $FP_ROLE (dry_run=true, paper only)."
 echo "  status:   docker compose ${COMPOSE_FILES[*]} ps"
 echo "  capture:  docker compose ${COMPOSE_FILES[*]} logs -f fp-capture"
 echo "  evidence: $FP_DIR/evidence"

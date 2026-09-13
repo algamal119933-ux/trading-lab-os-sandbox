@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assert the FP-CONTROL-1 compose overlay cannot drift into an unsafe runtime.
+"""Assert the FP control compose overlay cannot drift into an unsafe runtime.
 
 The overlay decides which strategy the forward-paper control actually runs and
 what the capture loop is allowed to write. Both are the kind of thing that
@@ -17,7 +17,7 @@ merge produced — is checked for:
 
 Usage:
     docker compose -f docker-compose.yml -f docker-compose.fp.yml config > rendered.yml
-    python3 scripts/check_fp_overlay.py rendered.yml
+    python3 scripts/check_fp_overlay.py rendered.yml fp-control-2
 """
 
 from __future__ import annotations
@@ -27,12 +27,19 @@ from pathlib import Path
 
 import yaml
 
-EVIDENCE_TARGET = "/freqtrade/user_data/fp-control-1"
+DEFAULT_INSTANCE_DIR = "fp-control-1"
 FORBIDDEN_ENDPOINTS = ("forcebuy", "forceenter", "forcesell", "forceexit")
 
 
-def check(rendered: dict) -> list[str]:
+def check(rendered: dict, instance_dir: str = DEFAULT_INSTANCE_DIR) -> list[str]:
+    """``instance_dir`` is the directory of the instance the launcher selected.
+
+    Checking the rendered stack against *that* instance rather than a constant is
+    what stops a successor runtime from being rendered onto a closed cohort's
+    paths by a stale variable.
+    """
     problems: list[str] = []
+    evidence_target = f"/freqtrade/user_data/{instance_dir}"
     services = rendered.get("services") or {}
 
     freqtrade = services.get("freqtrade")
@@ -45,7 +52,7 @@ def check(rendered: dict) -> list[str]:
         problems.append(f"freqtrade does not run BASELINE-1: {command_text}")
     if "PlumbingSmokeStrategy" in command_text:
         problems.append("the smoke strategy is running under the FP-CONTROL-1 overlay")
-    if "fp-control-1" not in command_text:
+    if instance_dir not in command_text:
         problems.append(f"freqtrade is not using the control's isolated paths: {command_text}")
     if "--dry-run false" in command_text or "--dry-run=false" in command_text:
         problems.append("a live-trading flag is present in the freqtrade command")
@@ -57,7 +64,7 @@ def check(rendered: dict) -> list[str]:
         for volume in capture.get("volumes") or []:
             target = volume.get("target") if isinstance(volume, dict) else str(volume)
             read_only = volume.get("read_only") if isinstance(volume, dict) else ":ro" in str(volume)
-            if not read_only and not str(target).startswith(EVIDENCE_TARGET):
+            if not read_only and not str(target).startswith(evidence_target):
                 problems.append(f"capture loop has a writable mount outside the evidence lane: {target}")
 
     text = yaml.dump(rendered)
@@ -87,12 +94,13 @@ def check(rendered: dict) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
-    if len(args) != 1:
-        print("usage: check_fp_overlay.py RENDERED_COMPOSE_YAML", file=sys.stderr)
+    if not 1 <= len(args) <= 2:
+        print("usage: check_fp_overlay.py RENDERED_COMPOSE_YAML [INSTANCE_DIR]", file=sys.stderr)
         return 2
 
+    instance_dir = args[1] if len(args) == 2 else DEFAULT_INSTANCE_DIR
     rendered = yaml.safe_load(Path(args[0]).read_text(encoding="utf-8"))
-    problems = check(rendered)
+    problems = check(rendered, instance_dir)
     if problems:
         for problem in problems:
             print(f"FP_OVERLAY_FAIL: {problem}", file=sys.stderr)

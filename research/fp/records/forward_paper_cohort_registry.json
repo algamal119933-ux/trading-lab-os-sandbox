@@ -92,8 +92,71 @@
         "owner_disposition": "The Owner has decided the prior host will not be used again and that the cohort is to be treated as unrecoverable. That is a disposition about how the project proceeds. It is not evidence about what did or did not occur between T0 and this closure, and it is recorded here so it can never be read as such.",
         "detail": "The evidence lane of this cohort - paper_input_ledger, paper_decision_ledger, paper_trade_ledger, paper_incident_ledger, the trade database and the pre-T0 preflight/admission artifacts - is not present in this workspace. It was gitignored by design and the migration was made with a git bundle, which carries committed history and no untracked runtime state. What follows from that is a limit on evidence, not a finding about the window: the surviving evidence does not establish a full trade lifecycle, and post-T0 evidence cannot be read or measured from the current evidence lane. Whether any trade occurred is therefore unanswered, and is left unanswered rather than resolved in either direction. No result is reconstructed, inferred or estimated."
       }
+    },
+    {
+      "role": "FP-CONTROL-2",
+      "cohort_id": null,
+      "status": "NOT_STARTED",
+      "t0_utc": null,
+      "closed_utc": null,
+      "closure_reason": null,
+      "runtime_identity": {
+        "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
+        "source_commit": null,
+        "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
+        "params_sha256": null,
+        "config_sha256": "d1d078c63adc5e4283632a1c3e65df8cd0d7c23a249575054491c6356d97a9ff",
+        "engine_version": "freqtradeorg/freqtrade:2026.7",
+        "image_digest": null,
+        "python_version": null,
+        "pairs": [
+          "BTC/USDT",
+          "ETH/USDT"
+        ],
+        "timeframe": "1h",
+        "detail_timeframe": "5m",
+        "fee_model": {
+          "per_side_ratio": 0.001,
+          "slippage": "none modelled"
+        },
+        "sizing": {
+          "dry_run_wallet": 100,
+          "stake_amount": 10,
+          "stake_currency": "USDT"
+        },
+        "max_open_trades": 2,
+        "order_policy": {
+          "execution": "freqtrade dry-run simulation only; no live order route exists",
+          "entry_pricing": "order book, price_side 'other', order_book_top 1",
+          "exit_pricing": "order book, price_side 'other', order_book_top 1",
+          "unfilled_timeout_minutes": 10,
+          "fee_per_side_ratio": 0.001,
+          "slippage_model": "none modelled",
+          "latency_model": "none modelled",
+          "partial_fill_model": "none modelled",
+          "risk_limits": "stoploss -0.25 and max_open_trades 2 only",
+          "additional_risk_limits": "none. No further limit is introduced before T0: an untested parameter added here would be presented as a control while never having been evaluated."
+        },
+        "feature_sources": [
+          "binance spot public OHLCV 1h"
+        ],
+        "paper_fill_model_version": "FREQTRADE_2026.7_DRYRUN_ORDERBOOK_V1",
+        "environment_variable_allowlist": [
+          "FREQTRADE_API_USER",
+          "FREQTRADE_API_PASSWORD",
+          "FREQTRADE_JWT_SECRET",
+          "FREQTRADE_WS_TOKEN",
+          "FREQTRADE_IMAGE"
+        ],
+        "bot_name": "fp-control-2",
+        "db_path": "/freqtrade/user_data/fp-control-2/tradesv3.sqlite",
+        "wallet": 100,
+        "log_path": "/freqtrade/user_data/fp-control-2/logs/freqtrade.log",
+        "evidence_dir": "/freqtrade/user_data/fp-control-2/evidence"
+      },
+      "change_log": []
     }
   ],
   "real_money_authorized": false,
-  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE. The FP-CONTROL-1 row is BASELINE-1 as operational control - not a candidate, not a survivor, and not candidate-quality evidence. Its T0 was frozen on 2026-09-08 after a passing pre-T0 gate on the prior host. The cohort was closed on 2026-09-13 with closure_reason EVIDENCE_LANE_LOST_IN_HOST_MIGRATION: its evidence lane is not present in this workspace, so the surviving evidence cannot establish a full trade lifecycle and no post-T0 evidence can be measured. The closure is an Owner evidence disposition, not a section-15 semantic change: no strategy, config, pair, timeframe or sizing semantics changed, and no O/R/S classification is asserted for it. The frozen t0_utc, cohort_id and source_commit stay exactly as recorded - they are history, never reusable - and the closed row claims nothing. A future forward-paper run is a new cohort with a new T0, admitted only by a fresh pre-T0 pass on the new host and a new Owner authorisation."
+  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE. The FP-CONTROL-1 row is BASELINE-1 as operational control - not a candidate, not a survivor, and not candidate-quality evidence. Its T0 was frozen on 2026-09-08 after a passing pre-T0 gate on the prior host. The cohort was closed on 2026-09-13 with closure_reason EVIDENCE_LANE_LOST_IN_HOST_MIGRATION: its evidence lane is not present in this workspace, so the surviving evidence cannot establish a full trade lifecycle and no post-T0 evidence can be measured. The closure is an Owner evidence disposition, not a section-15 semantic change: no strategy, config, pair, timeframe or sizing semantics changed, and no O/R/S classification is asserted for it. The frozen t0_utc, cohort_id and source_commit stay exactly as recorded - they are history, never reusable - and the closed row claims nothing. A future forward-paper run is a new cohort with a new T0, admitted only by a fresh pre-T0 pass on the new host and a new Owner authorisation. A second row, FP-CONTROL-2, is registered NOT_STARTED for pre-T0 host qualification on the native Ubuntu host. It is not a cohort: t0_utc and cohort_id are null and stay null until an Owner-authorised T0 act, its runtime paths are distinct from the closed instance's, and it inherits none of that instance's evidence or outcome. Qualification evidence written under it is pre-T0 qualification evidence and never prospective evidence."
 }

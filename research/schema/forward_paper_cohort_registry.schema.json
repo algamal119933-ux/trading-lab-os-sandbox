@@ -35,7 +35,7 @@
         "additionalProperties": false,
         "required": ["role", "cohort_id", "status", "t0_utc", "runtime_identity"],
         "properties": {
-          "role": { "enum": ["FP-CONTROL-1", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
+          "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
           "cohort_id": { "type": ["string", "null"] },
           "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED", "CLOSED"] },
           "t0_utc": {
@@ -145,7 +145,7 @@
             "description": "A closed control must say when it closed, why, and what its window established. Without all three, a cohort that established nothing is indistinguishable from one whose result was simply never written down.",
             "if": {
               "required": ["status", "role"],
-              "properties": { "status": { "const": "CLOSED" }, "role": { "const": "FP-CONTROL-1" } }
+              "properties": { "status": { "const": "CLOSED" }, "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2"] } }
             },
             "then": { "required": ["closed_utc", "closure_reason", "outcome"] }
           },

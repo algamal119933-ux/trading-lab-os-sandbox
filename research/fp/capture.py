@@ -103,6 +103,16 @@ class CaptureError(RuntimeError):
     """Raised when the capture loop cannot run safely."""
 
 
+class InstanceSelectionError(CaptureError):
+    """The registry cannot name exactly one runnable instance for a role.
+
+    Selection fails closed for every ambiguity. A loop that silently fell back
+    to "the first row" would, the moment a cohort closed and a successor was
+    registered, start stamping a closed cohort's identity onto new evidence —
+    which is the one failure the closure record exists to prevent.
+    """
+
+
 class DuplicateInstanceError(CaptureError):
     """Raised when another capture process already holds this evidence directory."""
 
@@ -203,6 +213,57 @@ class RuntimeIdentity:
         }
 
 
+def select_instance(role: str, registry: dict | None = None) -> dict:
+    """The one registry row a runtime may run as, or a hard failure.
+
+    There is no default row and no first-row fallback: an unknown role, a
+    duplicated role, and a CLOSED row each raise. A CLOSED row is refused
+    because its cohort's evidence stream ended — appending to it would splice a
+    new run onto a terminated one, and no later check could unpick that.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    matches = [item for item in registry.get("instances", []) if item.get("role") == role]
+    if not matches:
+        known = sorted({item.get("role") for item in registry.get("instances", [])} - {None})
+        raise InstanceSelectionError(f"unknown instance role {role!r}; the registry declares {known}")
+    if len(matches) > 1:
+        raise InstanceSelectionError(
+            f"ambiguous selection: {len(matches)} instances declare role {role!r}"
+        )
+    instance = matches[0]
+    status = instance.get("status")
+    if status == "CLOSED":
+        raise InstanceSelectionError(
+            f"{role} is CLOSED (cohort {instance.get('cohort_id')}, closed {instance.get('closed_utc')}): "
+            "a closed cohort accepts no further capture or evidence"
+        )
+    return instance
+
+
+def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
+    """Refuse a runtime that would write into another instance's paths.
+
+    Distinct paths in the registry are a declaration; this is the check that the
+    process about to write is actually honouring it.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    resolved = Path(evidence_dir).resolve()
+    for item in registry.get("instances", []):
+        if item.get("role") == role:
+            continue
+        identity = item.get("runtime_identity") or {}
+        for field in ("evidence_dir", "db_path", "log_path"):
+            other = identity.get(field)
+            if not other:
+                continue
+            other_path = Path(other)
+            if resolved == other_path or other_path in resolved.parents or resolved in other_path.parents:
+                raise InstanceSelectionError(
+                    f"{role} would write to {resolved}, which collides with {item.get('role')}.{field} "
+                    f"({other})"
+                )
+
+
 def build_identity(
     evidence_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
@@ -214,12 +275,12 @@ def build_identity(
     log_path: str | None = None,
 ) -> RuntimeIdentity:
     registry = _load_json(COHORT_REGISTRY) or {}
-    instance = next(
-        (item for item in registry.get("instances", []) if item.get("role") == role),
-        {},
-    )
+    instance = select_instance(role, registry)
+    assert_paths_are_exclusive(role, evidence_dir, registry)
     identity = instance.get("runtime_identity") or {}
-    resolved_bot = bot_name or identity.get("bot_name") or "fp-control-1"
+    resolved_bot = bot_name or identity.get("bot_name")
+    if not resolved_bot:
+        raise InstanceSelectionError(f"{role} declares no bot_name; a runtime identity must be bound before use")
     return RuntimeIdentity(
         # The instance identity is the bot name: it is what a second process
         # would collide on, and it survives restarts by construction.
@@ -262,6 +323,9 @@ def _registry_t0_ms(role: str) -> int | None:
     for instance in registry.get("instances", []):
         if instance.get("role") != role:
             continue
+        # A NOT_STARTED successor carries no T0, and the loop may never write
+        # one: t0_relation then reads T0_NOT_FROZEN and every captured bar is
+        # qualification evidence, not prospective evidence.
         raw = instance.get("t0_utc")
         if not raw:
             return None
@@ -706,6 +770,7 @@ class CaptureLoop:
         client: FreqtradeClient | None = None,
         identity: RuntimeIdentity | None = None,
         market_module=fp_market,
+        role: str = "FP-CONTROL-1",
     ) -> None:
         self.evidence_dir = Path(evidence_dir)
         self.pairs = list(pairs)
@@ -718,7 +783,7 @@ class CaptureLoop:
         self.ledgers = fp_ledger.open_ledgers(self.evidence_dir)
         self.state = recover_state(self.evidence_dir)
         self.identity = identity or build_identity(
-            self.evidence_dir, self.config_path, restart_counter=self.state.restart_counter
+            self.evidence_dir, self.config_path, role=role, restart_counter=self.state.restart_counter
         )
         self.t0_ms = _registry_t0_ms(self.identity.role)
 
@@ -967,6 +1032,14 @@ class CaptureLoop:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument(
+        "--role",
+        required=True,
+        help=(
+            "the registry instance this runtime is. Required and never defaulted: after a cohort "
+            "closes, a default would quietly select the closed row and stamp its identity onto new evidence."
+        ),
+    )
     parser.add_argument("--pair", action="append", dest="pairs", default=None)
     parser.add_argument("--timeframe", default="1h")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
@@ -998,6 +1071,13 @@ def main(argv: list[str] | None = None) -> int:
         client = FreqtradeClient(args.freqtrade_url, args.api_user or None, args.api_password or None)
 
     try:
+        select_instance(args.role)
+        assert_paths_are_exclusive(args.role, evidence_dir)
+    except InstanceSelectionError as exc:
+        print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        return 5
+
+    try:
         lock = EvidenceLock(evidence_dir).acquire()
     except DuplicateInstanceError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
@@ -1010,6 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
             timeframe=args.timeframe,
             config_path=Path(args.config),
             client=client,
+            role=args.role,
         )
         loop.record_run_started()
         print(

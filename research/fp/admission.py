@@ -231,7 +231,8 @@ def _frozen_configuration() -> tuple[str, str]:
     identified = [
         item
         for item in registry.get("instances", [])
-        if item.get("role") != "FP-CONTROL-1" and (item.get("runtime_identity") or {}).get("config_sha256")
+        if not str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX)
+        and (item.get("runtime_identity") or {}).get("config_sha256")
     ]
     if not identified:
         return UNPROVEN, (
@@ -312,6 +313,9 @@ def _replay_available() -> tuple[str, str]:
     return PASS, detail
 
 
+CONTROL_ROLE_PREFIX = "FP-CONTROL"
+
+
 def identified_candidate() -> str | None:
     """The candidate strategy name under evaluation, or None if there is none.
 
@@ -325,7 +329,12 @@ def identified_candidate() -> str | None:
     if registry is None:
         return None
     for item in registry.get("instances", []):
-        if item.get("role") == "FP-CONTROL-1":
+        # Every control row is excluded, not just the first one ever written.
+        # A control is never a candidate, so a successor control registered for
+        # pre-T0 qualification must not start satisfying candidate conditions
+        # the moment it appears — which is precisely what matching a single role
+        # literal would have allowed.
+        if str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX):
             continue
         identity = item.get("runtime_identity") or {}
         family = identity.get("candidate_family")
@@ -421,7 +430,7 @@ def _candidate_identity_frozen() -> tuple[str, str]:
     frozen = [
         item
         for item in registry.get("instances", [])
-        if item.get("role") != "FP-CONTROL-1"
+        if not str(item.get("role") or "").startswith(CONTROL_ROLE_PREFIX)
         and (item.get("runtime_identity") or {}).get("strategy_sha256")
         and (item.get("runtime_identity") or {}).get("config_sha256")
         and (item.get("runtime_identity") or {}).get("source_commit")

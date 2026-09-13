@@ -19,6 +19,16 @@ import json
 import pytest
 
 from fp import capture as fp_capture
+
+# The runnable control instance. FP-CONTROL-1 is CLOSED, and selection refuses a
+# closed row, so every loop these tests build must name the pre-T0 successor —
+# which is exactly what a real qualification run does.
+QUALIFYING_ROLE = "FP-CONTROL-2"
+
+
+def make_loop(*args, **kwargs):
+    kwargs.setdefault("role", QUALIFYING_ROLE)
+    return fp_capture.CaptureLoop(*args, **kwargs)
 from fp import ledger as fp_ledger
 from fp import market as fp_market
 from fp import reconcile as fp_reconcile
@@ -98,7 +108,7 @@ def stub_market(now_ms) -> StubMarket:
 
 @pytest.fixture
 def loop(tmp_path, stub_market, repo_root):
-    return fp_capture.CaptureLoop(
+    return make_loop(
         tmp_path / "evidence",
         ["BTC/USDT"],
         config_path=repo_root / "freqtrade" / "user_data" / "config.paper.json.example",
@@ -175,10 +185,10 @@ def test_duplicate_input_survives_a_fresh_process(tmp_path, stub_market, repo_ro
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    first = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    first = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     first.capture_inputs("BTC/USDT", limit=10)
 
-    second = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    second = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     summary = second.capture_inputs("BTC/USDT", limit=10)
 
     assert summary["written"] == 0
@@ -206,12 +216,12 @@ def test_duplicate_decision_rejected_across_a_restart(tmp_path, stub_market, rep
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    first = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    first = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     first.capture_inputs("BTC/USDT", limit=300)
     first.capture_decisions("BTC/USDT")
     before = len(first.ledgers["decision"].records())
 
-    restarted = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    restarted = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     summary = restarted.capture_decisions("BTC/USDT")
 
     assert summary["written"] == 0
@@ -248,7 +258,7 @@ class StubClient:
 
 def test_repeated_polling_records_each_execution_once(tmp_path, stub_market, repo_root):
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
-    loop = fp_capture.CaptureLoop(
+    loop = make_loop(
         tmp_path / "evidence", ["BTC/USDT"], config_path=config,
         client=StubClient([OPEN_TRADE], []), market_module=stub_market,
     )
@@ -267,7 +277,7 @@ def test_repeated_polling_records_each_execution_once(tmp_path, stub_market, rep
 def test_close_adds_one_event_and_never_reopens(tmp_path, stub_market, repo_root):
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     client = StubClient([OPEN_TRADE], [])
-    loop = fp_capture.CaptureLoop(
+    loop = make_loop(
         tmp_path / "evidence", ["BTC/USDT"], config_path=config,
         client=client, market_module=stub_market,
     )
@@ -296,13 +306,13 @@ def test_restart_resumes_the_chain_and_increments_the_counter(tmp_path, stub_mar
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    first = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    first = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     first.record_run_started()
     first.capture_inputs("BTC/USDT", limit=10)
     tip_before = first.ledgers["input"].tip_digest()
     assert first.identity.restart_counter == 0
 
-    second = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    second = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     second.record_run_started()
 
     assert second.identity.restart_counter == 1
@@ -315,7 +325,7 @@ def test_evidence_survives_reopening_by_fresh_readers(tmp_path, stub_market, rep
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    loop = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    loop = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     loop.capture_inputs("BTC/USDT", limit=250)
     loop.capture_decisions("BTC/USDT")
     expected = {kind: led.tip_digest() for kind, led in loop.ledgers.items()}
@@ -330,7 +340,7 @@ def test_recovered_state_matches_what_was_written(tmp_path, stub_market, repo_ro
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    loop = fp_capture.CaptureLoop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
+    loop = make_loop(evidence, ["BTC/USDT"], config_path=config, market_module=stub_market)
     loop.capture_inputs("BTC/USDT", limit=250)
     loop.capture_decisions("BTC/USDT")
 
@@ -352,14 +362,14 @@ def test_an_open_position_is_recovered_after_restart(tmp_path, stub_market, repo
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
 
-    first = fp_capture.CaptureLoop(
+    first = make_loop(
         evidence, ["BTC/USDT"], config_path=config,
         client=StubClient([OPEN_TRADE], []), market_module=stub_market,
     )
     first.capture_trades()
     assert "BTC/USDT" in first.state.open_positions
 
-    restarted = fp_capture.CaptureLoop(
+    restarted = make_loop(
         evidence, ["BTC/USDT"], config_path=config,
         client=StubClient([OPEN_TRADE], []), market_module=stub_market,
     )
@@ -457,7 +467,7 @@ def test_out_of_order_candle_becomes_an_incident_not_a_silent_drop(tmp_path, rep
         def fetch_closed_candles(self, pair, timeframe="1h", limit=3, **kwargs):
             return [forward, backward]
 
-    loop = fp_capture.CaptureLoop(
+    loop = make_loop(
         tmp_path / "evidence", ["BTC/USDT"], config_path=config,
         market_module=OutOfOrderMarket({}, now_ms),
     )
@@ -479,7 +489,7 @@ def test_out_of_order_candle_becomes_an_incident_not_a_silent_drop(tmp_path, rep
 def reconciled(tmp_path, stub_market, repo_root):
     config = repo_root / "freqtrade" / "user_data" / "config.paper.json.example"
     evidence = tmp_path / "evidence"
-    loop = fp_capture.CaptureLoop(
+    loop = make_loop(
         evidence, ["BTC/USDT"], config_path=config,
         client=StubClient([], [CLOSED_TRADE]), market_module=stub_market,
     )
@@ -629,7 +639,7 @@ def test_the_capture_loop_can_never_write_a_t0(tmp_path, stub_market, repo_root)
     assert "COHORT_REGISTRY.write_text" not in source
 
     before = (repo_root / "research" / "fp" / "records" / "forward_paper_cohort_registry.json").read_bytes()
-    loop = fp_capture.CaptureLoop(
+    loop = make_loop(
         tmp_path / "evidence", ["BTC/USDT"],
         config_path=repo_root / "freqtrade" / "user_data" / "config.paper.json.example",
         market_module=stub_market,

@@ -131,16 +131,36 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
             encoding="utf-8"
         )
     )
-    identity = next(
-        i for i in registry["instances"] if i["role"] == "FP-CONTROL-1"
-    )["runtime_identity"]
+    # The overlay is parameterised by the instance the launcher selects, so the
+    # check is that it *renders* onto the selected instance's declared paths —
+    # a template that drifted would land the runtime somewhere the registry
+    # never described, which is the drift this test exists to catch.
+    instance = next(i for i in registry["instances"] if i["role"] == "FP-CONTROL-2")
+    identity = instance["runtime_identity"]
+    assert instance["status"] == "NOT_STARTED", "the qualifying instance must be pre-T0"
+    instance_dir = identity["evidence_dir"].rsplit("/", 2)[-2]
 
-    command = overlay["services"]["freqtrade"]["command"]
+    def render(text: str) -> str:
+        return (
+            text.replace("${FP_INSTANCE_DIR}", instance_dir)
+            .replace("${FP_BOT_NAME}", identity["bot_name"])
+            .replace("${FP_ROLE}", instance["role"])
+        )
+
+    command = render(overlay["services"]["freqtrade"]["command"])
     assert identity["db_path"] in command
     assert identity["log_path"] in command
 
-    capture_command = " ".join(overlay["services"]["fp-capture"]["command"])
+    capture_command = render(" ".join(overlay["services"]["fp-capture"]["command"]))
     assert identity["evidence_dir"] in capture_command
+    assert "--role=FP-CONTROL-2" in capture_command, "the capture service must name its instance explicitly"
+
+    # And the closed instance's paths must appear nowhere in the template.
+    closed = next(i for i in registry["instances"] if i["role"] == "FP-CONTROL-1")["runtime_identity"]
+    raw = (overlay["services"]["freqtrade"]["command"]
+           + " ".join(overlay["services"]["fp-capture"]["command"]))
+    assert closed["evidence_dir"] not in raw
+    assert closed["db_path"] not in raw
 
 
 def test_the_capture_service_never_restarts_into_a_different_strategy(repo_root):
@@ -149,4 +169,4 @@ def test_the_capture_service_never_restarts_into_a_different_strategy(repo_root)
     # It must come back by itself: the runtime has to survive the session that
     # started it.
     assert capture["restart"] == "unless-stopped"
-    assert overlay["services"]["freqtrade"].get("container_name") == "tradinglab-fp-freqtrade"
+    assert overlay["services"]["freqtrade"].get("container_name") == "tradinglab-${FP_BOT_NAME}-freqtrade"
