@@ -494,3 +494,42 @@ def test_the_committed_parity_status_is_one_of_the_two_known_values():
     from fp import replay
 
     assert replay.EMA_PARITY_STATUS in {"ASSERTED_PENDING_TALIB_EXECUTION", "VERIFIED_IN_CI"}
+
+
+def test_a_closed_instance_states_when_and_why_it_closed(registry):
+    """A closed cohort must carry its closure facts, not leave them to prose.
+
+    The dangerous failure is a cohort whose row says CLOSED while the reason,
+    the time and the outcome live only in a document: read back later, the
+    window then looks like evidence that simply ended, rather than evidence
+    that was never established. ``closed_utc`` must also not precede ``t0_utc``.
+    """
+    for instance in registry["instances"]:
+        if instance["status"] != "CLOSED":
+            continue
+        assert instance["closed_utc"], "a closed instance must record when it closed"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", instance["closed_utc"])
+        assert instance["closed_utc"] >= instance["t0_utc"], "a cohort cannot close before its T0"
+        assert instance["closure_reason"], "a closed instance must record why it closed"
+
+        outcome = instance.get("outcome")
+        assert outcome, "a closed instance must record what its window established"
+        assert outcome["paper_trading_operational_capability"] in ("PROVEN", "NOT_PROVEN")
+        assert outcome["full_trade_lifecycle"] in ("OBSERVED", "NOT_YET_OBSERVED", "NOT_OBSERVED")
+
+        # The closure is a section-15 event and must appear in the change log.
+        closing = [e for e in instance.get("change_log", []) if e["utc"] == instance["closed_utc"]]
+        assert closing, "the closure must be recorded in the instance change_log"
+
+
+def test_no_cohort_is_running_while_fp_run_active_is_false(registry):
+    """``fp_run_active`` and the instance rows must agree in both directions.
+
+    A registry that says a run is active while every instance is closed, or the
+    reverse, is the state in which someone restarts a runtime believing a cohort
+    is still collecting evidence for it.
+    """
+    running = [i for i in registry["instances"] if i["status"] in ("RUNNING", "PAUSED")]
+    assert registry["fp_run_active"] == bool(running), (
+        f"fp_run_active={registry['fp_run_active']} but {len(running)} instance(s) are live"
+    )

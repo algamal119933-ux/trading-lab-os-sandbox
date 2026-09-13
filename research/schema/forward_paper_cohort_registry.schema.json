@@ -91,6 +91,19 @@
               "evidence_dir": { "type": ["string", "null"] }
             }
           },
+          "outcome": {
+            "description": "Recorded when a cohort is CLOSED: what its window did and did not establish. A closed cohort must be able to state its outcome in machine-readable form; leaving it to prose is how a window that proved nothing later gets read as though it proved something.",
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["paper_trading_operational_capability", "full_trade_lifecycle"],
+            "properties": {
+              "paper_trading_operational_capability": { "enum": ["PROVEN", "NOT_PROVEN"] },
+              "full_trade_lifecycle": { "enum": ["OBSERVED", "NOT_YET_OBSERVED", "NOT_OBSERVED"] },
+              "prospective_paper_edge": { "type": ["string", "null"] },
+              "measurable_post_t0_evidence": { "type": ["string", "null"] },
+              "detail": { "type": "string" }
+            }
+          },
           "change_log": {
             "type": "array",
             "description": "Section 15: every post-T0 change classified O (observability), R (runtime repair, semantics preserved) or S (semantic — closes the cohort).",
