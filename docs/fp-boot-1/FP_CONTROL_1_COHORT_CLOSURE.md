@@ -8,70 +8,78 @@
 
 ```text
 PAPER_TRADING_OPERATIONAL_CAPABILITY = NOT_PROVEN
-FULL_TRADE_LIFECYCLE                 = NOT_OBSERVED
-PROSPECTIVE_PAPER_EDGE               = NOT_EVALUATED_BY_FP_CONTROL_1
-MEASURABLE_POST_T0_EVIDENCE          = NONE
+PROSPECTIVE_PAPER_EDGE               = NOT_EVALUATED
+FULL_TRADE_LIFECYCLE                 = NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE
+MEASURABLE_POST_T0_EVIDENCE          = UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE
+CHANGE_MODEL_CLASSIFICATION          = NOT_APPLICABLE_TO_TRADING_SEMANTICS /
+                                       OWNER_EVIDENCE_DISPOSITION
 REAL_MONEY_AUTHORIZED                = NO
 ```
 
-This cohort establishes nothing. It is recorded so that the window it occupied
-cannot later be read as evidence, and so that the T0 it consumed is visibly
-spent rather than silently available for reuse.
+Every line above is a statement about evidence. None of them is a statement
+about what happened between T0 and this closure.
 
-## What happened
+## What can be said, and what cannot
 
-FP-CONTROL-1 was activated on the prior host on 2026-09-08 after a passing
-pre-T0 gate (commit `6d5d27c`, merged as `d001dfb`): preflight 16/16 PASS with
-`--require-pass` exit 0, entry state C, admission BLOCKED with no candidate
-admitted, reconciliation PASS over 1998 real captured candles, dataset lock gate
-PASS, canonical cache unmutated, clock skew within tolerance, clean worktree.
+The cohort's evidence lane is not present in this workspace: the four ledgers
+(`paper_input_ledger`, `paper_decision_ledger`, `paper_trade_ledger`,
+`paper_incident_ledger`), the trade database, the logs, and the pre-T0
+preflight and admission artifacts. They were gitignored by design, and the
+migration was made with a **git bundle**, which carries committed history and no
+untracked runtime state.
 
-The project then moved to a native Ubuntu host. The move was made with a **git
-bundle** (`git clone` from `trading-lab-os.bundle`), which carries committed
-history and nothing else. Everything the FP protocol deliberately keeps out of
-Git stayed behind:
+What follows from that, exactly:
 
-| Lost | Why it was not in Git |
+| Claim | Status |
 | --- | --- |
-| `freqtrade/user_data/fp-control-1/evidence/` — input, decision, trade and incident ledgers | `.gitignore` §29-34: the live evidence lane is append-only and would keep the worktree permanently dirty, tripping stop condition S2 |
-| `freqtrade/user_data/fp-control-1/tradesv3.sqlite`, `logs/` | same |
-| `artifacts/fp_preflight.json`, `artifacts/fp_admission.json` | `.gitignore` §55-65: host-run evidence, published deliberately at closure |
-| `dataset-cache/binance/*.feather`, `freqtrade/user_data/data/` | market data is never committed (CLOUD-0 C0.7) |
-| Docker volumes for freqtrade, capture, exporter, Prometheus, Grafana, MLflow | runtime state |
+| the surviving evidence establishes a full trade lifecycle | **no** — it does not |
+| post-T0 evidence can be read and measured here | **no** — unavailable in the current evidence lane |
+| paper trading operational capability is proven | **no** — remains `NOT_PROVEN` |
+| prospective paper edge was evaluated | **no** — remains `NOT_EVALUATED`, and FP-CONTROL-1 was never able to evaluate it |
+| no trade occurred during the window | **not claimed** — unknowable from what survives |
+| the instance stopped, or when it stopped | **not claimed** — unknowable from what survives |
 
-The Owner has confirmed the prior host will not be used again. The evidence lane
-is therefore unrecoverable, not merely absent.
+The distinction is the point of this record. "The ledgers are unavailable"
+supports "this cannot be established". It does not support "this did not
+happen". Where the evidence cannot answer, the question is left open rather
+than resolved in the convenient direction.
 
-## Why the cohort could not be continued
+## The Owner disposition, filed as a disposition
 
-Continuing would have required classifying the migration as a class **R** change
-— runtime repair, semantics preserved — and section 15 requires R to carry
-**before/after replay parity**. Parity is computed against the ledgers that this
-closure exists because we no longer have. There is no lawful way to prove that
-the instance which would start on Ubuntu is a continuation of the instance that
-ran on the prior host, and an unprovable continuation asserted anyway is exactly
-the defect the change model exists to catch.
+```text
+"The prior host will not be used again; treat the cohort as unrecoverable."
+= OWNER DISPOSITION
+```
 
-Nor could the gap be characterised. Between T0 and this closure the cohort was
-registered `RUNNING` for 5 days 8 hours while no capture process existed for an
-unknown part of that span. The incident ledger that would record an outage is
-itself lost, so an unrecorded gap is indistinguishable from an undetected one.
+It is a decision about how the project proceeds. It is **not** independent
+evidence of historical non-occurrence, and it is recorded in the registry's
+`outcome.owner_disposition` field, separate from every evidence field, so that
+it can never be read as such.
 
-## Why the closure is classified S
+The evidence lane's absence and the Owner's decision are two different facts:
+the first limits what can be shown, the second settles that no attempt to
+recover it will be made.
 
-The change log entry carries class `S`, and that needs stating plainly because
-the class description does not fit on its face: **no trading semantics were
-changed.** The strategy, configuration, sizing, pair universe and timeframe are
-untouched and remain byte-identical to their frozen hashes.
+## Change-model classification
 
-`S` is used because `S` is the class whose *consequence* this is — the evidence
-stream ends here and may never be spliced to another, and a future run is a new
-cohort with a new T0. `R` was not available for the reason above, and `O`
-(observability only) would have been false: an observability change leaves a
-cohort collecting evidence, and this one stops.
+```text
+CHANGE_MODEL_CLASSIFICATION = NOT_APPLICABLE_TO_TRADING_SEMANTICS /
+                              OWNER_EVIDENCE_DISPOSITION
+```
 
-The vocabulary was not extended to invent a fourth class. The reasoning is
-recorded here instead of being resolved silently.
+Stated explicitly:
+
+* **No strategy, config, pair, timeframe or sizing semantics changed.** The
+  strategy and config still hash to their frozen values — `8c0bc6c5…` and
+  `d1d078c6…`.
+* **No O/R/S classification is asserted for this closure.** It is not filed as
+  an `O`, `R` or `S` change-log entry, because it is not a section-15 change to
+  a running cohort; it is an administrative disposition of evidence.
+* **The O/R/S model is unchanged.** It continues to govern changes to a running
+  cohort exactly as written in
+  [`FP_BOOT_1_ENTRY_STATE.md`](FP_BOOT_1_ENTRY_STATE.md), and the cohort's two
+  pre-existing `O` entries are untouched. No class was added, removed or
+  reinterpreted.
 
 ## What is preserved, and what is forbidden
 
@@ -85,24 +93,35 @@ NEVER reuse  NEVER rewrite  NEVER move  NEVER back-date
 A future forward-paper run is a **new cohort**, requiring:
 
 1. a full host-side pre-T0 pass on the new host (activation pack A1-A13),
-2. `preflight.py --require-pass` exit 0 on this host's runtime,
+2. `preflight.py --require-pass` exit 0 against this host's runtime,
 3. a new Owner authorisation, and
 4. a new `T0` and a new `cohort_id` derived from it.
 
 Nothing from the closed window may be carried into that cohort — no ledger, no
 warm-up state, no partial result, no elapsed-time credit.
 
-## Machine-readable record
+## Machine-readable record and the rules that hold it
 
 `research/fp/records/forward_paper_cohort_registry.json`: instance status
-`CLOSED`, `closed_utc`, `closure_reason` and `outcome` as above,
-`fp_run_active` false, `paper_alpha_cohort` `NONE`, `entry_state` `C`,
+`CLOSED`, with `closed_utc`, `closure_reason` and `outcome` as above;
+`fp_run_active` false; `paper_alpha_cohort` `NONE`; `entry_state` `C`;
 `real_money_authorized` false.
 
-The registry schema gained an optional `outcome` object for this purpose: a
-closed cohort must be able to state, in machine-readable form, what it did and
-did not establish. Invariants for a closed row are asserted in
-`tests/test_fp_admission.py`.
+The registry schema carries the closure rules as conditional JSON Schema, so
+they are enforced on the document itself rather than only in a test:
+
+| Rule | Enforcement |
+| --- | --- |
+| `outcome` is forbidden on a `NOT_STARTED`, `RUNNING` or `PAUSED` row | instance `allOf` / `if`-`then` |
+| a `CLOSED` FP-CONTROL-1 row must carry `closed_utc`, `closure_reason` and `outcome` | instance `allOf` / `if`-`then` |
+| an `EVIDENCE_LANE_LOST_IN_HOST_MIGRATION` closure may not claim proven capability, a proven edge, an observed lifecycle, or available post-T0 evidence | instance `allOf` / `if`-`then` |
+| `fp_run_active` must agree with the instance rows in both directions | root `allOf` / `if`-`then`-`else` |
+| no undeclared `outcome` field | `additionalProperties: false` |
+
+`tests/test_fp_admission.py` carries a negative control for each rule: every one
+is shown to reject its own violation, and the two rules whose failure message is
+generic are additionally shown to accept the same document once the violation is
+removed.
 
 ## Unchanged by this closure
 
@@ -112,6 +131,6 @@ PAPER_ALPHA_COHORT    = NONE
 PAPER_ADMISSION       = BLOCKED
 BASELINE-1            = closed; Development PASS/NEUTRAL, Validation spent
 Dataset V2            = frozen by research/datasets/dataset_v2.lock.json;
-                        NOT re-acquired and NOT re-frozen by this work
+                        NOT re-acquired, NOT re-frozen, NOT downloaded
 REAL_MONEY_AUTHORIZED = NO
 ```
