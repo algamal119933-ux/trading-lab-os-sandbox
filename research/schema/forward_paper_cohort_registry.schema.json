@@ -95,23 +95,17 @@
             "description": "Recorded only when a cohort is CLOSED: what its window did and did not establish, stated as evidence truth. Every value describes what the surviving evidence supports, never what is believed to have happened out of view of the evidence.",
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "paper_trading_operational_capability",
-              "full_trade_lifecycle",
-              "prospective_paper_edge",
-              "measurable_post_t0_evidence",
-              "trading_semantics_changed"
-            ],
+            "required": ["paper_trading_operational_capability", "full_trade_lifecycle"],
             "properties": {
               "paper_trading_operational_capability": { "enum": ["PROVEN", "NOT_PROVEN"] },
               "full_trade_lifecycle": {
-                "description": "OBSERVED requires evidence of a complete lifecycle. NOT_YET_OBSERVED means the window ran with an intact evidence lane and no lifecycle appeared in it. NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE means the available evidence cannot answer the question - it is not a claim that no trade occurred.",
-                "enum": ["OBSERVED", "NOT_YET_OBSERVED", "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"]
+                "description": "OBSERVED requires evidence of a complete lifecycle. NOT_YET_OBSERVED and NOT_OBSERVED are claims a cohort with an intact evidence lane may make about its own window. NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE means the available evidence cannot answer the question - it is not a claim that no trade occurred, and it is what a cohort whose evidence is unavailable must use.",
+                "enum": ["OBSERVED", "NOT_YET_OBSERVED", "NOT_OBSERVED", "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"]
               },
               "prospective_paper_edge": { "enum": ["PROVEN", "NOT_PROVEN", "NOT_EVALUATED"] },
               "measurable_post_t0_evidence": {
-                "description": "AVAILABLE only where post-T0 evidence can still be read and measured. UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE states that it cannot, without asserting that none was ever produced.",
-                "enum": ["AVAILABLE", "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"]
+                "description": "AVAILABLE where post-T0 evidence can still be read and measured. NONE where an intact evidence lane shows that none was produced. UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE states only that it cannot be read here, without asserting that none was ever produced.",
+                "enum": ["AVAILABLE", "NONE", "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"]
               },
               "trading_semantics_changed": { "type": "boolean" },
               "change_model_classification": {
@@ -165,7 +159,13 @@
               "required": ["outcome"],
               "properties": {
                 "outcome": {
-                  "required": ["measurable_post_t0_evidence"],
+                  "required": [
+                    "paper_trading_operational_capability",
+                    "prospective_paper_edge",
+                    "full_trade_lifecycle",
+                    "measurable_post_t0_evidence",
+                    "trading_semantics_changed"
+                  ],
                   "properties": {
                     "paper_trading_operational_capability": { "const": "NOT_PROVEN" },
                     "prospective_paper_edge": { "enum": ["NOT_PROVEN", "NOT_EVALUATED"] },

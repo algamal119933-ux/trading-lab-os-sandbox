@@ -114,7 +114,8 @@ they are enforced on the document itself rather than only in a test:
 | --- | --- |
 | `outcome` is forbidden on a `NOT_STARTED`, `RUNNING` or `PAUSED` row | instance `allOf` / `if`-`then` |
 | a `CLOSED` FP-CONTROL-1 row must carry `closed_utc`, `closure_reason` and `outcome` | instance `allOf` / `if`-`then` |
-| an `EVIDENCE_LANE_LOST_IN_HOST_MIGRATION` closure may not claim proven capability, a proven edge, an observed lifecycle, or available post-T0 evidence | instance `allOf` / `if`-`then` |
+| an `EVIDENCE_LANE_LOST_IN_HOST_MIGRATION` closure must read `NOT_PROVEN`, `NOT_EVALUATED` or `NOT_PROVEN`, `NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE` and `UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE` — `PROVEN`, `OBSERVED`, `NOT_OBSERVED`, `AVAILABLE` and `NONE` all fail | instance `allOf` / `if`-`then` |
+| the shared vocabulary stays open to every other closure reason | the constraint lives in the conditional, not in the enums |
 | `fp_run_active` must agree with the instance rows in both directions | root `allOf` / `if`-`then`-`else` |
 | no undeclared `outcome` field | `additionalProperties: false` |
 
@@ -130,7 +131,12 @@ ENTRY_STATE           = C            (no paper-admissible survivor exists)
 PAPER_ALPHA_COHORT    = NONE
 PAPER_ADMISSION       = BLOCKED
 BASELINE-1            = closed; Development PASS/NEUTRAL, Validation spent
-Dataset V2            = frozen by research/datasets/dataset_v2.lock.json;
-                        NOT re-acquired, NOT re-frozen, NOT downloaded
 REAL_MONEY_AUTHORIZED = NO
 ```
+
+## Dataset V2
+
+Dataset V2 remains a **separate blocked prerequisite**. No dataset was
+downloaded, reacquired, re-frozen or modified by this closure. Its restoration
+decision will be handled in a separately authorised stage after closure
+acceptance.

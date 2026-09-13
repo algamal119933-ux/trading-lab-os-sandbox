@@ -628,18 +628,51 @@ def test_an_evidence_loss_closure_may_not_claim_a_proven_edge(registry, registry
     assert schema_errors(registry_schema, document), "a lost lane cannot prove an edge"
 
 
-def test_an_evidence_loss_closure_may_not_claim_measurable_post_t0_evidence(registry, registry_schema):
+@pytest.mark.parametrize("claim", ["AVAILABLE", "NONE"])
+def test_an_evidence_loss_closure_may_not_settle_post_t0_evidence(registry, registry_schema, claim):
+    """Neither "there was some" nor "there was none" is available to a lost lane.
+
+    NONE is a legitimate finding for a cohort that can still read its ledgers and
+    sees nothing in them. Here it would be the same false step as AVAILABLE, in
+    the other direction: settling from silence a question the evidence cannot reach.
+    """
     document = mutate(registry)
     instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
-    instance["outcome"]["measurable_post_t0_evidence"] = "AVAILABLE"
-    assert schema_errors(registry_schema, document), "a lost lane holds no measurable evidence"
+    instance["outcome"]["measurable_post_t0_evidence"] = claim
+    assert schema_errors(registry_schema, document), f"a lost lane cannot claim {claim}"
 
 
-def test_an_evidence_loss_closure_may_not_claim_an_observed_lifecycle(registry, registry_schema):
+@pytest.mark.parametrize("claim", ["OBSERVED", "NOT_OBSERVED", "NOT_YET_OBSERVED"])
+def test_an_evidence_loss_closure_may_not_settle_the_lifecycle(registry, registry_schema, claim):
     document = mutate(registry)
     instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
-    instance["outcome"]["full_trade_lifecycle"] = "OBSERVED"
-    assert schema_errors(registry_schema, document), "a lost lane cannot show a lifecycle"
+    instance["outcome"]["full_trade_lifecycle"] = claim
+    assert schema_errors(registry_schema, document), f"a lost lane cannot claim {claim}"
+
+
+def test_the_broader_vocabulary_stays_open_to_other_closure_reasons(registry, registry_schema):
+    """The loss rule constrains the loss closure, not the schema's vocabulary.
+
+    A cohort that closes with its evidence intact must still be able to say
+    PROVEN, OBSERVED, NOT_OBSERVED or AVAILABLE. Narrowing the shared vocabulary
+    to make one closure honest would have made every future closure less able to
+    state its own result.
+    """
+    document = mutate(
+        registry,
+        closure_reason="WINDOW_COMPLETED",
+        outcome={
+            "paper_trading_operational_capability": "PROVEN",
+            "full_trade_lifecycle": "OBSERVED",
+            "prospective_paper_edge": "NOT_EVALUATED",
+            "measurable_post_t0_evidence": "AVAILABLE",
+        },
+    )
+    assert schema_errors(registry_schema, document) == []
+
+    document["instances"][0]["outcome"]["full_trade_lifecycle"] = "NOT_OBSERVED"
+    document["instances"][0]["outcome"]["measurable_post_t0_evidence"] = "NONE"
+    assert schema_errors(registry_schema, document) == []
 
 
 def test_an_evidence_loss_closure_may_not_claim_proven_capability(registry, registry_schema):
