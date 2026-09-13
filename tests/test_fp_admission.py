@@ -494,3 +494,206 @@ def test_the_committed_parity_status_is_one_of_the_two_known_values():
     from fp import replay
 
     assert replay.EMA_PARITY_STATUS in {"ASSERTED_PENDING_TALIB_EXECUTION", "VERIFIED_IN_CI"}
+
+
+# -- closure of a cohort (sections 7, 15) ---------------------------------
+
+
+CLOSURE_SCHEMA = "research/schema/forward_paper_cohort_registry.schema.json"
+EVIDENCE_LOSS = "EVIDENCE_LANE_LOST_IN_HOST_MIGRATION"
+
+
+@pytest.fixture(scope="module")
+def registry_schema(request) -> dict:
+    return json.loads((request.config.rootpath / CLOSURE_SCHEMA).read_text(encoding="utf-8"))
+
+
+def schema_errors(schema: dict, document: dict) -> list:
+    import jsonschema
+
+    return list(jsonschema.validators.validator_for(schema)(schema).iter_errors(document))
+
+
+def mutate(registry: dict, **instance_fields) -> dict:
+    """A copy of the live registry with the control row edited.
+
+    Negative controls are built from the real document rather than from a stub,
+    so a rule that only ever holds for a hand-made minimal example cannot pass
+    for the wrong reason.
+    """
+    document = json.loads(json.dumps(registry))
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    for key, value in instance_fields.items():
+        if value is _REMOVE:
+            instance.pop(key, None)
+        else:
+            instance[key] = value
+    return document
+
+
+class _Remove:
+    pass
+
+
+_REMOVE = _Remove()
+
+
+def test_the_committed_registry_satisfies_the_closure_rules(registry, registry_schema):
+    assert schema_errors(registry_schema, registry) == []
+
+
+def test_a_closed_instance_states_when_and_why_it_closed(registry):
+    for instance in registry["instances"]:
+        if instance["status"] != "CLOSED":
+            continue
+        assert instance["closed_utc"], "a closed instance must record when it closed"
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", instance["closed_utc"])
+        assert instance["closed_utc"] >= instance["t0_utc"], "a cohort cannot close before its T0"
+        assert instance["closure_reason"], "a closed instance must record why it closed"
+        assert instance["outcome"], "a closed instance must record what its window established"
+
+
+def test_an_evidence_loss_closure_claims_nothing_the_lost_evidence_would_carry(registry):
+    """The closure states a limit on evidence, never a finding about the window.
+
+    "The ledgers are gone" supports "this cannot be established". It does not
+    support "this did not happen", and the difference is the whole point of the
+    record: an unanswerable question must stay visibly unanswered.
+    """
+    closed = [i for i in registry["instances"] if i["closure_reason"] == EVIDENCE_LOSS]
+    assert closed, "this repository's control row is closed on evidence loss"
+    for instance in closed:
+        outcome = instance["outcome"]
+        assert outcome["paper_trading_operational_capability"] == "NOT_PROVEN"
+        assert outcome["prospective_paper_edge"] == "NOT_EVALUATED"
+        assert outcome["full_trade_lifecycle"] == "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"
+        assert outcome["measurable_post_t0_evidence"] == "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"
+        assert outcome["trading_semantics_changed"] is False
+        # The Owner's decision is filed as a decision, not as evidence.
+        assert outcome["owner_disposition"]
+
+
+def test_an_evidence_disposition_asserts_no_change_class(registry):
+    """No O/R/S class is claimed for an administrative closure.
+
+    The change model governs changes to a running cohort. Filing an evidence
+    disposition under O, R or S would either claim semantics changed, or claim a
+    replay parity that the lost ledgers make uncomputable.
+    """
+    for instance in registry["instances"]:
+        if instance["status"] != "CLOSED" or instance["closure_reason"] != EVIDENCE_LOSS:
+            continue
+        assert instance["outcome"]["change_model_classification"] == (
+            "NOT_APPLICABLE_TO_TRADING_SEMANTICS / OWNER_EVIDENCE_DISPOSITION"
+        )
+        assert all(entry["utc"] != instance["closed_utc"] for entry in instance["change_log"]), (
+            "the closure must not be filed as a section-15 change entry"
+        )
+        # The O/R/S model itself is untouched: the surviving entries still use it.
+        assert [e["class"] for e in instance["change_log"]] == ["O", "O"]
+
+
+def test_no_cohort_is_running_while_fp_run_active_is_false(registry):
+    running = [i for i in registry["instances"] if i["status"] in ("RUNNING", "PAUSED")]
+    assert registry["fp_run_active"] == bool(running), (
+        f"fp_run_active={registry['fp_run_active']} but {len(running)} instance(s) are live"
+    )
+
+
+# -- negative controls: each rule must reject its own violation -----------
+
+
+def test_a_running_row_may_not_carry_an_outcome(registry, registry_schema):
+    document = mutate(registry, status="RUNNING", closed_utc=None, closure_reason=None)
+    document["fp_run_active"] = True
+    assert schema_errors(registry_schema, document), "a RUNNING row with an outcome must be rejected"
+
+    # ... and the outcome is why: the same row without one validates.
+    permitted = mutate(registry, status="RUNNING", closed_utc=None, closure_reason=None, outcome=_REMOVE)
+    permitted["fp_run_active"] = True
+    assert schema_errors(registry_schema, permitted) == []
+
+
+def test_a_closed_control_without_an_outcome_is_rejected(registry, registry_schema):
+    document = mutate(registry, outcome=_REMOVE)
+    errors = schema_errors(registry_schema, document)
+    assert errors, "a CLOSED control must carry an outcome"
+    assert any("outcome" in error.message for error in errors), [e.message for e in errors]
+
+
+def test_an_evidence_loss_closure_may_not_claim_a_proven_edge(registry, registry_schema):
+    document = mutate(registry)
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    instance["outcome"]["prospective_paper_edge"] = "PROVEN"
+    assert schema_errors(registry_schema, document), "a lost lane cannot prove an edge"
+
+
+@pytest.mark.parametrize("claim", ["AVAILABLE", "NONE"])
+def test_an_evidence_loss_closure_may_not_settle_post_t0_evidence(registry, registry_schema, claim):
+    """Neither "there was some" nor "there was none" is available to a lost lane.
+
+    NONE is a legitimate finding for a cohort that can still read its ledgers and
+    sees nothing in them. Here it would be the same false step as AVAILABLE, in
+    the other direction: settling from silence a question the evidence cannot reach.
+    """
+    document = mutate(registry)
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    instance["outcome"]["measurable_post_t0_evidence"] = claim
+    assert schema_errors(registry_schema, document), f"a lost lane cannot claim {claim}"
+
+
+@pytest.mark.parametrize("claim", ["OBSERVED", "NOT_OBSERVED", "NOT_YET_OBSERVED"])
+def test_an_evidence_loss_closure_may_not_settle_the_lifecycle(registry, registry_schema, claim):
+    document = mutate(registry)
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    instance["outcome"]["full_trade_lifecycle"] = claim
+    assert schema_errors(registry_schema, document), f"a lost lane cannot claim {claim}"
+
+
+def test_the_broader_vocabulary_stays_open_to_other_closure_reasons(registry, registry_schema):
+    """The loss rule constrains the loss closure, not the schema's vocabulary.
+
+    A cohort that closes with its evidence intact must still be able to say
+    PROVEN, OBSERVED, NOT_OBSERVED or AVAILABLE. Narrowing the shared vocabulary
+    to make one closure honest would have made every future closure less able to
+    state its own result.
+    """
+    document = mutate(
+        registry,
+        closure_reason="WINDOW_COMPLETED",
+        outcome={
+            "paper_trading_operational_capability": "PROVEN",
+            "full_trade_lifecycle": "OBSERVED",
+            "prospective_paper_edge": "NOT_EVALUATED",
+            "measurable_post_t0_evidence": "AVAILABLE",
+        },
+    )
+    assert schema_errors(registry_schema, document) == []
+
+    document["instances"][0]["outcome"]["full_trade_lifecycle"] = "NOT_OBSERVED"
+    document["instances"][0]["outcome"]["measurable_post_t0_evidence"] = "NONE"
+    assert schema_errors(registry_schema, document) == []
+
+
+def test_an_evidence_loss_closure_may_not_claim_proven_capability(registry, registry_schema):
+    document = mutate(registry)
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    instance["outcome"]["paper_trading_operational_capability"] = "PROVEN"
+    assert schema_errors(registry_schema, document), "a lost lane cannot prove capability"
+
+
+def test_fp_run_active_must_agree_with_the_instance_rows(registry, registry_schema):
+    stale = json.loads(json.dumps(registry))
+    stale["fp_run_active"] = True
+    assert schema_errors(registry_schema, stale), "active flag with no live instance must be rejected"
+
+    document = mutate(registry, status="RUNNING", closed_utc=None, closure_reason=None, outcome=_REMOVE)
+    document["fp_run_active"] = False
+    assert schema_errors(registry_schema, document), "live instance with an inactive flag must be rejected"
+
+
+def test_an_unknown_outcome_field_is_rejected(registry, registry_schema):
+    document = mutate(registry)
+    instance = next(i for i in document["instances"] if i["role"] == "FP-CONTROL-1")
+    instance["outcome"]["informal_note"] = "looked fine to me"
+    assert schema_errors(registry_schema, document), "additionalProperties must stay closed"

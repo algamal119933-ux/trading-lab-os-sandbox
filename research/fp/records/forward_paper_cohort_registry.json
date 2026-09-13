@@ -1,19 +1,19 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-08T12:15:13Z",
+  "registry_updated_utc": "2026-09-14T00:00:00Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
-  "fp_run_active": true,
+  "fp_run_active": false,
   "adopted_prior_t0": false,
   "instances": [
     {
       "role": "FP-CONTROL-1",
       "cohort_id": "FP-CONTROL-1-20260908T121513Z",
-      "status": "RUNNING",
+      "status": "CLOSED",
       "t0_utc": "2026-09-08T12:15:13Z",
-      "closed_utc": null,
-      "closure_reason": null,
+      "closed_utc": "2026-09-13T20:58:24Z",
+      "closure_reason": "EVIDENCE_LANE_LOST_IN_HOST_MIGRATION",
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
         "source_commit": "4b0d7f6326ead0a19f8870f94528a9aa75114e10",
@@ -81,9 +81,19 @@
           "description": "T0 frozen. Every mandatory pre-T0 condition passed on the authoritative host: preflight 16/16 PASS with --require-pass exit 0, entry state C, PAPER_ADMISSION BLOCKED with no candidate admitted (S14 not tripped), reconciliation PASS over 1998 real captured candles across two runs, DATASET_LOCK_GATE PASS, canonical cache unmutated since acquisition, clock skew within tolerance, worktree clean and REPO_CHECK_PASS. This entry records the freeze; it changes no trading semantics.",
           "replay_parity_before_after": null
         }
-      ]
+      ],
+      "outcome": {
+        "paper_trading_operational_capability": "NOT_PROVEN",
+        "full_trade_lifecycle": "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE",
+        "prospective_paper_edge": "NOT_EVALUATED",
+        "measurable_post_t0_evidence": "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE",
+        "trading_semantics_changed": false,
+        "change_model_classification": "NOT_APPLICABLE_TO_TRADING_SEMANTICS / OWNER_EVIDENCE_DISPOSITION",
+        "owner_disposition": "The Owner has decided the prior host will not be used again and that the cohort is to be treated as unrecoverable. That is a disposition about how the project proceeds. It is not evidence about what did or did not occur between T0 and this closure, and it is recorded here so it can never be read as such.",
+        "detail": "The evidence lane of this cohort - paper_input_ledger, paper_decision_ledger, paper_trade_ledger, paper_incident_ledger, the trade database and the pre-T0 preflight/admission artifacts - is not present in this workspace. It was gitignored by design and the migration was made with a git bundle, which carries committed history and no untracked runtime state. What follows from that is a limit on evidence, not a finding about the window: the surviving evidence does not establish a full trade lifecycle, and post-T0 evidence cannot be read or measured from the current evidence lane. Whether any trade occurred is therefore unanswered, and is left unanswered rather than resolved in either direction. No result is reconstructed, inferred or estimated."
+      }
     }
   ],
   "real_money_authorized": false,
-  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE. The FP-CONTROL-1 row is BASELINE-1 as operational control - not a candidate, not a survivor, and not candidate-quality evidence. Its per-instance runtime identity is now bound so that duplicate-instance and DB-isolation risk can be checked rather than assumed, and so a running instance's hashes can be compared against a frozen declaration. cohort_id, t0_utc and source_commit stay null until preflight returns PASS and the Owner-authorised T0 freeze is performed; populating them earlier would make warm-up look like prospective evidence."
+  "notes": "Entry state C: no paper-admissible survivor exists, so PAPER_ALPHA_COHORT = NONE. The FP-CONTROL-1 row is BASELINE-1 as operational control - not a candidate, not a survivor, and not candidate-quality evidence. Its T0 was frozen on 2026-09-08 after a passing pre-T0 gate on the prior host. The cohort was closed on 2026-09-13 with closure_reason EVIDENCE_LANE_LOST_IN_HOST_MIGRATION: its evidence lane is not present in this workspace, so the surviving evidence cannot establish a full trade lifecycle and no post-T0 evidence can be measured. The closure is an Owner evidence disposition, not a section-15 semantic change: no strategy, config, pair, timeframe or sizing semantics changed, and no O/R/S classification is asserted for it. The frozen t0_utc, cohort_id and source_commit stay exactly as recorded - they are history, never reusable - and the closed row claims nothing. A future forward-paper run is a new cohort with a new T0, admitted only by a fresh pre-T0 pass on the new host and a new Owner authorisation."
 }
