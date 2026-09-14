@@ -77,6 +77,17 @@ def parse_args(command) -> dict[str, str]:
     return parsed
 
 
+def named_volume_device(rendered: dict, name: str) -> str:
+    """The host path behind a local-driver named volume, or "" if it has none."""
+    volume = ((rendered.get("volumes") or {}).get(name) or {})
+    if not isinstance(volume, dict):
+        return ""
+    options = volume.get("driver_opts") or {}
+    if str(volume.get("driver") or "local") != "local":
+        return ""
+    return str(options.get("device") or "")
+
+
 def mount_pairs(service: dict) -> list[tuple[str, str, bool, str]]:
     """(host source, container target, read_only, kind) for every declared mount.
 
@@ -135,18 +146,21 @@ def check(rendered: dict, role: str) -> list[str]:
         """
         found: list[str] = []
         repo_root = REGISTRY_PATH.parent.parent.parent.parent
+        rendered_volumes = rendered
         for source, target, read_only, kind in mount_pairs(service):
             if read_only:
                 continue  # shared read-only mounts are fine; they write nothing
-            if kind == "volume":
-                # A named volume has no host path into the project and cannot
-                # alias an instance lane. Grafana's and Prometheus's own storage
-                # are exactly this, and flagging them would train a reader to
-                # ignore the check that matters.
-                continue
-
             host = None
-            if source:
+            if kind == "volume":
+                # A plain named volume has no host path and cannot alias a lane.
+                # A *local-driver* volume with a device= option does: it is a bind
+                # wearing a volume's clothes, and skipping it on the word "volume"
+                # was a hole a verifier walked straight through.
+                device = named_volume_device(rendered_volumes, source)
+                if not device:
+                    continue
+                host = Path(device).expanduser().resolve()
+            elif source:
                 candidate = Path(source).expanduser()
                 if not candidate.is_absolute():
                     candidate = repo_root / candidate
@@ -156,8 +170,14 @@ def check(rendered: dict, role: str) -> list[str]:
             touches_lane_target = bool(target) and (
                 target == "/freqtrade/user_data" or target.startswith("/freqtrade/user_data/")
             )
+            # Containment in BOTH directions. A host source *inside* user_data is
+            # the obvious case; a source that *contains* user_data — the repository
+            # root, or its parent, mounted at some unrelated target — reaches every
+            # lane at once and was previously invisible.
             touches_lane_host = host is not None and (
-                host == USER_DATA_HOST or USER_DATA_HOST in host.parents
+                host == USER_DATA_HOST
+                or USER_DATA_HOST in host.parents
+                or host in USER_DATA_HOST.parents
             )
             if not touches_lane_target and not touches_lane_host:
                 continue  # a writable mount that cannot reach any instance lane
@@ -167,7 +187,10 @@ def check(rendered: dict, role: str) -> list[str]:
             # closed host lane be mounted at the successor's target.
             inside_target = target == evidence_target or target.startswith(evidence_target + "/")
             if not inside_target:
-                found.append(f"{service_name} has a writable mount outside its own lane: {target}")
+                found.append(
+                    f"{service_name} has a writable mount that reaches an instance lane from "
+                    f"outside it: host={host} target={target}"
+                )
                 continue
             if host is None:
                 found.append(f"{service_name} declares a writable mount at {target} with no host source")

@@ -502,7 +502,14 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     live_records = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
     if runtime.role:
         stamped_roles = {(r.payload.get("identity") or {}).get("role") for r in live_records}
-        stamped_roles.discard(None)
+        # A record with no role is not "not contradicting" — it is unattributable,
+        # and discarding it turned a missing stamp into a pass.
+        if live_records and None in stamped_roles:
+            missing = [r.seq for r in live_records if not (r.payload.get("identity") or {}).get("role")]
+            return FAIL, (
+                f"{len(missing)} record(s) in {runtime.evidence_dir} carry no role and cannot be "
+                f"attributed to {runtime.role}: seq {missing[:5]}"
+            ), {}
         if stamped_roles and stamped_roles != {runtime.role}:
             return FAIL, (
                 f"the evidence in {runtime.evidence_dir} was written by {sorted(stamped_roles)}, "

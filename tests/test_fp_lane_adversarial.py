@@ -502,11 +502,12 @@ def test_engine_argument_spoofs_are_rejected(argument, spoof):
 
 
 def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
-    """Integration-level: the script a human runs, not the resolver underneath.
+    """scripts/stop_fp_control.sh itself, not the resolver underneath it.
 
-    The previous proof exercised `resolve_lane` directly and passed while
-    `scripts/stop_fp_control.sh` — which is what actually stops a runtime — still
-    refused a paused row. This runs the resolver CLI the script invokes.
+    The escape this catches hid exactly in that gap: the resolver was correct and
+    the script still refused. The script is run with a patched registry and a
+    stubbed `docker` on PATH, so the test proves the script reaches the stop
+    command without starting or stopping anything real.
     """
     registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     paused = row(registry, SUCCESSOR)
@@ -516,22 +517,35 @@ def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
     patched = tmp_path / "registry.json"
     patched.write_text(json.dumps(registry), encoding="utf-8")
 
-    def run(mode: str) -> subprocess.CompletedProcess:
-        code = (
-            "import sys, runpy;"
-            f"sys.path.insert(0, 'research');"
-            "from fp import lane;"
-            f"lane.COHORT_REGISTRY = __import__('pathlib').Path({str(patched)!r});"
-            f"sys.argv = ['fp_instance.py', {SUCCESSOR!r}] + {[mode] if mode else []!r};"
-            "runpy.run_path('scripts/fp_instance.py', run_name='__main__')"
-        )
-        return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    # A docker that records its arguments and does nothing.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    marker = tmp_path / "docker-args.txt"
+    (bin_dir / "docker").write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> {marker}\nexit 0\n', encoding="utf-8"
+    )
+    (bin_dir / "docker").chmod(0o755)
 
-    stop = run("--stop")
-    assert "FP_ROLE=" in stop.stdout, f"the stop path must resolve a PAUSED row: {stop.stderr}"
-    start = run("--start")
-    assert "FP_ROLE=" not in start.stdout, "a PAUSED row must not resolve for start"
-    assert "PAUSED" in start.stderr
+    # A sitecustomize that points the lane module at the patched registry.
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "sitecustomize.py").write_text(
+        "import pathlib, sys\n"
+        f"sys.path.insert(0, {str(Path('research').resolve())!r})\n"
+        "from fp import lane\n"
+        f"lane.COHORT_REGISTRY = pathlib.Path({str(patched)!r})\n",
+        encoding="utf-8",
+    )
+
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    env["PYTHONPATH"] = f"{site}:{env.get('PYTHONPATH', '')}"
+    result = subprocess.run(["bash", "scripts/stop_fp_control.sh", SUCCESSOR],
+                            capture_output=True, text=True, timeout=120, env=env)
+    assert result.returncode == 0, f"the stop script must handle a PAUSED row: {result.stderr}"
+    assert marker.exists(), "the stop script never reached the compose command"
+    assert "down" in marker.read_text(), marker.read_text()
+    assert "Stopped FP-CONTROL-2" in result.stdout
 
 
 def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch):
@@ -565,22 +579,64 @@ def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
 
 
 def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatch):
-    """The consumer side of the same contract: a foreign role must be caught."""
-    from fp import preflight
+    """A foreign-role record must be refused — proven with a real record.
+
+    The previous version of this test created no foreign record, accepted either
+    verdict, and deleted the real FP-CONTROL-2 lane on the way out. It touches
+    nothing outside tmp_path now, and it fails if the refusal does not happen.
+    """
+    from fp import ledger as fp_ledger, preflight
 
     monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
-    evidence = lane.resolve_lane(SUCCESSOR).host_evidence_dir
-    evidence.mkdir(parents=True, exist_ok=True)
-    try:
-        report = preflight.run(
-            runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
-        )
-        assert report["preflight"] in ("BLOCKED", "PASS")
-    finally:
-        import shutil
 
-        shutil.rmtree(evidence.parent, ignore_errors=True)
+    evidence = tmp_path / "evidence"
+    ledgers = fp_ledger.open_ledgers(evidence)
+    foreign = {
+        "candle_ts": 1_700_000_000_000,
+        "identity": {
+            "runtime_id": "FP-CONTROL-1:fp-control-1",
+            "run_id": "f" * 32,
+            "role": CLOSED,                      # written by the closed cohort
+            "cohort_id": "FP-CONTROL-1-20260908T121513Z",
+            "source_commit": "0" * 40,
+            "strategy_sha256": "0" * 64,
+        },
+    }
+    ledgers["decision"].append(foreign)
+
+    runtime = preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
+    monkeypatch.setattr(
+        capture, "assert_evidence_dir_is_declared", lambda *a, **k: None
+    )  # the lane binding is proven separately; here the role is under test
+    result, evidence_text, _ = preflight._check_hashes_match_registry(runtime)
+    assert result == "FAIL", (result, evidence_text)
+    assert CLOSED in evidence_text or "role" in evidence_text
+
+    # And a record with no role at all is unattributable, not merely silent.
+    unstamped = tmp_path / "unstamped"
+    unstamped_ledgers = fp_ledger.open_ledgers(unstamped)
+    unstamped_ledgers["decision"].append({"candle_ts": 1, "identity": {"run_id": "a" * 32}})
+    result2, text2, _ = preflight._check_hashes_match_registry(
+        preflight.RuntimeContext(evidence_dir=unstamped, role=SUCCESSOR)
+    )
+    assert result2 == "FAIL", (result2, text2)
+    assert "no role" in text2
+
+
+def test_reconciliation_requires_role_on_every_record(tmp_path):
+    """The other consumer of the same contract."""
+    from fp import ledger as fp_ledger, reconcile
+
+    evidence = tmp_path / "evidence"
+    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers["input"].append({
+        "market_event_id": "BTC/USDT|1h|1",
+        "identity": {"run_id": "a" * 32, "runtime_id": "x", "source_commit": "0" * 40},
+    })
+    report = reconcile.reconcile(evidence)
+    attribution = [f for f in report["findings"] if f["check"] == "record_attribution"]
+    assert attribution and attribution[0]["result"] == "FAIL", report["findings"]
 
 
 def test_host_container_mapping_against_independently_written_paths():
@@ -608,3 +664,77 @@ def test_a_status_less_candidate_row_is_not_eligible(registry, tmp_path, monkeyp
     monkeypatch.setattr(admission, "COHORT_REGISTRY", path)
     assert admission.eligible_candidates() == []
     assert admission.identified_candidate() is None
+
+
+def test_an_ancestor_bind_at_an_unrelated_target_is_rejected():
+    """The repository root mounted at /workspace reaches every lane at once.
+
+    Containment was checked in one direction only — "is the source inside
+    user_data" — so a source that *contains* user_data was invisible.
+    """
+    rendered = rendered_overlay()
+    rendered["services"]["some-future-sidecar"] = {
+        "image": "busybox",
+        "volumes": [{"type": "bind", "source": str(REPO_ROOT_LITERAL),
+                     "target": "/workspace", "read_only": False}],
+    }
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert problems, "a writable ancestor bind must be rejected"
+    assert any("some-future-sidecar" in p for p in problems), problems
+
+
+def test_a_local_driver_named_volume_backed_by_user_data_is_rejected():
+    """A named volume with device= is a bind wearing a volume's clothes."""
+    rendered = rendered_overlay()
+    rendered.setdefault("volumes", {})["sneaky"] = {
+        "driver": "local",
+        "driver_opts": {"type": "none", "o": "bind", "device": str(CLOSED_LANE_LITERAL)},
+    }
+    rendered["services"]["some-future-sidecar"] = {
+        "image": "busybox",
+        "volumes": [{"type": "volume", "source": "sneaky",
+                     "target": "/freqtrade/user_data/fp-control-1", "read_only": False}],
+    }
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert problems, "a local-driver volume backed by the closed lane must be rejected"
+
+
+def test_a_plain_named_volume_is_still_accepted():
+    """Grafana's own storage must not be flagged, or the check becomes noise."""
+    rendered = rendered_overlay()
+    rendered.setdefault("volumes", {})["ordinary"] = {}
+    rendered["services"]["some-future-sidecar"] = {
+        "image": "busybox",
+        "volumes": [{"type": "volume", "source": "ordinary", "target": "/data", "read_only": False}],
+    }
+    assert check_fp_overlay.check(rendered, SUCCESSOR) == []
+
+
+def test_the_launcher_refuses_a_symlinked_lane_before_creating_anything(tmp_path):
+    """Validation must precede mkdir: a symlinked lane was materialised first."""
+    script = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
+    validate_at = script.index("FP_LANE_FAIL")
+    mkdir_at = script.index('mkdir -p "$FP_DIR/logs"')
+    assert validate_at < mkdir_at, "the lane check must run before the directories are created"
+
+    # Behavioural half: a lane directory that resolves elsewhere is refused.
+    decoy = tmp_path / "elsewhere"
+    decoy.mkdir()
+    fake_lane = tmp_path / "fp-control-2"
+    fake_lane.symlink_to(decoy, target_is_directory=True)
+    code = (
+        "import sys; sys.path.insert(0, 'research');"
+        "from pathlib import Path; from fp.lane import resolve_lane;"
+        f"lane = resolve_lane({SUCCESSOR!r});"
+        f"resolved = Path({str(fake_lane)!r}).resolve();"
+        "print('REFUSED' if resolved != lane.host_instance_dir.resolve() else 'ACCEPTED')"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert out.stdout.strip() == "REFUSED", out
+
+
+def test_the_launcher_hashes_the_runtime_config_not_the_example():
+    """config.json is what the engine reads; the example is not."""
+    script = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
+    assert 'os.environ.get("HOST_CONFIG", "freqtrade/user_data/config.json")' in script
+    assert '"config_sha256": "freqtrade/user_data/config.paper.json.example"' not in script

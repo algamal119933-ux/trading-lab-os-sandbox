@@ -67,9 +67,12 @@ except InstanceSelectionError as exc:
     sys.exit(3)
 identity = instance["runtime_identity"]
 
+# The *runtime* config is what the engine reads. Hashing the committed example
+# instead let sizing or risk drift in config.json reach `compose up` unnoticed,
+# because the file being checked was not the file being run.
 expected = {
     "strategy_sha256": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
-    "config_sha256": "freqtrade/user_data/config.paper.json.example",
+    "config_sha256": os.environ.get("HOST_CONFIG", "freqtrade/user_data/config.json"),
 }
 problems = []
 for field, path in expected.items():
@@ -89,6 +92,40 @@ if problems:
         print(f"FP_IDENTITY_FAIL: {problem}", file=sys.stderr)
     sys.exit(3)
 print("FP_IDENTITY_PASS: strategy, config and runtime paths match the frozen registry")
+PY
+
+# The lane is validated before anything is created. Creating the directories
+# first meant a symlinked lane was materialised — and, in one reproduction,
+# written — before the check that would have refused it ran.
+python3 - "$FP_ROLE" "$FP_DIR" <<'PY' || exit 3
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "research")
+from fp.lane import LaneError, resolve_lane  # noqa: E402
+
+role, lane_dir = sys.argv[1], Path(sys.argv[2])
+try:
+    lane = resolve_lane(role)
+except LaneError as exc:
+    print(f"FP_LANE_FAIL: {exc}", file=sys.stderr)
+    raise SystemExit(3)
+
+# resolve() follows every existing symlink component, so a lane that points
+# somewhere else resolves somewhere else and is refused here, before mkdir.
+resolved = lane_dir.resolve()
+if resolved != lane.host_instance_dir.resolve():
+    print(
+        f"FP_LANE_FAIL: {lane_dir} resolves to {resolved}, not the declared "
+        f"{lane.host_instance_dir}",
+        file=sys.stderr,
+    )
+    raise SystemExit(3)
+for parent in (lane_dir / "logs", lane_dir / "evidence"):
+    if parent.exists() and parent.resolve() != (lane.host_instance_dir / parent.name):
+        print(f"FP_LANE_FAIL: {parent} resolves outside the lane", file=sys.stderr)
+        raise SystemExit(3)
+print(f"FP_LANE_PASS: {resolved}")
 PY
 
 mkdir -p "$FP_DIR/logs" "$FP_DIR/evidence"

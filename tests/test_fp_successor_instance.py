@@ -511,6 +511,8 @@ def test_the_resolver_quotes_every_value_it_emits():
 def test_reconciliation_requires_every_identity_field_it_claims():
     from fp import reconcile
 
+    # Behavioural, and role is now part of the same contract — see
+    # tests/test_fp_lane_adversarial.py::test_reconciliation_requires_role_on_every_record
     source = Path("research/fp/reconcile.py").read_text(encoding="utf-8")
-    assert "required_identity = (\"run_id\", \"runtime_id\", \"source_commit\")" in source
+    assert '"run_id", "runtime_id", "source_commit", "role"' in source
     assert hasattr(reconcile, "reconcile")

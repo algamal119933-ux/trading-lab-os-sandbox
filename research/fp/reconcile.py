@@ -92,7 +92,7 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None) -> dict:
     # The message claimed run_id, runtime_id and commit; only run_id was checked.
     # A record whose runtime_id or source commit is missing cannot be tied to the
     # instance that wrote it, which is the whole purpose of attribution.
-    required_identity = ("run_id", "runtime_id", "source_commit")
+    required_identity = ("run_id", "runtime_id", "source_commit", "role")
     unattributed = [
         r.seq
         for r in inputs + decisions + trades
@@ -102,8 +102,8 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None) -> dict:
         Finding(
             "record_attribution",
             FAIL if unattributed else PASS,
-            f"records missing run_id/runtime_id/source_commit: {unattributed[:5]}" if unattributed else
-            f"all {len(inputs) + len(decisions) + len(trades)} records carry a run_id, runtime_id and commit",
+            f"records missing run_id/runtime_id/source_commit/role: {unattributed[:5]}" if unattributed else
+            f"all {len(inputs) + len(decisions) + len(trades)} records carry a run_id, runtime_id, commit and role",
             len(unattributed),
         )
     )
