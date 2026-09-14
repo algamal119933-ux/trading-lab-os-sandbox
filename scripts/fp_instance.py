@@ -11,7 +11,8 @@ A CLOSED instance, an unknown role and a duplicated role are all refused by the
 selector, so no launcher can start into a terminated cohort's paths.
 
 Usage:
-    python3 scripts/fp_instance.py FP-CONTROL-2            # shell-eval lines
+    python3 scripts/fp_instance.py FP-CONTROL-2            # start-class selection
+    python3 scripts/fp_instance.py FP-CONTROL-2 --stop     # stop-class selection
     python3 scripts/fp_instance.py FP-CONTROL-2 --json
 """
 
@@ -25,10 +26,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "research"))
 
 from fp.capture import InstanceSelectionError  # noqa: E402
-from fp.lane import EXECUTABLE_STATUSES, LaneError, resolve_lane, select_row  # noqa: E402
+from fp.lane import (  # noqa: E402
+    EXECUTABLE_STATUSES,
+    STOPPABLE_STATUSES,
+    LaneError,
+    resolve_lane,
+    select_row,
+)
+
+# Which statuses each caller may address. Starting a runtime and stopping one are
+# different questions: a PAUSED row must never start by itself, and must always
+# be stoppable, or the only way out of PAUSED is editing the registry by hand.
+MODES = {"start": EXECUTABLE_STATUSES, "stop": STOPPABLE_STATUSES}
 
 
-def resolve(role: str) -> dict:
+def resolve(role: str, mode: str = "start") -> dict:
     """Every value the launcher needs, from the one shared resolver.
 
     Nothing is reconstructed here. The launcher, the capture loop, preflight and
@@ -36,9 +48,11 @@ def resolve(role: str) -> dict:
     disagree about where this instance writes.
     """
     try:
-        lane = resolve_lane(role, allowed_statuses=EXECUTABLE_STATUSES)
+        lane = resolve_lane(role, allowed_statuses=MODES[mode])
     except LaneError as exc:
         raise InstanceSelectionError(str(exc)) from exc
+    except KeyError as exc:  # pragma: no cover - guarded by the CLI
+        raise InstanceSelectionError(f"unknown mode {mode!r}") from exc
     row = select_row(role)
     return {
         "role": lane.role,
@@ -57,11 +71,17 @@ def resolve(role: str) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
+    mode = "start"
+    flags = [a for a in args[1:] if a.startswith("--")]
+    for flag in list(flags):
+        if flag in ("--start", "--stop"):
+            mode = flag.lstrip("-")
+            args = [a for a in args if a != flag]
     if not 1 <= len(args) <= 2 or (len(args) == 2 and args[1] != "--json"):
-        print("usage: fp_instance.py ROLE [--json]", file=sys.stderr)
+        print("usage: fp_instance.py ROLE [--start|--stop] [--json]", file=sys.stderr)
         return 2
     try:
-        resolved = resolve(args[0])
+        resolved = resolve(args[0], mode)
     except InstanceSelectionError as exc:
         print(f"FP_SELECTION_FAIL: {exc}", file=sys.stderr)
         return 3

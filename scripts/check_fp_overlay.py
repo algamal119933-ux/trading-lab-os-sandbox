@@ -17,8 +17,11 @@ merge produced — is checked for:
   alone let a closed instance's host directory be mounted at the successor's
   container target, which would have written the successor's evidence straight
   into the historical lane;
-* the capture service's --role and --evidence-dir are parsed as arguments and
-  compared exactly, never by substring;
+* every identity-bearing argument — the capture service's --role and
+  --evidence-dir, and the engine's --strategy, --db-url, --logfile and --config —
+  is parsed and compared exactly, never by substring;
+* writable mounts are checked on EVERY rendered service, including services this
+  file does not name and services added later;
 * the declared bot name is required, not merely "not contradicted";
 * no execution endpoint appears anywhere in the rendered stack.
 
@@ -38,6 +41,8 @@ import yaml
 
 REGISTRY_PATH = Path(__file__).resolve().parent.parent / "research/fp/records/forward_paper_cohort_registry.json"
 FORBIDDEN_ENDPOINTS = ("forcebuy", "forceenter", "forcesell", "forceexit")
+STRATEGY_NAME = "BaselineEmaRegimeV1"
+USER_DATA_HOST = (REGISTRY_PATH.parent.parent.parent.parent / "freqtrade" / "user_data").resolve()
 
 
 def _lane_module():
@@ -72,19 +77,24 @@ def parse_args(command) -> dict[str, str]:
     return parsed
 
 
-def mount_pairs(service: dict) -> list[tuple[str, str, bool]]:
-    """(host source, container target, read_only) for every declared mount."""
-    pairs: list[tuple[str, str, bool]] = []
+def mount_pairs(service: dict) -> list[tuple[str, str, bool, str]]:
+    """(host source, container target, read_only, kind) for every declared mount.
+
+    ``kind`` separates a bind — which names a real host directory and can
+    therefore alias an instance lane — from a named volume, which cannot.
+    """
+    pairs: list[tuple[str, str, bool, str]] = []
     for volume in service.get("volumes") or []:
         if isinstance(volume, dict):
             pairs.append((str(volume.get("source") or ""), str(volume.get("target") or ""),
-                          bool(volume.get("read_only"))))
+                          bool(volume.get("read_only")), str(volume.get("type") or "bind")))
         else:
             text = str(volume)
             parts = text.split(":")
             source = parts[0] if parts else ""
             target = parts[1] if len(parts) > 1 else ""
-            pairs.append((source, target, text.endswith(":ro")))
+            kind = "bind" if source.startswith((".", "/", "~")) else "volume"
+            pairs.append((source, target, text.endswith(":ro"), kind))
     return pairs
 
 
@@ -124,23 +134,44 @@ def check(rendered: dict, role: str) -> list[str]:
         checked, and it is the one that decides whose evidence gets overwritten.
         """
         found: list[str] = []
-        for source, target, read_only in mount_pairs(service):
+        repo_root = REGISTRY_PATH.parent.parent.parent.parent
+        for source, target, read_only, kind in mount_pairs(service):
             if read_only:
                 continue  # shared read-only mounts are fine; they write nothing
-            # Any writable mount must be inside the selected lane — including a
-            # mount of the code the capture loop runs, which must never be
-            # writable from inside the container that runs it.
+            if kind == "volume":
+                # A named volume has no host path into the project and cannot
+                # alias an instance lane. Grafana's and Prometheus's own storage
+                # are exactly this, and flagging them would train a reader to
+                # ignore the check that matters.
+                continue
+
+            host = None
+            if source:
+                candidate = Path(source).expanduser()
+                if not candidate.is_absolute():
+                    candidate = repo_root / candidate
+                # resolve() follows symlinks, so an escape lands outside the lane
+                host = candidate.resolve()
+
+            touches_lane_target = bool(target) and (
+                target == "/freqtrade/user_data" or target.startswith("/freqtrade/user_data/")
+            )
+            touches_lane_host = host is not None and (
+                host == USER_DATA_HOST or USER_DATA_HOST in host.parents
+            )
+            if not touches_lane_target and not touches_lane_host:
+                continue  # a writable mount that cannot reach any instance lane
+
+            # From here the mount can reach an FP lane, so it must be the
+            # selected one — on both sides. Target-only checking is what let a
+            # closed host lane be mounted at the successor's target.
             inside_target = target == evidence_target or target.startswith(evidence_target + "/")
             if not inside_target:
                 found.append(f"{service_name} has a writable mount outside its own lane: {target}")
                 continue
-            if not source:
+            if host is None:
                 found.append(f"{service_name} declares a writable mount at {target} with no host source")
                 continue
-            host = Path(source).expanduser()
-            if not host.is_absolute():
-                host = (REGISTRY_PATH.parent.parent.parent.parent / host).resolve()
-            host = host.resolve()  # follows symlinks: an escape resolves outside the lane
             if not lane.owns_host_path(host):
                 found.append(
                     f"{service_name} mounts host {host} at {target}: that host path is not inside "
@@ -162,13 +193,35 @@ def check(rendered: dict, role: str) -> list[str]:
         return ["the rendered overlay declares no freqtrade service"]
 
     command = freqtrade.get("command")
-    command_text = " ".join(command) if isinstance(command, list) else str(command)
-    if "BaselineEmaRegimeV1" not in command_text:
-        problems.append(f"freqtrade does not run BASELINE-1: {command_text}")
+    command_text = " ".join(str(c) for c in command) if isinstance(command, list) else str(command)
+    # Every identity-bearing argument is parsed and compared for equality.
+    # Containment checks passed BaselineEmaRegimeV1Evil and tradesv3.sqlite-evil:
+    # a name that merely *contains* the right one is a different runtime.
+    engine_args = parse_args(command)
+    strategy = engine_args.get("--strategy")
+    if strategy != STRATEGY_NAME:
+        problems.append(
+            f"freqtrade does not run BASELINE-1: strategy is {strategy!r}, not {STRATEGY_NAME!r}"
+        )
     if "PlumbingSmokeStrategy" in command_text:
         problems.append("the smoke strategy is running under the FP control overlay")
-    # Exact path components, not a substring: "fp-control-2" is a substring of
-    # "fp-control-2-evil", so a drifted lane would have passed a containment test.
+
+    db_url = engine_args.get("--db-url")
+    expected_db_urls = {f"sqlite:///{identity['db_path']}", f"sqlite:////{identity['db_path'].lstrip('/')}"}
+    if db_url not in expected_db_urls:
+        problems.append(
+            f"freqtrade uses db-url {db_url!r}, not the declared database {identity['db_path']!r}"
+        )
+    logfile = engine_args.get("--logfile")
+    if logfile != identity["log_path"]:
+        problems.append(
+            f"freqtrade logs to {logfile!r}, not the declared {identity['log_path']!r}"
+        )
+    config_arg = engine_args.get("--config")
+    if config_arg != "/freqtrade/user_data/config.json":
+        problems.append(f"freqtrade reads config {config_arg!r}, not the paper config")
+
+    # Nothing else under user_data may appear in the command at all.
     expected_prefix = f"/freqtrade/user_data/{instance_dir}/"
     used = {token for token in re.findall(r"/freqtrade/user_data/[^\s'\"]+", command_text)}
     allowed = {identity["db_path"], identity["log_path"], "/freqtrade/user_data/config.json",
@@ -176,10 +229,6 @@ def check(rendered: dict, role: str) -> list[str]:
     stray = sorted(p for p in used if p not in allowed and not p.startswith(expected_prefix))
     if stray:
         problems.append(f"freqtrade writes outside {instance_dir}: {stray}")
-    # The declared paths must appear exactly, not merely something under the lane.
-    for field in ("db_path", "log_path"):
-        if identity[field] not in command_text:
-            problems.append(f"freqtrade does not use the declared {field} {identity[field]}: {command_text}")
 
     environment = freqtrade.get("environment") or {}
     bot_name = environment.get("FREQTRADE__BOT_NAME") if isinstance(environment, dict) else None
@@ -192,7 +241,16 @@ def check(rendered: dict, role: str) -> list[str]:
     elif bot_name != identity["bot_name"]:
         problems.append(f"freqtrade runs as bot {bot_name!r}, not the declared {identity['bot_name']!r}")
 
-    problems.extend(writable_mount_problems("freqtrade", freqtrade))
+    # Mount isolation is a property of the whole rendered graph. Checking only
+    # the two services this file happens to name let an auxiliary service —
+    # exporter, prometheus, grafana, mlflow, or anything added later — mount the
+    # closed lane writable and pass. The loop below covers every service that
+    # exists now and every service added afterwards.
+    for service_name, service in sorted(services.items()):
+        if not isinstance(service, dict):
+            problems.append(f"{service_name} is not a service mapping; the render cannot be validated")
+            continue
+        problems.extend(writable_mount_problems(service_name, service))
     if "--dry-run false" in command_text or "--dry-run=false" in command_text:
         problems.append("a live-trading flag is present in the freqtrade command")
 
@@ -210,7 +268,16 @@ def check(rendered: dict, role: str) -> list[str]:
                 f"the capture service writes {args.get('--evidence-dir')!r}, not the declared "
                 f"evidence lane {evidence_dir!r}"
             )
-        problems.extend(writable_mount_problems("capture loop", capture))
+        # The loop observes a runtime; it must never be able to edit the code it
+        # runs. Lane logic cannot express this — /app/research reaches no
+        # instance lane — so it is stated separately.
+        for source, target, read_only, kind in mount_pairs(capture):
+            if read_only or kind == "volume":
+                continue
+            if target.startswith("/app/"):
+                problems.append(
+                    f"capture loop has a writable mount of its own code: {target}"
+                )
 
     text = yaml.dump(rendered)
     for endpoint in FORBIDDEN_ENDPOINTS:

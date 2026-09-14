@@ -40,8 +40,9 @@ resolves it in one place, and `scripts/start_fp_control.sh FP-CONTROL-2` /
 overlay is rendered from that selection and checked against it before the stack
 starts.
 
-`research/fp/admission.py` now excludes **every** control role from candidate
-identification rather than one role literal. Without that, registering a second
+`research/fp/admission.py` identifies candidates from an explicit allow-list of
+candidate roles rather than by excluding controls, so an unknown or malformed
+role can never fall through into candidacy. Without that, registering a second
 control would have made a control look like an identified candidate and let its
 records answer candidate-scoped conditions 1-6 — the exact hazard that function
 was written to prevent. Conditions 1 and 2 carry the same fix.

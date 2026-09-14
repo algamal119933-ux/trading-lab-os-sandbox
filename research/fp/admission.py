@@ -361,9 +361,16 @@ def eligible_candidates(registry: dict | None = None) -> list[dict]:
     registry = registry if registry is not None else _load_json(COHORT_REGISTRY)
     if registry is None:
         return []
+    from fp import lane as fp_lane  # noqa: PLC0415 — avoids a module import cycle
+
     found = []
     for item in registry.get("instances", []):
         if item.get("role") not in CANDIDATE_ROLES:
+            continue
+        # A row whose status cannot be read is not a candidate. Excluding only
+        # CLOSED let a malformed or status-less row through, which is the wrong
+        # direction for a gate that exists to fail closed.
+        if item.get("status") not in fp_lane.VALID_STATUSES:
             continue
         if item.get("status") == "CLOSED":
             continue

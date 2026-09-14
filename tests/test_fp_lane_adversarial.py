@@ -412,3 +412,199 @@ def test_every_component_resolves_the_lane_through_one_module():
         ("scripts/fp_instance.py", "resolve_lane"),
     ):
         assert needle in Path(path).read_text(encoding="utf-8"), f"{path} does not use the shared resolver"
+
+
+# =========================================================================
+# P1 stage contract §8 — behavioural proofs at the real entrypoints.
+#
+# Two escapes survived two independent reviews by slipping through the gap
+# between a unit-level truth and the production path that actually runs. These
+# proofs therefore exercise the rendered graph and the real scripts, and their
+# expected values are anchored independently of the implementation constants
+# they check — a test that imports the constant it is verifying cannot catch a
+# sabotaged constant.
+# =========================================================================
+
+# Anchored by hand, not by importing lane.HOST_USER_DATA.
+REPO_ROOT_LITERAL = Path(__file__).resolve().parent.parent
+HOST_USER_DATA_LITERAL = REPO_ROOT_LITERAL / "freqtrade" / "user_data"
+CLOSED_LANE_LITERAL = HOST_USER_DATA_LITERAL / "fp-control-1"
+SUCCESSOR_LANE_LITERAL = HOST_USER_DATA_LITERAL / "fp-control-2"
+
+
+def all_service_names(rendered: dict) -> list[str]:
+    return sorted(rendered.get("services", {}))
+
+
+def test_the_rendered_graph_has_more_services_than_the_two_named_ones():
+    """If this ever shrinks to two, the whole-graph proof below means less."""
+    names = all_service_names(rendered_overlay())
+    assert len(names) > 2, names
+    assert {"freqtrade", "fp-capture"}.issubset(set(names))
+
+
+def test_a_writable_closed_lane_is_rejected_on_every_rendered_service():
+    """The bypass the second review found: an auxiliary service, unchecked."""
+    base = rendered_overlay()
+    for name in all_service_names(base):
+        rendered = json.loads(json.dumps(base))
+        rendered["services"][name]["volumes"] = [
+            {"type": "bind", "source": str(CLOSED_LANE_LITERAL),
+             "target": "/freqtrade/user_data/fp-control-1", "read_only": False}
+        ]
+        problems = check_fp_overlay.check(rendered, SUCCESSOR)
+        assert problems, f"{name} may not mount the closed lane writable"
+        assert any("fp-control-1" in p for p in problems), (name, problems)
+
+
+def test_a_service_added_later_cannot_bypass_mount_isolation():
+    """Enforcement must follow the graph, not a hard-coded list of names."""
+    rendered = rendered_overlay()
+    rendered["services"]["some-future-sidecar"] = {
+        "image": "busybox",
+        "volumes": [{"type": "bind", "source": str(CLOSED_LANE_LITERAL),
+                     "target": "/freqtrade/user_data/fp-control-1", "read_only": False}],
+    }
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert any("some-future-sidecar" in p for p in problems), problems
+
+
+def test_shared_read_only_mounts_remain_acceptable():
+    """The repair must not make the legitimate render fail."""
+    assert check_fp_overlay.check(rendered_overlay(), SUCCESSOR) == []
+
+
+@pytest.mark.parametrize(
+    "argument,spoof",
+    [
+        ("--strategy", "BaselineEmaRegimeV1Evil"),
+        ("--db-url", "sqlite:////freqtrade/user_data/fp-control-2/tradesv3.sqlite-evil"),
+        ("--logfile", "/freqtrade/user_data/fp-control-2/logs/freqtrade.log-evil"),
+        ("--config", "/freqtrade/user_data/config.json-evil"),
+    ],
+)
+def test_engine_argument_spoofs_are_rejected(argument, spoof):
+    """Suffix lookalikes are different runtimes, and must be read as different."""
+    rendered = rendered_overlay()
+    command = [str(c) for c in rendered["services"]["freqtrade"]["command"]]
+    out, index = [], 0
+    while index < len(command):
+        token = command[index]
+        out.append(token)
+        if token == argument and index + 1 < len(command):
+            out.append(spoof)
+            index += 2
+            continue
+        index += 1
+    rendered["services"]["freqtrade"]["command"] = out
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert problems, f"a spoofed {argument} must be rejected"
+
+
+def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
+    """Integration-level: the script a human runs, not the resolver underneath.
+
+    The previous proof exercised `resolve_lane` directly and passed while
+    `scripts/stop_fp_control.sh` — which is what actually stops a runtime — still
+    refused a paused row. This runs the resolver CLI the script invokes.
+    """
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    paused = row(registry, SUCCESSOR)
+    paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
+                  cohort_id="FP-CONTROL-2-20260914T000000Z")
+    paused["runtime_identity"]["source_commit"] = "0" * 40
+    patched = tmp_path / "registry.json"
+    patched.write_text(json.dumps(registry), encoding="utf-8")
+
+    def run(mode: str) -> subprocess.CompletedProcess:
+        code = (
+            "import sys, runpy;"
+            f"sys.path.insert(0, 'research');"
+            "from fp import lane;"
+            f"lane.COHORT_REGISTRY = __import__('pathlib').Path({str(patched)!r});"
+            f"sys.argv = ['fp_instance.py', {SUCCESSOR!r}] + {[mode] if mode else []!r};"
+            "runpy.run_path('scripts/fp_instance.py', run_name='__main__')"
+        )
+        return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+
+    stop = run("--stop")
+    assert "FP_ROLE=" in stop.stdout, f"the stop path must resolve a PAUSED row: {stop.stderr}"
+    start = run("--start")
+    assert "FP_ROLE=" not in start.stdout, "a PAUSED row must not resolve for start"
+    assert "PAUSED" in start.stderr
+
+
+def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch):
+    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    paused = row(registry, SUCCESSOR)
+    paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
+                  cohort_id="FP-CONTROL-2-20260914T000000Z")
+    paused["runtime_identity"]["source_commit"] = "0" * 40
+    patched = tmp_path / "registry.json"
+    patched.write_text(json.dumps(registry), encoding="utf-8")
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", patched)
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", patched)
+    with pytest.raises(capture.InstanceSelectionError) as excinfo:
+        capture.CaptureLoop(tmp_path / "lane", ["BTC/USDT"], role=SUCCESSOR)
+    assert "PAUSED" in str(excinfo.value)
+
+
+def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
+    """Attribution must be written, not assumed by the consumer."""
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+
+    class StubMarket:
+        TIMEFRAME_MS = {"1h": 3_600_000}
+
+    loop = capture.CaptureLoop(tmp_path / "lane", ["BTC/USDT"], role=SUCCESSOR, market_module=StubMarket)
+    loop.record_incident("probe", "role attribution")
+    record = loop.ledgers["incident"].records()[-1]
+    assert record.payload["identity"]["role"] == SUCCESSOR
+    assert record.payload["identity"]["cohort_id"] is None
+
+
+def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatch):
+    """The consumer side of the same contract: a foreign role must be caught."""
+    from fp import preflight
+
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    evidence = lane.resolve_lane(SUCCESSOR).host_evidence_dir
+    evidence.mkdir(parents=True, exist_ok=True)
+    try:
+        report = preflight.run(
+            runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
+        )
+        assert report["preflight"] in ("BLOCKED", "PASS")
+    finally:
+        import shutil
+
+        shutil.rmtree(evidence.parent, ignore_errors=True)
+
+
+def test_host_container_mapping_against_independently_written_paths():
+    """Expectations written by hand: sabotaging the constant must fail this."""
+    resolved = lane.resolve_lane(SUCCESSOR)
+    assert resolved.host_instance_dir == SUCCESSOR_LANE_LITERAL
+    assert resolved.host_evidence_dir == SUCCESSOR_LANE_LITERAL / "evidence"
+    assert resolved.host_db_path == SUCCESSOR_LANE_LITERAL / "tradesv3.sqlite"
+    assert resolved.host_log_path == SUCCESSOR_LANE_LITERAL / "logs" / "freqtrade.log"
+    assert str(resolved.container_evidence_dir) == "/freqtrade/user_data/fp-control-2/evidence"
+    assert lane.container_to_host("/freqtrade/user_data/fp-control-1/evidence") == \
+        CLOSED_LANE_LITERAL / "evidence"
+
+
+def test_a_status_less_candidate_row_is_not_eligible(registry, tmp_path, monkeypatch):
+    """Fail closed on an unreadable status, not only on CLOSED."""
+    doc = json.loads(json.dumps(registry))
+    stranger = json.loads(json.dumps(row(doc, SUCCESSOR)))
+    stranger["role"] = "FP-CANDIDATE-A"
+    stranger["runtime_identity"]["candidate_family"] = "x"
+    stranger.pop("status")
+    doc["instances"].append(stranger)
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    monkeypatch.setattr(admission, "COHORT_REGISTRY", path)
+    assert admission.eligible_candidates() == []
+    assert admission.identified_candidate() is None

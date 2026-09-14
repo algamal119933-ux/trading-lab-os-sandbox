@@ -16,7 +16,10 @@ fi
 # The substitution's exit status must be checked before eval sees it: `eval
 # "$(...)"` reports eval's success, not the selector's, and a refusal would then
 # surface as an unbound variable several lines later instead of as a refusal.
-if ! FP_SELECTION="$(python3 scripts/fp_instance.py "$1")"; then
+# Stop-class selection: a PAUSED instance must be stoppable. Asking for
+# start-class selection here made PAUSED unstoppable, so the only exit from it
+# was editing the registry by hand.
+if ! FP_SELECTION="$(python3 scripts/fp_instance.py "$1" --stop)"; then
   exit 3
 fi
 eval "$FP_SELECTION"

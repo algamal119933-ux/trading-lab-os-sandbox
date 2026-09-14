@@ -205,6 +205,10 @@ class RuntimeIdentity:
         return {
             "runtime_id": self.runtime_id,
             "run_id": self.run_id,
+            # The role is what preflight and reconciliation compare a record
+            # against. Leaving it out made the consumer check a field the writer
+            # never wrote, so attribution was asserted rather than proven.
+            "role": self.role,
             "cohort_id": self.cohort_id,
             "restart_counter": self.restart_counter,
             "source_commit": self.source_commit,
