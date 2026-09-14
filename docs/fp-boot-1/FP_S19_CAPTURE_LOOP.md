@@ -7,7 +7,9 @@
 > The mechanism described below is unchanged.
 
 **Closes:** activation-pack stop condition `S19` and the known gap in section 0.1
-**Scope:** single cohort (FP-CONTROL-1). Control-only. Paper / dry-run only.
+**Scope:** one control instance at a time, selected by role. Control-only. Paper /
+dry-run only. Written when FP-CONTROL-1 was the only instance; the runnable
+instance today is the pre-T0 successor FP-CONTROL-2.
 **Does not change:** BASELINE-1 strategy logic, indicators, entry rules, exit rules,
 thresholds, pair universe, timeframe semantics, or any historical evidence.
 
@@ -37,7 +39,7 @@ Three modules and their tests. Nothing else in the runtime changed.
 | `research/fp/capture.py` | The loop. Runtime identity, single-writer lock, state recovery, input/decision/trade/incident capture, risk-admission recording. |
 | `research/fp/reconcile.py` | Cross-ledger reconciliation and the event-time parity gate on real captured data. |
 | `scripts/check_fp_overlay.py` | Asserts the compose overlay cannot drift into an unsafe runtime. |
-| `docker-compose.fp.yml` | The FP-CONTROL-1 runtime: BASELINE-1 on isolated paths, plus the capture service. |
+| `docker-compose.fp.yml` | The FP control runtime: BASELINE-1 on the selected instance's isolated paths, plus the capture service. |
 | `scripts/start_fp_control.sh` / `stop_fp_control.sh` | Fail-closed launcher and a stop that retains evidence. |
 
 ### The evidence chain
@@ -107,8 +109,9 @@ is still refused.
 
 With no runtime attached — the CI case — behaviour is unchanged, deliberately: the
 gate must not become easier to pass by being run somewhere with less evidence
-available. With `--evidence-dir` and the runtime URLs, these are answered from the
-running instance instead:
+available. With `--role`, `--evidence-dir` and the runtime URLs, these are answered from the
+running instance instead (`--role` is required whenever evidence is attached, so
+the runtime is compared against the instance it actually is):
 
 | # | Check | How it is now proven |
 | --- | --- | --- |

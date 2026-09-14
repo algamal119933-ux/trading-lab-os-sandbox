@@ -52,7 +52,10 @@ KLINES_PATH = "/api/v3/klines"
 TIME_PATH = "/api/v3/time"
 
 TIMEOUT_SECONDS = 20
-USER_AGENT = "trading-lab-os-fp-control-1/1.0 (public market data; paper only)"
+# Names the project and the retrieval path, not one instance: this module is
+# shared by whichever lane is running, and stamping a single instance name
+# onto every request made the closed cohort look like the current runtime.
+USER_AGENT = "trading-lab-os-fp-capture/1.0 (public market data; paper only)"
 
 # The identity of this retrieval path, recorded into every input record. A
 # change of source must be visible in the evidence rather than inferred from a

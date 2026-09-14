@@ -60,6 +60,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import lane as fp_lane  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import market as fp_market  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
@@ -213,31 +214,32 @@ class RuntimeIdentity:
         }
 
 
-def select_instance(role: str, registry: dict | None = None) -> dict:
-    """The one registry row a runtime may run as, or a hard failure.
+def select_instance(
+    role: str,
+    registry: dict | None = None,
+    *,
+    allowed_statuses: tuple[str, ...] | None = fp_lane.EXECUTABLE_STATUSES,
+) -> dict:
+    """The one registry row this operation may act on, or a hard failure.
 
-    There is no default row and no first-row fallback: an unknown role, a
-    duplicated role, and a CLOSED row each raise. A CLOSED row is refused
-    because its cohort's evidence stream ended — appending to it would splice a
-    new run onto a terminated one, and no later check could unpick that.
+    Delegates to the shared resolver so the launcher, preflight, the compose
+    guard and this loop all decide identity the same way. There is no default
+    row and no first-row fallback: an unknown role, a duplicated role, and a
+    malformed or missing status each raise.
+
+    ``allowed_statuses`` defaults to the executable set, because the callers in
+    this module are all about to write evidence. A CLOSED row is refused because
+    its cohort's evidence stream ended; a PAUSED row is refused because a human
+    paused it and silently resuming would erase that decision. Read-only and
+    stop-class callers pass their own set — one global rule would either let a
+    paused cohort start or make it unstoppable.
     """
     registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
-    matches = [item for item in registry.get("instances", []) if item.get("role") == role]
-    if not matches:
-        known = sorted({item.get("role") for item in registry.get("instances", [])} - {None})
-        raise InstanceSelectionError(f"unknown instance role {role!r}; the registry declares {known}")
-    if len(matches) > 1:
-        raise InstanceSelectionError(
-            f"ambiguous selection: {len(matches)} instances declare role {role!r}"
-        )
-    instance = matches[0]
-    status = instance.get("status")
-    if status == "CLOSED":
-        raise InstanceSelectionError(
-            f"{role} is CLOSED (cohort {instance.get('cohort_id')}, closed {instance.get('closed_utc')}): "
-            "a closed cohort accepts no further capture or evidence"
-        )
-    return instance
+    try:
+        fp_lane.resolve_lane(role, registry, allowed_statuses=allowed_statuses)
+    except fp_lane.LaneError as exc:
+        raise InstanceSelectionError(str(exc)) from exc
+    return fp_lane.select_row(role, registry)
 
 
 def _collides(a: Path, b: Path) -> bool:
@@ -271,11 +273,21 @@ def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | N
             other = identity.get(field)
             if not other:
                 continue
-            if _collides(resolved, Path(other)):
-                raise InstanceSelectionError(
-                    f"{role} would write to {resolved}, which collides with {item.get('role')}.{field} "
-                    f"({other})"
-                )
+            # Both namespaces: the container path the registry declares, and the
+            # host path it maps to. A run started on the host collides with
+            # another lane through the host path, and the container path alone
+            # would never see it.
+            candidates = [Path(other)]
+            try:
+                candidates.append(fp_lane.container_to_host(other))
+            except fp_lane.LaneError:
+                pass  # an unmappable path has no host twin
+            for other_path in candidates:
+                if _collides(resolved, other_path):
+                    raise InstanceSelectionError(
+                        f"{role} would write to {resolved}, which collides with "
+                        f"{item.get('role')}.{field} ({other_path})"
+                    )
 
 
 def assert_evidence_dir_is_declared(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
@@ -289,13 +301,18 @@ def assert_evidence_dir_is_declared(role: str, evidence_dir: Path, registry: dic
     ``assert_paths_are_exclusive`` instead.
     """
     registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
-    instance = select_instance(role, registry)
-    declared = (instance.get("runtime_identity") or {}).get("evidence_dir")
-    if not declared:
-        raise InstanceSelectionError(f"{role} declares no evidence_dir")
-    if Path(evidence_dir).resolve() != Path(declared):
+    try:
+        lane = fp_lane.resolve_lane(role, registry, allowed_statuses=fp_lane.EXECUTABLE_STATUSES)
+    except fp_lane.LaneError as exc:
+        raise InstanceSelectionError(str(exc)) from exc
+    # Either namespace names the same lane: a capture process inside the
+    # container knows the container path, a host qualification knows the host
+    # path. Accepting only one of them is what made host-side qualification
+    # impossible.
+    if not lane.matches_evidence_dir(evidence_dir):
         raise InstanceSelectionError(
-            f"{role} must write its evidence to the declared {declared}, not {Path(evidence_dir).resolve()}"
+            f"{role} must write its evidence to the declared {lane.container_evidence_dir} "
+            f"(host {lane.host_evidence_dir}), not {Path(evidence_dir).resolve()}"
         )
 
 

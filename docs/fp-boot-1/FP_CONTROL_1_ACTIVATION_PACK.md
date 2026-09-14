@@ -271,31 +271,32 @@ python3 research/fp/preflight.py --require-pass    # exit 0 required before T0
 
 Only after A13 exits 0 and every item in section B passes.
 
-```text
-HISTORICAL RECORD — NOT EXECUTABLE. This snippet selected the FP-CONTROL-1 row
-by name and wrote t0_utc, cohort_id, status and source_commit into it. That row
-is now CLOSED; running this would rewrite a closed cohort's history. It is fenced
-as text, not bash, so it cannot be lifted out and run.
+> **The program that stood here has been removed.** It was a runnable snippet
+> that selected the `FP-CONTROL-1` row by name and wrote `t0_utc`, `cohort_id`,
+> `status`, `source_commit`, `fp_run_active` and the registry timestamp into it.
+> That row is now **CLOSED**, and an independent review demonstrated that the
+> snippet still rewrote it when copied out and run against a registry copy —
+> a Markdown fence is not an execution control. Nothing that can be pasted into
+> a shell remains here.
 
-python3 - <<'PY'
-import json, pathlib, subprocess
-from datetime import datetime, timezone
-reg = pathlib.Path("research/fp/records/forward_paper_cohort_registry.json")
-r = json.loads(reg.read_text())
-t0 = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-commit = subprocess.check_output(["git","rev-parse","HEAD"], text=True).strip()
-inst = next(i for i in r["instances"] if i["role"] == "FP-CONTROL-1")
-inst["t0_utc"] = t0
-inst["cohort_id"] = f"FP-CONTROL-1-{t0.replace(':','').replace('-','')}"
-inst["status"] = "RUNNING"
-inst["runtime_identity"]["source_commit"] = commit
-r["fp_run_active"] = True
-r["registry_updated_utc"] = t0
-reg.write_text(json.dumps(r, indent=2) + "\n")
-print("FP_T0 =", t0); print("COHORT_ID =", inst["cohort_id"])
-PY
-python3 scripts/verify_repo.py --fix && git add -A && git commit -m "FP-CONTROL-1: freeze T0 and cohort"
-```
+What the historical act did, as description only:
+
+* it read the cohort registry and located the control row **by role**;
+* it stamped a T0 timestamp in `YYYY-MM-DDTHH:MM:SSZ`, derived the cohort id
+  from that same timestamp, set the row to a started state, and recorded the
+  source commit;
+* it set the registry-level active flag and the registry timestamp;
+* it then regenerated the manifest and committed the change.
+
+That act is spent. `FP-CONTROL-1`'s T0 is `2026-09-08T12:15:13Z` and its cohort
+is `FP-CONTROL-1-20260908T121513Z`; both are history and may never be reused,
+rewritten, moved or back-dated — see
+[`FP_CONTROL_1_COHORT_CLOSURE.md`](FP_CONTROL_1_COHORT_CLOSURE.md).
+
+Freezing a **new** T0, for a future cohort, is an Owner-only decision and has no
+script in this repository. It is performed against a pre-T0 successor instance —
+see [`FP_PRE_T0_SUCCESSOR_CONTROL.md`](FP_PRE_T0_SUCCESSOR_CONTROL.md) — never
+against a closed row, and the runtime code refuses a closed row in any case.
 
 ### A15 — status, logs, safe restart, closure
 

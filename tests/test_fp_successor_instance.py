@@ -408,8 +408,12 @@ def test_the_activation_pack_carries_no_runnable_registry_write():
     pack = Path("docs/fp-boot-1/FP_CONTROL_1_ACTIVATION_PACK.md").read_text(encoding="utf-8")
     assert "SUPERSEDED" in pack[:2000]
     a14 = pack[pack.index("### A14"):pack.index("### A15")]
-    assert "```bash" not in a14, "A14 still offers an executable registry write"
-    assert "NOT EXECUTABLE" in a14
+    # A fence language is not an execution control: the program itself is gone.
+    for runnable in ("python3 - <<", "reg.write_text", "json.dumps(r",
+                     'inst["t0_utc"]', 'inst["cohort_id"]', '["fp_run_active"] = True',
+                     "git commit -m", "```bash"):
+        assert runnable not in a14, f"A14 still carries runnable registry-write material: {runnable!r}"
+    assert "removed" in a14.lower()
 
 
 def test_the_registry_schema_enforces_role_uniqueness_and_started_state(request, registry):
@@ -497,7 +501,8 @@ def test_the_resolver_quotes_every_value_it_emits():
     assert result.returncode == 0
     emitted = dict(line.split("=", 1) for line in result.stdout.strip().splitlines())
     assert set(emitted) == {
-        "FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME", "FP_DB_PATH", "FP_LOG_PATH", "FP_EVIDENCE_DIR", "FP_T0",
+        "FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME", "FP_DB_PATH", "FP_LOG_PATH", "FP_EVIDENCE_DIR",
+        "FP_HOST_INSTANCE_DIR", "FP_HOST_EVIDENCE_DIR", "FP_T0",
     }
     for key, value in emitted.items():
         assert value == shlex.quote(shlex.split(value)[0] if value else ""), f"{key} is not shell-quoted"

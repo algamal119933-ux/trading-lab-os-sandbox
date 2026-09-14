@@ -1,4 +1,5 @@
-# FP-CONTROL-1 overlay — BASELINE-1 as operational control, paper only.
+# FP control overlay — BASELINE-1 as operational control, paper only.
+# The instance is chosen by scripts/start_fp_control.sh, never by this file.
 #
 # Applied on top of docker-compose.yml:
 #
@@ -6,7 +7,7 @@
 #
 # It exists as an overlay rather than as edits to the base file because the base
 # stack is the CLOUD-0 plumbing stack, which runs the smoke strategy and is
-# still the thing its own tests describe. FP-CONTROL-1 is a different runtime
+# still the thing its own tests describe. An FP control is a different runtime
 # with a different strategy, its own database, its own logs and its own evidence
 # directory, and conflating the two would let a smoke run write into the
 # evidence lane of a forward-paper cohort.

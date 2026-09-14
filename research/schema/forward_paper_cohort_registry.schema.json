@@ -144,13 +144,16 @@
         },
         "allOf": [
           {
-            "description": "The converse invariant: a row that has started - RUNNING, PAUSED or CLOSED - must carry the T0, cohort id and source commit that were frozen together by the one authorised act. Without this, a started row with nulls would read as a run that has no boundary.",
+            "description": "The converse invariant: a row that has started - RUNNING, PAUSED or CLOSED - must carry the T0, cohort id and source commit that were frozen together by the one authorised act. The values must be semantically valid, not merely present: an empty string is a JSON string and would otherwise satisfy a type check while carrying no boundary at all.",
             "if": { "required": ["status"], "properties": { "status": { "enum": ["RUNNING", "PAUSED", "CLOSED"] } } },
             "then": {
               "properties": {
-                "t0_utc": { "type": "string" },
-                "cohort_id": { "type": "string" },
-                "runtime_identity": { "properties": { "source_commit": { "type": "string" } } }
+                "t0_utc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+                "cohort_id": { "type": "string", "minLength": 1, "pattern": "^\\S.*\\S$|^\\S$" },
+                "runtime_identity": {
+                  "required": ["source_commit"],
+                  "properties": { "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" } }
+                }
               },
               "required": ["t0_utc", "cohort_id"]
             }

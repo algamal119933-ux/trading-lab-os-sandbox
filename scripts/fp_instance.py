@@ -24,38 +24,34 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "research"))
 
-from fp.capture import InstanceSelectionError, select_instance  # noqa: E402
+from fp.capture import InstanceSelectionError  # noqa: E402
+from fp.lane import EXECUTABLE_STATUSES, LaneError, resolve_lane, select_row  # noqa: E402
 
 
 def resolve(role: str) -> dict:
-    instance = select_instance(role)
-    identity = instance["runtime_identity"]
-    evidence_dir = identity.get("evidence_dir") or ""
-    # ".../<instance_dir>/evidence" -> "<instance_dir>"
-    instance_dir = evidence_dir.rsplit("/", 2)[-2] if "/" in evidence_dir else ""
-    if not instance_dir or not identity.get("bot_name"):
-        raise InstanceSelectionError(f"{role} has no bound instance directory or bot name")
-    for field in ("db_path", "log_path"):
-        declared = identity.get(field)
-        if not declared:
-            raise InstanceSelectionError(f"{role} declares no {field}")
-        # The launcher consumes the declared paths verbatim; reconstructing them
-        # from the directory name would let the registry and the runtime disagree
-        # about where the database lives.
-        if not declared.startswith(f"/freqtrade/user_data/{instance_dir}/"):
-            raise InstanceSelectionError(
-                f"{role}.{field} ({declared}) is not inside its own lane /freqtrade/user_data/{instance_dir}/"
-            )
+    """Every value the launcher needs, from the one shared resolver.
+
+    Nothing is reconstructed here. The launcher, the capture loop, preflight and
+    the compose guard all ask the same module the same question, so they cannot
+    disagree about where this instance writes.
+    """
+    try:
+        lane = resolve_lane(role, allowed_statuses=EXECUTABLE_STATUSES)
+    except LaneError as exc:
+        raise InstanceSelectionError(str(exc)) from exc
+    row = select_row(role)
     return {
-        "role": role,
-        "instance_dir": instance_dir,
-        "bot_name": identity["bot_name"],
-        "status": instance.get("status"),
-        "t0_utc": instance.get("t0_utc"),
-        "cohort_id": instance.get("cohort_id"),
-        "evidence_dir": evidence_dir,
-        "db_path": identity.get("db_path"),
-        "log_path": identity.get("log_path"),
+        "role": lane.role,
+        "instance_dir": lane.instance_dir,
+        "bot_name": lane.bot_name,
+        "status": lane.status,
+        "t0_utc": row.get("t0_utc"),
+        "cohort_id": row.get("cohort_id"),
+        "evidence_dir": str(lane.container_evidence_dir),
+        "db_path": str(lane.container_db_path),
+        "log_path": str(lane.container_log_path),
+        "host_instance_dir": str(lane.host_instance_dir),
+        "host_evidence_dir": str(lane.host_evidence_dir),
     }
 
 
@@ -81,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         "FP_DB_PATH": resolved["db_path"] or "",
         "FP_LOG_PATH": resolved["log_path"] or "",
         "FP_EVIDENCE_DIR": resolved["evidence_dir"],
+        "FP_HOST_INSTANCE_DIR": resolved["host_instance_dir"],
+        "FP_HOST_EVIDENCE_DIR": resolved["host_evidence_dir"],
         "FP_T0": resolved["t0_utc"] or "T0_NOT_FROZEN",
     }
     for key, value in emit.items():

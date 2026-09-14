@@ -11,8 +11,15 @@ So the rendered overlay — not the source file, which says nothing about what t
 merge produced — is checked for:
 
 * BASELINE-1 is the strategy, and the smoke strategy is absent;
-* the control's own database, log and evidence paths are in use;
-* the capture loop's only writable mount is the evidence lane;
+* the control's own database, log and evidence paths are in use, exactly;
+* every writable mount is checked on BOTH sides — the container target *and*
+  the host source behind it, canonicalised through realpath. Checking targets
+  alone let a closed instance's host directory be mounted at the successor's
+  container target, which would have written the successor's evidence straight
+  into the historical lane;
+* the capture service's --role and --evidence-dir are parsed as arguments and
+  compared exactly, never by substring;
+* the declared bot name is required, not merely "not contradicted";
 * no execution endpoint appears anywhere in the rendered stack.
 
 Usage:
@@ -33,18 +40,52 @@ REGISTRY_PATH = Path(__file__).resolve().parent.parent / "research/fp/records/fo
 FORBIDDEN_ENDPOINTS = ("forcebuy", "forceenter", "forcesell", "forceexit")
 
 
-def declared_identity(role: str) -> dict:
-    """The selected instance's declared identity, or a hard failure.
-
-    The guard reads the registry itself rather than trusting a directory name it
-    was handed: a rendered stack is only safe if it matches the instance the
-    registry says may run, field for field.
-    """
+def _lane_module():
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "research"))
-    from fp.capture import select_instance  # noqa: PLC0415
+    from fp import lane as fp_lane  # noqa: PLC0415
 
-    instance = select_instance(role, json.loads(REGISTRY_PATH.read_text(encoding="utf-8")))
-    return instance["runtime_identity"]
+    return fp_lane
+
+
+def parse_args(command) -> dict[str, str]:
+    """``--key=value`` and ``--key value`` into exact values.
+
+    Substring matching is what let ``--role=FP-CONTROL-2-evil`` satisfy a check
+    for ``--role=FP-CONTROL-2``. Parsing gives the value itself, so equality can
+    be required.
+    """
+    tokens = list(command) if isinstance(command, list) else str(command).split()
+    parsed: dict[str, str] = {}
+    index = 0
+    while index < len(tokens):
+        token = str(tokens[index])
+        if token.startswith("--"):
+            if "=" in token:
+                key, value = token.split("=", 1)
+                parsed[key] = value
+            elif index + 1 < len(tokens) and not str(tokens[index + 1]).startswith("--"):
+                parsed[token] = str(tokens[index + 1])
+                index += 1
+            else:
+                parsed[token] = ""
+        index += 1
+    return parsed
+
+
+def mount_pairs(service: dict) -> list[tuple[str, str, bool]]:
+    """(host source, container target, read_only) for every declared mount."""
+    pairs: list[tuple[str, str, bool]] = []
+    for volume in service.get("volumes") or []:
+        if isinstance(volume, dict):
+            pairs.append((str(volume.get("source") or ""), str(volume.get("target") or ""),
+                          bool(volume.get("read_only"))))
+        else:
+            text = str(volume)
+            parts = text.split(":")
+            source = parts[0] if parts else ""
+            target = parts[1] if len(parts) > 1 else ""
+            pairs.append((source, target, text.endswith(":ro")))
+    return pairs
 
 
 def check(rendered: dict, role: str) -> list[str]:
@@ -55,17 +96,65 @@ def check(rendered: dict, role: str) -> list[str]:
     paths by a stale variable.
     """
     problems: list[str] = []
+    fp_lane = _lane_module()
     try:
-        identity = declared_identity(role)
+        lane = fp_lane.resolve_lane(role, allowed_statuses=fp_lane.EXECUTABLE_STATUSES)
     except Exception as exc:  # noqa: BLE001 — any selection failure is a refusal
         return [f"the overlay names an unusable instance {role}: {exc}"]
+    others = fp_lane.other_lanes(role)
 
+    identity = {
+        "db_path": str(lane.container_db_path),
+        "log_path": str(lane.container_log_path),
+        "evidence_dir": str(lane.container_evidence_dir),
+        "bot_name": lane.bot_name,
+    }
     evidence_dir = identity["evidence_dir"]
-    instance_dir = evidence_dir.rsplit("/", 2)[-2]
+    instance_dir = lane.instance_dir
     # The writable boundary is the instance's own lane, which contains its
     # evidence directory, its database and its logs. Anything writable outside
     # that lane is what this guard exists to catch.
-    evidence_target = f"/freqtrade/user_data/{instance_dir}"
+    evidence_target = str(lane.container_instance_dir)
+
+    def writable_mount_problems(service_name: str, service: dict) -> list[str]:
+        """Both sides of every writable mount, canonicalised.
+
+        A mount is two claims: where the container will write, and which real
+        host directory receives it. The second claim is the one that was never
+        checked, and it is the one that decides whose evidence gets overwritten.
+        """
+        found: list[str] = []
+        for source, target, read_only in mount_pairs(service):
+            if read_only:
+                continue  # shared read-only mounts are fine; they write nothing
+            # Any writable mount must be inside the selected lane — including a
+            # mount of the code the capture loop runs, which must never be
+            # writable from inside the container that runs it.
+            inside_target = target == evidence_target or target.startswith(evidence_target + "/")
+            if not inside_target:
+                found.append(f"{service_name} has a writable mount outside its own lane: {target}")
+                continue
+            if not source:
+                found.append(f"{service_name} declares a writable mount at {target} with no host source")
+                continue
+            host = Path(source).expanduser()
+            if not host.is_absolute():
+                host = (REGISTRY_PATH.parent.parent.parent.parent / host).resolve()
+            host = host.resolve()  # follows symlinks: an escape resolves outside the lane
+            if not lane.owns_host_path(host):
+                found.append(
+                    f"{service_name} mounts host {host} at {target}: that host path is not inside "
+                    f"the selected lane {lane.host_instance_dir}"
+                )
+                continue
+            for other in others:
+                if other.owns_host_path(host):
+                    found.append(
+                        f"{service_name} mounts host {host} at {target}, which belongs to "
+                        f"{other.role} ({other.host_instance_dir})"
+                    )
+        return found
+
     services = rendered.get("services") or {}
 
     freqtrade = services.get("freqtrade")
@@ -94,17 +183,16 @@ def check(rendered: dict, role: str) -> list[str]:
 
     environment = freqtrade.get("environment") or {}
     bot_name = environment.get("FREQTRADE__BOT_NAME") if isinstance(environment, dict) else None
-    if bot_name is not None and bot_name != identity["bot_name"]:
+    # Required, not merely uncontradicted: an absent bot name leaves the running
+    # instance unidentifiable in its own logs and database.
+    if not bot_name:
+        problems.append(
+            f"freqtrade declares no FREQTRADE__BOT_NAME; the registry requires {identity['bot_name']!r}"
+        )
+    elif bot_name != identity["bot_name"]:
         problems.append(f"freqtrade runs as bot {bot_name!r}, not the declared {identity['bot_name']!r}")
 
-    # Every writable mount on freqtrade must be the selected lane.
-    for volume in freqtrade.get("volumes") or []:
-        target = volume.get("target") if isinstance(volume, dict) else str(volume).split(":")[1:2]
-        read_only = volume.get("read_only") if isinstance(volume, dict) else ":ro" in str(volume)
-        target_text = target if isinstance(target, str) else (target[0] if target else "")
-        inside = target_text == f"/freqtrade/user_data/{instance_dir}" or target_text.startswith(expected_prefix)
-        if not read_only and target_text.startswith("/freqtrade/user_data") and not inside:
-            problems.append(f"freqtrade mounts {target_text} writable, outside its own lane")
+    problems.extend(writable_mount_problems("freqtrade", freqtrade))
     if "--dry-run false" in command_text or "--dry-run=false" in command_text:
         problems.append("a live-trading flag is present in the freqtrade command")
 
@@ -112,21 +200,17 @@ def check(rendered: dict, role: str) -> list[str]:
     if not capture:
         problems.append("the rendered overlay declares no fp-capture service")
     else:
-        capture_command = capture.get("command")
-        capture_text = " ".join(capture_command) if isinstance(capture_command, list) else str(capture_command)
-        if f"--role={role}" not in capture_text:
-            problems.append(f"the capture service does not name the selected instance: {capture_text}")
-        if f"--evidence-dir={evidence_dir}" not in capture_text:
+        args = parse_args(capture.get("command"))
+        if args.get("--role") != role:
             problems.append(
-                f"the capture service does not write the declared evidence lane {identity['evidence_dir']}"
+                f"the capture service names role {args.get('--role')!r}, not the selected {role!r}"
             )
-        for volume in capture.get("volumes") or []:
-            target = volume.get("target") if isinstance(volume, dict) else str(volume)
-            read_only = volume.get("read_only") if isinstance(volume, dict) else ":ro" in str(volume)
-            target_text = str(target)
-            inside = target_text == evidence_target or target_text.startswith(evidence_target + "/")
-            if not read_only and not inside:
-                problems.append(f"capture loop has a writable mount outside the evidence lane: {target}")
+        if args.get("--evidence-dir") != evidence_dir:
+            problems.append(
+                f"the capture service writes {args.get('--evidence-dir')!r}, not the declared "
+                f"evidence lane {evidence_dir!r}"
+            )
+        problems.extend(writable_mount_problems("capture loop", capture))
 
     text = yaml.dump(rendered)
     for endpoint in FORBIDDEN_ENDPOINTS:

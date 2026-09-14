@@ -228,12 +228,12 @@ def _frozen_configuration() -> tuple[str, str]:
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
-    identified = [
-        item
-        for item in registry.get("instances", [])
-        if item.get("role") in CANDIDATE_ROLES
-        and (item.get("runtime_identity") or {}).get("config_sha256")
-    ]
+    shape, identified = candidate_cardinality(registry)
+    if shape == "AMBIGUOUS":
+        return FAIL, (
+            f"{len(identified)} eligible candidates ({[r.get('role') for r in identified]}); "
+            "admission cannot choose between them and fails closed"
+        )
     if not identified:
         return UNPROVEN, (
             "no candidate instance names a frozen configuration hash; a configuration cannot be identified "
@@ -321,6 +321,13 @@ CONTROL_ROLE_PREFIX = "FP-CONTROL"
 CANDIDATE_ROLES = ("FP-CANDIDATE-A", "FP-CANDIDATE-B")
 
 
+def _candidate_role() -> str:
+    shape, rows = candidate_cardinality()
+    if shape == "UNIQUE":
+        return rows[0]["role"]
+    return CANDIDATE_ROLES[0]
+
+
 def identified_candidate() -> str | None:
     """The candidate strategy name under evaluation, or None if there is none.
 
@@ -330,22 +337,48 @@ def identified_candidate() -> str | None:
     is exactly what happened: lookahead and timestamp-knowability reported PASS
     on the control's records while no candidate existed at all.
     """
-    registry = _load_json(COHORT_REGISTRY)
-    if registry is None:
+    eligible = eligible_candidates()
+    if len(eligible) != 1:
+        # Zero is the honest answer when nothing is admissible, and more than one
+        # is an ambiguity, not a menu. Returning the first match made the result
+        # depend on registry order: reversing two rows changed which candidate
+        # the gate believed it was evaluating.
         return None
+    return (eligible[0].get("runtime_identity") or {}).get("candidate_family")
+
+
+def eligible_candidates(registry: dict | None = None) -> list[dict]:
+    """Every row that could be *the* candidate, in a deterministic order.
+
+    Eligibility is a set membership question, answered the same way everywhere:
+
+    * a control is never a candidate, whichever control it is;
+    * a CLOSED row is never eligible — its evidence stream ended;
+    * a row without a frozen strategy hash names no candidate to evaluate.
+
+    Sorted by role so the answer cannot depend on how the file was written.
+    """
+    registry = registry if registry is not None else _load_json(COHORT_REGISTRY)
+    if registry is None:
+        return []
+    found = []
     for item in registry.get("instances", []):
-        # Every control row is excluded, not just the first one ever written.
-        # A control is never a candidate, so a successor control registered for
-        # pre-T0 qualification must not start satisfying candidate conditions
-        # the moment it appears — which is precisely what matching a single role
-        # literal would have allowed.
         if item.get("role") not in CANDIDATE_ROLES:
             continue
+        if item.get("status") == "CLOSED":
+            continue
         identity = item.get("runtime_identity") or {}
-        family = identity.get("candidate_family")
-        if family and identity.get("strategy_sha256"):
-            return family
-    return None
+        if identity.get("candidate_family") and identity.get("strategy_sha256"):
+            found.append(item)
+    return sorted(found, key=lambda row: row.get("role") or "")
+
+
+def candidate_cardinality(registry: dict | None = None) -> tuple[str, list[dict]]:
+    """(NONE | UNIQUE | AMBIGUOUS, rows) — the shape of the candidate set."""
+    rows = eligible_candidates(registry)
+    if not rows:
+        return "NONE", rows
+    return ("UNIQUE" if len(rows) == 1 else "AMBIGUOUS"), rows
 
 
 def _from_gate_records(key: str, description: str) -> tuple[str, str]:
@@ -432,12 +465,16 @@ def _candidate_identity_frozen() -> tuple[str, str]:
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
+    shape, eligible = candidate_cardinality(registry)
+    if shape == "AMBIGUOUS":
+        return FAIL, (
+            f"{len(eligible)} eligible candidates ({[r.get('role') for r in eligible]}); "
+            "a candidate identity cannot be frozen while the choice is ambiguous"
+        )
     frozen = [
         item
-        for item in registry.get("instances", [])
-        if item.get("role") in CANDIDATE_ROLES
-        and (item.get("runtime_identity") or {}).get("strategy_sha256")
-        and (item.get("runtime_identity") or {}).get("config_sha256")
+        for item in eligible
+        if (item.get("runtime_identity") or {}).get("config_sha256")
         and (item.get("runtime_identity") or {}).get("source_commit")
     ]
     if not frozen:
@@ -663,7 +700,10 @@ def evaluate() -> dict:
         "evaluated_utc": _utc_now(),
         "code_commit": _git_commit(),
         "candidate": {
-            "role": "FP-CANDIDATE-A",
+            # The uniquely eligible role, or the first declared candidate role as
+            # a placeholder when there is none. Hard-coding FP-CANDIDATE-A made
+            # the record lie whenever the real candidate was B.
+            "role": _candidate_role(),
             "name": None,
             "strategy_file": None,
             "strategy_sha256": None,
