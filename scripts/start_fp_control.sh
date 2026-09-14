@@ -31,7 +31,7 @@ if ! FP_SELECTION="$(python3 scripts/fp_instance.py "$1")"; then
   exit 3
 fi
 eval "$FP_SELECTION"
-export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME
+export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME FP_DB_PATH FP_LOG_PATH FP_EVIDENCE_DIR
 FP_DIR="freqtrade/user_data/$FP_INSTANCE_DIR"
 echo "FP_ROLE=$FP_ROLE FP_INSTANCE_DIR=$FP_INSTANCE_DIR FP_BOT_NAME=$FP_BOT_NAME T0=$FP_T0"
 
@@ -102,7 +102,7 @@ echo "FP_SOURCE_COMMIT=$FP_SOURCE_COMMIT"
 # what gets checked, against the instance actually selected.
 RENDERED="$(mktemp)"
 docker compose "${COMPOSE_FILES[@]}" config > "$RENDERED"
-python3 scripts/check_fp_overlay.py "$RENDERED" "$FP_INSTANCE_DIR" || { rm -f "$RENDERED"; exit 4; }
+python3 scripts/check_fp_overlay.py "$RENDERED" "$FP_ROLE" || { rm -f "$RENDERED"; exit 4; }
 rm -f "$RENDERED"
 
 docker compose "${COMPOSE_FILES[@]}" up -d

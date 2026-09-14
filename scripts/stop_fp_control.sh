@@ -20,7 +20,7 @@ if ! FP_SELECTION="$(python3 scripts/fp_instance.py "$1")"; then
   exit 3
 fi
 eval "$FP_SELECTION"
-export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME
+export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME FP_DB_PATH FP_LOG_PATH FP_EVIDENCE_DIR
 
 docker compose -f docker-compose.yml -f docker-compose.fp.yml down
 

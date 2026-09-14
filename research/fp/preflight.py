@@ -499,10 +499,25 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     }
 
     ledgers = fp_ledger.open_ledgers(Path(runtime.evidence_dir))
+    live_records = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+    if runtime.role:
+        stamped_roles = {(r.payload.get("identity") or {}).get("role") for r in live_records}
+        stamped_roles.discard(None)
+        if stamped_roles and stamped_roles != {runtime.role}:
+            return FAIL, (
+                f"the evidence in {runtime.evidence_dir} was written by {sorted(stamped_roles)}, "
+                f"not by {runtime.role}"
+            ), {}
+        stamped_cohorts = {(r.payload.get("identity") or {}).get("cohort_id") for r in live_records}
+        declared_cohort = frozen[0].get("cohort_id")
+        if stamped_cohorts - {declared_cohort}:
+            return FAIL, (
+                f"the evidence carries cohort ids {sorted(c for c in stamped_cohorts if c)} that the "
+                f"registry does not declare for {runtime.role} ({declared_cohort})"
+            ), {}
     stamped = {
         (r.payload.get("identity") or {}).get("strategy_sha256")
-        for r in ledgers["decision"].records()
-        if not r.payload.get("erratum")
+        for r in live_records
     }
     stamped.discard(None)
     if not stamped:
@@ -970,6 +985,14 @@ def run(evidence_dir: Path | None = None, runtime: RuntimeContext | None = None)
     gate must not become easier to pass by being run somewhere with less
     evidence available.
     """
+    # A runtime that names a role must be the lane that role declares, and the
+    # records in it must carry that role. Accepting an unbound or mismatched
+    # runtime is how evidence from one instance ends up answering another's gate.
+    if runtime is not None and runtime.has_evidence:
+        if not runtime.role:
+            raise ValueError("a runtime with evidence must name its role")
+        fp_capture.assert_evidence_dir_is_declared(runtime.role, Path(runtime.evidence_dir))
+
     temp_dir = None
     if evidence_dir is None:
         temp_dir = Path(tempfile.mkdtemp(prefix="fp-preflight-"))

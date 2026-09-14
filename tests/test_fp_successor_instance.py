@@ -11,6 +11,7 @@ further, and a successor inherits nothing.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -114,11 +115,16 @@ def test_an_ambiguous_role_fails_closed(registry):
     assert "ambiguous" in str(excinfo.value)
 
 
-def test_there_is_no_first_row_fallback(registry):
-    """The old behaviour returned an empty identity for an unknown role."""
-    source = Path("research/fp/capture.py").read_text(encoding="utf-8")
-    assert "select_instance(role, registry)" in source
-    assert 'if item.get("role") == role),\n        {},\n    )' not in source
+def test_there_is_no_first_row_fallback(registry, tmp_path, monkeypatch):
+    """Behavioural, not textual: an unknown role must raise, never return row 0."""
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    with pytest.raises(capture.InstanceSelectionError):
+        capture.build_identity(tmp_path, role="FP-CONTROL-404")
+    # And the successor's identity is the successor's, not whichever row is first.
+    identity = capture.build_identity(tmp_path, role=SUCCESSOR)
+    assert identity.role == SUCCESSOR
+    assert identity.bot_name == "fp-control-2"
+    assert identity.db_path == "/freqtrade/user_data/fp-control-2/tradesv3.sqlite"
 
 
 # -- 6. path collisions fail ----------------------------------------------
@@ -344,24 +350,162 @@ def test_preflight_refuses_an_unbound_runtime():
     assert preflight.main(["--role", "FP-CONTROL-404"]) == 2  # unknown
 
 
-def test_preflight_tamper_proof_never_writes_into_the_lane_it_tests():
-    source = Path("research/fp/preflight.py").read_text(encoding="utf-8")
-    assert "tempfile.TemporaryDirectory(prefix=\"fp-preflight-tamper-\")" in source
-    assert "Path(runtime.evidence_dir) / \"tampered_real_input.jsonl\"" not in source
+def test_preflight_refuses_a_runtime_whose_lane_is_not_declared(tmp_path):
+    """Behavioural: run() must reject an evidence directory the registry does not declare."""
+    from fp import preflight
+
+    (tmp_path / "paper_input_ledger.jsonl").write_text("", encoding="utf-8")
+    with pytest.raises((ValueError, capture.InstanceSelectionError)):
+        preflight.run(runtime=preflight.RuntimeContext(evidence_dir=tmp_path, role=SUCCESSOR))
+    with pytest.raises((ValueError, capture.InstanceSelectionError)):
+        preflight.run(runtime=preflight.RuntimeContext(evidence_dir=tmp_path))
 
 
-def test_an_unknown_role_is_never_read_as_a_candidate(registry):
-    """Candidacy is an allow-list; a prefix test let unknown roles through."""
+def test_an_unknown_role_is_never_read_as_a_candidate(registry, tmp_path, monkeypatch):
+    """Behavioural: a hashed row with an unrecognised role must not become a candidate."""
     from fp import admission
 
-    assert admission.CANDIDATE_ROLES == ("FP-CANDIDATE-A", "FP-CANDIDATE-B")
-    source = Path("research/fp/admission.py").read_text(encoding="utf-8")
-    assert "item.get(\"role\") not in CANDIDATE_ROLES" in source
+    doctored = json.loads(json.dumps(registry))
+    stranger = json.loads(json.dumps(doctored["instances"][1]))
+    stranger["role"] = "UNKNOWN-A"
+    stranger["runtime_identity"]["candidate_family"] = "wrong-first"
+    doctored["instances"].append(stranger)
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(doctored), encoding="utf-8")
+    monkeypatch.setattr(admission, "COHORT_REGISTRY", path)
+    assert admission.identified_candidate() is None
+    assert admission.evaluate()["paper_admission"] == "BLOCKED"
 
 
-def test_the_activation_pack_no_longer_offers_to_rewrite_the_closed_row():
-    pack = Path("docs/fp-boot-1/FP_CONTROL_1_ACTIVATION_PACK.md").read_text(encoding="utf-8")
-    assert "SUPERSEDED" in pack.split("\n\n", 3)[1] or "SUPERSEDED" in pack[:2000], (
-        "the pack's A14 writes t0_utc and cohort_id into the FP-CONTROL-1 row and must carry a "
-        "superseded notice at the top"
+def test_a_control_role_is_not_a_valid_candidate_in_the_admission_schema(request):
+    """A mutated record naming a control as the candidate must fail validation."""
+    import jsonschema
+
+    schema = json.loads(
+        (request.config.rootpath / "research/schema/paper_candidate_admission.schema.json").read_text(
+            encoding="utf-8"
+        )
     )
+    record = json.loads(
+        (request.config.rootpath / "research/fp/records/paper_candidate_admission.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    validator = jsonschema.validators.validator_for(schema)(schema)
+    assert list(validator.iter_errors(record)) == []
+    for control in (HISTORICAL, SUCCESSOR):
+        mutated = json.loads(json.dumps(record))
+        mutated["candidate"]["role"] = control
+        assert list(validator.iter_errors(mutated)), f"{control} must not validate as a candidate"
+
+
+def test_the_activation_pack_carries_no_runnable_registry_write():
+    """A14 wrote t0_utc and cohort_id straight into the FP-CONTROL-1 row.
+
+    A banner is a warning; what matters is that the snippet is no longer a bash
+    block anyone can lift out and run.
+    """
+    pack = Path("docs/fp-boot-1/FP_CONTROL_1_ACTIVATION_PACK.md").read_text(encoding="utf-8")
+    assert "SUPERSEDED" in pack[:2000]
+    a14 = pack[pack.index("### A14"):pack.index("### A15")]
+    assert "```bash" not in a14, "A14 still offers an executable registry write"
+    assert "NOT EXECUTABLE" in a14
+
+
+def test_the_registry_schema_enforces_role_uniqueness_and_started_state(request, registry):
+    import jsonschema
+
+    schema = json.loads(
+        (request.config.rootpath / SCHEMA_PATH).read_text(encoding="utf-8")
+    )
+    validator = jsonschema.validators.validator_for(schema)(schema)
+
+    duplicated = json.loads(json.dumps(registry))
+    duplicated["instances"].append(json.loads(json.dumps(duplicated["instances"][1])))
+    assert list(validator.iter_errors(duplicated)), "a duplicated role must not validate"
+
+    started_with_nulls = json.loads(json.dumps(registry))
+    successor = next(i for i in started_with_nulls["instances"] if i["role"] == SUCCESSOR)
+    successor["status"] = "RUNNING"
+    started_with_nulls["fp_run_active"] = True
+    assert list(validator.iter_errors(started_with_nulls)), (
+        "a started row with null t0/cohort/source must not validate"
+    )
+
+
+def test_the_overlay_guard_requires_the_declared_paths_and_role():
+    import check_fp_overlay
+
+    registry_identity = json.loads(Path(REGISTRY_PATH).read_text(encoding="utf-8"))["instances"][1][
+        "runtime_identity"
+    ]
+    good = {
+        "services": {
+            "freqtrade": {
+                "command": [
+                    "trade", "--logfile", registry_identity["log_path"],
+                    "--db-url", f"sqlite:///{registry_identity['db_path']}",
+                    "--config", "/freqtrade/user_data/config.json",
+                    "--strategy", "BaselineEmaRegimeV1",
+                ],
+                "environment": {"FREQTRADE__BOT_NAME": registry_identity["bot_name"]},
+                "volumes": [
+                    {"source": "./freqtrade/user_data", "target": "/freqtrade/user_data", "read_only": True},
+                    {"source": "./freqtrade/user_data/fp-control-2",
+                     "target": "/freqtrade/user_data/fp-control-2", "read_only": False},
+                ],
+            },
+            "fp-capture": {
+                "command": ["python", "/app/research/fp/capture.py", "--role=FP-CONTROL-2",
+                            f"--evidence-dir={registry_identity['evidence_dir']}"],
+                "volumes": [
+                    {"source": "./freqtrade/user_data/fp-control-2",
+                     "target": "/freqtrade/user_data/fp-control-2", "read_only": False},
+                ],
+            },
+        }
+    }
+    assert check_fp_overlay.check(good, SUCCESSOR) == []
+
+    # the closed role is refused outright
+    assert check_fp_overlay.check(good, HISTORICAL)
+
+    # a writable whole-user_data mount is refused
+    wide = json.loads(json.dumps(good))
+    wide["services"]["freqtrade"]["volumes"][0]["read_only"] = False
+    assert check_fp_overlay.check(wide, SUCCESSOR)
+
+    # a capture service that does not name the role is refused
+    unnamed = json.loads(json.dumps(good))
+    unnamed["services"]["fp-capture"]["command"] = ["python", "/app/research/fp/capture.py"]
+    assert check_fp_overlay.check(unnamed, SUCCESSOR)
+
+    # a bot name that is not the declared one is refused
+    wrong_bot = json.loads(json.dumps(good))
+    wrong_bot["services"]["freqtrade"]["environment"]["FREQTRADE__BOT_NAME"] = "fp-control-1"
+    assert check_fp_overlay.check(wrong_bot, SUCCESSOR)
+
+
+def test_the_resolver_quotes_every_value_it_emits():
+    """The launchers eval this output; an unquoted registry string would be code."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "scripts/fp_instance.py", SUCCESSOR],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0
+    emitted = dict(line.split("=", 1) for line in result.stdout.strip().splitlines())
+    assert set(emitted) == {
+        "FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME", "FP_DB_PATH", "FP_LOG_PATH", "FP_EVIDENCE_DIR", "FP_T0",
+    }
+    for key, value in emitted.items():
+        assert value == shlex.quote(shlex.split(value)[0] if value else ""), f"{key} is not shell-quoted"
+
+
+def test_reconciliation_requires_every_identity_field_it_claims():
+    from fp import reconcile
+
+    source = Path("research/fp/reconcile.py").read_text(encoding="utf-8")
+    assert "required_identity = (\"run_id\", \"runtime_id\", \"source_commit\")" in source
+    assert hasattr(reconcile, "reconcile")

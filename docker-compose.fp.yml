@@ -31,12 +31,19 @@ services:
     # configured here.
     command: >
       trade
-      --logfile /freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}/logs/freqtrade.log
-      --db-url sqlite:////freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}/tradesv3.sqlite
+      --logfile ${FP_LOG_PATH:?set by scripts/start_fp_control.sh after a fail-closed selection}
+      --db-url sqlite:///${FP_DB_PATH:?set by scripts/start_fp_control.sh after a fail-closed selection}
       --config /freqtrade/user_data/config.json
       --strategy BaselineEmaRegimeV1
     environment:
       FREQTRADE__BOT_NAME: ${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}
+    # The base stack mounts the whole of user_data writable, which would leave
+    # Freqtrade able to write the closed cohort's database and logs even though
+    # capture refuses to. Here it gets user_data read-only plus exactly one
+    # writable lane: the instance the launcher selected.
+    volumes:
+      - ./freqtrade/user_data:/freqtrade/user_data:ro
+      - ./freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}:/freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}
 
   freqtrade-exporter:
     container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-exporter

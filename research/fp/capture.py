@@ -1111,14 +1111,6 @@ def main(argv: list[str] | None = None) -> int:
             "recorded as WARMUP, contributing state and no outcome claim."
         ),
     )
-    parser.add_argument(
-        "--allow-undeclared-evidence-dir",
-        action="store_true",
-        help=(
-            "run against a directory the registry does not declare. For offline drills only: "
-            "the evidence it writes belongs to no registered instance and is not admissible."
-        ),
-    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
@@ -1132,8 +1124,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         select_instance(args.role)
         assert_paths_are_exclusive(args.role, evidence_dir)
-        if not args.allow_undeclared_evidence_dir:
-            assert_evidence_dir_is_declared(args.role, evidence_dir)
+        assert_evidence_dir_is_declared(args.role, evidence_dir)
     except InstanceSelectionError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
         return 5

@@ -89,16 +89,20 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None) -> dict:
     incidents = ledgers["incident"].records()
 
     # -- 2. every record has an identifiable author -----------------------
+    # The message claimed run_id, runtime_id and commit; only run_id was checked.
+    # A record whose runtime_id or source commit is missing cannot be tied to the
+    # instance that wrote it, which is the whole purpose of attribution.
+    required_identity = ("run_id", "runtime_id", "source_commit")
     unattributed = [
         r.seq
         for r in inputs + decisions + trades
-        if not (r.payload.get("identity") or {}).get("run_id")
+        if not all((r.payload.get("identity") or {}).get(field) for field in required_identity)
     ]
     findings.append(
         Finding(
             "record_attribution",
             FAIL if unattributed else PASS,
-            f"records without a run_id: {unattributed[:5]}" if unattributed else
+            f"records missing run_id/runtime_id/source_commit: {unattributed[:5]}" if unattributed else
             f"all {len(inputs) + len(decisions) + len(trades)} records carry a run_id, runtime_id and commit",
             len(unattributed),
         )

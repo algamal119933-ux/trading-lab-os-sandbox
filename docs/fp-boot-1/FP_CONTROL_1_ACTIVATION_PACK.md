@@ -271,7 +271,12 @@ python3 research/fp/preflight.py --require-pass    # exit 0 required before T0
 
 Only after A13 exits 0 and every item in section B passes.
 
-```bash
+```text
+HISTORICAL RECORD — NOT EXECUTABLE. This snippet selected the FP-CONTROL-1 row
+by name and wrote t0_utc, cohort_id, status and source_commit into it. That row
+is now CLOSED; running this would rewrite a closed cohort's history. It is fenced
+as text, not bash, so it cannot be lifted out and run.
+
 python3 - <<'PY'
 import json, pathlib, subprocess
 from datetime import datetime, timezone

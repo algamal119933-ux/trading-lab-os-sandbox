@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 
@@ -34,6 +35,17 @@ def resolve(role: str) -> dict:
     instance_dir = evidence_dir.rsplit("/", 2)[-2] if "/" in evidence_dir else ""
     if not instance_dir or not identity.get("bot_name"):
         raise InstanceSelectionError(f"{role} has no bound instance directory or bot name")
+    for field in ("db_path", "log_path"):
+        declared = identity.get(field)
+        if not declared:
+            raise InstanceSelectionError(f"{role} declares no {field}")
+        # The launcher consumes the declared paths verbatim; reconstructing them
+        # from the directory name would let the registry and the runtime disagree
+        # about where the database lives.
+        if not declared.startswith(f"/freqtrade/user_data/{instance_dir}/"):
+            raise InstanceSelectionError(
+                f"{role}.{field} ({declared}) is not inside its own lane /freqtrade/user_data/{instance_dir}/"
+            )
     return {
         "role": role,
         "instance_dir": instance_dir,
@@ -60,10 +72,19 @@ def main(argv: list[str] | None = None) -> int:
     if len(args) == 2:
         print(json.dumps(resolved, indent=2))
         return 0
-    print(f"FP_ROLE={resolved['role']}")
-    print(f"FP_INSTANCE_DIR={resolved['instance_dir']}")
-    print(f"FP_BOT_NAME={resolved['bot_name']}")
-    print(f"FP_T0={resolved['t0_utc'] or 'T0_NOT_FROZEN'}")
+    # Every value is shell-quoted. The launchers `eval` this output, and an
+    # unquoted registry string would be shell input rather than data.
+    emit = {
+        "FP_ROLE": resolved["role"],
+        "FP_INSTANCE_DIR": resolved["instance_dir"],
+        "FP_BOT_NAME": resolved["bot_name"],
+        "FP_DB_PATH": resolved["db_path"] or "",
+        "FP_LOG_PATH": resolved["log_path"] or "",
+        "FP_EVIDENCE_DIR": resolved["evidence_dir"],
+        "FP_T0": resolved["t0_utc"] or "T0_NOT_FROZEN",
+    }
+    for key, value in emit.items():
+        print(f"{key}={shlex.quote(value)}")
     return 0
 
 

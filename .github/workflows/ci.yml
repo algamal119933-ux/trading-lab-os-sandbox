@@ -259,11 +259,11 @@ jobs:
           # resolved the same fail-closed way the launcher resolves it. Rendering
           # without a selection is now a hard failure rather than an empty lane.
           eval "$(python3 scripts/fp_instance.py FP-CONTROL-2)"
-          export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME
+          export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME FP_DB_PATH FP_LOG_PATH FP_EVIDENCE_DIR
           docker compose -f docker-compose.yml -f docker-compose.fp.yml config > /tmp/fp-rendered.yml
           docker compose -f docker-compose.yml -f docker-compose.fp.yml config --services
           python3 -m pip install --quiet "PyYAML==6.0.3"
-          python3 scripts/check_fp_overlay.py /tmp/fp-rendered.yml "$FP_INSTANCE_DIR"
+          python3 scripts/check_fp_overlay.py /tmp/fp-rendered.yml "$FP_ROLE"
 
       - name: An unselected FP overlay render must fail closed
         run: |

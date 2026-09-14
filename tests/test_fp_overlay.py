@@ -14,25 +14,41 @@ import yaml
 
 import check_fp_overlay
 
+# The role the guard is asked about. FP-CONTROL-1 is closed, so the only
+# instance a rendered stack may describe is the pre-T0 successor.
+ROLE = "FP-CONTROL-2"
+LANE = "/freqtrade/user_data/fp-control-2"
+
 SAFE = {
     "services": {
         "freqtrade": {
             "command": [
                 "trade",
-                "--logfile", "/freqtrade/user_data/fp-control-1/logs/freqtrade.log",
-                "--db-url", "sqlite:////freqtrade/user_data/fp-control-1/tradesv3.sqlite",
+                "--logfile", f"{LANE}/logs/freqtrade.log",
+                "--db-url", f"sqlite:///{LANE}/tradesv3.sqlite",
                 "--config", "/freqtrade/user_data/config.json",
                 "--strategy", "BaselineEmaRegimeV1",
             ],
-            "environment": {"FREQTRADE__API_SERVER__JWT_SECRET_KEY": "local-only"},
+            "environment": {
+                "FREQTRADE__API_SERVER__JWT_SECRET_KEY": "local-only",
+                "FREQTRADE__BOT_NAME": "fp-control-2",
+            },
+            "volumes": [
+                {"source": "./freqtrade/user_data", "target": "/freqtrade/user_data", "read_only": True},
+                {"source": "./freqtrade/user_data/fp-control-2", "target": LANE, "read_only": False},
+            ],
         },
         "fp-capture": {
+            "command": [
+                "python", "/app/research/fp/capture.py",
+                f"--role={ROLE}", f"--evidence-dir={LANE}/evidence",
+            ],
             "volumes": [
                 {"source": "./research", "target": "/app/research", "read_only": True},
                 {"source": "./freqtrade", "target": "/app/freqtrade", "read_only": True},
                 {
-                    "source": "./freqtrade/user_data/fp-control-1",
-                    "target": "/freqtrade/user_data/fp-control-1",
+                    "source": "./freqtrade/user_data/fp-control-2",
+                    "target": LANE,
                     "read_only": False,
                 },
             ],
@@ -47,19 +63,19 @@ def rendered() -> dict:
 
 
 def test_the_safe_overlay_passes(rendered):
-    assert check_fp_overlay.check(rendered) == []
+    assert check_fp_overlay.check(rendered, ROLE) == []
 
 
 def test_local_api_secrets_are_not_mistaken_for_exchange_credentials(rendered):
     """The stack passes its own REST-API secrets between services legitimately."""
     rendered["services"]["freqtrade"]["environment"]["FREQTRADE__API_SERVER__PASSWORD"] = "x"
-    assert check_fp_overlay.check(rendered) == []
+    assert check_fp_overlay.check(rendered, ROLE) == []
 
 
 def test_the_smoke_strategy_is_rejected(rendered):
     command = rendered["services"]["freqtrade"]["command"]
     command[command.index("BaselineEmaRegimeV1")] = "PlumbingSmokeStrategy"
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any("BASELINE-1" in p for p in problems)
     assert any("smoke strategy" in p for p in problems)
 
@@ -70,38 +86,40 @@ def test_shared_paths_are_rejected(rendered):
         "trade", "--db-url", "sqlite:////freqtrade/user_data/tradesv3.sqlite",
         "--strategy", "BaselineEmaRegimeV1",
     ]
-    problems = check_fp_overlay.check(rendered)
-    assert any("isolated paths" in p for p in problems)
+    problems = check_fp_overlay.check(rendered, ROLE)
+    # The guard now names the declared path it did not find, which is a more
+    # precise complaint than "isolated paths" was.
+    assert any("declared db_path" in p or "writes outside" in p for p in problems), problems
 
 
 def test_a_writable_code_mount_is_rejected(rendered):
     rendered["services"]["fp-capture"]["volumes"][0]["read_only"] = False
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any("writable mount" in p for p in problems)
 
 
 def test_a_missing_capture_service_is_rejected(rendered):
     del rendered["services"]["fp-capture"]
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any("no fp-capture" in p for p in problems)
 
 
 @pytest.mark.parametrize("endpoint", ["forcebuy", "forceenter", "forcesell", "forceexit"])
 def test_an_execution_endpoint_anywhere_is_rejected(rendered, endpoint):
     rendered["services"]["freqtrade"]["command"].append(f"--{endpoint}")
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any(endpoint in p for p in problems)
 
 
 def test_an_exchange_credential_is_rejected(rendered):
     rendered["services"]["freqtrade"]["environment"]["BINANCE_API_SECRET"] = "nope"
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any("exchange credential" in p for p in problems)
 
 
 def test_a_live_trading_flag_is_rejected(rendered):
     rendered["services"]["freqtrade"]["command"].extend(["--dry-run", "false"])
-    problems = check_fp_overlay.check(rendered)
+    problems = check_fp_overlay.check(rendered, ROLE)
     assert any("live-trading flag" in p for p in problems)
 
 
@@ -135,7 +153,7 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
     # check is that it *renders* onto the selected instance's declared paths —
     # a template that drifted would land the runtime somewhere the registry
     # never described, which is the drift this test exists to catch.
-    instance = next(i for i in registry["instances"] if i["role"] == "FP-CONTROL-2")
+    instance = next(i for i in registry["instances"] if i["role"] == ROLE)
     identity = instance["runtime_identity"]
     assert instance["status"] == "NOT_STARTED", "the qualifying instance must be pre-T0"
     instance_dir = identity["evidence_dir"].rsplit("/", 2)[-2]
@@ -149,16 +167,19 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
         "FP_INSTANCE_DIR": instance_dir,
         "FP_BOT_NAME": identity["bot_name"],
         "FP_ROLE": instance["role"],
+        "FP_DB_PATH": identity["db_path"],
+        "FP_LOG_PATH": identity["log_path"],
+        "FP_EVIDENCE_DIR": identity["evidence_dir"],
     }
 
     def render(text: str) -> str:
         def substitute(match):
             return values[match.group(1)]
 
-        return _re.sub(r"\$\{(FP_INSTANCE_DIR|FP_BOT_NAME|FP_ROLE)(?::\?[^}]*)?\}", substitute, text)
+        return _re.sub(r"\$\{(FP_INSTANCE_DIR|FP_BOT_NAME|FP_ROLE|FP_DB_PATH|FP_LOG_PATH|FP_EVIDENCE_DIR)(?::\?[^}]*)?\}", substitute, text)
 
     raw_overlay = (repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8")
-    for variable in ("FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME"):
+    for variable in ("FP_ROLE", "FP_INSTANCE_DIR", "FP_BOT_NAME", "FP_DB_PATH", "FP_LOG_PATH"):
         assert f"${{{variable}:?" in raw_overlay, (
             f"{variable} must be required, not defaulted: an unset variable renders an unnamed lane "
             "with the whole of user_data writable"

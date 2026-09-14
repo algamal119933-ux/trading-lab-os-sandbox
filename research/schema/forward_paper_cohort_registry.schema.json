@@ -30,6 +30,12 @@
       "type": "array",
       "maxItems": 4,
       "uniqueItems": true,
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "FP-CONTROL-1" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CONTROL-2" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-A" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-B" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 }
+      ],
       "description": "Section 4: control instances plus at most two survivor candidates. Capacity is four because a closed control is kept as history beside the pre-T0 successor that replaced it.",
       "items": {
         "type": "object",
@@ -137,6 +143,18 @@
           }
         },
         "allOf": [
+          {
+            "description": "The converse invariant: a row that has started - RUNNING, PAUSED or CLOSED - must carry the T0, cohort id and source commit that were frozen together by the one authorised act. Without this, a started row with nulls would read as a run that has no boundary.",
+            "if": { "required": ["status"], "properties": { "status": { "enum": ["RUNNING", "PAUSED", "CLOSED"] } } },
+            "then": {
+              "properties": {
+                "t0_utc": { "type": "string" },
+                "cohort_id": { "type": "string" },
+                "runtime_identity": { "properties": { "source_commit": { "type": "string" } } }
+              },
+              "required": ["t0_utc", "cohort_id"]
+            }
+          },
           {
             "description": "A NOT_STARTED row has started nothing, so it may carry no T0, no cohort id and no source commit. Without this, a pre-T0 successor could quietly acquire the identity of a run that never happened.",
             "if": { "required": ["status"], "properties": { "status": { "const": "NOT_STARTED" } } },
