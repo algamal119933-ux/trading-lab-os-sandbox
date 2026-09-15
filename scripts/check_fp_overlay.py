@@ -122,6 +122,10 @@ def check(rendered: dict, role: str) -> list[str]:
         lane = fp_lane.resolve_lane(role, allowed_statuses=fp_lane.EXECUTABLE_STATUSES)
     except Exception as exc:  # noqa: BLE001 — any selection failure is a refusal
         return [f"the overlay names an unusable instance {role}: {exc}"]
+    try:
+        lane.assert_root_is_canonical()
+    except Exception as exc:  # noqa: BLE001
+        return [f"the selected lane is not canonical: {exc}"]
     others = fp_lane.other_lanes(role)
 
     identity = {

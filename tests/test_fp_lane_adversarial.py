@@ -579,53 +579,73 @@ def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
 
 
 def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatch):
-    """A foreign-role record must be refused — proven with a real record.
+    """Through preflight.run(), not a private helper, and for every ledger.
 
-    The previous version of this test created no foreign record, accepted either
-    verdict, and deleted the real FP-CONTROL-2 lane on the way out. It touches
-    nothing outside tmp_path now, and it fails if the refusal does not happen.
+    The previous version called `_check_hashes_match_registry` directly, so it
+    would have passed even if the real gate stopped invoking that check. This
+    drives the public entry point and asserts the check's own verdict inside the
+    produced report.
     """
     from fp import ledger as fp_ledger, preflight
 
     monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
+
+    def report_for(ledger_name: str, identity: dict) -> dict:
+        evidence = tmp_path / ledger_name
+        ledgers = fp_ledger.open_ledgers(evidence)
+        ledgers[ledger_name].append({"candle_ts": 1_700_000_000_000, "identity": identity})
+        return preflight.run(
+            runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
+        )
+
+    def hash_check(report: dict) -> dict:
+        return next(c for c in report["checks"] if "hashes match registry" in c["check"])
+
+    foreign = {
+        "runtime_id": "FP-CONTROL-1:fp-control-1", "run_id": "f" * 32, "role": CLOSED,
+        "cohort_id": "FP-CONTROL-1-20260908T121513Z", "source_commit": "0" * 40,
+        "strategy_sha256": "0" * 64,
+    }
+    # A foreign record in ANY ledger must be caught, not only in decisions.
+    for ledger_name in ("decision", "input", "trade", "incident"):
+        check = hash_check(report_for(ledger_name, foreign))
+        assert check["result"] == "FAIL", (ledger_name, check)
+        assert CLOSED in check["evidence"] or "role" in check["evidence"], (ledger_name, check)
+
+    unstamped = hash_check(report_for("decision", {"run_id": "a" * 32}))
+    assert unstamped["result"] == "FAIL", unstamped
+    assert "no role" in unstamped["evidence"]
+
+
+def test_preflight_compares_the_stamped_config_hash(tmp_path, monkeypatch):
+    """A record written against some other config must not pass unnoticed."""
+    from fp import ledger as fp_ledger, preflight
+
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
 
     evidence = tmp_path / "evidence"
     ledgers = fp_ledger.open_ledgers(evidence)
-    foreign = {
+    ledgers["decision"].append({
         "candle_ts": 1_700_000_000_000,
         "identity": {
-            "runtime_id": "FP-CONTROL-1:fp-control-1",
-            "run_id": "f" * 32,
-            "role": CLOSED,                      # written by the closed cohort
-            "cohort_id": "FP-CONTROL-1-20260908T121513Z",
-            "source_commit": "0" * 40,
-            "strategy_sha256": "0" * 64,
+            "runtime_id": "FP-CONTROL-2:fp-control-2", "run_id": "a" * 32, "role": SUCCESSOR,
+            "cohort_id": None, "source_commit": "0" * 40,
+            "strategy_sha256": capture.sha256_file(capture.STRATEGY_PATH),
+            "config_sha256": "d" * 64,          # not the config on disk
         },
-    }
-    ledgers["decision"].append(foreign)
-
-    runtime = preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
-    monkeypatch.setattr(
-        capture, "assert_evidence_dir_is_declared", lambda *a, **k: None
-    )  # the lane binding is proven separately; here the role is under test
-    result, evidence_text, _ = preflight._check_hashes_match_registry(runtime)
-    assert result == "FAIL", (result, evidence_text)
-    assert CLOSED in evidence_text or "role" in evidence_text
-
-    # And a record with no role at all is unattributable, not merely silent.
-    unstamped = tmp_path / "unstamped"
-    unstamped_ledgers = fp_ledger.open_ledgers(unstamped)
-    unstamped_ledgers["decision"].append({"candle_ts": 1, "identity": {"run_id": "a" * 32}})
-    result2, text2, _ = preflight._check_hashes_match_registry(
-        preflight.RuntimeContext(evidence_dir=unstamped, role=SUCCESSOR)
-    )
-    assert result2 == "FAIL", (result2, text2)
-    assert "no role" in text2
+    })
+    report = preflight.run(runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR))
+    check = next(c for c in report["checks"] if "hashes match registry" in c["check"])
+    assert check["result"] == "FAIL", check
+    assert "config hash" in check["evidence"], check
 
 
 def test_reconciliation_requires_role_on_every_record(tmp_path):
-    """The other consumer of the same contract."""
+    """Attribution that is never compared proves nothing."""
     from fp import ledger as fp_ledger, reconcile
 
     evidence = tmp_path / "evidence"
@@ -634,9 +654,26 @@ def test_reconciliation_requires_role_on_every_record(tmp_path):
         "market_event_id": "BTC/USDT|1h|1",
         "identity": {"run_id": "a" * 32, "runtime_id": "x", "source_commit": "0" * 40},
     })
-    report = reconcile.reconcile(evidence)
+    report = reconcile.reconcile(evidence, expected_role=SUCCESSOR)
     attribution = [f for f in report["findings"] if f["check"] == "record_attribution"]
     assert attribution and attribution[0]["result"] == "FAIL", report["findings"]
+
+
+@pytest.mark.parametrize("ledger_name", ["input", "decision", "trade", "incident"])
+def test_reconciliation_rejects_a_foreign_role_in_any_ledger(tmp_path, ledger_name):
+    """A foreign input or incident is as damaging as a foreign decision."""
+    from fp import ledger as fp_ledger, reconcile
+
+    evidence = tmp_path / ledger_name
+    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers[ledger_name].append({
+        "market_event_id": "BTC/USDT|1h|1",
+        "identity": {"run_id": "f" * 32, "runtime_id": "FP-CONTROL-1:fp-control-1",
+                     "source_commit": "0" * 40, "role": CLOSED},
+    })
+    report = reconcile.reconcile(evidence, expected_role=SUCCESSOR)
+    binding = [f for f in report["findings"] if f["check"] == "record_role_binding"]
+    assert binding and binding[0]["result"] == "FAIL", (ledger_name, report["findings"])
 
 
 def test_host_container_mapping_against_independently_written_paths():
@@ -710,31 +747,55 @@ def test_a_plain_named_volume_is_still_accepted():
     assert check_fp_overlay.check(rendered, SUCCESSOR) == []
 
 
-def test_the_launcher_refuses_a_symlinked_lane_before_creating_anything(tmp_path):
-    """Validation must precede mkdir: a symlinked lane was materialised first."""
-    script = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
-    validate_at = script.index("FP_LANE_FAIL")
-    mkdir_at = script.index('mkdir -p "$FP_DIR/logs"')
-    assert validate_at < mkdir_at, "the lane check must run before the directories are created"
+def test_an_escaped_lane_root_is_refused_by_every_consumer(tmp_path, monkeypatch):
+    """A lane root that resolves outside user_data owns nothing.
 
-    # Behavioural half: a lane directory that resolves elsewhere is refused.
-    decoy = tmp_path / "elsewhere"
-    decoy.mkdir()
-    fake_lane = tmp_path / "fp-control-2"
-    fake_lane.symlink_to(decoy, target_is_directory=True)
-    code = (
-        "import sys; sys.path.insert(0, 'research');"
-        "from pathlib import Path; from fp.lane import resolve_lane;"
-        f"lane = resolve_lane({SUCCESSOR!r});"
-        f"resolved = Path({str(fake_lane)!r}).resolve();"
-        "print('REFUSED' if resolved != lane.host_instance_dir.resolve() else 'ACCEPTED')"
-    )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
-    assert out.stdout.strip() == "REFUSED", out
+    Comparing the given path against the declared path made an escaping symlink
+    agree with itself: both sides followed the same link and matched, so the
+    rendered overlay passed and the launcher created directories outside
+    user_data. Canonicality is now asked of the root itself.
+    """
+    escape = tmp_path / "elsewhere"
+    escape.mkdir()
+    link = lane.HOST_USER_DATA / "fp-control-2"
+    assert not link.exists(), "the real lane must not exist during this test"
+    link.symlink_to(escape, target_is_directory=True)
+    try:
+        escaped = lane.resolve_lane(SUCCESSOR)
+        assert not escaped.root_is_canonical()
+        assert not escaped.owns_host_path(escaped.host_instance_dir)
+        with pytest.raises(lane.LaneError):
+            escaped.assert_root_is_canonical()
+        # the compose guard refuses the rendered graph outright
+        problems = check_fp_overlay.check(rendered_overlay(), SUCCESSOR)
+        assert problems and any("canonical" in p for p in problems), problems
+        # and the launcher refuses before creating anything
+        result = subprocess.run(["bash", "scripts/start_fp_control.sh", SUCCESSOR],
+                                capture_output=True, text=True, timeout=180)
+        assert result.returncode != 0, result.stdout
+        assert "FP_LANE_FAIL" in result.stderr or "FP_OVERLAY_FAIL" in result.stderr, result.stderr
+        assert not (escape / "logs").exists(), "the launcher created directories despite refusing"
+        assert not (escape / "evidence").exists()
+    finally:
+        link.unlink()
 
 
-def test_the_launcher_hashes_the_runtime_config_not_the_example():
-    """config.json is what the engine reads; the example is not."""
-    script = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
-    assert 'os.environ.get("HOST_CONFIG", "freqtrade/user_data/config.json")' in script
-    assert '"config_sha256": "freqtrade/user_data/config.paper.json.example"' not in script
+def test_the_launcher_detects_runtime_config_drift(tmp_path):
+    """Behavioural: a drifted config.json must stop the launcher.
+
+    The previous proof read the script's source text, which would have passed a
+    launcher that hashed the right file and then ignored the answer.
+    """
+    runtime_config = Path("freqtrade/user_data/config.json")
+    original = runtime_config.read_bytes()
+    drifted = json.loads(original)
+    drifted["stake_amount"] = drifted["stake_amount"] + 1      # sizing drift
+    try:
+        runtime_config.write_text(json.dumps(drifted, indent=2) + "\n", encoding="utf-8")
+        result = subprocess.run(["bash", "scripts/start_fp_control.sh", SUCCESSOR],
+                                capture_output=True, text=True, timeout=180)
+        assert result.returncode != 0, "a drifted runtime config must stop the launcher"
+        assert "config_sha256" in result.stderr or "FP_IDENTITY_FAIL" in result.stderr, result.stderr
+    finally:
+        runtime_config.write_bytes(original)
+    assert runtime_config.read_bytes() == original

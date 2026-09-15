@@ -63,7 +63,13 @@ def _live(records) -> list:
     return [r for r in records if not r.payload.get("erratum")]
 
 
-def reconcile(evidence_dir: Path, pairs: list[str] | None = None) -> dict:
+def reconcile(evidence_dir: Path, pairs: list[str] | None = None, expected_role: str | None = None) -> dict:
+    """Cross-ledger reconciliation.
+
+    ``expected_role`` binds the evidence to the instance it claims to belong to.
+    Without it, reconciliation reported PASS over records written by another
+    role — attribution that is recorded but never compared proves nothing.
+    """
     evidence_dir = Path(evidence_dir)
     ledgers = fp_ledger.open_ledgers(evidence_dir)
 
@@ -93,17 +99,41 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None) -> dict:
     # A record whose runtime_id or source commit is missing cannot be tied to the
     # instance that wrote it, which is the whole purpose of attribution.
     required_identity = ("run_id", "runtime_id", "source_commit", "role")
+    # Every live record in every ledger, not only the three the earlier version
+    # happened to concatenate: a foreign input or incident is exactly as
+    # damaging as a foreign decision.
+    live = [
+        record
+        for name in ("input", "decision", "trade", "incident")
+        for record in ledgers[name].records()
+        if not record.payload.get("erratum")
+    ]
     unattributed = [
         r.seq
-        for r in inputs + decisions + trades
+        for r in live
         if not all((r.payload.get("identity") or {}).get(field) for field in required_identity)
     ]
+    foreign = []
+    if expected_role is not None:
+        foreign = [
+            r.seq for r in live
+            if (r.payload.get("identity") or {}).get("role") not in (None, expected_role)
+        ]
+        findings.append(
+            Finding(
+                "record_role_binding",
+                FAIL if foreign else PASS,
+                f"records written by another role: {foreign[:5]}" if foreign else
+                f"all {len(live)} live records carry role {expected_role}",
+                len(foreign),
+            )
+        )
     findings.append(
         Finding(
             "record_attribution",
             FAIL if unattributed else PASS,
             f"records missing run_id/runtime_id/source_commit/role: {unattributed[:5]}" if unattributed else
-            f"all {len(inputs) + len(decisions) + len(trades)} records carry a run_id, runtime_id, commit and role",
+            f"all {len(live)} live records carry a run_id, runtime_id, commit and role",
             len(unattributed),
         )
     )

@@ -52,6 +52,7 @@ from fp import market as fp_market  # noqa: E402
 from fp import reconcile as fp_reconcile  # noqa: E402
 
 EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+RUNTIME_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.json"
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 PASS, FAIL, UNPROVEN = "PASS", "FAIL", "UNPROVEN"
@@ -493,13 +494,24 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     if runtime is None or not runtime.has_evidence:
         return UNPROVEN, "hash comparison requires the running instance; not executed here", {}
 
+    # The runtime config is what the engine reads. Hashing only the committed
+    # example meant a drifted config.json could not be detected, and a record
+    # stamped with any config hash at all was accepted.
+    runtime_config = RUNTIME_CONFIG if RUNTIME_CONFIG.exists() else EXAMPLE_CONFIG
     on_disk = {
         "strategy_sha256": fp_capture.sha256_file(fp_capture.STRATEGY_PATH),
-        "config_sha256": fp_capture.sha256_file(EXAMPLE_CONFIG),
+        "config_sha256": fp_capture.sha256_file(runtime_config),
     }
 
     ledgers = fp_ledger.open_ledgers(Path(runtime.evidence_dir))
-    live_records = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+    # Every ledger, not only decisions: a foreign input or incident record is
+    # just as unattributable, and checking one ledger let the others through.
+    live_records = [
+        record
+        for name in ("input", "decision", "trade", "incident")
+        for record in ledgers[name].records()
+        if not record.payload.get("erratum")
+    ]
     if runtime.role:
         stamped_roles = {(r.payload.get("identity") or {}).get("role") for r in live_records}
         # A record with no role is not "not contradicting" — it is unattributable,
@@ -531,6 +543,14 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
         return UNPROVEN, "the runtime has stamped no strategy hash onto its evidence yet", {}
     if len(stamped) > 1:
         return FAIL, f"the running instance changed strategy hash mid-run: {sorted(stamped)}", {}
+
+    stamped_configs = {(r.payload.get("identity") or {}).get("config_sha256") for r in live_records}
+    stamped_configs.discard(None)
+    if stamped_configs and stamped_configs != {on_disk["config_sha256"]}:
+        return FAIL, (
+            f"the evidence was written against config hash(es) {sorted(s[:12] for s in stamped_configs)}, "
+            f"but {runtime_config.name} hashes to {on_disk['config_sha256'][:12]}"
+        ), {}
 
     mismatches = []
     for item in frozen:

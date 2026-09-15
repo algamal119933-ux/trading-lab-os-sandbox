@@ -76,10 +76,31 @@ class Lane:
         return container_to_host(container_path)
 
     def owns_host_path(self, candidate: Path) -> bool:
-        """True when a real host path lies inside this lane, symlinks resolved."""
+        """True when a real host path lies inside this lane, symlinks resolved.
+
+        A lane whose own root resolves outside the canonical user_data directory
+        owns nothing: comparing two paths that both follow the same escaping
+        symlink makes them agree with each other while agreeing with nothing
+        real, which is how an escaped lane passed every check.
+        """
+        if not self.root_is_canonical():
+            return False
         resolved = _resolve(candidate)
         lane = _resolve(self.host_instance_dir)
         return resolved == lane or lane in resolved.parents
+
+    def root_is_canonical(self) -> bool:
+        """The lane root must really live under the project's user_data."""
+        root = _resolve(HOST_USER_DATA)
+        resolved = _resolve(self.host_instance_dir)
+        return resolved == root or root in resolved.parents
+
+    def assert_root_is_canonical(self) -> None:
+        if not self.root_is_canonical():
+            raise LaneError(
+                f"{self.role}'s lane root {self.host_instance_dir} resolves to "
+                f"{_resolve(self.host_instance_dir)}, outside {_resolve(HOST_USER_DATA)}"
+            )
 
     def matches_evidence_dir(self, candidate: Path | str) -> bool:
         """The declared evidence directory, named in either namespace.

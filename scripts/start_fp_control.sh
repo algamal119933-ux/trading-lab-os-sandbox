@@ -111,6 +111,16 @@ except LaneError as exc:
     print(f"FP_LANE_FAIL: {exc}", file=sys.stderr)
     raise SystemExit(3)
 
+# Two things are checked, not one. First: the declared lane root must really
+# live under the project's user_data. Comparing the given path against the
+# declared path alone made an escaping symlink agree with itself — both sides
+# resolved to the same place outside user_data and matched.
+try:
+    lane.assert_root_is_canonical()
+except LaneError as exc:
+    print(f"FP_LANE_FAIL: {exc}", file=sys.stderr)
+    raise SystemExit(3)
+
 # resolve() follows every existing symlink component, so a lane that points
 # somewhere else resolves somewhere else and is refused here, before mkdir.
 resolved = lane_dir.resolve()
