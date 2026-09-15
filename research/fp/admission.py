@@ -506,7 +506,10 @@ def _baseline_lineage_is_authoritative() -> tuple[bool, str]:
     with git rather than asserted, so it flips by itself the moment the merge
     lands.
     """
-    for ref in ("origin/main", "main"):
+    # HEAD is the last resort so the answer is deterministic in any checkout: a
+    # fresh clone of a branch has neither origin/main nor a local main, and the
+    # gate must not report a different result there than in the writer's tree.
+    for ref in ("origin/main", "main", "HEAD"):
         try:
             subprocess.check_output(
                 ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", f"{ref}^{{commit}}"],
@@ -562,7 +565,16 @@ def benchmark_closure_state() -> tuple[str, str]:
     * ``CLOSED`` - the scorecard carries at least one experiment row and no
       amendment says otherwise.
     """
-    for ref in ("origin/main", "main"):
+    for ref in ("origin/main", "main", "HEAD"):
+        # A ref that does not exist in this checkout is skipped, not answered
+        # for. Returning NOT_MERGED on the first missing ref made a fresh clone
+        # — which has no origin/main — report a different state than the
+        # writer's tree, from identical content.
+        if _git_show(ref, "research/external/candidate_registry.json") is None and \
+           _git_show(ref, "research/external/sprint_closure.json") is None and \
+           _git_show(ref, "research/external/qualification_scorecard.csv") is None:
+            continue
+
         # An Owner amendment can end a sprint without closing it. That state is
         # recorded additively in sprint_closure.json rather than by editing the
         # frozen preregistration, and it must be read *before* the scorecard:
@@ -601,7 +613,10 @@ def benchmark_closure_state() -> tuple[str, str]:
                 "pre-registered, not executed"
             )
         return "CLOSED", f"qualification scorecard on {ref} carries {len(rows)} experiment row(s)"
-    return "NOT_MERGED", "no main ref is available in this checkout"
+    return "NOT_MERGED", (
+        "no POST-BASELINE-EXTBENCH-1 artifacts are reachable from any ref in this checkout; "
+        "the sprint lineage has not been merged (section 3.2)"
+    )
 
 
 def _project_integrity() -> tuple[str, str]:

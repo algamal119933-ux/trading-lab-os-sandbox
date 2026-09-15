@@ -43,6 +43,8 @@ import yaml
 REGISTRY_PATH = Path(__file__).resolve().parent.parent / "research/fp/records/forward_paper_cohort_registry.json"
 FORBIDDEN_ENDPOINTS = ("forcebuy", "forceenter", "forcesell", "forceexit")
 STRATEGY_NAME = "BaselineEmaRegimeV1"
+# Sentinel target for storage the render cannot describe.
+UNRESOLVABLE_TARGET = "<unresolvable-container-reference>"
 USER_DATA_HOST = (REGISTRY_PATH.parent.parent.parent.parent / "freqtrade" / "user_data").resolve()
 
 
@@ -112,9 +114,12 @@ def effective_mounts(rendered: dict, service_name: str, _seen: tuple[str, ...] =
     for entry in service.get("volumes_from") or []:
         text = str(entry)
         if text.startswith("container:"):
-            # A raw container reference cannot be resolved from the render, so it
-            # is treated as an unknown writable source rather than ignored.
-            mounts.append((text, "", False, "bind"))
+            # A raw container reference names storage this render cannot
+            # describe, so its contents are unknown. Unknown plus writable is
+            # refused rather than filtered out: the previous version appended it
+            # as a mount with no target, and the lane filter then dropped it.
+            mode_is_ro = text.endswith(":ro")
+            mounts.append((text, UNRESOLVABLE_TARGET, mode_is_ro, "bind"))
             continue
         parts = text.split(":")
         source_service = parts[0]
@@ -194,6 +199,15 @@ def check(rendered: dict, role: str) -> list[str]:
         for source, target, read_only, kind in effective_mounts(rendered_volumes, service_name):
             if read_only:
                 continue  # shared read-only mounts are fine; they write nothing
+            if target == UNRESOLVABLE_TARGET:
+                if not read_only:
+                    found.append(
+                        f"{service_name} takes writable storage from {source}, which this render "
+                        "cannot describe; an undescribable writable source cannot be shown to stay "
+                        "out of another instance's lane"
+                    )
+                continue
+
             host = None
             if kind == "volume":
                 # A plain named volume has no host path and cannot alias a lane.

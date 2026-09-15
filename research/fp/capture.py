@@ -1160,10 +1160,14 @@ def main(argv: list[str] | None = None) -> int:
         # a stand-in: refusing here is what stops records being written against
         # one config and attributed to another.
         config_path = Path(args.config).resolve()
-        if config_path.name != RUNTIME_CONFIG_PATH.name:
+        # Not merely "a file called config.json": the declared runtime path, in
+        # either namespace. Accepting any config.json anywhere let a runtime
+        # stamp a hash from a file the engine was not reading.
+        declared_suffix = Path("freqtrade/user_data") / RUNTIME_CONFIG_PATH.name
+        if not str(config_path).endswith(str(declared_suffix)):
             raise InstanceSelectionError(
-                f"capture must run against the runtime configuration "
-                f"{RUNTIME_CONFIG_PATH.name}, not {config_path.name}"
+                f"capture must run against the declared runtime configuration "
+                f".../{declared_suffix}, not {config_path}"
             )
         if not config_path.is_file():
             raise InstanceSelectionError(f"the runtime configuration {config_path} does not exist")

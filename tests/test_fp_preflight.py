@@ -154,7 +154,9 @@ def test_preflight_passes_when_every_check_passes(monkeypatch):
         "_check_external_features",
         "_check_db_isolation",
     ):
-        monkeypatch.setattr(preflight, name, lambda: ("PASS", "stub"))
+        # The config-reading checks now take the runtime, so that they read the
+        # configuration the instance is actually running under.
+        monkeypatch.setattr(preflight, name, lambda runtime=None: ("PASS", "stub"))
     # Checks that may interrogate a live runtime take the runtime and return
     # their own evidence detail alongside the verdict.
     for name in (

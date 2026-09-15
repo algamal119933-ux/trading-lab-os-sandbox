@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import json
 import sys
+
+# Tests must leave the tree exactly as they found it; a stray __pycache__ is a
+# write into the repository and makes a read-only clean checkout differ.
+sys.dont_write_bytecode = True
 from pathlib import Path
 
 import pytest

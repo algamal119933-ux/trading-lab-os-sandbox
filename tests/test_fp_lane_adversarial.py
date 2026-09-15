@@ -919,3 +919,74 @@ def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
     after = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
     assert after == before, f"the authoritative tree changed:\n{before}\n--- became ---\n{after}"
     assert not Path("freqtrade/user_data/fp-control-2").exists()
+
+
+def test_storage_from_an_undescribable_container_reference_is_refused():
+    """`volumes_from: [container:...]` names storage the render cannot describe.
+
+    The earlier version appended it as a mount with no target, and the lane
+    filter then dropped it — so an undescribable *writable* source passed. It is
+    refused now, while a read-only one stays acceptable.
+    """
+    rendered = rendered_overlay()
+    rendered["services"]["some-future-sidecar"] = {
+        "image": "busybox",
+        "volumes_from": ["container:history-holder:rw"],
+    }
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert problems, "writable storage from an undescribable source must be refused"
+    assert any("undescribable" in p or "cannot describe" in p for p in problems), problems
+
+    read_only = json.loads(json.dumps(rendered))
+    read_only["services"]["some-future-sidecar"]["volumes_from"] = ["container:history-holder:ro"]
+    assert check_fp_overlay.check(read_only, SUCCESSOR) == []
+
+
+def test_capture_requires_the_declared_runtime_config_path(tmp_path):
+    """Not merely a file named config.json: the declared runtime path."""
+    decoy = tmp_path / "config.json"
+    decoy.write_bytes(Path("freqtrade/user_data/config.paper.json.example").read_bytes())
+    result = subprocess.run(
+        [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
+         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--config", str(decoy), "--cycles", "1"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode != 0, result.stdout
+    assert "declared runtime configuration" in result.stderr, result.stderr
+
+
+def test_preflight_validates_the_runtime_config_when_one_is_attached(tmp_path, monkeypatch):
+    """With a runtime attached, the safety checks must read its own config."""
+    from fp import preflight
+
+    runtime_config = runtime_config_for(tmp_path, monkeypatch)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
+    report = preflight.run(runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR))
+    guard = next(c for c in report["checks"] if c["id"] == 1)
+    assert runtime_config.name in guard["evidence"], guard
+
+    # Without a runtime the template is the only configuration that exists.
+    plain = preflight.run()
+    assert "config.paper.json.example" in next(c for c in plain["checks"] if c["id"] == 1)["evidence"]
+
+
+def test_the_lineage_check_answers_the_same_way_in_a_fresh_clone(tmp_path):
+    """A clone of a branch has neither origin/main nor main; the answer must hold."""
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--single-branch",
+                    "--branch", subprocess.run(["git", "branch", "--show-current"],
+                                               capture_output=True, text=True, check=True).stdout.strip(),
+                    ".", str(clone)],
+                   capture_output=True, text=True, timeout=300, check=True)
+    subprocess.run(["git", "-C", str(clone), "remote", "remove", "origin"], capture_output=True, check=True)
+    code = (
+        "import sys, json; sys.path.insert(0, 'research');"
+        "from fp import admission;"
+        "print(json.dumps(admission.evaluate()['authoritative_lineage']['is_ancestor_of_main']))"
+    )
+    here = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
+    there = subprocess.run([sys.executable, "-c", code], cwd=clone, capture_output=True, text=True, timeout=180)
+    assert here.stdout.strip() == there.stdout.strip() == "true", (here.stdout, there.stdout, there.stderr)

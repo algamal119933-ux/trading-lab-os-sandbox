@@ -249,21 +249,36 @@ def _capture_sample(evidence_dir: Path, pair: str = "BTC/USDT") -> tuple[fp_ledg
 # --------------------------------------------------------------------------
 
 
-def _check_guard() -> tuple[str, str]:
+def _effective_config(runtime=None) -> Path:
+    """The configuration a check should read.
+
+    With a runtime attached the answer is the runtime's own config: validating
+    the template while a different file executes is exactly the config-truth
+    split this boundary closes. With no runtime — the CI case — the template is
+    the only configuration that exists, and is used knowingly.
+    """
+    if runtime is not None and RUNTIME_CONFIG.is_file():
+        return RUNTIME_CONFIG
+    return EXAMPLE_CONFIG
+
+
+def _check_guard(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
     try:
         import paper_guard  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover
         return FAIL, f"paper_guard unavailable: {exc}"
     violations = paper_guard.Violations()
-    paper_guard.check_config(EXAMPLE_CONFIG, violations)
+    paper_guard.check_config(_effective_config(runtime), violations)
     paper_guard.check_strategies(violations)
     if violations:
         return FAIL, "; ".join(violations[:5])
-    return PASS, "scripts/paper_guard.py accepts the shipped paper config and every strategy file"
+    return PASS, (
+        f"scripts/paper_guard.py accepts {_effective_config(runtime).name} and every strategy file"
+    )
 
 
-def _check_dry_run() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_dry_run(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     if config.get("dry_run") is not True:
@@ -271,8 +286,8 @@ def _check_dry_run() -> tuple[str, str]:
     return PASS, "dry_run is exactly true (not truthy: the guard rejects 1, 'true' and null)"
 
 
-def _check_spot_mode() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_spot_mode(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     if config.get("trading_mode") != "spot":
@@ -450,8 +465,8 @@ def _check_restart_drill(evidence_dir: Path) -> tuple[str, str, dict]:
     )
 
 
-def _check_no_secret() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_no_secret(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     exchange = config.get("exchange") or {}
@@ -1078,10 +1093,10 @@ def run(evidence_dir: Path | None = None, runtime: RuntimeContext | None = None)
             return result, evidence
 
         outcomes = [
-            _check_guard(),
-            _check_dry_run(),
-            _check_spot_mode(),
-            _check_no_secret(),
+            _check_guard(runtime),
+            _check_dry_run(runtime),
+            _check_spot_mode(runtime),
+            _check_no_secret(runtime),
             _drop_extra(_check_hashes_match_registry(runtime)),
             _drop_extra(_check_market_data_ingestion(runtime)),
             _check_external_features(),
