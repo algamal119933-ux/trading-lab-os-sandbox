@@ -702,7 +702,7 @@ def _check_input_ledger_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     # Negative control against the real ledger: altering a captured candle must
     # break the chain. Proving it on real evidence, not only on a synthetic
     # copy, is the point of this check.
-    lines = facts["ledgers"]["input"].path.read_text(encoding="utf-8").splitlines()
+    lines = facts["ledgers"]["input"].raw_text().splitlines()
     target = len(lines) // 2
     record = json.loads(lines[target])
     record["payload"]["candle"]["close"] = float(record["payload"]["candle"]["close"]) + 1.0
@@ -747,14 +747,19 @@ def _check_input_ledger(evidence_dir: Path) -> tuple[str, str, dict]:
     if problems:
         return FAIL, "; ".join(problems[:3]), {}
 
-    # Negative control: an altered payload must break the chain.
-    text = input_ledger.path.read_text(encoding="utf-8").splitlines()
-    tampered = evidence_dir / "tampered_input.jsonl"
+    # Negative control: an altered payload must break the chain. The lines are
+    # read through the lane like any other evidence read, and the altered copy
+    # is built in a throwaway directory — a gate that leaves a file named
+    # "tampered_*" inside a cohort's own lane is one crash away from leaving it
+    # there permanently.
+    text = input_ledger.raw_text().splitlines()
     record = json.loads(text[10])
     record["payload"]["candle"]["close"] = record["payload"]["candle"]["close"] + 1
     text[10] = json.dumps(record, sort_keys=True, ensure_ascii=False)
-    tampered.write_text("\n".join(text) + "\n", encoding="utf-8")
-    detected = bool(fp_ledger.Ledger(tampered, "input").verify())
+    with tempfile.TemporaryDirectory(prefix="fp-preflight-tamper-") as scratch:
+        tampered = Path(scratch) / "tampered_input.jsonl"
+        tampered.write_text("\n".join(text) + "\n", encoding="utf-8")
+        detected = bool(fp_ledger.Ledger(tampered, "input").verify())
     if not detected:
         return FAIL, "the input ledger did not detect an altered candle payload", {}
 

@@ -15,6 +15,7 @@ be able to prove these properties without a market route.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +29,11 @@ QUALIFYING_ROLE = "FP-CONTROL-2"
 
 def make_loop(*args, **kwargs):
     kwargs.setdefault("role", QUALIFYING_ROLE)
+    # The lane is created explicitly, the way capture's own entry point creates
+    # it. Appending to a ledger no longer conjures the directory, so a test that
+    # relied on that would have been testing a behaviour production removed.
+    evidence = Path(args[0])
+    evidence.mkdir(parents=True, exist_ok=True)
     return fp_capture.CaptureLoop(*args, **kwargs)
 from fp import ledger as fp_ledger
 from fp import market as fp_market
@@ -562,6 +568,7 @@ def test_reconciliation_detects_a_duplicated_execution(reconciled):
 
 def test_a_second_writer_is_refused(tmp_path):
     evidence = tmp_path / "evidence"
+    evidence.mkdir(parents=True, exist_ok=True)
     first = fp_capture.EvidenceLock(evidence).acquire()
     try:
         with pytest.raises(fp_capture.DuplicateInstanceError):

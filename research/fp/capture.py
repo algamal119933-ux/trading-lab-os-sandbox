@@ -61,6 +61,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
         sys.path.insert(0, _extra)
 
 from fp import lane as fp_lane  # noqa: E402
+from fp.lane_io import LaneHandle, LaneIOError  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import market as fp_market  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
@@ -447,22 +448,28 @@ class EvidenceLock:
     self-heals while a genuine second instance is still refused.
     """
 
-    def __init__(self, evidence_dir: Path) -> None:
+    def __init__(self, evidence_dir: Path, *, lane: LaneHandle | None = None) -> None:
         self.path = Path(evidence_dir) / LOCK_FILENAME
+        self._lane = lane
+        self._own_lane = False
         self._handle = None
 
     def acquire(self, identity: RuntimeIdentity | None = None) -> "EvidenceLock":
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # O_NOFOLLOW: a lock file that is a symlink would send this write
-        # wherever the link points — a review reproduced exactly that, landing
-        # 95 bytes in the closed cohort's lane and truncating the registry.
-        handle = open(self.path, "a+", encoding="utf-8", opener=fp_ledger._no_follow_opener)
+        # The lock file is an entry in the evidence lane, so it is opened the way
+        # every other entry is: from the lane's own directory descriptor. The
+        # lane is not created here — a lock that conjures its own directory is a
+        # lock over a lane nobody selected.
+        if self._lane is None:
+            self._lane = LaneHandle.open(self.path.parent)
+            self._own_lane = True
+        handle = self._lane.open_lock_file(LOCK_FILENAME)
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             handle.seek(0)
             holder = handle.read().strip()
             handle.close()
+            self._close_own_lane()
             raise DuplicateInstanceError(
                 f"another capture process already holds {self.path}: {holder or 'unknown holder'}"
             ) from exc
@@ -484,6 +491,12 @@ class EvidenceLock:
         self._handle = handle
         return self
 
+    def _close_own_lane(self) -> None:
+        if self._own_lane and self._lane is not None:
+            self._lane.close()
+            self._lane = None
+            self._own_lane = False
+
     def release(self) -> None:
         if self._handle is not None:
             try:
@@ -491,6 +504,7 @@ class EvidenceLock:
             finally:
                 self._handle.close()
                 self._handle = None
+        self._close_own_lane()
 
     def __enter__(self) -> "EvidenceLock":
         return self
@@ -529,9 +543,9 @@ class RecoveredState:
         return len(self.prior_runs)
 
 
-def recover_state(evidence_dir: Path) -> RecoveredState:
+def recover_state(evidence_dir: Path, *, lane: LaneHandle | None = None) -> RecoveredState:
     """Reconstruct capture state by reading the ledgers back from disk."""
-    ledgers = fp_ledger.open_ledgers(evidence_dir)
+    ledgers = fp_ledger.open_ledgers(evidence_dir, lane=lane)
     state = RecoveredState()
 
     for record in ledgers["input"]:
@@ -864,6 +878,7 @@ class CaptureLoop:
         client: FreqtradeClient | None = None,
         market_module=fp_market,
         role: str | None = None,
+        lane: LaneHandle | None = None,
     ) -> None:
         self.evidence_dir = Path(evidence_dir)
         self.pairs = list(pairs)
@@ -874,8 +889,14 @@ class CaptureLoop:
         self.client = client
         self.market = market_module
         assert_no_symlinked_children(self.evidence_dir)
-        self.ledgers = fp_ledger.open_ledgers(self.evidence_dir)
-        self.state = recover_state(self.evidence_dir)
+        # One open descriptor on the lane, held for the life of the loop, and
+        # every ledger append, lock write and state snapshot goes through it.
+        # Re-deriving the lane from its pathname per write is what let a symlink
+        # planted between two cycles redirect one of them.
+        self.lane = lane if lane is not None else LaneHandle.open(self.evidence_dir)
+        self._own_lane = lane is None
+        self.ledgers = fp_ledger.open_ledgers(self.evidence_dir, lane=self.lane)
+        self.state = recover_state(self.evidence_dir, lane=self.lane)
         # The identity is built here or not at all. It used to be injectable,
         # and an injected one bypassed selection entirely: a forged FP-CONTROL-1
         # identity could write into the closed cohort's ledgers with no gate in
@@ -891,6 +912,12 @@ class CaptureLoop:
         self.t0_ms = _registry_t0_ms(self.identity.role)
 
     # -- helpers ---------------------------------------------------------
+
+    def close(self) -> None:
+        """Release the lane descriptor if this loop opened it."""
+        if self._own_lane and self.lane is not None:
+            self.lane.close()
+            self._own_lane = False
 
     def _append(self, kind: str, payload: dict):
         enriched = dict(payload)
@@ -1106,6 +1133,11 @@ class CaptureLoop:
         it. It exists so an operator can see the runtime's position without
         parsing four ledgers, and it is regenerated from the ledgers each cycle.
         """
+        # Once per cycle, confirm the pathname still names the directory this
+        # loop holds open. A substituted lane is a split runtime — capture
+        # writing one directory while the gates read another — and the only
+        # honest answer is to stop, not to pick one.
+        self.lane.assert_identity_unchanged()
         path = self.evidence_dir / STATE_FILENAME
         snapshot = {
             "written_utc": utc_now(),
@@ -1123,7 +1155,10 @@ class CaptureLoop:
             "daily_pack_digest": fp_ledger.daily_pack_digest(self.ledgers.values()),
             "real_money_authorized": False,
         }
-        path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+        # Replaced in place inside the lane, never written through its name: a
+        # symlink planted here previously sent the snapshot outside the lane,
+        # and pointing it at the cohort registry truncated the registry.
+        self.lane.replace_atomically(STATE_FILENAME, json.dumps(snapshot, indent=2) + "\n")
         return path
 
 
@@ -1206,10 +1241,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
         return 5
 
+    # The lane is created here and nowhere else. It used to appear as a side
+    # effect of the first ledger append, so a mistyped --evidence-dir produced a
+    # second plausible-looking lane instead of a refusal; now the runtime that
+    # passed selection is the only thing that can bring a lane into existence.
     try:
-        lock = EvidenceLock(evidence_dir).acquire()
+        lane = LaneHandle.open(evidence_dir, create=True)
+    except LaneIOError as exc:
+        print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        return 5
+
+    try:
+        lock = EvidenceLock(evidence_dir, lane=lane).acquire()
     except DuplicateInstanceError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        lane.close()
         return 3
 
     try:
@@ -1220,6 +1266,7 @@ def main(argv: list[str] | None = None) -> int:
             config_path=Path(args.config),
             client=client,
             role=args.role,
+            lane=lane,
         )
         loop.record_run_started()
         print(
@@ -1259,6 +1306,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         lock.release()
+        lane.close()
 
 
 if __name__ == "__main__":

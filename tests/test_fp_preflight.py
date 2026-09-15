@@ -270,7 +270,7 @@ def test_real_input_check_fails_on_synthetic_provenance(tmp_path):
     """Evidence that did not come from the exchange must not satisfy check 8."""
     from fp import ledger as fp_ledger
 
-    ledgers = fp_ledger.open_ledgers(tmp_path)
+    ledgers = fp_ledger.open_ledgers(tmp_path, create=True)
     ledgers["input"].append(
         {
             "pair": "BTC/USDT",
@@ -291,7 +291,7 @@ def test_real_input_check_fails_on_synthetic_provenance(tmp_path):
 def test_real_restart_drill_is_unproven_before_a_second_run(tmp_path):
     from fp import ledger as fp_ledger
 
-    ledgers = fp_ledger.open_ledgers(tmp_path)
+    ledgers = fp_ledger.open_ledgers(tmp_path, create=True)
     ledgers["incident"].append(
         {"category": "run_started", "full_identity": {"run_id": "a", "restart_counter": 0}}
     )
@@ -304,7 +304,7 @@ def test_real_restart_drill_is_unproven_before_a_second_run(tmp_path):
 def test_real_restart_drill_fails_when_counters_do_not_advance(tmp_path):
     from fp import ledger as fp_ledger
 
-    ledgers = fp_ledger.open_ledgers(tmp_path)
+    ledgers = fp_ledger.open_ledgers(tmp_path, create=True)
     for run_id in ("a", "b"):
         ledgers["incident"].append(
             {"category": "run_started", "full_identity": {"run_id": run_id, "restart_counter": 0}}

@@ -140,14 +140,14 @@ def test_digest_covers_every_envelope_field():
 
 
 def test_open_ledgers_creates_the_four_specification_ledgers(tmp_path):
-    ledgers = open_ledgers(tmp_path)
+    ledgers = open_ledgers(tmp_path, create=True)
     assert set(ledgers) == set(LEDGER_KINDS)
     assert ledgers["incident"].path.name == "paper_incident_ledger.jsonl"
 
 
 def test_daily_pack_digest_tracks_ledger_tips(tmp_path):
     """Section 26: the daily pack has its own digest, bound to what it covers."""
-    ledgers = open_ledgers(tmp_path)
+    ledgers = open_ledgers(tmp_path, create=True)
     before = daily_pack_digest(ledgers.values())
     ledgers["trade"].append({"trade_id": 1})
     after = daily_pack_digest(ledgers.values())

@@ -559,6 +559,7 @@ def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch)
     monkeypatch.setattr(lane, "COHORT_REGISTRY", patched)
     monkeypatch.setattr(capture, "COHORT_REGISTRY", patched)
     with pytest.raises(capture.InstanceSelectionError) as excinfo:
+        (tmp_path / "lane").mkdir()
         capture.CaptureLoop(tmp_path / "lane", ["BTC/USDT"], role=SUCCESSOR)
     assert "PAUSED" in str(excinfo.value)
 
@@ -571,6 +572,7 @@ def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
     class StubMarket:
         TIMEFRAME_MS = {"1h": 3_600_000}
 
+    (tmp_path / "lane").mkdir()
     loop = capture.CaptureLoop(tmp_path / "lane", ["BTC/USDT"], role=SUCCESSOR, market_module=StubMarket)
     loop.record_incident("probe", "role attribution")
     record = loop.ledgers["incident"].records()[-1]
@@ -611,7 +613,7 @@ def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatc
 
     def report_for(ledger_name: str, identity: dict) -> dict:
         evidence = tmp_path / ledger_name
-        ledgers = fp_ledger.open_ledgers(evidence)
+        ledgers = fp_ledger.open_ledgers(evidence, create=True)
         ledgers[ledger_name].append({"candle_ts": 1_700_000_000_000, "identity": identity})
         return preflight.run(
             runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR)
@@ -646,7 +648,7 @@ def test_preflight_compares_the_stamped_config_hash(tmp_path, monkeypatch):
     runtime_config_for(tmp_path, monkeypatch)
 
     evidence = tmp_path / "evidence"
-    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
     ledgers["decision"].append({
         "candle_ts": 1_700_000_000_000,
         "identity": {
@@ -667,7 +669,7 @@ def test_reconciliation_requires_role_on_every_record(tmp_path):
     from fp import ledger as fp_ledger, reconcile
 
     evidence = tmp_path / "evidence"
-    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
     ledgers["input"].append({
         "market_event_id": "BTC/USDT|1h|1",
         "identity": {"run_id": "a" * 32, "runtime_id": "x", "source_commit": "0" * 40},
@@ -683,7 +685,7 @@ def test_reconciliation_rejects_a_foreign_role_in_any_ledger(tmp_path, ledger_na
     from fp import ledger as fp_ledger, reconcile
 
     evidence = tmp_path / ledger_name
-    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
     ledgers[ledger_name].append({
         "market_event_id": "BTC/USDT|1h|1",
         "identity": {"run_id": "f" * 32, "runtime_id": "FP-CONTROL-1:fp-control-1",
@@ -867,7 +869,7 @@ def test_the_reconcile_cli_requires_an_explicit_role(tmp_path):
     from fp import ledger as fp_ledger, reconcile
 
     evidence = tmp_path / "evidence"
-    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
     ledgers["incident"].append({
         "category": "probe", "detail": "foreign",
         "identity": {"run_id": "f" * 32, "runtime_id": "FP-CONTROL-1:fp-control-1",
@@ -1013,14 +1015,16 @@ def test_a_symlinked_file_inside_the_lane_cannot_redirect_a_write(tmp_path, monk
     assert "symbolic link" in str(excinfo.value)
 
     # Even without the tree check, the open itself must refuse to follow it.
-    with pytest.raises(OSError):
+    from fp.lane_io import LaneIOError
+
+    with pytest.raises(LaneIOError):
         capture.EvidenceLock(evidence).acquire()
     assert victim.read_text(encoding="utf-8") == '{"untouched": true}'
 
     # The same protection on a ledger file.
     linked_ledger = evidence / "paper_incident_ledger.jsonl"
     linked_ledger.symlink_to(victim)
-    with pytest.raises(OSError):
+    with pytest.raises(fp_ledger.LedgerError):
         fp_ledger.Ledger(linked_ledger, "incident").append({"category": "x", "detail": "y"})
     assert victim.read_text(encoding="utf-8") == '{"untouched": true}'
 
