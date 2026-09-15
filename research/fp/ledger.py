@@ -48,6 +48,17 @@ LEDGER_KINDS = ("input", "decision", "trade", "incident")
 _TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 
 
+def _no_follow_opener(path, flags):
+    """Open without following a symlinked final component.
+
+    A ledger path inside a valid evidence directory is still attacker-shaped if
+    the file itself is a link: the directory passes every containment check and
+    the write lands wherever the link points. O_NOFOLLOW makes the kernel refuse
+    that, so no check has to be remembered at each call site.
+    """
+    return os.open(path, flags | os.O_NOFOLLOW)
+
+
 class LedgerError(RuntimeError):
     """Raised when a ledger is malformed, tampered with, or misused."""
 
@@ -107,7 +118,7 @@ class Ledger:
     def __iter__(self) -> Iterator[Record]:
         if not self.path.exists():
             return
-        with self.path.open("r", encoding="utf-8") as handle:
+        with open(self.path, "r", encoding="utf-8", opener=_no_follow_opener) as handle:
             for line_no, line in enumerate(handle, start=1):
                 line = line.strip()
                 if not line:
@@ -153,7 +164,7 @@ class Ledger:
         record = Record(seq, self.kind, stamp, prev, digest, payload)
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
+        with open(self.path, "a", encoding="utf-8", opener=_no_follow_opener) as handle:
             handle.write(json.dumps(record.as_dict(), sort_keys=True, ensure_ascii=False) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
@@ -179,7 +190,7 @@ class Ledger:
         seq, prev = self.head()
         written: list[Record] = []
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
+        with open(self.path, "a", encoding="utf-8", opener=_no_follow_opener) as handle:
             for payload in payloads:
                 digest = record_digest(seq, self.kind, stamp, prev, payload)
                 record = Record(seq, self.kind, stamp, prev, digest, payload)

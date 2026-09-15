@@ -299,6 +299,28 @@ def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | N
                     )
 
 
+def assert_no_symlinked_children(evidence_dir: Path) -> None:
+    """No entry inside the evidence directory may be a symbolic link.
+
+    Containment answered "is this directory the right one" and stopped there.
+    The files inside it are write targets too, and a linked one leaves the lane
+    while the directory itself still passes. Checked before anything is opened,
+    and backed at open time by O_NOFOLLOW so a link created afterwards cannot be
+    followed either.
+    """
+    root = Path(evidence_dir)
+    if not root.exists():
+        return
+    if root.is_symlink():
+        raise InstanceSelectionError(f"{root} is a symbolic link, not a directory this runtime owns")
+    for entry in root.rglob("*"):
+        if entry.is_symlink():
+            raise InstanceSelectionError(
+                f"{entry} inside the evidence lane is a symbolic link to {os.readlink(entry)}; "
+                "a write target that leaves the lane is refused"
+            )
+
+
 def assert_evidence_dir_is_declared(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
     """The runtime's evidence directory must be the one the registry declares.
 
@@ -431,7 +453,10 @@ class EvidenceLock:
 
     def acquire(self, identity: RuntimeIdentity | None = None) -> "EvidenceLock":
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        handle = self.path.open("a+", encoding="utf-8")
+        # O_NOFOLLOW: a lock file that is a symlink would send this write
+        # wherever the link points — a review reproduced exactly that, landing
+        # 95 bytes in the closed cohort's lane and truncating the registry.
+        handle = open(self.path, "a+", encoding="utf-8", opener=fp_ledger._no_follow_opener)
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
@@ -835,7 +860,7 @@ class CaptureLoop:
         evidence_dir: Path,
         pairs: list[str],
         timeframe: str = "1h",
-        config_path: Path = DEFAULT_CONFIG_PATH,
+        config_path: Path = RUNTIME_CONFIG_PATH,
         client: FreqtradeClient | None = None,
         market_module=fp_market,
         role: str | None = None,
@@ -848,6 +873,7 @@ class CaptureLoop:
         self.config = _load_json(self.config_path) or {}
         self.client = client
         self.market = market_module
+        assert_no_symlinked_children(self.evidence_dir)
         self.ledgers = fp_ledger.open_ledgers(self.evidence_dir)
         self.state = recover_state(self.evidence_dir)
         # The identity is built here or not at all. It used to be injectable,
@@ -1155,19 +1181,24 @@ def main(argv: list[str] | None = None) -> int:
         select_instance(args.role)
         assert_paths_are_exclusive(args.role, evidence_dir)
         assert_evidence_dir_is_declared(args.role, evidence_dir)
+        assert_no_symlinked_children(evidence_dir)
         # A runtime that cannot name the configuration it is running under
         # cannot stamp an honest identity onto its evidence. The template is not
         # a stand-in: refusing here is what stops records being written against
         # one config and attributed to another.
         config_path = Path(args.config).resolve()
-        # Not merely "a file called config.json": the declared runtime path, in
-        # either namespace. Accepting any config.json anywhere let a runtime
-        # stamp a hash from a file the engine was not reading.
-        declared_suffix = Path("freqtrade/user_data") / RUNTIME_CONFIG_PATH.name
-        if not str(config_path).endswith(str(declared_suffix)):
+        # An allow-list of the two real locations, not a suffix match: a decoy
+        # at /anywhere/freqtrade/user_data/config.json satisfied the suffix and
+        # had its own hash recorded.
+        permitted = {
+            RUNTIME_CONFIG_PATH.resolve(),                       # host namespace
+            Path("/freqtrade/user_data/config.json"),            # container namespace
+            Path("/app/freqtrade/user_data/config.json"),        # capture container
+        }
+        if config_path not in permitted:
             raise InstanceSelectionError(
-                f"capture must run against the declared runtime configuration "
-                f".../{declared_suffix}, not {config_path}"
+                f"capture must run against the declared runtime configuration; {config_path} is not "
+                f"one of {sorted(str(p) for p in permitted)}"
             )
         if not config_path.is_file():
             raise InstanceSelectionError(f"the runtime configuration {config_path} does not exist")

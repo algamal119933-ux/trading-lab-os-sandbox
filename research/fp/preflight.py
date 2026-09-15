@@ -249,6 +249,10 @@ def _capture_sample(evidence_dir: Path, pair: str = "BTC/USDT") -> tuple[fp_ledg
 # --------------------------------------------------------------------------
 
 
+class MissingRuntimeConfig(Exception):
+    """A runtime is attached but its configuration is not on disk."""
+
+
 def _effective_config(runtime=None) -> Path:
     """The configuration a check should read.
 
@@ -257,12 +261,23 @@ def _effective_config(runtime=None) -> Path:
     split this boundary closes. With no runtime — the CI case — the template is
     the only configuration that exists, and is used knowingly.
     """
-    if runtime is not None and RUNTIME_CONFIG.is_file():
+    if runtime is not None:
+        if not RUNTIME_CONFIG.is_file():
+            # No silent substitution: with a runtime attached, the template is
+            # not evidence about what that runtime is executing.
+            raise MissingRuntimeConfig(
+                f"a runtime is attached but {RUNTIME_CONFIG} does not exist; its configuration "
+                "identity cannot be established"
+            )
         return RUNTIME_CONFIG
     return EXAMPLE_CONFIG
 
 
 def _check_guard(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
     try:
         import paper_guard  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover
@@ -278,6 +293,10 @@ def _check_guard(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
 
 
 def _check_dry_run(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
     config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
@@ -287,6 +306,10 @@ def _check_dry_run(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
 
 
 def _check_spot_mode(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
     config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
@@ -466,6 +489,10 @@ def _check_restart_drill(evidence_dir: Path) -> tuple[str, str, dict]:
 
 
 def _check_no_secret(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
     config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"

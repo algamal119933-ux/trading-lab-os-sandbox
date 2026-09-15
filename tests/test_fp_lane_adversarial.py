@@ -990,3 +990,77 @@ def test_the_lineage_check_answers_the_same_way_in_a_fresh_clone(tmp_path):
     here = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
     there = subprocess.run([sys.executable, "-c", code], cwd=clone, capture_output=True, text=True, timeout=180)
     assert here.stdout.strip() == there.stdout.strip() == "true", (here.stdout, there.stdout, there.stderr)
+
+
+def test_a_symlinked_file_inside_the_lane_cannot_redirect_a_write(tmp_path, monkeypatch):
+    """Containment answered for the directory; the files inside it are targets too.
+
+    A review reproduced this: with `.fp_capture.lock` linked into the closed
+    cohort's lane, a successful capture wrote there; linked at the registry, the
+    registry was truncated. Two independent defences are proven here — the
+    pre-flight tree check, and O_NOFOLLOW at the moment of opening.
+    """
+    from fp import ledger as fp_ledger
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    victim = tmp_path / "victim.json"
+    victim.write_text('{"untouched": true}', encoding="utf-8")
+    (evidence / capture.LOCK_FILENAME).symlink_to(victim)
+
+    with pytest.raises(capture.InstanceSelectionError) as excinfo:
+        capture.assert_no_symlinked_children(evidence)
+    assert "symbolic link" in str(excinfo.value)
+
+    # Even without the tree check, the open itself must refuse to follow it.
+    with pytest.raises(OSError):
+        capture.EvidenceLock(evidence).acquire()
+    assert victim.read_text(encoding="utf-8") == '{"untouched": true}'
+
+    # The same protection on a ledger file.
+    linked_ledger = evidence / "paper_incident_ledger.jsonl"
+    linked_ledger.symlink_to(victim)
+    with pytest.raises(OSError):
+        fp_ledger.Ledger(linked_ledger, "incident").append({"category": "x", "detail": "y"})
+    assert victim.read_text(encoding="utf-8") == '{"untouched": true}'
+
+
+def test_the_capture_loop_refuses_a_lane_containing_a_symlinked_file(tmp_path, monkeypatch):
+    """The loop checks before it opens anything."""
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    evidence = tmp_path / "lane"
+    evidence.mkdir()
+    (evidence / "paper_input_ledger.jsonl").symlink_to(tmp_path / "elsewhere.jsonl")
+    with pytest.raises(capture.InstanceSelectionError):
+        capture.CaptureLoop(evidence, ["BTC/USDT"], role=SUCCESSOR)
+
+
+def test_a_decoy_config_path_is_refused(tmp_path):
+    """A file at .../freqtrade/user_data/config.json elsewhere is not the runtime config."""
+    decoy = tmp_path / "freqtrade" / "user_data"
+    decoy.mkdir(parents=True)
+    (decoy / "config.json").write_bytes(Path("freqtrade/user_data/config.paper.json.example").read_bytes())
+    result = subprocess.run(
+        [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
+         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--config", str(decoy / "config.json"), "--cycles", "1"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode != 0
+    assert "declared runtime configuration" in result.stderr, result.stderr
+
+
+def test_attached_preflight_fails_when_the_runtime_config_is_absent(tmp_path, monkeypatch):
+    """No template substitution while a runtime is attached — in every check."""
+    from fp import preflight
+
+    monkeypatch.setattr(preflight, "RUNTIME_CONFIG", tmp_path / "absent-config.json")
+    monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    report = preflight.run(runtime=preflight.RuntimeContext(evidence_dir=evidence, role=SUCCESSOR))
+    for check_id in (1, 2, 3, 4):
+        check = next(c for c in report["checks"] if c["id"] == check_id)
+        assert check["result"] == "FAIL", check
+        assert "cannot be established" in check["evidence"], check
