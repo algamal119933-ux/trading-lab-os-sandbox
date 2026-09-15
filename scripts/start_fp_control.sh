@@ -109,6 +109,7 @@ from pathlib import Path
 
 sys.path.insert(0, "research")
 from fp.lane import LaneError, resolve_lane  # noqa: E402
+from fp.lane_io import LaneHandle, LaneIOError  # noqa: E402
 
 role, lane_dir = sys.argv[1], Path(sys.argv[2])
 try:
@@ -141,10 +142,18 @@ for parent in (lane_dir / "logs", lane_dir / "evidence"):
     if parent.exists() and parent.resolve() != (lane.host_instance_dir / parent.name):
         print(f"FP_LANE_FAIL: {parent} resolves outside the lane", file=sys.stderr)
         raise SystemExit(3)
+
+# Created through the lane boundary, not by `mkdir -p`, so the launcher and the
+# capture runtime bring a lane into existence the same way and the directory is
+# opened and pinned by the same code that will later write into it.
+try:
+    for child in ("logs", "evidence"):
+        LaneHandle.open(lane_dir / child, create=True).close()
+except LaneIOError as exc:
+    print(f"FP_LANE_FAIL: {exc}", file=sys.stderr)
+    raise SystemExit(3)
 print(f"FP_LANE_PASS: {resolved}")
 PY
-
-mkdir -p "$FP_DIR/logs" "$FP_DIR/evidence"
 
 # Stamped into the capture container, which has no git of its own.
 FP_SOURCE_COMMIT="$(git rev-parse HEAD)"

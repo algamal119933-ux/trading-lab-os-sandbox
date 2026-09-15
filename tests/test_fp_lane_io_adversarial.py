@@ -599,3 +599,55 @@ def test_13c_the_policy_limit_is_stated_truthfully_in_the_boundary(evidence):
         with pytest.raises(LaneIOError):
             handle.append_text("demo.jsonl", "second\n")
         assert alias.read_text(encoding="utf-8") == "first\n"
+
+
+# --------------------------------------------------------------------------
+# the launcher creates lanes through the same boundary, not with `mkdir -p`
+# --------------------------------------------------------------------------
+
+
+def _launcher_lane_block() -> str:
+    """The launcher's lane validation-and-creation step, as the shell runs it.
+
+    Executing the real block keeps this a behavioural proof: if the step stops
+    creating the lane, or starts creating it some other way, this fails.
+    """
+    text = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
+    marker = 'python3 - "$FP_ROLE" "$FP_DIR" <<\'PY\''
+    rest = text[text.index(marker) + len(marker):]
+    return rest.split("\n", 1)[1].split("\nPY\n")[0]
+
+
+def _disposable_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    files = subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                           check=True).stdout.split()
+    for relative in files:
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(relative, target)
+    return repo
+
+
+def test_the_launcher_creates_its_lane_through_the_boundary(tmp_path):
+    block = _launcher_lane_block()
+    repo = _disposable_repo(tmp_path)
+    lane_dir = repo / "freqtrade" / "user_data" / "fp-control-2"
+
+    created = subprocess.run([sys.executable, "-c", block, SUCCESSOR, str(lane_dir)],
+                             cwd=repo, capture_output=True, text=True, timeout=300)
+    assert created.returncode == 0, created.stdout + created.stderr
+    assert (lane_dir / "logs").is_dir() and not (lane_dir / "logs").is_symlink()
+    assert (lane_dir / "evidence").is_dir() and not (lane_dir / "evidence").is_symlink()
+
+    outside = tmp_path / "outside-lane"
+    outside.mkdir()
+    shutil.rmtree(lane_dir / "evidence")
+    (lane_dir / "evidence").symlink_to(outside)
+
+    refused = subprocess.run([sys.executable, "-c", block, SUCCESSOR, str(lane_dir)],
+                            cwd=repo, capture_output=True, text=True, timeout=300)
+    assert refused.returncode == 3, refused.stdout + refused.stderr
+    assert "FP_LANE_FAIL" in refused.stderr
+    assert sorted(p.name for p in outside.iterdir()) == [], "the launcher created a lane outside"
