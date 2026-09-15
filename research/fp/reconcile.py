@@ -117,7 +117,10 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None, expected_role:
     if expected_role is not None:
         foreign = [
             r.seq for r in live
-            if (r.payload.get("identity") or {}).get("role") not in (None, expected_role)
+            # A missing role is foreign too: "not contradicting" is not the same
+            # as "attributable", and treating it as acceptable is what let an
+            # unstamped record pass.
+            if (r.payload.get("identity") or {}).get("role") != expected_role
         ]
         findings.append(
             Finding(
@@ -355,13 +358,22 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None, expected_role:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument(
+        "--role",
+        required=True,
+        help=(
+            "the instance whose evidence this is. Required: internal correctness with an "
+            "unbound public entrypoint means the command a human runs answers a weaker "
+            "question than the library does, and a foreign-role record reads as PASS."
+        ),
+    )
     parser.add_argument("--pair", action="append", dest="pairs", default=None)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--require-pass", action="store_true", help="exit 2 unless reconciliation passes")
     parser.add_argument("-o", "--out", default=None)
     args = parser.parse_args(argv)
 
-    report = reconcile(Path(args.evidence_dir), args.pairs)
+    report = reconcile(Path(args.evidence_dir), args.pairs, expected_role=args.role)
     text = json.dumps(report, indent=2) + "\n"
 
     if args.out:

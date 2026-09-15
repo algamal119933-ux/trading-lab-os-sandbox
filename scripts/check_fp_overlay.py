@@ -20,8 +20,9 @@ merge produced — is checked for:
 * every identity-bearing argument — the capture service's --role and
   --evidence-dir, and the engine's --strategy, --db-url, --logfile and --config —
   is parsed and compared exactly, never by substring;
-* writable mounts are checked on EVERY rendered service, including services this
-  file does not name and services added later;
+* writable mounts are checked on EVERY rendered service — including services this
+  file does not name, services added later, and mounts a service *inherits*
+  through volumes_from, where a read-only bind can be promoted to writable;
 * the declared bot name is required, not merely "not contradicted";
 * no execution endpoint appears anywhere in the rendered stack.
 
@@ -88,6 +89,45 @@ def named_volume_device(rendered: dict, name: str) -> str:
     return str(options.get("device") or "")
 
 
+def effective_mounts(rendered: dict, service_name: str, _seen: tuple[str, ...] = ()) -> list[tuple[str, str, bool, str]]:
+    """Every mount a service actually gets, declarations plus inheritance.
+
+    Validating `volumes:` alone left `volumes_from:` unexamined, and a service
+    that inherits another's read-only historical bind as `:rw` obtains exactly
+    the write path the declaration was refusing. Inheritance is resolved here —
+    chains included, cycles guarded — so the policy sees what the container sees.
+
+    Docker semantics: `volumes_from: other` inherits `other`'s mounts with their
+    own access mode; `other:ro` forces read-only; `other:rw` forces writable,
+    which is the promotion that matters.
+    """
+    if service_name in _seen or len(_seen) > 8:
+        return []
+    services = rendered.get("services") or {}
+    service = services.get(service_name) or {}
+    if not isinstance(service, dict):
+        return []
+
+    mounts = list(mount_pairs(service))
+    for entry in service.get("volumes_from") or []:
+        text = str(entry)
+        if text.startswith("container:"):
+            # A raw container reference cannot be resolved from the render, so it
+            # is treated as an unknown writable source rather than ignored.
+            mounts.append((text, "", False, "bind"))
+            continue
+        parts = text.split(":")
+        source_service = parts[0]
+        mode = parts[1] if len(parts) > 1 else "rw"
+        for src, target, read_only, kind in effective_mounts(rendered, source_service, _seen + (service_name,)):
+            if mode == "ro":
+                read_only = True
+            elif mode == "rw":
+                read_only = False
+            mounts.append((src, target, read_only, kind))
+    return mounts
+
+
 def mount_pairs(service: dict) -> list[tuple[str, str, bool, str]]:
     """(host source, container target, read_only, kind) for every declared mount.
 
@@ -141,7 +181,7 @@ def check(rendered: dict, role: str) -> list[str]:
     # that lane is what this guard exists to catch.
     evidence_target = str(lane.container_instance_dir)
 
-    def writable_mount_problems(service_name: str, service: dict) -> list[str]:
+    def writable_mount_problems(service_name: str, service: dict) -> list[str]:  # noqa: ARG001
         """Both sides of every writable mount, canonicalised.
 
         A mount is two claims: where the container will write, and which real
@@ -151,7 +191,7 @@ def check(rendered: dict, role: str) -> list[str]:
         found: list[str] = []
         repo_root = REGISTRY_PATH.parent.parent.parent.parent
         rendered_volumes = rendered
-        for source, target, read_only, kind in mount_pairs(service):
+        for source, target, read_only, kind in effective_mounts(rendered_volumes, service_name):
             if read_only:
                 continue  # shared read-only mounts are fine; they write nothing
             host = None
@@ -298,7 +338,7 @@ def check(rendered: dict, role: str) -> list[str]:
         # The loop observes a runtime; it must never be able to edit the code it
         # runs. Lane logic cannot express this — /app/research reaches no
         # instance lane — so it is stated separately.
-        for source, target, read_only, kind in mount_pairs(capture):
+        for source, target, read_only, kind in effective_mounts(rendered, "fp-capture"):
             if read_only or kind == "volume":
                 continue
             if target.startswith("/app/"):

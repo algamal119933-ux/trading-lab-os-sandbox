@@ -46,6 +46,9 @@ if grep -q "CHANGE_ME" .env; then
 fi
 
 # The runtime config must exist and be paper-safe before a container is created.
+# The guard runs against the same fixed path the identity check hashes and the
+# overlay mounts: one file, one identity.
+HOST_CONFIG="freqtrade/user_data/config.json"
 require_paper_config
 
 # The control's identity must match what the registry froze. This is the same
@@ -70,9 +73,12 @@ identity = instance["runtime_identity"]
 # The *runtime* config is what the engine reads. Hashing the committed example
 # instead let sizing or risk drift in config.json reach `compose up` unnoticed,
 # because the file being checked was not the file being run.
+# Fixed, not overridable. HOST_CONFIG let the file that was hashed differ from
+# the file compose mounts, which is the same truth-splitting the example
+# fallback caused: one config validated, another executed.
 expected = {
     "strategy_sha256": "freqtrade/user_data/strategies/BaselineEmaRegimeV1.py",
-    "config_sha256": os.environ.get("HOST_CONFIG", "freqtrade/user_data/config.json"),
+    "config_sha256": "freqtrade/user_data/config.json",
 }
 problems = []
 for field, path in expected.items():

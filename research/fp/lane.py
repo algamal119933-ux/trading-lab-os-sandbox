@@ -14,9 +14,12 @@ are kept explicitly apart rather than being hoped to coincide:
     container   /freqtrade/user_data/<instance_dir>/...   what the engine sees
     host        <repo>/freqtrade/user_data/<instance_dir>/...   what is on disk
 
-``resolve_lane`` is also where status is judged. Structural selection (which row
-is this role?) is separated from permission to run (may this row execute?),
-because stop and recovery legitimately address rows that must never execute.
+``resolve_lane`` is also where status is judged, and where containment is
+decided. Structural selection (which row is this role?) is separated from
+permission to run (may this row execute?), because stop and recovery legitimately
+address rows that must never execute — but neither is reachable for a lane whose
+real location is outside the project's user_data: that raises here, so no caller
+can hold an unsafe lane object in the first place.
 """
 
 from __future__ import annotations
@@ -90,7 +93,11 @@ class Lane:
         return resolved == lane or lane in resolved.parents
 
     def root_is_canonical(self) -> bool:
-        """The lane root must really live under the project's user_data."""
+        """Defence in depth: ``resolve_lane`` already refused a non-canonical root.
+
+        Kept because a Lane can be constructed directly in a test, and because a
+        symlink can appear between resolution and use.
+        """
         root = _resolve(HOST_USER_DATA)
         resolved = _resolve(self.host_instance_dir)
         return resolved == root or root in resolved.parents
@@ -227,6 +234,33 @@ def resolve_lane(
             )
 
     host_instance_dir = HOST_USER_DATA / instance_dir
+
+    # Containment is decided HERE, at the only place a Lane comes into
+    # existence. Earlier versions validated at call sites, and every review
+    # found the same class of bypass one boundary further out: a caller that
+    # obtained a Lane and trusted it never met the check. A lane whose real
+    # location is outside the project's user_data is not a lane, so no object is
+    # returned for it at all.
+    root = _resolve(HOST_USER_DATA)
+    resolved_root = _resolve(host_instance_dir)
+    if resolved_root != root and root not in resolved_root.parents:
+        raise LaneError(
+            f"{role}'s lane root {host_instance_dir} resolves to {resolved_root}, "
+            f"outside the canonical {root}"
+        )
+    if resolved_root == root:
+        raise LaneError(f"{role}'s lane root resolves to {root} itself, which is every lane at once")
+    # Every declared path must also land inside this lane once symlinks are
+    # followed, not merely look like it in the registry's text.
+    for field, container_path in declared.items():
+        host_path = HOST_USER_DATA / container_path.relative_to(CONTAINER_USER_DATA)
+        resolved_path = _resolve(host_path)
+        if resolved_path != resolved_root and resolved_root not in resolved_path.parents:
+            raise LaneError(
+                f"{role}.{field} ({host_path}) resolves to {resolved_path}, outside its own lane "
+                f"{resolved_root}"
+            )
+
     return Lane(
         role=role,
         status=status,

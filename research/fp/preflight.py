@@ -497,7 +497,15 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     # The runtime config is what the engine reads. Hashing only the committed
     # example meant a drifted config.json could not be detected, and a record
     # stamped with any config hash at all was accepted.
-    runtime_config = RUNTIME_CONFIG if RUNTIME_CONFIG.exists() else EXAMPLE_CONFIG
+    # No fallback: when a runtime is attached, its configuration must exist and
+    # be the one on disk. Falling back to the example made "validated config" and
+    # "executed config" two different files.
+    if not RUNTIME_CONFIG.is_file():
+        return FAIL, (
+            f"the runtime configuration {RUNTIME_CONFIG} does not exist, so the running instance's "
+            "configuration identity cannot be established"
+        ), {}
+    runtime_config = RUNTIME_CONFIG
     on_disk = {
         "strategy_sha256": fp_capture.sha256_file(fp_capture.STRATEGY_PATH),
         "config_sha256": fp_capture.sha256_file(runtime_config),
@@ -837,7 +845,9 @@ def _check_monitoring(runtime: RuntimeContext | None = None) -> tuple[str, str, 
 
 def _check_replay_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     """Section 16.12 — event-time replay on a bounded *real-data* sample."""
-    report = fp_reconcile.reconcile(Path(runtime.evidence_dir))
+    # The runtime names its role; reconciliation must judge the evidence as that
+    # instance's, not as anyone's.
+    report = fp_reconcile.reconcile(Path(runtime.evidence_dir), expected_role=runtime.role)
     if report["reconciliation"] != PASS:
         return FAIL, f"reconciliation of the real capture failed: {report['failing_checks']}", {
             "reconciliation": report["reconciliation"],

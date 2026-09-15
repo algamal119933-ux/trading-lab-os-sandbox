@@ -80,7 +80,12 @@ PAPER_FILL_MODEL_SEMANTICS = (
 )
 
 STRATEGY_PATH = REPO_ROOT / "freqtrade" / "user_data" / "strategies" / "BaselineEmaRegimeV1.py"
-DEFAULT_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+# The configuration the engine actually reads. One file is the runtime identity:
+# validated, hashed, mounted, executed and stamped. The committed example is a
+# template and must never stand in for it in evidence.
+RUNTIME_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.json"
+EXAMPLE_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+DEFAULT_CONFIG_PATH = EXAMPLE_CONFIG_PATH
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 LOCK_FILENAME = ".fp_capture.lock"
@@ -1114,7 +1119,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--pair", action="append", dest="pairs", default=None)
     parser.add_argument("--timeframe", default="1h")
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    parser.add_argument(
+        "--config",
+        default=str(RUNTIME_CONFIG_PATH),
+        help="the runtime configuration the engine reads; the committed example is not accepted here",
+    )
     parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL", ""))
     parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER", ""))
     parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD", ""))
@@ -1146,6 +1155,18 @@ def main(argv: list[str] | None = None) -> int:
         select_instance(args.role)
         assert_paths_are_exclusive(args.role, evidence_dir)
         assert_evidence_dir_is_declared(args.role, evidence_dir)
+        # A runtime that cannot name the configuration it is running under
+        # cannot stamp an honest identity onto its evidence. The template is not
+        # a stand-in: refusing here is what stops records being written against
+        # one config and attributed to another.
+        config_path = Path(args.config).resolve()
+        if config_path.name != RUNTIME_CONFIG_PATH.name:
+            raise InstanceSelectionError(
+                f"capture must run against the runtime configuration "
+                f"{RUNTIME_CONFIG_PATH.name}, not {config_path.name}"
+            )
+        if not config_path.is_file():
+            raise InstanceSelectionError(f"the runtime configuration {config_path} does not exist")
     except InstanceSelectionError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
         return 5

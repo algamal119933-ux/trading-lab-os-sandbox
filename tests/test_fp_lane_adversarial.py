@@ -578,6 +578,22 @@ def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
     assert record.payload["identity"]["cohort_id"] is None
 
 
+def runtime_config_for(tmp_path: Path, monkeypatch, source: Path | None = None) -> Path:
+    """A runtime config for tests, supplied the way an operator supplies one.
+
+    freqtrade/user_data/config.json is deliberately gitignored, so a clean
+    checkout has none; a test that assumed it existed passed in the writer tree
+    and failed on a fresh clone, which is exactly the divergence the isolation
+    boundary exists to prevent.
+    """
+    from fp import preflight
+
+    runtime = tmp_path / "config.json"
+    runtime.write_bytes((source or Path("freqtrade/user_data/config.paper.json.example")).read_bytes())
+    monkeypatch.setattr(preflight, "RUNTIME_CONFIG", runtime)
+    return runtime
+
+
 def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatch):
     """Through preflight.run(), not a private helper, and for every ledger.
 
@@ -591,6 +607,7 @@ def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatc
     monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
+    runtime_config_for(tmp_path, monkeypatch)
 
     def report_for(ledger_name: str, identity: dict) -> dict:
         evidence = tmp_path / ledger_name
@@ -626,6 +643,7 @@ def test_preflight_compares_the_stamped_config_hash(tmp_path, monkeypatch):
     monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
     monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
+    runtime_config_for(tmp_path, monkeypatch)
 
     evidence = tmp_path / "evidence"
     ledgers = fp_ledger.open_ledgers(evidence)
@@ -747,55 +765,157 @@ def test_a_plain_named_volume_is_still_accepted():
     assert check_fp_overlay.check(rendered, SUCCESSOR) == []
 
 
-def test_an_escaped_lane_root_is_refused_by_every_consumer(tmp_path, monkeypatch):
-    """A lane root that resolves outside user_data owns nothing.
+def repo_copy(tmp_path: Path) -> Path:
+    """A disposable copy of the tracked tree, for proofs that must mutate state.
 
-    Comparing the given path against the declared path made an escaping symlink
-    agree with itself: both sides followed the same link and matched, so the
-    rendered overlay passed and the launcher created directories outside
-    user_data. Canonicality is now asked of the root itself.
+    A test that writes into the authoritative tree is not evidence — it is a
+    second writer. Everything destructive happens in here, so a clean checkout
+    and the writer tree produce the same result.
     """
+    destination = tmp_path / "repo"
+    files = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    for relative in files:
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(Path(relative).read_bytes())
+    # The runtime config is gitignored, so a clean checkout has none; the copy
+    # gets one from the committed template, which is what an operator does.
+    runtime = destination / "freqtrade/user_data/config.json"
+    if not runtime.exists():
+        runtime.write_bytes((destination / "freqtrade/user_data/config.paper.json.example").read_bytes())
+    return destination
+
+
+def run_in(repo: Path, *args: str, env_extra: dict | None = None) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = f"{repo / 'research'}:{env.get('PYTHONPATH', '')}"
+    env.update(env_extra or {})
+    return subprocess.run(list(args), cwd=repo, capture_output=True, text=True, timeout=300, env=env)
+
+
+def test_an_escaped_lane_root_is_refused_by_every_consumer(tmp_path):
+    """A lane root pointing outside user_data must be refused everywhere.
+
+    Run entirely inside a disposable copy: the earlier version created the
+    symlink in the real tree, which made the suite fail on a read-only clean
+    checkout and mutated authoritative state to prove a refusal.
+    """
+    repo = repo_copy(tmp_path)
     escape = tmp_path / "elsewhere"
     escape.mkdir()
-    link = lane.HOST_USER_DATA / "fp-control-2"
-    assert not link.exists(), "the real lane must not exist during this test"
-    link.symlink_to(escape, target_is_directory=True)
-    try:
-        escaped = lane.resolve_lane(SUCCESSOR)
-        assert not escaped.root_is_canonical()
-        assert not escaped.owns_host_path(escaped.host_instance_dir)
-        with pytest.raises(lane.LaneError):
-            escaped.assert_root_is_canonical()
-        # the compose guard refuses the rendered graph outright
-        problems = check_fp_overlay.check(rendered_overlay(), SUCCESSOR)
-        assert problems and any("canonical" in p for p in problems), problems
-        # and the launcher refuses before creating anything
-        result = subprocess.run(["bash", "scripts/start_fp_control.sh", SUCCESSOR],
-                                capture_output=True, text=True, timeout=180)
-        assert result.returncode != 0, result.stdout
-        assert "FP_LANE_FAIL" in result.stderr or "FP_OVERLAY_FAIL" in result.stderr, result.stderr
-        assert not (escape / "logs").exists(), "the launcher created directories despite refusing"
-        assert not (escape / "evidence").exists()
-    finally:
-        link.unlink()
+    (repo / "freqtrade/user_data/fp-control-2").symlink_to(escape, target_is_directory=True)
+
+    # 1. the resolver itself refuses to produce a lane at all
+    resolver = run_in(
+        repo, sys.executable, "-c",
+        "import sys; sys.path.insert(0,'research');"
+        "from fp import lane;"
+        "\ntry:\n lane.resolve_lane('FP-CONTROL-2'); print('ACCEPTED')\nexcept lane.LaneError as e: print('REFUSED')",
+    )
+    assert resolver.stdout.strip() == "REFUSED", resolver
+
+    # 2. the launcher's resolver CLI refuses
+    instance = run_in(repo, sys.executable, "scripts/fp_instance.py", "FP-CONTROL-2")
+    assert instance.returncode != 0, instance.stdout
+
+    # 3. capture refuses, and writes nothing into the escaped directory
+    capture_run = run_in(
+        repo, sys.executable, "research/fp/capture.py",
+        "--role", "FP-CONTROL-2",
+        "--evidence-dir", str(escape / "evidence"),
+        "--config", "freqtrade/user_data/config.json",
+        "--cycles", "1",
+    )
+    assert capture_run.returncode != 0, capture_run.stdout
+    assert not list(escape.rglob("*.jsonl")), "capture wrote evidence into the escaped lane"
 
 
 def test_the_launcher_detects_runtime_config_drift(tmp_path):
-    """Behavioural: a drifted config.json must stop the launcher.
+    """A drifted runtime config must stop the launcher — proven in a copy."""
+    repo = repo_copy(tmp_path)
+    runtime_config = repo / "freqtrade/user_data/config.json"
+    drifted = json.loads(runtime_config.read_text(encoding="utf-8"))
+    drifted["stake_amount"] = drifted["stake_amount"] + 1
+    runtime_config.write_text(json.dumps(drifted, indent=2) + "\n", encoding="utf-8")
+    (repo / ".env").write_text("FREQTRADE_API_USER=x\nFREQTRADE_API_PASSWORD=x\n"
+                               "FREQTRADE_JWT_SECRET=x\nFREQTRADE_WS_TOKEN=x\n"
+                               "GRAFANA_ADMIN_USER=x\nGRAFANA_ADMIN_PASSWORD=x\n", encoding="utf-8")
+    result = run_in(repo, "bash", "scripts/start_fp_control.sh", SUCCESSOR)
+    assert result.returncode != 0, "a drifted runtime config must stop the launcher"
+    assert "config_sha256" in result.stderr or "FP_IDENTITY_FAIL" in result.stderr, result.stderr
 
-    The previous proof read the script's source text, which would have passed a
-    launcher that hashed the right file and then ignored the answer.
+
+def test_the_runtime_config_identity_cannot_be_overridden():
+    """One file is the identity: no environment override may redirect it."""
+    launcher = Path("scripts/start_fp_control.sh").read_text(encoding="utf-8")
+    assert 'os.environ.get("HOST_CONFIG"' not in launcher
+    assert '"config_sha256": "freqtrade/user_data/config.json"' in launcher
+
+    # Behavioural: capture refuses to stamp evidence against the template.
+    result = subprocess.run(
+        [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
+         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--config", "freqtrade/user_data/config.paper.json.example", "--cycles", "1"],
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode != 0
+    assert "runtime configuration" in result.stderr, result.stderr
+
+
+def test_the_reconcile_cli_requires_an_explicit_role(tmp_path):
+    """The command a human runs must ask the same question the library does."""
+    from fp import ledger as fp_ledger, reconcile
+
+    evidence = tmp_path / "evidence"
+    ledgers = fp_ledger.open_ledgers(evidence)
+    ledgers["incident"].append({
+        "category": "probe", "detail": "foreign",
+        "identity": {"run_id": "f" * 32, "runtime_id": "FP-CONTROL-1:fp-control-1",
+                     "source_commit": "0" * 40, "role": CLOSED},
+    })
+    with pytest.raises(SystemExit):
+        reconcile.main(["--evidence-dir", str(evidence)])          # no --role
+    assert reconcile.main(["--evidence-dir", str(evidence), "--role", SUCCESSOR,
+                           "--require-pass"]) == 2
+
+
+def test_inherited_writable_mounts_are_resolved(tmp_path):
+    """volumes_from can promote a read-only historical bind to writable."""
+    rendered = rendered_overlay()
+    rendered["services"]["history-holder"] = {
+        "image": "busybox",
+        "volumes": [{"type": "bind", "source": str(CLOSED_LANE_LITERAL),
+                     "target": "/freqtrade/user_data/fp-control-1", "read_only": True}],
+    }
+    rendered["services"]["thief"] = {"image": "busybox", "volumes_from": ["history-holder:rw"]}
+    problems = check_fp_overlay.check(rendered, SUCCESSOR)
+    assert problems, "an inherited-and-promoted historical mount must be rejected"
+    assert any("thief" in p for p in problems), problems
+
+    # Inheriting it read-only is legitimate and must still pass.
+    read_only = json.loads(json.dumps(rendered))
+    read_only["services"]["thief"]["volumes_from"] = ["history-holder:ro"]
+    assert check_fp_overlay.check(read_only, SUCCESSOR) == []
+
+
+def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
+    """The isolation itself, proven by using it rather than by grepping for it.
+
+    A copy is made, mutated, and the authoritative tree is then compared against
+    git to show it did not move. The real evidence for suite isolation is the
+    clean-checkout run in the acceptance gates; this pins the mechanism those
+    proofs depend on.
     """
-    runtime_config = Path("freqtrade/user_data/config.json")
-    original = runtime_config.read_bytes()
-    drifted = json.loads(original)
-    drifted["stake_amount"] = drifted["stake_amount"] + 1      # sizing drift
-    try:
-        runtime_config.write_text(json.dumps(drifted, indent=2) + "\n", encoding="utf-8")
-        result = subprocess.run(["bash", "scripts/start_fp_control.sh", SUCCESSOR],
-                                capture_output=True, text=True, timeout=180)
-        assert result.returncode != 0, "a drifted runtime config must stop the launcher"
-        assert "config_sha256" in result.stderr or "FP_IDENTITY_FAIL" in result.stderr, result.stderr
-    finally:
-        runtime_config.write_bytes(original)
-    assert runtime_config.read_bytes() == original
+    before = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
+    repo = repo_copy(tmp_path)
+    assert (repo / "research/fp/lane.py").exists()
+    assert (repo / "freqtrade/user_data/config.json").exists(), "the copy carries a runtime config"
+
+    (repo / "freqtrade/user_data/config.json").write_text("{}", encoding="utf-8")
+    (repo / "freqtrade/user_data/fp-control-2").mkdir(parents=True, exist_ok=True)
+
+    # The authoritative tree must be exactly as it was — not necessarily clean,
+    # since a writer may have work in progress, but unchanged by this test.
+    after = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
+    assert after == before, f"the authoritative tree changed:\n{before}\n--- became ---\n{after}"
+    assert not Path("freqtrade/user_data/fp-control-2").exists()
