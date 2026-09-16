@@ -923,6 +923,13 @@ def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
     proofs depend on.
     """
     before = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
+    lane = Path("freqtrade/user_data/fp-control-2")
+    # What the lane looked like before this test — which, during a qualification
+    # run, is a live directory full of evidence. The question is whether this
+    # test moved it, not whether it exists: asserting absence made a legitimate
+    # running qualification fail the suite.
+    lane_before = sorted(p.name for p in lane.iterdir()) if lane.is_dir() else None
+
     repo = repo_copy(tmp_path)
     assert (repo / "research/fp/lane.py").exists()
     assert (repo / "freqtrade/user_data/config.json").exists(), "the copy carries a runtime config"
@@ -934,7 +941,8 @@ def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
     # since a writer may have work in progress, but unchanged by this test.
     after = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
     assert after == before, f"the authoritative tree changed:\n{before}\n--- became ---\n{after}"
-    assert not Path("freqtrade/user_data/fp-control-2").exists()
+    lane_after = sorted(p.name for p in lane.iterdir()) if lane.is_dir() else None
+    assert lane_after == lane_before, "the test reached the authoritative lane"
 
 
 def test_storage_from_an_undescribable_container_reference_is_refused():
