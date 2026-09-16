@@ -129,7 +129,16 @@ jobs:
                "research/fp/records/paper_candidate_admission.json"),
               ("research/schema/forward_paper_cohort_registry.schema.json",
                "research/fp/records/forward_paper_cohort_registry.json"),
+              ("research/schema/evidence_digest_publication.schema.json",
+               "research/fp/records/evidence_digest_publication.json"),
+              # Created by S3b and absent until then. Validated when present
+              # rather than required to exist: freeze_t0 already refuses without
+              # it, and a CI step that demanded it now would fail every build
+              # until the stage that writes it.
+              ("research/schema/p2_qualification_binding.schema.json",
+               "research/fp/records/p2_qualification_binding.json"),
           ]
+          pairs = [(s, r) for s, r in pairs if pathlib.Path(r).is_file()]
           failed = False
           for schema_path, record_path in pairs:
               schema = json.loads(pathlib.Path(schema_path).read_text())
@@ -230,6 +239,92 @@ jobs:
             exit 1
           fi
           echo "preflight correctly refuses a T0"
+
+      - name: Registry law — RUNNING/T0 correspondence
+        # The invariants a per-row JSON schema cannot express: fp_run_active
+        # agreeing with the rows it summarises, a cohort id that derives from
+        # its own T0, one RUNNING row at a time, one lane per row.
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "research")
+          from fp import registry_law as law
+          problems = law.check_registry(law.load_registry())
+          for problem in problems:
+              print(f"::error::{problem}")
+          print("REGISTRY_LAW = " + ("PASS" if not problems else "FAIL"))
+          sys.exit(2 if problems else 0)
+          PY
+
+      - name: T0 freeze-candidate gate
+        # A no-op on every branch that does not touch the cohort registry. When
+        # one does freeze a T0 it insists on the whole transaction: exactly two
+        # files, exactly seven values, the closed row byte-identical, and
+        # SEMANTIC_IDENTITY(M1) == SEMANTIC_IDENTITY(M2).
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python3 scripts/check_freeze_candidate.py --base FETCH_HEAD --head HEAD
+
+      - name: freeze_t0 must refuse while no Owner authorization is merged
+        # The negative control for the authority boundary itself. T0 authority
+        # is a merged record, not a token: this asserts the record is absent and
+        # that its absence refuses, so a build can never go green with a T0
+        # frozen by anything other than an Owner merge.
+        run: |
+          set -euo pipefail
+          test ! -e docs/p2/OWNER_T0_AUTHORIZATION.md
+          python - <<'PY'
+          import subprocess, sys
+          sys.path.insert(0, "scripts")
+          sys.path.insert(0, "research")
+          import freeze_t0
+          head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                                text=True, check=True).stdout.strip()
+          try:
+              freeze_t0.read_authorization(head)
+          except freeze_t0.FreezeRefused as exc:
+              print(f"T0_AUTHORITY = ABSENT — {exc}")
+              sys.exit(0)
+          print("::error::an Owner T0 authorization is readable at HEAD; freezing a T0 is an "
+                "Owner act and must be reviewed as one")
+          sys.exit(1)
+          PY
+
+      - name: Semantic equivalence of this branch with its merge base
+        # Reported, never failing: a branch that changes runtime behaviour is
+        # ordinary work, and the equivalence proof is only binding between M1
+        # and M2. Printed on every run so the value is visible before the freeze
+        # rather than computed for the first time during it.
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          BASE=$(git merge-base HEAD FETCH_HEAD)
+          python3 scripts/prove_semantic_equivalence.py "$BASE" HEAD || true
+
+      - name: PR scope audit must actually run here
+        # The scope and reconciliation-version audits compare this branch against
+        # main, and they skip in a checkout that has no main reference at all —
+        # which is correct in a remote-less reproduction clone and would be a
+        # silent hole here. CI is where a reviewer reads the result, so CI proves
+        # the baseline resolved and nothing was skipped.
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python -m pytest tests/test_p2_scope_audit.py tests/test_p2_reconciliation_version.py \
+            -q -rs --no-header | tee "$RUNNER_TEMP/scope-audit.txt"
+          if grep -q "no baseline" "$RUNNER_TEMP/scope-audit.txt"; then
+            echo "::error::the PR scope audit could not resolve a baseline and skipped. It must"
+            echo "::error::run against main here, which is the only place a reviewer reads it."
+            exit 1
+          fi
+          if grep -qE "[1-9][0-9]* skipped" "$RUNNER_TEMP/scope-audit.txt"; then
+            echo "::error::the PR scope audit skipped a check unexpectedly"
+            sed -n "/short test summary/,$ p" "$RUNNER_TEMP/scope-audit.txt"
+            exit 1
+          fi
+          echo "SCOPE_AUDIT = RAN (baseline resolved, no skips)"
 
       - name: Test suite
         run: python -m pytest

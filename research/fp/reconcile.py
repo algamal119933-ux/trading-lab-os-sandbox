@@ -39,6 +39,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
 from fp import lane as fp_lane  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
+from fp import semantic_identity as fp_semantic  # noqa: E402
 
 PASS, FAIL = "PASS", "FAIL"
 # A finding that could not be established is neither a pass nor a contradiction.
@@ -49,6 +50,37 @@ UNPROVEN = "UNPROVEN"
 UNKNOWN_COMMIT = "0" * 40
 
 RECONCILE_ENGINE_VERSION = "FP_RECONCILE_V1"
+
+# Every finding this module can emit, named once so the set is a law rather than
+# a property of whichever branches happened to run. preflight keeps MECHANISM_KEYS
+# for the same reason: a check that silently stops being emitted is a check that
+# stopped running, and its absence looks exactly like its success.
+#
+# P1 closed on THIRTEEN findings and its closure record says so; that statement
+# describes P1 and is never rewritten. P2 adds registry_source_commit_equivalence
+# — the check that compares the registry's declared source commit against the one
+# stamped on the evidence — so the current and future law is FOURTEEN.
+FINDINGS_ALWAYS = (
+    "ledger_chain_integrity",
+    "record_attribution",
+    "record_source_commit",
+    "registry_source_commit_equivalence",
+    "input_uniqueness",
+    "decision_uniqueness",
+    "decision_input_linkage",
+    "decision_causality",
+    "event_time_replay",
+    "execution_backed_by_decision",
+    "no_duplicate_execution",
+    "restart_continuity",
+    "paper_only_authority",
+)
+# Emitted only when the caller bound a role, because without one there is no
+# role to bind records to. The CLI always requires --role, so a human-run
+# reconciliation always produces the full fourteen.
+FINDINGS_WHEN_ROLE_BOUND = ("record_role_binding",)
+EXPECTED_FINDINGS = tuple(sorted(set(FINDINGS_ALWAYS) | set(FINDINGS_WHEN_ROLE_BOUND)))
+RECONCILE_FINDING_COUNT = len(EXPECTED_FINDINGS)
 
 
 @dataclass
@@ -86,6 +118,124 @@ def repository_head() -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _stamped_roles(live) -> set:
+    return {(r.payload.get("identity") or {}).get("role") for r in live}
+
+
+def _registry_source_commit_equivalence(live, decisions, expected_role, stamped) -> Finding:
+    """Is the registry's declared source commit the same system as the stamped one?
+
+    ``expected_role`` selects the registry row. When the caller did not bind
+    one, the role the records themselves carry is used to *select* — not to
+    corroborate: the registry is the trusted side of this comparison, and
+    ``record_role_binding`` is the separate check that decides whether the
+    records may claim that role at all.
+    """
+    check = "registry_source_commit_equivalence"
+    if not live:
+        return Finding(check, UNPROVEN, "no live records, so no stamped commit to compare", 0)
+
+    role = expected_role
+    if role is None:
+        roles = {item for item in _stamped_roles(live) if item}
+        if len(roles) != 1:
+            return Finding(
+                check, UNPROVEN,
+                f"the evidence names {sorted(roles)} as its role, so no single registry row can be "
+                "selected to compare against",
+                len(roles),
+            )
+        role = next(iter(roles))
+
+    try:
+        registry = json.loads(fp_lane.read_identity_text(fp_lane.COHORT_REGISTRY))
+    except Exception as exc:  # noqa: BLE001
+        return Finding(check, UNPROVEN, f"the cohort registry is unreadable: {exc}", 0)
+
+    rows = [item for item in (registry.get("instances") or []) if item.get("role") == role]
+    if len(rows) != 1:
+        # Not UNPROVEN: the evidence claims a role the registry does not declare
+        # exactly once, and that is a contradiction rather than an unanswered
+        # question.
+        return Finding(
+            check, FAIL,
+            f"the registry declares {len(rows)} rows with role {role!r}; evidence attributed to a "
+            "role the registry cannot resolve has no declared source commit to be equivalent to",
+            len(rows),
+        )
+    row = rows[0]
+    status = row.get("status")
+    declared = (row.get("runtime_identity") or {}).get("source_commit")
+
+    if len(stamped) != 1:
+        return Finding(
+            check, UNPROVEN,
+            f"the evidence carries {len(stamped)} distinct source commits, so there is no single "
+            "runtime commit to compare the declaration against",
+            len(stamped),
+        )
+    stamped_commit = next(iter(stamped))
+
+    if declared is None:
+        if status != "NOT_STARTED":
+            return Finding(
+                check, FAIL,
+                f"{role} is {status} but declares no source_commit; a row that has started must "
+                "carry the commit its cohort was frozen against",
+                0,
+            )
+        # A NOT_STARTED row declares nothing, so there is nothing to be
+        # equivalent to — but only if the evidence agrees that no boundary was
+        # frozen. A record claiming PRE_T0 or POST_T0 under a row with no T0
+        # would mean the boundary came from somewhere other than the registry.
+        relations = {r.payload.get("t0_relation") for r in decisions if r.payload.get("t0_relation")}
+        if relations - {"T0_NOT_FROZEN"}:
+            return Finding(
+                check, FAIL,
+                f"{role} is NOT_STARTED and declares no T0, but its decisions claim "
+                f"{sorted(relations)}; a t0_relation other than T0_NOT_FROZEN under a row with no "
+                "frozen T0 means the boundary did not come from the registry",
+                len(relations),
+            )
+        return Finding(
+            check, PASS,
+            f"{role} is NOT_STARTED and declares no source commit, and every decision reads "
+            f"T0_NOT_FROZEN: there is no declaration for the stamped {stamped_commit[:8]} to "
+            "contradict",
+            0,
+        )
+
+    if status == "NOT_STARTED":
+        return Finding(
+            check, FAIL,
+            f"{role} is NOT_STARTED but declares source_commit {declared[:8]}; a row that has "
+            "started nothing may not hold the identity of a run that never happened",
+            0,
+        )
+
+    report = fp_semantic.compare(declared, stamped_commit, role)
+    if report["result"] == fp_semantic.EQUIVALENT:
+        return Finding(
+            check, PASS,
+            f"the registry declares {declared[:8]} and the evidence was written from "
+            f"{stamped_commit[:8]}; the two carry identical semantic identity — {report['detail']}",
+            0,
+        )
+    if report["result"] == fp_semantic.DIFFERENT:
+        return Finding(
+            check, FAIL,
+            f"the registry declares {declared[:8]} but the evidence was written from "
+            f"{stamped_commit[:8]}, and the two do not run the same system: {report['detail']}",
+            len(report["differences"]),
+        )
+    return Finding(
+        check, UNPROVEN,
+        f"the declared {declared[:8]} and the stamped {stamped_commit[:8]} could not be compared: "
+        f"{report['detail']}",
+        0,
+    )
 
 
 def reconcile(
@@ -209,6 +359,17 @@ def reconcile(
         commit_result = PASS
         commit_detail = f"all {len(live)} live records were written from {expected_commit[:8]}, this repository's HEAD"
     findings.append(Finding("record_source_commit", commit_result, commit_detail, len(stamped)))
+
+    # -- 2c. the DECLARED commit and the STAMPED commit must run the same system
+    # Contract section 5. The registry declares M1 — the merged main immediately
+    # before the freeze — while every record is stamped with M2, the commit the
+    # runtime actually ran at. Those are different commits by construction, and
+    # until now nothing compared the declaration to anything at all. A stamp
+    # that is required to exist but never checked is not evidence of the source,
+    # which is the same class of defect P1 closed one level down.
+    findings.append(
+        _registry_source_commit_equivalence(live, decisions, expected_role, stamped)
+    )
 
     # -- 3. market events captured exactly once ---------------------------
     event_ids = [r.payload.get("market_event_id") for r in inputs]
@@ -402,9 +563,26 @@ def reconcile(
         )
     )
 
+    # The report must carry every finding the law names, and no other. A finding
+    # that quietly stopped being emitted is a check that stopped running, and
+    # from the outside that is indistinguishable from it passing.
+    expected = set(FINDINGS_ALWAYS)
+    if expected_role is not None:
+        expected |= set(FINDINGS_WHEN_ROLE_BOUND)
+    emitted = {item.check for item in findings}
+    findings_complete = emitted == expected
+    missing = sorted(expected - emitted)
+    unexpected = sorted(emitted - expected)
+
     status = PASS if all(item.result == PASS for item in findings) else FAIL
+    if not findings_complete:
+        status = FAIL
     return {
         "reconcile_engine_version": RECONCILE_ENGINE_VERSION,
+        "expected_findings": sorted(expected),
+        "findings_complete": findings_complete,
+        "missing_findings": missing,
+        "unexpected_findings": unexpected,
         "evidence_dir": str(evidence_dir),
         "pairs": pairs,
         "counts": {
@@ -418,7 +596,11 @@ def reconcile(
         "daily_pack_digest": fp_ledger.daily_pack_digest(ledgers.values()),
         "replays": replays,
         "findings": [item.as_dict() for item in findings],
-        "failing_checks": [item.check for item in findings if item.result != PASS],
+        "failing_checks": (
+            [item.check for item in findings if item.result != PASS]
+            + ([f"findings_incomplete: missing {missing}, unexpected {unexpected}"]
+               if not findings_complete else [])
+        ),
         "reconciliation": status,
         "real_money_authorized": False,
     }

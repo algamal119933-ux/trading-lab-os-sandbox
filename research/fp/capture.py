@@ -1073,6 +1073,28 @@ class CaptureLoop:
                 "restart_counter": self.identity.restart_counter,
             }
             self._append("decision", payload)
+            # Contract section 7: a bar that closed after T0 but was recovered by
+            # backfill rather than observed live is a continuity gap. The
+            # crediting law already refuses it — POST_T0 + WARMUP is contextual,
+            # never credited — but refusing it silently would leave a missing
+            # hour and a recorded one looking identical in the evidence. They are
+            # different evidentiary objects, so the gap is recorded per bar: one
+            # incident names one candle nobody watched close.
+            if payload["t0_relation"] == "POST_T0" and bar_class == BAR_WARMUP:
+                self.record_incident(
+                    "activation_gap",
+                    (
+                        f"{pair} {self.timeframe} bar closing at {close_ts} closed after T0 but was "
+                        f"recovered {staleness}ms late, beyond one candle period; it is POST_T0 and "
+                        "WARMUP, so it is contextual evidence and is never credited"
+                    ),
+                    pair=pair,
+                    candle_ts=decision.candle_ts,
+                    close_ts_ms=close_ts,
+                    staleness_ms=staleness,
+                    bar_class=bar_class,
+                    t0_relation=payload["t0_relation"],
+                )
             self.state.decided_bars.add(key)
             self.state.signal_state[pair] = decision.signal_state
             self.state.decision_records += 1

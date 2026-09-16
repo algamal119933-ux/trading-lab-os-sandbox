@@ -290,6 +290,7 @@ Proceed autonomously within that contract.
 
 Do not ask the owner to run ordinary repository checks you can perform yourself.
 
-Return only at an `OWNER_MERGE_REQUIRED` gate, a Tier-3 durability blocker, a
-genuine strategy/risk/Dataset authority conflict, or `T0_PRECONDITIONS = PASS`.
+Return only at an `OWNER_MERGE_REQUIRED` gate, a genuine strategy/risk/Dataset
+authority conflict, or `T0_PRECONDITIONS = PASS`. Independent-host storage is no
+longer a P2 T0 precondition and is not a return trigger.
 Ordinary implementation, test and runtime issues are not returns.

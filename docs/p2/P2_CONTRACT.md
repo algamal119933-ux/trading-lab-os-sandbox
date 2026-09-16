@@ -92,20 +92,40 @@ persistence · restart recovery · no duplicate execution · ledger reconciliati
 data integrity
 ```
 
-P1 evidenced eight of them — the non-lifecycle eight — at commit `4543d4c3`.
-**That is not carried forward as the sole current proof.** `main` has advanced
-since, and this contract will advance it further. The eight are therefore
-**re-established during S3 against the current P2 source and runtime**.
+Nine of the twelve can be evidenced without a trade having happened; three
+cannot. `research/fp/capability.py` is that split made executable, and it is the
+only place the model is stated — every schema, tool, test and record derives
+from it rather than restating it.
 
 ```text
-S3, lane L1, pre-T0     the eight non-lifecycle properties, at Mq
-L2, post-T0, credited   the four lifecycle properties
-                        paper order/fill · position state ·
-                        no duplicate execution · and the completed
-                        entry→fill→position→exit→realised-PnL chain
+S3, lane L1, pre-T0     the NINE pre-T0 qualifiable properties, at Mq
+                        real market input · event-time/timestamp knowability ·
+                        paper-only authority · decision logging · risk/admission ·
+                        persistence · restart recovery · ledger reconciliation ·
+                        data integrity
+L2, post-T0, credited   the THREE lifecycle properties
+                        paper order/fill · position state · no duplicate execution
 
-P2 PASS requires the aggregate:  12 / 12
+P2 PASS requires the aggregate:  9 + 3 = 12 / 12
 ```
+
+**`FULL_TRADE_LIFECYCLE` is not one of the twelve.** It is the completed
+entry→fill→position→exit→realised-PnL chain, reported as its own status
+alongside the capability verdict — the activation pack reports it separately and
+the registry schema gives it its own enum. An earlier revision of this section
+described the split as "eight non-lifecycle" plus "four lifecycle", counting the
+aggregate as the fourth. That does not close: twelve minus three is nine, and
+folding the aggregate into the count would let a cohort reach `12/12` while a
+genuine property went unevidenced, with the aggregate standing in for it. It
+would also collapse the one distinction `P2 INCONCLUSIVE / INSUFFICIENT`
+depends on — a quiet window can leave the lifecycle unobserved with every
+capability intact, and that outcome is only expressible if the two are counted
+separately.
+
+P1 evidenced the pre-T0 nine at commit `4543d4c3`. **That is not carried forward
+as the sole current proof.** `main` has advanced since, and this contract will
+advance it further. The nine are therefore **re-established during S3 against the
+current P2 source and runtime**.
 
 **No pre-T0 record may be presented as prospective lifecycle evidence.** L1
 proves that the machinery works at the P2 commit. It proves nothing about a
@@ -124,7 +144,7 @@ record — never by path.
 | | Lane | Purpose | Credited? |
 | --- | --- | --- | --- |
 | **L0** | retained P1 qualification lane | history | **never** |
-| **L1** | fresh disposable pre-T0 qualification lane, S3 | prove the eight at Mq | **never** |
+| **L1** | fresh disposable pre-T0 qualification lane, S3 | prove the pre-T0 nine at Mq | **never** |
 | **L2** | fresh authoritative post-T0 cohort lane | the cohort | **the only lane that may be** |
 
 ```text
@@ -306,7 +326,7 @@ Its absence is the default, and the default is refusal.
 
 ```text
 S3   qualification run at Mq on L1 → preflight 16/16 · reconcile PASS ·
-     the eight properties · observe image_digest + python_version ·
+     the pre-T0 nine · observe image_digest + python_version ·
      generate the certificate WHILE L1 IS LIVE · stop · seal · archive L1
 S3b  PR: bind the observations and the certificate (class O)  → CI → MERGE → M1
      prove SEMANTIC_IDENTITY(Mq) == SEMANTIC_IDENTITY(M1)
@@ -344,6 +364,47 @@ VALIDATED AT ACTIVATION (scripts/validate_activation.py, exit 0/2)
     because the stamped cohort id equals the declared one
   9 the activation-gap record is present
 ```
+
+### The window law
+
+T0 is the **prospective evidence boundary** and it never moves. It is not,
+however, the start of the active window — a registry can say `RUNNING` while
+nothing runs, and counting a cohort's window from an instant at which it was not
+yet observing would mean the clock ran during the one interval whose records are
+explicitly not credited.
+
+```text
+ACTIVATION_UTC   the instant activation validation FIRST proves a lawful
+                 POST_T0 + LIVE cohort record
+
+WINDOW STARTS AT ACTIVATION_UTC                      not at T0_UTC
+
+NORMAL END       the first naturally completed full paper trade lifecycle
+                 AND all twelve PAPER_TRADING_OPERATIONAL_CAPABILITY properties
+                     satisfied under the section 3 model (9 pre-T0 + 3 post-T0)
+                 AND reconciliation, evidence and safety requirements PASS
+
+HARD CAP         ACTIVATION_UTC + 30 calendar days
+```
+
+Reaching the hard cap without a naturally completed lifecycle is a **lawful
+outcome**, not a failure: close under `P2 INCONCLUSIVE / INSUFFICIENT` (section
+12) and say so plainly. There is **no automatic extension**.
+
+```text
+FORBIDDEN, WITHOUT EXCEPTION, TO MAKE THE WINDOW END
+  an artificial trade · a threshold change · a forced entry or exit ·
+  any strategy modification
+```
+
+That prohibition is the whole reason the cap is expressible at all. A window
+that could be extended until it produced a trade would be a window that always
+produces one, and the result would say nothing about the system.
+
+`T0_UTC` remains immutable and remains the crediting boundary. `ACTIVATION_UTC`
+is only the active-window clock. Records between the two are governed by the
+crediting law exactly as before: `POST_T0 + WARMUP` is contextual and is never
+credited.
 
 ### The activation gap
 
@@ -385,11 +446,15 @@ between reconciliation runs.
 
 ## 8. Durability
 
-The two must never be conflated. The project has already paid for conflating
-them once, under the closure reason `EVIDENCE_LANE_LOST_IN_HOST_MIGRATION`.
+Two things must never be conflated, and the project has already paid for
+conflating them once, under the closure reason
+`EVIDENCE_LANE_LOST_IN_HOST_MIGRATION`: **a copy is not redundancy, and a digest
+is not a backup.** Everything below is written so that no record can acquire a
+stronger belief than the mechanism that produced it supports.
 
 ```text
-TIER 1 — SAME-HOST ARCHIVAL                                        REQUIRED
+TIER 1 — WHOLE-LANE ARCHIVAL                                       REQUIRED
+  Whole-lane archival with provenance and digest verification.
   MAY CLAIM  lanes cannot be commingled or cross-credited; no running container
              can reach an archived lane; operator error in the live lane cannot
              destroy archived evidence
@@ -397,25 +462,41 @@ TIER 1 — SAME-HOST ARCHIVAL                                        REQUIRED
              this machine being decommissioned
 
 TIER 2 — DIGEST PUBLICATION                                        REQUIRED
-  tracked: ledger tips, daily_pack_digest, record counts, per-file sha256.
-  No evidence CONTENT leaves the host.
+  Tracked publication of evidence counts, ledger tips, the daily pack digest and
+  the per-file hashes needed to prove the identity and extent of sealed
+  evidence. No evidence CONTENT leaves the host.
   MAY CLAIM  surviving evidence is provably the evidence that was sealed; a loss
              and its exact extent are provable rather than reconstructed
   MAY NOT CLAIM  that anything is recoverable. A digest is not a backup. It
              converts an unbounded loss into a bounded, documented one.
 
-TIER 3 — INDEPENDENT-HOST / INDEPENDENT-STORAGE SNAPSHOT
-  REQUIRED BEFORE T0 unless the Owner later changes this requirement.
-  Evidence storage outside the active workstation's FAILURE DOMAIN.
-  ONLY TIER 3 MAY CLAIM HOST-LOSS REDUNDANCY.
-  Discovery only: what is already lawfully available on this host. No purchase,
-  no provisioning, no credential creation without separate authority.
-  If no lawful independent destination exists after S3b:
-      STOP — OWNER_DECISION_REQUIRED BEFORE T0
+SECOND PHYSICAL DEVICE                REQUIRED WHEN AVAILABLE AND HEALTHY
+  The secondary WDC disk already present in this workstation. When it is
+  available and healthy for the cohort, it is used for an append-only /
+  versioned evidence copy.
+  LABELLED, ALWAYS AND EVERYWHERE
+      SAME_HOST_SECOND_DEVICE = YES
+      HOST_LOSS_REDUNDANCY    = NOT_PROVEN
+  MAY CLAIM  the sealed evidence exists on a second physical device, so the
+             failure of either single drive does not by itself destroy it
+  MAY NOT CLAIM  survival of host loss · workstation destruction · theft ·
+             host-wide filesystem or OS catastrophe
+  IT IS NOT CALLED TIER 3, in any record, at any time.
 ```
 
+**Independent-host storage is not a P2 T0 precondition.** The earlier revision of
+this section made an off-host snapshot `REQUIRED BEFORE T0` and stopped for an
+Owner decision if none existed. That was an Owner-added precaution and is
+superseded: it is removed as a blocker, not satisfied. True independent-host /
+off-host storage, restore qualification and disaster recovery are **P3
+operational-hardening scope**, and no cloud or NAS provisioning is required for
+P2. No external service, remote host or credential is provisioned by this
+contract.
+
 A same-host copy is never described as host-loss redundancy, in any record, at
-any time.
+any time. That sentence survives the amendment unchanged, and it is exactly why
+the second device carries `HOST_LOSS_REDUNDANCY = NOT_PROVEN` on its face: two
+drives in one chassis share a power supply, a room, and a thief.
 
 ---
 
@@ -429,9 +510,14 @@ S1 merged                                    S3b merged
 S2 merged                                    qualification certificate valid
 S3 PASS                                       SEMANTIC_IDENTITY(Mq) == (M1)
 fresh L2 exists and is empty                  Dataset lock PASS
-Tier-3 durability gate satisfied              strategy/risk/Dataset authority unchanged
-docs/p2/OWNER_T0_AUTHORIZATION.md merged      REAL_MONEY_AUTHORIZED = NO
+Tier 1 + Tier 2 satisfied                     strategy/risk/Dataset authority unchanged
+second device used when available/healthy     REAL_MONEY_AUTHORIZED = NO
+docs/p2/OWNER_T0_AUTHORIZATION.md merged
 ```
+
+Independent-host storage is **not** among them. An unavailable or unhealthy
+second device does not block T0 either — it is recorded as unavailable, and the
+cohort proceeds with Tier 1 and Tier 2, which are unconditional.
 
 When all are true, the report is `T0_PRECONDITIONS = PASS` and execution stops at
 `OWNER_T0_EXECUTION_CONFIRMATION_REQUIRED`.
@@ -447,7 +533,7 @@ OWNER ONLY
   risk semantic expansion                 Dataset authority / refreeze
   opening the parked 19d7d7e              live authorization / real money
   any class D or E change to a running cohort
-  Tier-3 provisioning, purchase or credential creation
+  any off-host storage provisioning, purchase or credential creation (P3 scope)
 
 CLAUDE CODE, AUTONOMOUSLY, WITHIN THIS CONTRACT
   build and test every tool named here — including freeze_t0, but never run it
@@ -460,8 +546,10 @@ CLAUDE CODE, AUTONOMOUSLY, WITHIN THIS CONTRACT
   re-ground on merged main and resume
 
 RETURNS TO THE OWNER ONLY AT
-  OWNER_MERGE_REQUIRED · Tier-3 unavailable · a genuine strategy/risk/Dataset
-  authority conflict · T0_PRECONDITIONS = PASS
+  OWNER_MERGE_REQUIRED · a genuine strategy/risk/Dataset authority conflict ·
+  T0_PRECONDITIONS = PASS
+  (an unavailable second device is NOT a return: it is recorded and the cohort
+   proceeds on Tier 1 and Tier 2)
 ```
 
 Ordinary implementation, test and runtime issues inside S1–S3b are not returns.
@@ -494,7 +582,8 @@ Replacement-T0 budget is **not granted** by this contract.
 
 ```text
 P2 CLOSED / PASS
-  12/12 properties — the eight from S3 at Mq, the four from credited L2 records ·
+  12/12 properties — the NINE from S3 at Mq, the THREE from credited L2 records;
+  full_trade_lifecycle is reported beside them and is never counted among them ·
   reconciliation PASS · chains verify from genesis · one (commit, role, cohort,
   lane) identity throughout · equivalence proof holds · safe end-state ·
   archives sealed and digests published · closure record merged
@@ -555,7 +644,7 @@ S2   pre-T0 implementation — archive_fp_lane · prove_semantic_equivalence ·
      the registry_source_commit_equivalence reconciliation finding · the
      preflight correction · RUNNING/T0 correspondence tests · the CI
      freeze-candidate gate · activation and crediting negative controls ·
-     Tier 1 · Tier 2 · Tier 3 discovery only
+     Tier 1 · Tier 2 · second-device availability and replication
 S3   live pre-T0 qualification at Mq on L1, and the certificate
 S3b  class-O binding of the observations and the certificate → M1
 ```

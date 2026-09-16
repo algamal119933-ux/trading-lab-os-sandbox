@@ -580,10 +580,29 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
             ), {}
         stamped_cohorts = {(r.payload.get("identity") or {}).get("cohort_id") for r in live_records}
         declared_cohort = frozen[0].get("cohort_id")
-        if stamped_cohorts - {declared_cohort}:
+        # An unstamped record is handled before the set difference, exactly as
+        # the role check above does. Left to the difference alone it still
+        # failed, but reported "the evidence carries cohort ids []" — a refusal
+        # naming nothing, which reads as a misfiring gate and invites someone to
+        # decide it is spurious. The two cases are also different facts: a
+        # foreign id is another cohort's evidence in this lane, while a missing
+        # one is a record that cannot be attributed to any cohort at all.
+        if declared_cohort is not None and None in stamped_cohorts:
+            unstamped = [
+                r.seq for r in live_records
+                if (r.payload.get("identity") or {}).get("cohort_id") is None
+            ]
             return FAIL, (
-                f"the evidence carries cohort ids {sorted(c for c in stamped_cohorts if c)} that the "
-                f"registry does not declare for {runtime.role} ({declared_cohort})"
+                f"{len(unstamped)} record(s) in {runtime.evidence_dir} carry no cohort id and "
+                f"cannot be attributed to {runtime.role}'s frozen cohort {declared_cohort}: "
+                f"seq {unstamped[:5]}. A lane holding records written before T0 was frozen is "
+                "not a fresh lane"
+            ), {}
+        foreign_cohorts = sorted(c for c in stamped_cohorts - {declared_cohort} if c)
+        if foreign_cohorts:
+            return FAIL, (
+                f"the evidence carries cohort ids {foreign_cohorts} that the registry does not "
+                f"declare for {runtime.role} ({declared_cohort})"
             ), {}
     stamped = {
         (r.payload.get("identity") or {}).get("strategy_sha256")
