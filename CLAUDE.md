@@ -1,28 +1,32 @@
-# CLAUDE.md — Trading Lab OS Cloud Sandbox
+# CLAUDE.md — Trading Lab OS
 
 ## Identity
 
 Repository: `trading-lab-os-sandbox`
 
-This repository is a **sanitized cloud-development copy** of Trading Lab OS.
-It is intentionally separated from the owner's local Windows/WSL/Docker project.
+This repository is checked out on a **native Ubuntu host with Docker Engine**,
+reconstituted by `P1 — HOST RECONSTITUTION`. It is the workspace a live paper
+runtime is started from, and the terminal on this host is the operator surface.
+
+The earlier Windows / WSL / Docker Desktop host is gone. Its evidence lane did
+not survive the migration — see
+[`docs/fp-boot-1/FP_CONTROL_1_COHORT_CLOSURE.md`](docs/fp-boot-1/FP_CONTROL_1_COHORT_CLOSURE.md)
+— so nothing on it is reachable and nothing recorded there may be treated as
+current.
 
 ### Critical environment rule
 
 Do **not** assume you can access:
-- `C:\trading_lab_os_v1`
-- the owner's Windows filesystem
-- the owner's WSL instance
-- the owner's Docker Desktop runtime
-- local `.env`
-- local exchange data files
-- local SQLite databases
-- local Grafana/Prometheus/MLflow state
+- `C:\trading_lab_os_v1`, the Windows filesystem, or any WSL instance
+- the prior host's `.env`, SQLite databases, or Grafana/Prometheus/MLflow state
+- the FP-CONTROL-1 evidence lane, in any form
 
-Repository evidence is authoritative for this cloud workspace.
-Previously recorded local-runtime evidence may be used as historical evidence only.
+Repository evidence is authoritative. Previously recorded runtime evidence from
+any host is historical evidence only, and evidence from *this* host is current
+only for the commit it was produced at.
 
-Do not claim a local runtime test passed unless the test was actually run in the current environment or in CI.
+Do not claim a runtime test passed unless it was actually run in the current
+environment or in CI, at a commit you can name.
 
 ---
 
@@ -142,206 +146,56 @@ Do not call reduced exposure "alpha" without exposure-adjusted analysis.
 
 # CURRENT AUTHORIZED STAGE
 
-`CLOUD-0 — REPOSITORY READINESS & REPRODUCIBLE RESEARCH HARNESS`
+`P2 — PROSPECTIVE PAPER PROOF`
 
-Do **not** jump directly to FreqAI, RD-Agent, Hyperopt, Hummingbot, Condor, or live trading.
+**The stage contract is [`docs/p2/P2_CONTRACT.md`](docs/p2/P2_CONTRACT.md).** It
+is the P2 single source of truth: purpose, lane model, source-commit model, the
+T0 transaction, crediting law, durability tiers, authority and closure law all
+live there and are deliberately not restated here.
 
-Do **not** run or optimize a complex `TrendMomentumBaselineV1` merely because such a file exists.
+Do **not** jump directly to FreqAI, RD-Agent, Hyperopt, Hummingbot, Condor,
+NautilusTrader, Qlib, or live trading.
 
-The first goal is to make this repository safe, reproducible, CI-verifiable, and ready for controlled deterministic baseline research.
+Do **not** run or optimize a complex `TrendMomentumBaselineV1` merely because
+such a file exists.
 
----
+## Closed stages — their records, not their directives
 
-## CLOUD-0 execution gates
+The execution directives for the stages below were spent when those stages
+closed. Their outcomes live in their closure records, which remain authoritative
+for what was established; the directives themselves are not reproduced here,
+because a spent instruction sitting under "current stage" is how a closed stage
+gets re-run.
 
-### C0.1 — Repository truth
+```text
+CLOUD-0     repository readiness and reproducible research harness
+            docs/cloud-0/CLOUD-0_CLOSURE.md  (+ C0.1, C0.2, C0.4, C0.7 records)
+BASELINE-1  simple deterministic active benchmark — both protocol windows run
+            docs/research/BASELINE_1_PROTOCOL.md
+            docs/research/BASELINE_1_DEVELOPMENT_RESULT.md
+            docs/research/BASELINE_1_VALIDATION_RESULT.md
+            BASELINE_PROTOCOL = PASS · BASELINE_PERFORMANCE = NEUTRAL ·
+            DURABLE_ALPHA = NOT_PROVEN · Validation is SPENT, never pristine OOS
+FP-BOOT-1   forward-paper scaffold, admission, preflight, ledgers, capture loop
+            docs/fp-boot-1/
+P1          host reconstitution — docs/p1/P1_CLOSURE.md — CLOSED / PASS
+```
 
-Inspect the entire repository.
+## Execution model
 
-Identify:
-- tracked source/config/docs;
-- local-only artifacts that should not be tracked;
-- stale or conflicting directives;
-- configuration precedence risks;
-- tests/scripts that currently exist;
-- missing dependency pins;
-- assumptions that only work on the owner's local machine.
+```text
+Terminal = operator surface     Claude Code = sole writer/executor
+CliDeck = NONE                  Codex = NONE
+branch → PR → CI → OWNER MERGE → re-ground → resume the SAME stage
+fail-closed: UNPROVEN blocks exactly as FAIL does, and no override flag exists
+```
 
-Produce a concise repository state record.
+## Standing prerequisite order and boundaries
 
----
-
-### C0.2 — Secret and artifact hygiene
-
-Verify the repository contains no:
-- `.env`
-- real API keys
-- JWT secrets
-- GitHub tokens
-- private keys
-- SQLite trade DBs
-- logs containing credentials
-- market-data directories
-- backtest-result archives that are not deliberate fixtures
-- MLflow runtime state
-
-Strengthen `.gitignore` if necessary.
-
-Do not remove useful reproducibility reports merely because they are generated artifacts; classify them explicitly.
-
----
-
-### C0.3 — Paper-safety invariant
-
-The repository must make unsafe live activation difficult.
-
-Verify / test that baseline configuration and scripts enforce:
-- `dry_run=true`
-- spot only
-- no leverage
-- no futures/margin
-- no shorts
-- blank exchange key/secret in examples
-- no withdrawal path
-- bounded max open trades
-- bounded simulated wallet/stake
-
-The paper guard must fail closed.
-
-Add automated tests for these invariants.
-
----
-
-### C0.4 — Configuration isolation
-
-Do not rely on a runtime-generated `config.json` being committed.
-
-Use a safe example / research config pattern.
-
-Document Freqtrade precedence:
-CLI > environment > config > strategy.
-
-Create a reproducible way for CI/research to show the effective config without requiring secrets.
-
-No test should silently mix config-level ROI/stoploss/timeframe with strategy-level values.
-
----
-
-### C0.5 — CI
-
-Create a GitHub Actions workflow appropriate for this repository.
-
-At minimum, CI should verify what is feasible without private data:
-- Python syntax / compile checks
-- JSON validity
-- YAML validity
-- PowerShell or shell-script sanity where practical
-- paper-guard tests
-- exporter unit/smoke tests
-- Docker Compose configuration rendering using safe dummy local-only environment values
-- exporter image build
-- deterministic repository checks
-
-Use pinned major/minor action versions and avoid unnecessary third-party actions.
-
-If a Freqtrade container can be used safely in CI without private credentials:
-- verify the strategy/config can be loaded;
-- do not run live trading.
-
-Do not make CI depend on locked OOS results.
-
----
-
-### C0.6 — Research evidence schema
-
-Create a machine-readable experiment record schema containing at least:
-- timestamp
-- command
-- code commit
-- config hash
-- dataset hashes
-- strategy hash
-- Freqtrade version
-- pairs
-- timeframe
-- detail timeframe
-- timerange
-- fee assumption
-- wallet
-- stake
-- max open trades
-- result metrics
-- gate decision
-- reason
-
-Prefer JSON plus concise Markdown summary.
-
----
-
-### C0.7 — Data-reproduction plan
-
-Because market data is intentionally excluded from Git:
-
-Create a documented, deterministic data acquisition and audit workflow.
-
-Requirements:
-- exact exchange / market type
-- exact pairs
-- exact timeframes
-- explicit start/end
-- deep audit after download
-- SHA256 fingerprints
-- no accidental update of a frozen dataset during an experiment
-
-Do not expose or use a locked OOS simply to optimize a candidate.
-
-Before choosing Dataset V2 dates, explain the regime-coverage rationale without looking at active-strategy outcomes.
-
----
-
-# NEXT RESEARCH STAGE AFTER CLOUD-0
-
-Only after CLOUD-0 closes:
-
-`BASELINE-1 — SIMPLE DETERMINISTIC ACTIVE BENCHMARK`
-
-Preferred initial concept:
-- 1h
-- spot
-- long-only
-- EMA50 / EMA200 regime logic
-- no Hyperopt
-- no AI
-- no RSI/ATR/volume filter initially
-- no complex ROI schedule
-- transparent exit logic
-- conservative emergency stoploss only
-
-This is an interpretable reference, not a profit-maximization attempt.
-
-Before adding complexity:
-- normal Development backtest
-- lookahead analysis
-- recursive analysis
-- detailed-timeframe simulation where appropriate
-- exposure-adjusted evaluation
-
-Measure:
-- return
-- max drawdown
-- Sharpe / Sortino / Calmar
-- profit factor
-- win rate
-- trade count
-- consecutive losses
-- fees
-- turnover
-- time/capital exposure
-- return per unit of exposure
-- per-pair contribution
-- exposure-matched passive comparison
-
-Add later features by **ablation only**, one at a time.
+[`docs/NEXT_EXECUTION_PREREQUISITES_2026-09-14.md`](docs/NEXT_EXECUTION_PREREQUISITES_2026-09-14.md)
+records the ordered prerequisites to Paper Beta and the authority boundaries. It
+grants no execution authority and is not superseded by the P2 contract; P2 is
+items 3 through 5 of that order.
 
 ---
 
@@ -387,15 +241,22 @@ AI does not receive unrestricted real-money execution authority.
 
 Work on a dedicated branch, not directly on `main`.
 
-Preferred branch:
-
-`claude/cloud-0-repo-readiness`
+Branch names are stage-scoped, e.g. `claude/p2-governance`,
+`claude/p2-pre-t0-implementation`.
 
 Make small coherent commits.
+
+Never push to `main`. Never auto-merge. Never squash or rebase a PR: merges are
+normal two-parent merges the Owner performs.
 
 Do not rewrite published history.
 
 Do not delete evidence to make a gate pass.
+
+While a forward-paper cohort is running, the runtime's checkout stays pinned at
+its frozen commit. Cut branches and make commits from a separate worktree — a
+`git checkout` in the runtime's own directory changes what the launcher would
+stamp and dirties the tree the running capture loop reads.
 
 ---
 
@@ -422,10 +283,13 @@ OWNER_DECISION_REQUIRED = YES/NO
 
 ## Immediate first action
 
-Start with `C0.1 — Repository truth`.
+Read [`docs/p2/P2_CONTRACT.md`](docs/p2/P2_CONTRACT.md), then re-ground on merged
+`main` and resume P2 at the first stage of §13 that is not yet merged.
 
-Then proceed autonomously through CLOUD-0.
+Proceed autonomously within that contract.
 
-Do not ask the owner to run ordinary repository checks that you can perform in the cloud environment yourself.
+Do not ask the owner to run ordinary repository checks you can perform yourself.
 
-Stop only for a true blocker, a safety boundary, or completion of CLOUD-0.
+Return only at an `OWNER_MERGE_REQUIRED` gate, a Tier-3 durability blocker, a
+genuine strategy/risk/Dataset authority conflict, or `T0_PRECONDITIONS = PASS`.
+Ordinary implementation, test and runtime issues are not returns.
