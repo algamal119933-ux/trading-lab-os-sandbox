@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": "2026-09-16T16:33:42Z",
+  "published_utc": "2026-09-16T16:41:27Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
@@ -38,6 +38,44 @@
           "trade": "0000000000000000000000000000000000000000000000000000000000000000"
         },
         "daily_pack_digest": "fa347aa5d9084777c311cc93f9c29ae04815aea26b22e867422cc5fa1bada1d0",
+        "counts": {
+          "decision": 1998,
+          "incident": 3,
+          "input": 1998,
+          "trade": 0
+        },
+        "chain_problems": []
+      }
+    },
+    {
+      "archive_name": "l1-attempt-9ba714fd",
+      "role": "FP-CONTROL-2",
+      "cohort_id": null,
+      "lane_status_at_archival": "NOT_STARTED",
+      "reason": "First L1 pre-T0 qualification attempt, source commit 9ba714fdc7c456d04d44256ca84bfefcb04ce3f1. Runtime-attached preflight 16/16 PASS and reconciliation 14/14 PASS at that commit, but scripts/seal_pre_t0_qualification.py could not produce a certificate: it built a preflight RuntimeContext with no observability endpoints and no market route, so checks 6, 11 and 14 returned UNPROVEN and blocked. Repairing that tool changes RUNTIME_TREE, so Mq moves and this lane is superseded rather than reused. Contextual: never credited, never deleted.",
+      "archived_utc": "2026-09-16T16:41:27Z",
+      "verified_utc": "2026-09-16T16:41:27Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-2",
+      "file_count": 7,
+      "total_bytes": 6355217,
+      "files": {
+        "evidence/.fp_capture.lock": "8090110ff9bbe662d36af122809a1c9569fd736a241702b8ce1b8e92d3f58eeb",
+        "evidence/capture_runtime.json": "3030525431cce288a36cc1bdeb036bbcbbcdfa60773765c09e722181cb042afd",
+        "evidence/paper_decision_ledger.jsonl": "6ec879e0bae0f95618b8424f39280b3a3bfccfcbd3f46c0b434516c512f8f9a7",
+        "evidence/paper_incident_ledger.jsonl": "02af1167f7a63f6d06124b505ebff7ede5b5695c619f3eba88e5e22b9e55b8ba",
+        "evidence/paper_input_ledger.jsonl": "4e20e09277c542572a55b5176c86f158cfe7b03d593ba1f924df525e1dc6d3ca",
+        "logs/freqtrade.log": "7ca1512a2f480d7f2c37b7d64af4b70ad6a61d97a7cb9d6b81c942932b6ad84b",
+        "tradesv3.sqlite": "011f8f447b5386949f6ff29d8dc9cff9d1f3881d4339dc14c20ef6cd37dd9e1d"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "75d08ce96cb8a307f87dc60e9466666a050eb7333e2b9586f6a04a36b2fb3257",
+          "incident": "29c6973e0a5c9ce634ed67363453f651dd31100c757073354abc139712c4f7a6",
+          "input": "c93c3c22b134b9ff36ff00b19fef1623c40963631f2928b55c8d7336dbbdaa0b",
+          "trade": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "daily_pack_digest": "8711087b950c2df112975fcdac6f37d30d1aa337d02e4ddf918257633d471e99",
         "counts": {
           "decision": 1998,
           "incident": 3,

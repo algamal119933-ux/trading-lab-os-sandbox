@@ -102,6 +102,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py": "S3 — the scope audit is pinned to ranges so it cannot decay",
     "research/fp/records/evidence_digest_publication.json": "S3 — Tier 2, the sealed lanes' digests",
+    "scripts/seal_pre_t0_qualification.py": "S3 — the seal must attach the live runtime, not only refuse",
+    "tests/test_p2_watch_and_seal.py": "S3 — the seal is proven able to succeed, not only to refuse",
+    "tests/test_p2_archival.py": "S3 — Tier 2 tests must survive Tier 2 being used",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

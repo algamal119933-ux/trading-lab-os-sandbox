@@ -198,6 +198,29 @@ def test_archiving_a_lane_that_does_not_exist_is_refused(lane_registry, tmp_path
 # -- Tier 2 ----------------------------------------------------------------
 
 
+PUBLICATION_RECORD = Path("research/fp/records/evidence_digest_publication.json")
+
+
+def fresh_publication(tmp_path: Path) -> Path:
+    """An empty publication document with the real record's claims and shape.
+
+    The tests below are about the publish mechanism, so they must start from an
+    empty ledger of archives. They used to start from a verbatim copy of the
+    committed record, which was indistinguishable from this while that record
+    was empty and stopped being so the first time Tier 2 was used for real: on
+    the S3 branch, four of these tests failed on the two archives S3 had
+    genuinely published. Shape and claims are still read from the real document
+    — a test carrying its own copy of the tier-2 disclaimer would stop noticing
+    if the real one changed — and only the accumulated entries are dropped.
+    """
+    document = json.loads(PUBLICATION_RECORD.read_text(encoding="utf-8"))
+    document["archives"] = []
+    document["published_utc"] = None
+    path = tmp_path / "publication.json"
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 @pytest.fixture
 def sealed(lane_registry, tmp_path):
     registry, root = lane_registry
@@ -210,11 +233,7 @@ def sealed(lane_registry, tmp_path):
 def test_a_published_digest_validates_against_its_schema(sealed, tmp_path):
     archive_dir, _ = sealed
     entry = publisher.verify_archive(archive_dir)
-    publication = tmp_path / "publication.json"
-    publication.write_text(
-        Path("research/fp/records/evidence_digest_publication.json").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
+    publication = fresh_publication(tmp_path)
     document = publisher.publish(entry, publication)
     schema = json.loads(
         Path("research/schema/evidence_digest_publication.schema.json").read_text(encoding="utf-8")
@@ -268,11 +287,7 @@ def test_an_unsealed_directory_refuses_publication(tmp_path):
 def test_a_published_digest_is_never_rewritten(sealed, tmp_path):
     """Re-verification is the point. Silent replacement is the attack."""
     archive_dir, _ = sealed
-    publication = tmp_path / "publication.json"
-    publication.write_text(
-        Path("research/fp/records/evidence_digest_publication.json").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
+    publication = fresh_publication(tmp_path)
     entry = publisher.verify_archive(archive_dir)
     publisher.publish(entry, publication)
 
@@ -288,17 +303,35 @@ def test_a_published_digest_is_never_rewritten(sealed, tmp_path):
         publisher.publish(forged, publication)
 
 
-def test_the_committed_publication_starts_empty_and_valid():
-    document = json.loads(
-        Path("research/fp/records/evidence_digest_publication.json").read_text(encoding="utf-8")
-    )
+def test_the_committed_publication_is_valid_and_claims_no_more_than_tier_2():
+    """It accumulates. What it must never do is grow a stronger claim.
+
+    This asserted an empty `archives` list until S3, which was a statement
+    about the record having never been used rather than about the record. Tier
+    2 exists to be appended to; the invariants that matter are that every entry
+    validates, that no entry carries evidence content, and that the document
+    keeps saying a digest is not a backup.
+    """
+    document = json.loads(PUBLICATION_RECORD.read_text(encoding="utf-8"))
     schema = json.loads(
         Path("research/schema/evidence_digest_publication.schema.json").read_text(encoding="utf-8")
     )
     assert not list(jsonschema.validators.validator_for(schema)(schema).iter_errors(document))
-    assert document["archives"] == []
     assert document["host_loss_redundancy"] is False
+    assert document["durability_tier"] == 2
     assert "not a backup" in document["tier_2_disclaimer"]
+
+    for entry in document["archives"]:
+        assert entry["archive_name"] and entry["role"]
+        assert entry["files"], "an entry with no per-file hashes proves no extent"
+        assert all(len(digest) == 64 for digest in entry["files"].values())
+        # Identity and extent only. A published digest never carries a ledger
+        # payload, a wallet, or a position.
+        assert set(entry) <= {
+            "archive_name", "role", "cohort_id", "lane_status_at_archival", "reason",
+            "archived_utc", "verified_utc", "source_lane", "file_count", "total_bytes",
+            "files", "evidence",
+        }
 
 
 # =========================================================================
@@ -465,11 +498,7 @@ def test_a_previously_published_digest_still_verifies_after_a_later_archive(
     populate(root)
     fp_archive.archive_lane(ROLE, name="point-a", archive_root=tmp_path / "artifacts",
                             reason="A", registry=registry)
-    publication = tmp_path / "publication.json"
-    publication.write_text(
-        Path("research/fp/records/evidence_digest_publication.json").read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
+    publication = fresh_publication(tmp_path)
     entry_a = publisher.verify_archive(tmp_path / "artifacts" / "point-a")
     publisher.publish(entry_a, publication)
 

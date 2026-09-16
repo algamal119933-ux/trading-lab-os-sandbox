@@ -375,3 +375,181 @@ def test_a_certificate_hashes_to_the_value_the_owner_will_name(tmp_path):
     import hashlib
     assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
     assert len(digest) == 64
+
+
+# -- the seal must be able to succeed, not only to refuse -------------------
+#
+# Every seal test above proves a refusal, and that is exactly the gap that hid
+# the freeze_t0 ordering defect S2 recorded: a tool driven only into its
+# refusals is never shown to reach its output at all. It hid one here too.
+# `seal` built its own preflight RuntimeContext with no observability endpoints
+# and no market route, so 'real market-data ingestion works', 'monitoring is
+# alive' and 'clock/timestamp handling is within tolerance' answered UNPROVEN —
+# which blocks exactly as FAIL does — and no certificate could ever be produced.
+# Observed on a live L1 lane at 9ba714fd whose own gates were green: preflight
+# 16/16 PASS and reconciliation 14/14 PASS by hand, and
+#
+#   QUALIFICATION_SEAL_REFUSED: preflight is BLOCKED; not PASS:
+#   ['real market-data ingestion works', 'monitoring is alive',
+#    'clock/timestamp handling is within tolerance']
+#
+# The refusal named three checks and not the one thing the operator had to do.
+
+
+ATTACHED = dict(
+    freqtrade_url="http://127.0.0.1:8080",
+    exporter_url="http://127.0.0.1:9108/metrics",
+    prometheus_url="http://127.0.0.1:9090",
+    api_user="qualification-api-user-never-recorded",
+    api_password="qualification-api-password-never-recorded",
+    check_market_route=True,
+)
+
+
+def _attached(**overrides) -> sealer.fp_preflight.RuntimeContext:
+    return sealer.fp_preflight.RuntimeContext(**{**ATTACHED, **overrides})
+
+
+def _pass_reconcile(monkeypatch):
+    """The synthetic lane cannot satisfy event_time_replay, which runs first.
+
+    The wiring refusals below are about the runtime context, so reconciliation
+    is stubbed past rather than satisfied; its own refusals are proven by
+    tests/test_p2_reconciliation_version.py and by the live S3 run.
+    """
+    monkeypatch.setattr(sealer.fp_reconcile, "reconcile", lambda *a, **k: {
+        "reconciliation": fp_reconcile.PASS,
+        "counts": {"input": 1, "decision": 1, "trade": 0, "incident": 1},
+        "ledger_tips": {"input": "a" * 64},
+        "daily_pack_digest": "b" * 64,
+        "failing_checks": [],
+    })
+
+
+def _green_gates(monkeypatch, evidence):
+    """Stub the two gate reports so seal's own assembly is what is under test.
+
+    Reproducing a sixteen-check runtime-attached preflight in-process would mean
+    reimplementing the runtime, and the real one is exercised against the live
+    lane during S3. What is asserted here is the part that was broken: that seal
+    wires the context it was given, demands PASS from both gates, and assembles
+    a certificate at all.
+    """
+    report = {
+        "preflight": fp_reconcile.PASS,
+        "checks": [{"check": f"check {i}", "result": fp_reconcile.PASS} for i in range(16)],
+    }
+    seen: dict = {}
+
+    def fake_preflight(evidence_dir=None, runtime=None):
+        seen["runtime"] = runtime
+        return report
+
+    monkeypatch.setattr(sealer.fp_preflight, "run", fake_preflight)
+    _pass_reconcile(monkeypatch)
+    monkeypatch.setattr(sealer.fp_semantic, "semantic_identity",
+                        lambda commit, role: type("I", (), {"digest": "c" * 64,
+                                                            "runtime_tree": {"x": "y"}})())
+    return seen
+
+
+def test_sealing_refuses_a_runtime_with_no_market_route(lane_env, monkeypatch):
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    _pass_reconcile(monkeypatch)
+    with pytest.raises(sealer.SealError, match="check-market-route is required"):
+        _seal(evidence, monkeypatch, runtime=_attached(check_market_route=False))
+
+
+def test_sealing_refuses_a_runtime_with_no_monitoring_endpoint(lane_env, monkeypatch):
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    _pass_reconcile(monkeypatch)
+    with pytest.raises(sealer.SealError, match="exporter-url or --freqtrade-url is required"):
+        _seal(evidence, monkeypatch,
+              runtime=_attached(exporter_url=None, freqtrade_url=None))
+
+
+def test_sealing_refuses_an_endpointless_runtime_by_default(lane_env, monkeypatch):
+    """The old behaviour, now a refusal that names the wiring."""
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    _pass_reconcile(monkeypatch)
+    with pytest.raises(sealer.SealError, match="check-market-route is required"):
+        _seal(evidence, monkeypatch, runtime=None)
+
+
+def test_the_seal_owns_the_lane_the_gates_run_over(lane_env, monkeypatch, tmp_path):
+    """A caller supplies endpoints; it never redirects the gates at another lane."""
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    seen = _green_gates(monkeypatch, evidence)
+    elsewhere = tmp_path / "someone-elses-lane"
+    elsewhere.mkdir()
+    _seal(evidence, monkeypatch,
+          runtime=_attached(evidence_dir=elsewhere, role="FP-CONTROL-1"))
+    assert Path(seen["runtime"].evidence_dir) == Path(evidence)
+    assert seen["runtime"].role == ROLE
+    # and the endpoints the caller did supply survived
+    assert seen["runtime"].exporter_url == ATTACHED["exporter_url"]
+    assert seen["runtime"].check_market_route is True
+
+
+def test_a_fully_attached_seal_produces_a_certificate(lane_env, monkeypatch):
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    _green_gates(monkeypatch, evidence)
+    certificate = _seal(evidence, monkeypatch, runtime=_attached())
+
+    assert certificate["certificate_version"] == sealer.CERTIFICATE_VERSION
+    assert certificate["role"] == ROLE
+    assert certificate["qualification_commit"] == COMMIT
+    assert certificate["qualification_result"]["preflight"] == "PASS"
+    assert certificate["qualification_result"]["preflight_checks_passed"] == 16
+    assert certificate["qualification_result"]["preflight_checks_total"] == 16
+    assert certificate["qualification_result"]["reconciliation"] == "PASS"
+    assert certificate["t0_relation_of_every_record"] == "T0_NOT_FROZEN"
+    assert certificate["prospective_evidence"] == "NONE"
+    assert certificate["real_money_authorized"] is False
+
+    # The nine pre-T0 properties, and never a lifecycle one.
+    from fp import capability as fp_capability
+
+    evidenced = certificate["qualification_result"]["properties_evidenced"]
+    assert sorted(evidenced) == sorted(fp_capability.PRE_T0_QUALIFIABLE)
+    assert not set(evidenced) & set(fp_capability.POST_T0_LIFECYCLE)
+
+    # What the sixteen checks were answered against, so "PASS 16/16" can be
+    # told apart from "PASS 16/16 with three checks excused".
+    attached = certificate["qualification_result"]["runtime_attached"]
+    assert attached["market_route_probed"] is True
+    assert attached["exporter_url"] == ATTACHED["exporter_url"]
+    assert attached["prometheus_url"] == ATTACHED["prometheus_url"]
+    assert attached["freqtrade_url"] == ATTACHED["freqtrade_url"]
+
+
+def test_a_certificate_records_no_credential(lane_env, monkeypatch):
+    """The certificate is published as a digest and read by later reviewers."""
+    _, _, evidence = lane_env
+    write_lane(evidence)
+    _green_gates(monkeypatch, evidence)
+    certificate = _seal(evidence, monkeypatch, runtime=_attached())
+    text = json.dumps(certificate)
+    assert ATTACHED["api_password"] not in text
+    assert ATTACHED["api_user"] not in text
+
+    # Keys, not substrings: a bare substring search for "user" matches
+    # "user_data" in every lane path in the record, which is how a credential
+    # check ends up failing on a path and proving nothing about credentials.
+    def keys(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                yield key
+                yield from keys(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from keys(item)
+
+    for key in keys(certificate):
+        assert not any(word in key.lower()
+                       for word in ("password", "secret", "token", "credential", "api_user"))
