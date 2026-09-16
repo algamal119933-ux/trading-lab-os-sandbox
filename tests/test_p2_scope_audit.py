@@ -105,6 +105,9 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/seal_pre_t0_qualification.py": "S3 — the seal must attach the live runtime, not only refuse",
     "tests/test_p2_watch_and_seal.py": "S3 — the seal is proven able to succeed, not only to refuse",
     "tests/test_p2_archival.py": "S3 — Tier 2 tests must survive Tier 2 being used",
+    "research/fp/records/p2_qualification_binding.json": "S3b — the class-O binding of Mq and the certificate",
+    "tests/test_p2_qualification_binding.py": "S3b — the binding's claims are recomputed, not trusted",
+    "docs/p2/S3_LIVE_PRE_T0_QUALIFICATION.md": "S3 / S3b stage record",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
