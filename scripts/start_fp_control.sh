@@ -48,6 +48,7 @@ fi
 # The runtime config must exist and be paper-safe before a container is created.
 # The guard runs against the same fixed path the identity check hashes and the
 # overlay mounts: one file, one identity.
+# shellcheck disable=SC2034  # read by require_paper_config in the sourced _common.sh
 HOST_CONFIG="freqtrade/user_data/config.json"
 require_paper_config
 
