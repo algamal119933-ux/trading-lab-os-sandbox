@@ -3,9 +3,18 @@
 Contract section 6 puts T0 authority in a **merged record**, not a token, and
 the reasoning is the whole design: a secret can be guessed, leaked, copied out
 of a transcript, or supplied by whoever is sitting at the keyboard; a merge
-cannot. ``docs/p2/OWNER_T0_AUTHORIZATION.md`` therefore does not exist, is read
-from git at HEAD rather than from the working tree, and its absence is the
-default — which makes refusal the default.
+cannot. ``docs/p2/OWNER_T0_AUTHORIZATION.md`` is therefore read from git at HEAD
+rather than from the working tree, and its absence is the default — which makes
+refusal the default.
+
+Its absence was also, for the whole of S1-S3b, a *fact about this repository*,
+and several tests here asserted that fact as though it were the law. It is not:
+the Owner granting authority is the lawful end of that default, and a test that
+fails the moment the mechanism it guards is lawfully used was describing the day
+it was written. What is durable is the shape of authority, not its absence — so
+the negative controls below construct the absence they need in a disposable
+clone, and the assertion against this repository asks whether any authorization
+at HEAD is *lawful*, not whether one exists.
 
 Every test here drives the real decision function. The git layer is scripted so
 that each test moves exactly one fact and everything else stays lawful;
@@ -159,26 +168,65 @@ def freeze(**overrides):
 # -- the headline refusal, against the real repository ---------------------
 
 
-def test_the_authorization_does_not_exist_on_main():
-    """The default state of this repository, and the default is refusal."""
+def test_the_authorization_at_this_head_is_absent_or_lawful():
+    """Either state is lawful; a third state — present and malformed — is not.
+
+    Before the Owner grants authority the file is absent and the tool refuses.
+    After the Owner merges it the file is present, and what must then be true is
+    that it parses, names this role, and names the same qualification run the
+    merged S3b binding pins. Asserting absence instead would make the Owner's
+    own lawful act fail the suite.
+
+    Neither branch asserts a T0: an authorization permits the freeze, and the
+    freeze is a separate transaction, so the registry is checked to be untouched
+    under both.
+    """
     head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
                           check=True).stdout.strip()
+    try:
+        granted = freeze_t0.read_authorization(head)
+    except freeze_t0.FreezeRefused as refusal:
+        assert "does not exist at" in str(refusal)
+    else:
+        merged_binding = json.loads(
+            subprocess.run(["git", "show", f"{head}:{freeze_t0.BINDING_PATH}"],
+                           capture_output=True, text=True, check=True).stdout
+        )
+        assert granted["ROLE"] == ROLE == merged_binding["role"]
+        assert granted["QUALIFICATION_COMMIT"] == merged_binding["qualification_commit"]
+        assert granted["QUALIFICATION_CERTIFICATE_SHA256"] == merged_binding["certificate_sha256"]
+        assert granted["REAL_MONEY_AUTHORIZED"].strip().upper() == "NO"
+        # An expiry that has already passed is a refusal, not a pass; that it
+        # parses at all is what this layer checks.
+        freeze_t0._parse_utc(granted["EXPIRES_UTC"], "EXPIRES_UTC")
+        # The qualification it names has to be in the history it authorizes.
+        assert subprocess.run(["git", "merge-base", "--is-ancestor",
+                               granted["QUALIFICATION_COMMIT"], head]).returncode == 0
+
+    row = next(r for r in json.loads(
+        subprocess.run(["git", "show", f"{head}:{freeze_t0.REGISTRY_PATH}"],
+                       capture_output=True, text=True, check=True).stdout
+    )["instances"] if r["role"] == ROLE)
+    assert row["t0_utc"] is None and row["cohort_id"] is None
+    assert row["status"] == "NOT_STARTED"
+
+
+def test_the_authorization_is_read_from_git_not_the_working_tree(clone):
+    """A working-tree read would let anyone with write access here grant T0.
+
+    Exercised in a disposable clone. The earlier version of this test planted the
+    file in THIS repository and unlinked it afterwards, which was harmless only
+    while the path was guaranteed empty; against a merged authorization it would
+    have deleted the Owner's record to run.
+    """
+    root, head = clone
+    head = _remove_authorization(root, head)
+    planted = root / freeze_t0.AUTHORIZATION_PATH
+    planted.parent.mkdir(parents=True, exist_ok=True)
+    planted.write_text(authorization(), encoding="utf-8")
+    assert planted.is_file()
     with pytest.raises(freeze_t0.FreezeRefused, match="does not exist at"):
         freeze_t0.read_authorization(head)
-
-
-def test_the_authorization_is_read_from_git_not_the_working_tree(tmp_path, monkeypatch):
-    """A working-tree read would let anyone with write access here grant T0."""
-    planted = Path("docs/p2") / "OWNER_T0_AUTHORIZATION.md"
-    assert not planted.exists()
-    planted.write_text(authorization(), encoding="utf-8")
-    try:
-        head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
-                              check=True).stdout.strip()
-        with pytest.raises(freeze_t0.FreezeRefused, match="does not exist at"):
-            freeze_t0.read_authorization(head)
-    finally:
-        planted.unlink()
 
 
 def test_freeze_t0_takes_no_authorization_token():
@@ -551,6 +599,28 @@ def _commit_authorization(root: Path, text: str, message: str = "Owner: authoriz
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
+def _remove_authorization(root: Path, head: str) -> str:
+    """A clone HEAD that carries no authorization, whatever main carries.
+
+    The three controls below prove that an uncommitted, a staged, and an
+    off-branch authorization each grant nothing. Each needs a HEAD where the
+    real thing is absent, and once the Owner has merged one, this repository is
+    no longer such a HEAD. Constructing the absence is the repair: the controls
+    then keep testing what they were written to test, in a clone, for as long as
+    the mechanism exists — rather than only until it was first used.
+    """
+    path = root / freeze_t0.AUTHORIZATION_PATH
+    if not path.exists():
+        return head
+    subprocess.run(["git", "-C", str(root), "rm", "--quiet", "--",
+                    freeze_t0.AUTHORIZATION_PATH], check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=owner@example.invalid",
+                    "-c", "user.name=owner", "commit", "--quiet", "-m",
+                    "the state before authority was granted"], check=True)
+    return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
 def test_authority_comes_from_the_committed_object_not_the_worktree(clone):
     """The load-bearing distinction, exercised against a real commit."""
     root, _ = clone
@@ -585,6 +655,7 @@ def test_authority_comes_from_the_committed_object_not_the_worktree(clone):
 def test_an_untracked_authorization_grants_no_authority(clone):
     """Writing the file and never committing it is the obvious attempt."""
     root, head = clone
+    head = _remove_authorization(root, head)
     path = root / freeze_t0.AUTHORIZATION_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(authorization(), encoding="utf-8")
@@ -596,6 +667,7 @@ def test_an_untracked_authorization_grants_no_authority(clone):
 def test_a_staged_but_uncommitted_authorization_grants_no_authority(clone):
     """Staging is not history either: `git show HEAD:` reads the commit."""
     root, head = clone
+    head = _remove_authorization(root, head)
     path = root / freeze_t0.AUTHORIZATION_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(authorization(), encoding="utf-8")
@@ -606,6 +678,7 @@ def test_a_staged_but_uncommitted_authorization_grants_no_authority(clone):
 
 def test_an_authorization_on_another_branch_is_not_authority_at_this_head(clone):
     root, head = clone
+    head = _remove_authorization(root, head)
     subprocess.run(["git", "-C", str(root), "checkout", "--quiet", "-b", "side"], check=True)
     _commit_authorization(root, authorization())
     subprocess.run(["git", "-C", str(root), "checkout", "--quiet", head], check=True)

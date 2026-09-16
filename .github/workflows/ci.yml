@@ -267,29 +267,81 @@ jobs:
           git fetch origin main
           python3 scripts/check_freeze_candidate.py --base FETCH_HEAD --head HEAD
 
-      - name: freeze_t0 must refuse while no Owner authorization is merged
-        # The negative control for the authority boundary itself. T0 authority
-        # is a merged record, not a token: this asserts the record is absent and
-        # that its absence refuses, so a build can never go green with a T0
-        # frozen by anything other than an Owner merge.
+      - name: The T0 authority boundary, in whichever state it is in
+        # The control for the authority boundary itself. T0 authority is a
+        # merged record, not a token, and this step proves the boundary holds in
+        # both of its lawful states.
+        #
+        # ABSENT is the default, and the default is refusal. The earlier version
+        # of this step asserted ONLY that state — `test ! -e` on the path — which
+        # made the Owner's own lawful grant a red build: the same defect class
+        # this stage's record names, a check whose subject was the present moment
+        # written down as though it were a law.
+        #
+        # GRANTED is equally lawful, and then the file must be what freeze_t0
+        # will actually read: parsing, naming this role and the qualification run
+        # the merged S3b binding pins, forbidding real money, and carrying an
+        # unexpired expiry. What neither state may do is carry a frozen T0 — the
+        # registry is checked here, and the transaction that writes it is audited
+        # by the freeze-candidate gate above. So a build still cannot go green
+        # with a T0 frozen by anything other than an Owner merge.
         run: |
           set -euo pipefail
-          test ! -e docs/p2/OWNER_T0_AUTHORIZATION.md
           python - <<'PY'
-          import subprocess, sys
+          import json, subprocess, sys
           sys.path.insert(0, "scripts")
           sys.path.insert(0, "research")
           import freeze_t0
           head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
                                 text=True, check=True).stdout.strip()
+          problems = []
           try:
-              freeze_t0.read_authorization(head)
+              granted = freeze_t0.read_authorization(head)
           except freeze_t0.FreezeRefused as exc:
+              granted = None
               print(f"T0_AUTHORITY = ABSENT — {exc}")
-              sys.exit(0)
-          print("::error::an Owner T0 authorization is readable at HEAD; freezing a T0 is an "
-                "Owner act and must be reviewed as one")
-          sys.exit(1)
+          if granted is not None:
+              binding = json.loads(subprocess.run(
+                  ["git", "show", f"{head}:{freeze_t0.BINDING_PATH}"],
+                  capture_output=True, text=True, check=True).stdout)
+              if granted["ROLE"] != binding["role"]:
+                  problems.append(f"authorization names role {granted['ROLE']!r}, "
+                                  f"binding names {binding['role']!r}")
+              if granted["QUALIFICATION_COMMIT"] != binding["qualification_commit"]:
+                  problems.append("the authorization names a qualification commit the merged "
+                                  "binding does not record")
+              if granted["QUALIFICATION_CERTIFICATE_SHA256"] != binding["certificate_sha256"]:
+                  problems.append("the authorization names a certificate the merged binding "
+                                  "does not pin")
+              if granted["REAL_MONEY_AUTHORIZED"].strip().upper() != "NO":
+                  problems.append("the authorization does not declare REAL_MONEY_AUTHORIZED = NO")
+              try:
+                  freeze_t0._parse_utc(granted["EXPIRES_UTC"], "EXPIRES_UTC")
+              except freeze_t0.FreezeRefused as exc:
+                  problems.append(str(exc))
+              if subprocess.run(["git", "merge-base", "--is-ancestor",
+                                 granted["QUALIFICATION_COMMIT"], head]).returncode != 0:
+                  problems.append("the qualification commit it names is not in this history")
+              print(f"T0_AUTHORITY = GRANTED — role {granted['ROLE']}, qualification "
+                    f"{granted['QUALIFICATION_COMMIT'][:8]}, certificate "
+                    f"{granted['QUALIFICATION_CERTIFICATE_SHA256'][:12]}, expires "
+                    f"{granted['EXPIRES_UTC']}")
+
+          # Authority permits a freeze. It is never itself a freeze.
+          registry = json.loads(subprocess.run(
+              ["git", "show", f"{head}:{freeze_t0.REGISTRY_PATH}"],
+              capture_output=True, text=True, check=True).stdout)
+          row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
+          if (row["t0_utc"], row["cohort_id"], row["status"]) != (None, None, "NOT_STARTED"):
+              problems.append(f"FP-CONTROL-2 carries t0={row['t0_utc']!r} "
+                              f"cohort={row['cohort_id']!r} status={row['status']!r}; a T0 "
+                              "written outside the audited freeze transaction")
+          if registry["real_money_authorized"] is not False:
+              problems.append("the registry does not declare real_money_authorized = false")
+          print("T0_FROZEN = NO" if not problems else "T0_AUTHORITY_GATE = FAIL")
+          for problem in problems:
+              print(f"::error::{problem}")
+          sys.exit(2 if problems else 0)
           PY
 
       - name: Semantic equivalence of this branch with its merge base

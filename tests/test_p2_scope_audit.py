@@ -91,15 +91,13 @@ S2_SCOPE: dict[str, str] = {
     "CLAUDE.md": "durability policy — the Tier-3 return trigger is superseded",
 }
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-}
+# PR #18, merged. Two parents: 2b96dbde (main before) + a887fa93 (the branch).
+S3_MERGE = "d6b1eeb3fd5995e69b3e31ab6d21807af5b9ec5b"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-BRANCH_SCOPE: dict[str, str] = {
+# Every path S3 / S3b touched → the requirement it satisfies. These entries were
+# BRANCH_SCOPE while the stage was in flight; they move here on the merge, where
+# they stop depending on which branch is checked out.
+S3_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py": "S3 — the scope audit is pinned to ranges so it cannot decay",
     "research/fp/records/evidence_digest_publication.json": "S3 — Tier 2, the sealed lanes' digests",
     "scripts/seal_pre_t0_qualification.py": "S3 — the seal must attach the live runtime, not only refuse",
@@ -108,6 +106,27 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/fp/records/p2_qualification_binding.json": "S3b — the class-O binding of Mq and the certificate",
     "tests/test_p2_qualification_binding.py": "S3b — the binding's claims are recomputed, not trusted",
     "docs/p2/S3_LIVE_PRE_T0_QUALIFICATION.md": "S3 / S3b stage record",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+BRANCH_SCOPE: dict[str, str] = {
+    "docs/p2/OWNER_T0_AUTHORIZATION.md": "S4 — the Owner's merged T0 authorization record",
+    "tests/test_p2_scope_audit.py": "S4 — S3's scope is pinned to its merge range; the absence "
+                                    "of an authorization stops being asserted as law",
+    "tests/test_p2_freeze_t0.py": "S4 — the authority controls construct the absence they need "
+                                  "instead of depending on this repository having it",
+    "tests/test_p2_qualification_binding.py": "S4 — the binding's own claim is separated from the "
+                                              "authorization's existence",
+    ".github/workflows/ci.yml": "S4 — the authority gate proves the boundary in both states",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -463,11 +482,64 @@ def test_no_real_money_capability():
 
 
 def test_no_t0_was_created():
+    """No T0 exists — which is not the same claim as "no authority was granted".
+
+    This test used to assert both, and the second assertion was a description of
+    the day it was written rather than a law: the Owner granting T0 authority is
+    the lawful end of that default, and it would have failed the suite for the
+    Owner's own act. What must hold until the freeze transaction is itself
+    merged is that the registry carries no T0 — an authorization permits the
+    freeze and is not the freeze. The authorization's own lawfulness is checked
+    below.
+    """
     row = next(r for r in registry_at("HEAD")["instances"] if r["role"] == "FP-CONTROL-2")
     assert row["t0_utc"] is None
     assert row["status"] == "NOT_STARTED"
     assert row["runtime_identity"]["source_commit"] is None
-    assert not Path("docs/p2/OWNER_T0_AUTHORIZATION.md").exists()
+
+
+def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
+    """The mirror of the binding audit, for the object that does carry authority.
+
+    Absent is lawful — it is the default, and the default is refusal. Present is
+    lawful too, and then exactly one thing must be true of it: it is what
+    ``freeze_t0`` will read, it names this role and the qualification run the
+    merged S3b binding pins, it forbids real money, and it carries an expiry.
+    What it must NOT have done is freeze anything by existing.
+    """
+    path = Path("docs/p2/OWNER_T0_AUTHORIZATION.md")
+    if not path.exists():
+        return
+    import freeze_t0
+
+    granted: dict[str, list[str]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = freeze_t0.AUTHORIZATION_LINE.match(line)
+        if match and match.group(1) in freeze_t0.AUTHORIZATION_KEYS:
+            granted.setdefault(match.group(1), []).append(match.group(2))
+    # Every field, each exactly once: a file that says two things about one
+    # field is an ambiguity, and the tool refuses it rather than choosing.
+    for key in freeze_t0.AUTHORIZATION_KEYS:
+        assert granted.get(key, []) != [], f"the authorization does not declare {key}"
+        assert len(granted[key]) == 1, f"the authorization declares {key} more than once"
+
+    binding = json.loads(Path("research/fp/records/p2_qualification_binding.json")
+                         .read_text(encoding="utf-8"))
+    assert granted["ROLE"][0] == binding["role"] == "FP-CONTROL-2"
+    assert granted["QUALIFICATION_COMMIT"][0] == binding["qualification_commit"]
+    assert granted["QUALIFICATION_CERTIFICATE_SHA256"][0] == binding["certificate_sha256"]
+    assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"
+    freeze_t0._parse_utc(granted["EXPIRES_UTC"][0], "EXPIRES_UTC")
+
+    # It authorizes a freeze; it does not perform one. Both the registry and the
+    # manifest of what this branch touched say so.
+    registry = registry_at("HEAD")
+    row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
+    assert row["t0_utc"] is None and row["cohort_id"] is None
+    assert row["status"] == "NOT_STARTED"
+    assert row["change_log"] == []
+    assert registry["fp_run_active"] is False
+    assert registry["real_money_authorized"] is False
 
 
 def test_no_cohort_was_created():
