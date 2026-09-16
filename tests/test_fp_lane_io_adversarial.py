@@ -867,3 +867,36 @@ def test_a_clean_tracked_tree_reaches_the_render_step_and_stops_there(tmp_path):
     assert "FP_SOURCE_FAIL" not in launcher.stderr
     assert "config" in calls, f"the launcher never reached the render step: {calls}"
     assert "up -d" not in calls
+
+
+def test_a_reconciliation_report_may_not_be_written_into_a_lane(tmp_path, monkeypatch):
+    """A report is not evidence, and must not land where evidence lives.
+
+    `--out <lane>/paper_input_ledger.jsonl` would replace a hash-chained ledger
+    with a report. No attacker is needed: one mistyped path does it.
+    """
+    from fp import reconcile as fp_reconcile
+
+    evidence = tmp_path / "evidence"
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
+    ledgers["input"].append({"pair": "BTC/USDT", "candle_ts": BASE_TS})
+    before = (evidence / INPUT_LEDGER).read_bytes()
+
+    # The lane roots the guard consults are the declared ones; point them at
+    # this disposable lane rather than writing into the real tree.
+    monkeypatch.setattr(fp_reconcile.fp_lane, "all_lane_roots", lambda *a, **k: [evidence.resolve()])
+
+    code = fp_reconcile.main([
+        "--evidence-dir", str(evidence), "--role", SUCCESSOR,
+        "--out", str(evidence / INPUT_LEDGER),
+    ])
+    assert code == 2
+    assert (evidence / INPUT_LEDGER).read_bytes() == before, "the report overwrote a ledger"
+
+    # A destination outside every lane is still written, so the guard refuses
+    # the dangerous case rather than the feature.
+    outside = tmp_path / "report.json"
+    assert fp_reconcile.main([
+        "--evidence-dir", str(evidence), "--role", SUCCESSOR, "--out", str(outside),
+    ]) in (0, 1, 2)
+    assert outside.is_file() and json.loads(outside.read_text(encoding="utf-8"))

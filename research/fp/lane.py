@@ -282,6 +282,26 @@ def resolve_lane(
     )
 
 
+def all_lane_roots(registry: dict | None = None) -> list[Path]:
+    """Every declared lane root on this host, resolved.
+
+    Used by tools that write *about* evidence to check they are not writing
+    *into* it. Unresolvable rows are skipped, as in :func:`other_lanes`: a row
+    that resolves to nowhere is not a place anything can land.
+    """
+    data = _load_registry(registry)
+    roots: list[Path] = []
+    for item in data.get("instances") or []:
+        role = item.get("role")
+        if not role:
+            continue
+        try:
+            roots.append(_resolve(resolve_lane(role, data).host_instance_dir))
+        except LaneError:
+            continue
+    return roots
+
+
 def other_lanes(role: str, registry: dict | None = None) -> list[Lane]:
     """Every other resolvable lane, for cross-instance containment checks.
 

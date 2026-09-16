@@ -35,6 +35,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import lane as fp_lane  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
 
@@ -377,6 +378,19 @@ def main(argv: list[str] | None = None) -> int:
     text = json.dumps(report, indent=2) + "\n"
 
     if args.out:
+        # A report is not evidence, and it may not be written where evidence
+        # lives: `--out <lane>/paper_input_ledger.jsonl` would overwrite a
+        # hash-chained ledger with a report, and one mistyped path is all that
+        # takes. Refusing is cheap; reconstructing a truncated ledger is not.
+        destination = Path(args.out).resolve()
+        for declared in fp_lane.all_lane_roots():
+            if destination == declared or declared in destination.parents:
+                print(
+                    f"RECONCILE_REFUSED: {args.out} is inside the evidence lane {declared}; "
+                    "a report must not be written where evidence lives",
+                    file=sys.stderr,
+                )
+                return 2
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"wrote {args.out}")
     if args.json:
