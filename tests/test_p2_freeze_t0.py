@@ -526,3 +526,113 @@ def test_an_unlawful_freeze_rolls_back_completely(clone):
     unstaged = subprocess.run(["git", "-C", str(root), "diff", "--name-only"],
                               capture_output=True, text=True, check=True).stdout.split()
     assert unstaged == []
+
+
+# =========================================================================
+# Authorization provenance: the committed git object, not a file on disk.
+#
+# "The Owner authorized this" must be a statement about history, not about the
+# current contents of a directory. Everything below is driven against a real
+# repository in which the authorization is genuinely committed, so the
+# distinction is exercised rather than asserted: the worktree copy is then
+# deleted, emptied and forged in turn, and the authority must come back
+# unchanged from the object every time.
+# =========================================================================
+
+
+def _commit_authorization(root: Path, text: str, message: str = "Owner: authorize T0") -> str:
+    path = root / freeze_t0.AUTHORIZATION_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "--", freeze_t0.AUTHORIZATION_PATH], check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=owner@example.invalid",
+                    "-c", "user.name=owner", "commit", "--quiet", "-m", message], check=True)
+    return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+def test_authority_comes_from_the_committed_object_not_the_worktree(clone):
+    """The load-bearing distinction, exercised against a real commit."""
+    root, _ = clone
+    head = _commit_authorization(root, authorization())
+    committed = freeze_t0.read_authorization(head)
+    assert committed["ROLE"] == ROLE
+    assert committed["QUALIFICATION_CERTIFICATE_SHA256"] == CERT
+
+    worktree_copy = root / freeze_t0.AUTHORIZATION_PATH
+
+    # Deleted from the worktree: authority is unchanged, because it never lived there.
+    worktree_copy.unlink()
+    assert freeze_t0.read_authorization(head) == committed
+
+    # Emptied: same.
+    worktree_copy.write_text("", encoding="utf-8")
+    assert freeze_t0.read_authorization(head) == committed
+
+    # Forged in place, naming a different role, a different certificate and no
+    # expiry. A filesystem read would take every one of these.
+    worktree_copy.write_text(
+        authorization(ROLE="FP-CANDIDATE-A", QUALIFICATION_CERTIFICATE_SHA256="0" * 64,
+                      EXPIRES_UTC=_future(3650)),
+        encoding="utf-8",
+    )
+    forged = freeze_t0.read_authorization(head)
+    assert forged == committed
+    assert forged["ROLE"] == ROLE
+    assert forged["QUALIFICATION_CERTIFICATE_SHA256"] == CERT
+
+
+def test_an_untracked_authorization_grants_no_authority(clone):
+    """Writing the file and never committing it is the obvious attempt."""
+    root, head = clone
+    path = root / freeze_t0.AUTHORIZATION_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(authorization(), encoding="utf-8")
+    assert path.is_file()
+    with pytest.raises(freeze_t0.FreezeRefused, match="does not exist at"):
+        freeze_t0.read_authorization(head)
+
+
+def test_a_staged_but_uncommitted_authorization_grants_no_authority(clone):
+    """Staging is not history either: `git show HEAD:` reads the commit."""
+    root, head = clone
+    path = root / freeze_t0.AUTHORIZATION_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(authorization(), encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "--", freeze_t0.AUTHORIZATION_PATH], check=True)
+    with pytest.raises(freeze_t0.FreezeRefused, match="does not exist at"):
+        freeze_t0.read_authorization(head)
+
+
+def test_an_authorization_on_another_branch_is_not_authority_at_this_head(clone):
+    root, head = clone
+    subprocess.run(["git", "-C", str(root), "checkout", "--quiet", "-b", "side"], check=True)
+    _commit_authorization(root, authorization())
+    subprocess.run(["git", "-C", str(root), "checkout", "--quiet", head], check=True)
+    with pytest.raises(freeze_t0.FreezeRefused, match="does not exist at"):
+        freeze_t0.read_authorization(head)
+
+
+def test_a_dirty_worktree_copy_cannot_reach_the_freeze_at_all(clone, lawful, monkeypatch):
+    """Two independent barriers, and the outer one is the clean-tree gate.
+
+    Even if the committed authorization is lawful, a modified worktree means the
+    frozen source commit would not describe what runs — so the freeze refuses
+    before the authorization is consulted at all.
+    """
+    monkeypatch.setattr(freeze_t0, "_git", ScriptedGit(status=" M docs/p2/OWNER_T0_AUTHORIZATION.md"))
+    with pytest.raises(freeze_t0.FreezeRefused, match="differ from HEAD"):
+        freeze()
+
+
+def test_freeze_t0_never_reads_the_authorization_from_the_filesystem():
+    """No filesystem read of that path exists anywhere in the tool."""
+    source = Path("scripts/freeze_t0.py").read_text(encoding="utf-8")
+    assert 'git", "show"' not in source  # it goes through _git, which is scripted in tests
+    assert '_git(["show", f"{head}:{AUTHORIZATION_PATH}"]' in source
+    for forbidden in (
+        "Path(AUTHORIZATION_PATH).read_text",
+        "open(AUTHORIZATION_PATH",
+        "REPO_ROOT / AUTHORIZATION_PATH",
+    ):
+        assert forbidden not in source, forbidden

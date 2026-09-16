@@ -31,13 +31,15 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from fp import ledger as fp_ledger
+
 import publish_evidence_digest as publisher
 from fp import archive as fp_archive
 from fp import lane as fp_lane
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 ROLE = "FP-CONTROL-2"
-TEST_LANE = "fp-control-2-s2archivetest"
+TEST_LANE = "fp-testlane-s2archive"
 
 
 @pytest.fixture
@@ -297,3 +299,191 @@ def test_the_committed_publication_starts_empty_and_valid():
     assert document["archives"] == []
     assert document["host_loss_redundancy"] is False
     assert "not a backup" in document["tier_2_disclaimer"]
+
+
+# =========================================================================
+# Provenance and atomicity.
+#
+# The archive is the only thing that will exist after the lane is gone, so the
+# properties that matter are: it records where it came from, it proves it
+# arrived intact rather than assuming it, and nothing is destroyed until that
+# proof holds.
+# =========================================================================
+
+
+def test_the_archive_records_where_it_came_from(lane_registry, tmp_path):
+    registry, root = lane_registry
+    populate(root)
+    manifest = fp_archive.archive_lane(
+        ROLE, name="provenance", archive_root=tmp_path / "artifacts",
+        reason="L1 qualification", registry=registry,
+    )
+    assert manifest["source_lane"] == str(root.resolve())
+    assert manifest["archive_dir"] == str((tmp_path / "artifacts" / "provenance").resolve())
+    assert manifest["role"] == ROLE
+    assert manifest["reason"] == "L1 qualification"
+    assert manifest["lane_status_at_archival"] == "NOT_STARTED"
+    # The path recorded is canonical, not the name that led to it.
+    assert Path(manifest["source_lane"]).is_absolute()
+
+
+def _executable_source(path: str) -> str:
+    """The module's code with docstrings and comments stripped.
+
+    Scanning the raw text would match the very prose that explains why a rename
+    is not used — a test that fails because the reasoning is documented is a
+    test that pressures someone to delete the reasoning.
+    """
+    import ast, io, tokenize
+
+    text = Path(path).read_text(encoding="utf-8")
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            doc = ast.get_docstring(node, clean=False)
+            if doc:
+                text = text.replace(doc, "")
+    out = []
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type != tokenize.COMMENT:
+            out.append(token.string)
+    return "".join(out)
+
+
+def test_the_protocol_is_copy_verify_seal_remove_and_never_a_rename(lane_registry, tmp_path):
+    """A rename is cheaper and is deliberately not used. Proven, not asserted."""
+    registry, root = lane_registry
+    populate(root)
+    manifest = fp_archive.archive_lane(ROLE, name="protocol", archive_root=tmp_path / "artifacts",
+                                       registry=registry)
+    assert manifest["rename_used"] is False
+    assert manifest["transfer_protocol"] == "COPY -> VERIFY BYTES -> VERIFY LEDGERS -> SEAL -> REMOVE"
+    code = _executable_source("research/fp/archive.py")
+    for forbidden in ("os.rename", "shutil.move", "os.replace", '"mv"', "'mv'"):
+        assert forbidden not in code, f"archive.py uses {forbidden}"
+    assert "shutil.copytree" in code
+
+
+def test_the_manifest_records_both_devices_without_branching_on_them(lane_registry, tmp_path):
+    """Cross-filesystem archival takes the same code path as same-filesystem."""
+    registry, root = lane_registry
+    populate(root)
+    manifest = fp_archive.archive_lane(ROLE, name="devices", archive_root=tmp_path / "artifacts",
+                                       registry=registry)
+    assert isinstance(manifest["source_device"], int)
+    assert isinstance(manifest["archive_device"], int)
+    assert manifest["crossed_filesystem"] == (
+        manifest["source_device"] != manifest["archive_device"]
+    )
+    # Recorded and never consulted: the devices appear exactly once each, in the
+    # manifest literal, and no branch anywhere selects a transfer strategy from
+    # them. A cross-filesystem archive therefore runs the code that was tested.
+    code = _executable_source("research/fp/archive.py")
+    import re as _re
+
+    for name in ("source_device", "archive_device", "crossed_filesystem"):
+        for statement in _re.findall(r"^\s*(?:if|elif|while)\b.*$", code, _re.MULTILINE):
+            assert name not in statement, f"{name} is branched on: {statement.strip()}"
+
+
+def test_pre_and_post_ledger_state_must_be_identical(lane_registry, tmp_path, monkeypatch):
+    """The archived chains are re-opened and required to agree with the lane."""
+    registry, root = lane_registry
+    evidence = root / "evidence"
+    evidence.mkdir(parents=True)
+    (root / "logs").mkdir(parents=True)
+    (root / "tradesv3.sqlite").write_text("db\n", encoding="utf-8")
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
+    for index in range(3):
+        ledgers["input"].append({"pair": "BTC/USDT", "candle_ts": index, "identity": {}})
+
+    manifest = fp_archive.archive_lane(ROLE, name="ledgers", archive_root=tmp_path / "artifacts",
+                                       registry=registry)
+    assert manifest["evidence"]["counts"]["input"] == 3
+    assert manifest["evidence"]["chain_problems"] == []
+
+    # And the archived copy really is the thing that was verified.
+    archived = fp_ledger.open_ledgers(tmp_path / "artifacts" / "ledgers" / "evidence")
+    assert archived["input"].tip_digest() == manifest["evidence"]["ledger_tips"]["input"]
+    assert archived["input"].verify() == []
+
+
+def test_a_copy_that_does_not_match_leaves_the_lane_untouched(lane_registry, tmp_path, monkeypatch):
+    """Nothing is destroyed until the proof holds."""
+    registry, root = lane_registry
+    populate(root)
+    real = fp_archive.sha256_path
+    # Every re-read from the destination returns a wrong hash, as a silently
+    # corrupted copy would.
+    monkeypatch.setattr(fp_archive, "sha256_path",
+                        lambda p: "0" * 64 if "artifacts" in str(p) else real(p))
+    with pytest.raises(fp_archive.ArchiveError, match="is not the evidence"):
+        fp_archive.archive_lane(ROLE, name="mismatch", archive_root=tmp_path / "artifacts",
+                                registry=registry)
+    # The lane survives a failed archival completely.
+    assert (root / "tradesv3.sqlite").is_file()
+    assert (root / "evidence" / "paper_input_ledger.jsonl").is_file()
+
+
+def test_the_archive_is_sealed_before_the_source_is_removed(lane_registry, tmp_path, monkeypatch):
+    """If the remove fails, a complete sealed archive already exists."""
+    registry, root = lane_registry
+    populate(root)
+    monkeypatch.setattr(fp_archive.shutil, "rmtree",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("permission denied")))
+    with pytest.raises(OSError):
+        fp_archive.archive_lane(ROLE, name="sealed-first", archive_root=tmp_path / "artifacts",
+                                registry=registry)
+    archive = tmp_path / "artifacts" / "sealed-first"
+    assert (archive / fp_archive.ARCHIVE_MANIFEST).is_file()
+    assert (archive / "tradesv3.sqlite").is_file()
+    manifest = json.loads((archive / fp_archive.ARCHIVE_MANIFEST).read_text(encoding="utf-8"))
+    assert manifest["file_count"] == 8
+
+
+def test_a_running_container_refuses_archival(lane_registry, tmp_path, monkeypatch):
+    """The engine holds the database open and never touches the capture lock."""
+    registry, root = lane_registry
+    populate(root)
+    monkeypatch.setattr(fp_archive, "running_container", lambda bot_name: "fp-control-2-engine")
+    with pytest.raises(fp_archive.ArchiveError, match="mid-write database"):
+        fp_archive.archive_lane(ROLE, name="engine-up", archive_root=tmp_path / "artifacts",
+                                registry=registry)
+    assert (root / "tradesv3.sqlite").is_file()
+
+
+def test_an_unreachable_docker_daemon_reads_as_nothing_running():
+    """Sound rather than lenient: this stack exists only as a compose project."""
+    assert fp_archive.running_container("a-name-no-container-has-" + "x" * 20) is None
+
+
+def test_a_previously_published_digest_still_verifies_after_a_later_archive(
+    lane_registry, tmp_path
+):
+    """Archive Point A survives Archive Point B. Tier 2's whole purpose."""
+    registry, root = lane_registry
+    populate(root)
+    fp_archive.archive_lane(ROLE, name="point-a", archive_root=tmp_path / "artifacts",
+                            reason="A", registry=registry)
+    publication = tmp_path / "publication.json"
+    publication.write_text(
+        Path("research/fp/records/evidence_digest_publication.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    entry_a = publisher.verify_archive(tmp_path / "artifacts" / "point-a")
+    publisher.publish(entry_a, publication)
+
+    # A second, entirely separate lane is archived afterwards.
+    populate(root)
+    fp_archive.archive_lane(ROLE, name="point-b", archive_root=tmp_path / "artifacts",
+                            reason="B", registry=registry)
+    entry_b = publisher.verify_archive(tmp_path / "artifacts" / "point-b")
+    document = publisher.publish(entry_b, publication)
+
+    assert len(document["archives"]) == 2
+    # Point A re-verifies byte for byte, and its published digests are unchanged.
+    again = publisher.verify_archive(tmp_path / "artifacts" / "point-a")
+    assert again["files"] == entry_a["files"]
+    assert again["evidence"]["daily_pack_digest"] == entry_a["evidence"]["daily_pack_digest"]
+    published_a = next(a for a in document["archives"] if a["archive_name"] == "point-a")
+    assert published_a["files"] == entry_a["files"]

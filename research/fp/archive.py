@@ -25,9 +25,31 @@ mounts ``freqtrade/user_data`` and nothing else, so an archive under
 ``lane.resolve_lane`` refuses any lane root resolving outside canonical
 ``user_data`` — which means an archive can never later be mistaken for a lane.
 
-Nothing here deletes anything. Moving is a rename where possible and a
-copy-then-verify-then-remove where it is not; the removal happens only after
-every byte has been re-read from the destination and hashed.
+**There is no rename, and no ``mv``.** The protocol is, in this order and
+always:
+
+    COPY    every file, symlinks refused outright
+    VERIFY  re-read every byte from the DESTINATION and hash it against the
+            source; refuse on the first divergence, and on any file that
+            arrived which the lane did not have
+    VERIFY  re-open the archived ledgers and require their tips, their daily
+            pack digest and their record counts to equal what the lane had
+    SEAL    write the manifest into the archive
+    REMOVE  only now delete the source, and recreate the lane root empty
+
+A rename would be atomic and far cheaper, and it is deliberately not used.
+``os.rename`` fails across filesystems, and ``shutil.move``/GNU ``mv`` silently
+degrade to a copy-and-unlink when it does — so a lane on one device and an
+archive on another would take a completely different code path from the one
+anybody tested, discovered at the moment a 6 GB evidence lane is being sealed.
+More importantly, a rename gives no opportunity to re-read what landed, and an
+archive nobody has read back is an assumption rather than a copy. The manifest
+records both devices so a later reader can see whether the copy crossed one,
+but the protocol does not branch on the answer: it is the same protocol either
+way.
+
+Nothing here deletes anything until the archive is complete, verified and
+sealed.
 """
 
 from __future__ import annotations
@@ -37,6 +59,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,6 +127,33 @@ def lane_is_locked(evidence_dir: Path) -> bool:
         return False
     finally:
         os.close(handle)
+
+
+def running_container(bot_name: str) -> str | None:
+    """The name of a running container for this lane, or None.
+
+    The evidence lock catches a live capture loop. It does not catch the
+    ENGINE: freqtrade holds ``tradesv3.sqlite`` open, writes to it, and never
+    touches the capture lock — so a lane could be archived out from under a
+    running engine with every lock check passing, and the archived database
+    would be a mid-write snapshot.
+
+    A docker daemon that cannot be reached is treated as "nothing is running",
+    and that is sound rather than lenient: this stack exists only as a
+    docker-compose project, so if there is no daemon there is no engine. An
+    unreachable daemon on a host that never had one is the normal case in CI.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--filter", f"name={bot_name}", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return names[0] if names else None
 
 
 def walk_files(root: Path) -> list[Path]:
@@ -174,7 +224,11 @@ def archive_lane(
         raise ArchiveError(str(exc)) from exc
     lane.assert_root_is_canonical()
 
-    source = lane.host_instance_dir
+    # Canonicalised on both sides. resolve_lane has already refused a root that
+    # escapes user_data, but the value that goes into the manifest — and the one
+    # every containment comparison below uses — must be the real path, not the
+    # name that led to it.
+    source = lane.host_instance_dir.resolve()
     if not source.is_dir():
         raise ArchiveError(f"{role}'s lane {source} does not exist; there is nothing to archive")
 
@@ -182,6 +236,14 @@ def archive_lane(
         raise ArchiveError(
             f"a capture loop holds the lock on {lane.host_evidence_dir}. Archiving under a live "
             "writer would move a ledger mid-append; stop the runtime first"
+        )
+    container = running_container(lane.bot_name)
+    if container:
+        raise ArchiveError(
+            f"container {container!r} is running for {role}. The engine holds "
+            f"{lane.host_db_path.name} open and never touches the capture lock, so archiving now "
+            "would seal a mid-write database; stop the stack first: "
+            f"scripts/stop_fp_control.sh {role}"
         )
 
     root = Path(archive_root or ARCHIVE_ROOT)
@@ -214,9 +276,16 @@ def archive_lane(
     ledger_state = _ledger_digests(lane.host_evidence_dir)
 
     root.mkdir(parents=True, exist_ok=True)
-    # Copy first, verify, then remove. A rename would be atomic and cheaper, but
-    # it gives no opportunity to re-read what landed, and an archive nobody has
-    # read back is an assumption rather than a copy.
+    source_device = os.stat(source).st_dev
+    archive_device = os.stat(root).st_dev
+    # COPY. Never os.rename, never shutil.move, never mv: rename fails across
+    # filesystems and move silently degrades to copy-and-unlink when it does, so
+    # a cross-device lane would take a code path nobody tested, at the moment a
+    # multi-gigabyte evidence lane is being sealed. walk_files has already
+    # refused any symlink, so symlinks=True here copies nothing that could
+    # escape — it is set so that a link appearing between the walk and the copy
+    # is preserved as a link and then caught by the extra-files check, rather
+    # than silently followed out of the lane.
     shutil.copytree(source, destination, symlinks=True)
 
     verified: dict[str, str] = {}
@@ -236,6 +305,25 @@ def archive_lane(
     if extra:
         raise ArchiveError(f"the archive holds files the lane did not: {sorted(extra)[:5]}")
 
+    # The ledgers are re-opened FROM THE ARCHIVE and required to agree with what
+    # the lane held. Per-file hashes already prove the bytes arrived; this proves
+    # the archived chains still verify as chains, and that the record counts and
+    # pack digest a Tier-2 publication will carry describe the archive rather
+    # than a memory of the lane.
+    archived_evidence = destination / lane.host_evidence_dir.name
+    ledger_state_after = _ledger_digests(archived_evidence)
+    for field in ("ledger_tips", "daily_pack_digest", "counts"):
+        if ledger_state.get(field) != ledger_state_after.get(field):
+            raise ArchiveError(
+                f"the archived evidence disagrees with the lane on {field}: "
+                f"{ledger_state.get(field)} in the lane, {ledger_state_after.get(field)} in "
+                f"{destination}"
+            )
+    if ledger_state_after.get("chain_problems"):
+        raise ArchiveError(
+            f"the archived ledgers do not verify: {ledger_state_after['chain_problems'][:3]}"
+        )
+
     manifest = {
         "archive_engine_version": ARCHIVE_ENGINE_VERSION,
         "archived_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -244,6 +332,15 @@ def archive_lane(
         "cohort_id": (fp_lane.select_row(role, registry).get("cohort_id")),
         "source_lane": str(source),
         "archive_dir": str(destination),
+        # Recorded, never branched on. The protocol is copy-verify-seal-remove
+        # whether or not the copy crossed a device boundary, so that a cross-
+        # filesystem archive does not take a different code path from the one
+        # that was tested.
+        "source_device": source_device,
+        "archive_device": archive_device,
+        "crossed_filesystem": source_device != archive_device,
+        "transfer_protocol": "COPY -> VERIFY BYTES -> VERIFY LEDGERS -> SEAL -> REMOVE",
+        "rename_used": False,
         "reason": reason,
         "file_count": len(verified),
         "total_bytes": sum((destination / rel).stat().st_size for rel in verified),

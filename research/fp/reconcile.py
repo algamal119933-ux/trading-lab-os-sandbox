@@ -51,6 +51,37 @@ UNKNOWN_COMMIT = "0" * 40
 
 RECONCILE_ENGINE_VERSION = "FP_RECONCILE_V1"
 
+# Every finding this module can emit, named once so the set is a law rather than
+# a property of whichever branches happened to run. preflight keeps MECHANISM_KEYS
+# for the same reason: a check that silently stops being emitted is a check that
+# stopped running, and its absence looks exactly like its success.
+#
+# P1 closed on THIRTEEN findings and its closure record says so; that statement
+# describes P1 and is never rewritten. P2 adds registry_source_commit_equivalence
+# — the check that compares the registry's declared source commit against the one
+# stamped on the evidence — so the current and future law is FOURTEEN.
+FINDINGS_ALWAYS = (
+    "ledger_chain_integrity",
+    "record_attribution",
+    "record_source_commit",
+    "registry_source_commit_equivalence",
+    "input_uniqueness",
+    "decision_uniqueness",
+    "decision_input_linkage",
+    "decision_causality",
+    "event_time_replay",
+    "execution_backed_by_decision",
+    "no_duplicate_execution",
+    "restart_continuity",
+    "paper_only_authority",
+)
+# Emitted only when the caller bound a role, because without one there is no
+# role to bind records to. The CLI always requires --role, so a human-run
+# reconciliation always produces the full fourteen.
+FINDINGS_WHEN_ROLE_BOUND = ("record_role_binding",)
+EXPECTED_FINDINGS = tuple(sorted(set(FINDINGS_ALWAYS) | set(FINDINGS_WHEN_ROLE_BOUND)))
+RECONCILE_FINDING_COUNT = len(EXPECTED_FINDINGS)
+
 
 @dataclass
 class Finding:
@@ -532,9 +563,26 @@ def reconcile(
         )
     )
 
+    # The report must carry every finding the law names, and no other. A finding
+    # that quietly stopped being emitted is a check that stopped running, and
+    # from the outside that is indistinguishable from it passing.
+    expected = set(FINDINGS_ALWAYS)
+    if expected_role is not None:
+        expected |= set(FINDINGS_WHEN_ROLE_BOUND)
+    emitted = {item.check for item in findings}
+    findings_complete = emitted == expected
+    missing = sorted(expected - emitted)
+    unexpected = sorted(emitted - expected)
+
     status = PASS if all(item.result == PASS for item in findings) else FAIL
+    if not findings_complete:
+        status = FAIL
     return {
         "reconcile_engine_version": RECONCILE_ENGINE_VERSION,
+        "expected_findings": sorted(expected),
+        "findings_complete": findings_complete,
+        "missing_findings": missing,
+        "unexpected_findings": unexpected,
         "evidence_dir": str(evidence_dir),
         "pairs": pairs,
         "counts": {
@@ -548,7 +596,11 @@ def reconcile(
         "daily_pack_digest": fp_ledger.daily_pack_digest(ledgers.values()),
         "replays": replays,
         "findings": [item.as_dict() for item in findings],
-        "failing_checks": [item.check for item in findings if item.result != PASS],
+        "failing_checks": (
+            [item.check for item in findings if item.result != PASS]
+            + ([f"findings_incomplete: missing {missing}, unexpected {unexpected}"]
+               if not findings_complete else [])
+        ),
         "reconciliation": status,
         "real_money_authorized": False,
     }

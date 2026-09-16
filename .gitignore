@@ -33,16 +33,28 @@ freqtrade/user_data/hyperopt.lock
 # deliberately as closure artifacts, not swept in by an incidental commit.
 freqtrade/user_data/fp-control-1/
 
-# The same, for every other declared instance lane, and for the disposable
-# lanes the adversarial tests build. A qualification run writes ledgers, a
-# database and logs into its lane; left untracked they fail the repository's own
-# integrity gate, and the tempting fix — committing them — is exactly what must
-# never happen to evidence. The pattern is a prefix rather than two literals
-# because lane.resolve_lane insists a lane live under this directory, so a test
+# The same, for the one other DECLARED instance lane. A qualification run writes
+# ledgers, a database and logs into its lane; left untracked they fail the
+# repository's own integrity gate, and the tempting fix — committing them — is
+# exactly what must never happen to evidence.
+#
+# Listed literally, one line per lane the registry actually declares. A prefix
+# pattern was tried and withdrawn: `fp-control-*/` also hid `fp-control-3`,
+# `fp-control-A` and `fp-control-PRODUCTION`, none of which the registry
+# declares. An ignore rule that hides an undeclared lane hides exactly the thing
+# an operator most needs to see — a second runtime writing evidence nobody
+# authorised — and it hides it from `git status`, which is the signal the
+# forward-paper protocol's own clean-worktree stop condition depends on.
+freqtrade/user_data/fp-control-2/
+
+# Disposable lanes built by the adversarial tests, and nothing else.
+# `lane.resolve_lane` insists a lane root live under this directory, so a test
 # that exercises archival has nowhere else to build one, and a test that fails
-# mid-run would otherwise leave the worktree dirty and stop a forward-paper
-# window on its own clean-worktree condition.
-freqtrade/user_data/fp-control-*/
+# mid-run would otherwise leave the worktree dirty. The namespace is deliberately
+# one that can never name a real instance: the registry's role enum is closed to
+# FP-CONTROL-1/2 and FP-CANDIDATE-A/B, so no declared lane can ever be called
+# `fp-testlane-…`, and tests/test_p2_gitignore_boundary.py asserts that.
+freqtrade/user_data/fp-testlane-*/
 
 # ---------------------------------------------------------------------------
 # Market data and derived artifacts.

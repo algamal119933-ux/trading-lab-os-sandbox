@@ -39,7 +39,7 @@ from fp import semantic_identity as fp_semantic
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 ROLE = "FP-CONTROL-2"
-TEST_LANE = "fp-control-2-s2watchtest"
+TEST_LANE = "fp-testlane-s2watch"
 HOUR_MS = 3_600_000
 COMMIT = "a" * 40
 

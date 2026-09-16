@@ -33,7 +33,7 @@ from fp import registry_law as fp_law
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 ROLE = "FP-CONTROL-2"
-TEST_LANE = "fp-control-2-s2activationtest"
+TEST_LANE = "fp-testlane-s2activation"
 HOUR_MS = 3_600_000
 COMMIT = "a" * 40
 

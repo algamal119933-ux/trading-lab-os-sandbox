@@ -43,6 +43,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import capability as fp_capability  # noqa: E402
 from fp import lane as fp_lane  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import preflight as fp_preflight  # noqa: E402
@@ -53,21 +54,10 @@ from fp import semantic_identity as fp_semantic  # noqa: E402
 CERTIFICATE_VERSION = "FP_PRE_T0_QUALIFICATION_CERTIFICATE_V1"
 IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
-# The nine non-lifecycle names contract section 3's list leaves once its three
-# named lifecycle properties are removed. The contract says "eight"; see the
-# note in research/schema/p2_qualification_binding.schema.json — the count is a
-# governance question and is not resolved here.
-NON_LIFECYCLE_PROPERTIES = (
-    "real_market_input",
-    "event_time_timestamp_knowability",
-    "paper_only_authority",
-    "decision_logging",
-    "risk_admission",
-    "persistence",
-    "restart_recovery",
-    "ledger_reconciliation",
-    "data_integrity",
-)
+# Derived, never restated. research/fp/capability.py is the single source of the
+# property model, and a second hand-written copy here would be a second model
+# the moment one of them was edited.
+NON_LIFECYCLE_PROPERTIES = fp_capability.PRE_T0_QUALIFIABLE
 
 
 class SealError(Exception):

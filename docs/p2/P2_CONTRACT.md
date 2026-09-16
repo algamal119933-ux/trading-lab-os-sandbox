@@ -92,20 +92,40 @@ persistence · restart recovery · no duplicate execution · ledger reconciliati
 data integrity
 ```
 
-P1 evidenced eight of them — the non-lifecycle eight — at commit `4543d4c3`.
-**That is not carried forward as the sole current proof.** `main` has advanced
-since, and this contract will advance it further. The eight are therefore
-**re-established during S3 against the current P2 source and runtime**.
+Nine of the twelve can be evidenced without a trade having happened; three
+cannot. `research/fp/capability.py` is that split made executable, and it is the
+only place the model is stated — every schema, tool, test and record derives
+from it rather than restating it.
 
 ```text
-S3, lane L1, pre-T0     the eight non-lifecycle properties, at Mq
-L2, post-T0, credited   the four lifecycle properties
-                        paper order/fill · position state ·
-                        no duplicate execution · and the completed
-                        entry→fill→position→exit→realised-PnL chain
+S3, lane L1, pre-T0     the NINE pre-T0 qualifiable properties, at Mq
+                        real market input · event-time/timestamp knowability ·
+                        paper-only authority · decision logging · risk/admission ·
+                        persistence · restart recovery · ledger reconciliation ·
+                        data integrity
+L2, post-T0, credited   the THREE lifecycle properties
+                        paper order/fill · position state · no duplicate execution
 
-P2 PASS requires the aggregate:  12 / 12
+P2 PASS requires the aggregate:  9 + 3 = 12 / 12
 ```
+
+**`FULL_TRADE_LIFECYCLE` is not one of the twelve.** It is the completed
+entry→fill→position→exit→realised-PnL chain, reported as its own status
+alongside the capability verdict — the activation pack reports it separately and
+the registry schema gives it its own enum. An earlier revision of this section
+described the split as "eight non-lifecycle" plus "four lifecycle", counting the
+aggregate as the fourth. That does not close: twelve minus three is nine, and
+folding the aggregate into the count would let a cohort reach `12/12` while a
+genuine property went unevidenced, with the aggregate standing in for it. It
+would also collapse the one distinction `P2 INCONCLUSIVE / INSUFFICIENT`
+depends on — a quiet window can leave the lifecycle unobserved with every
+capability intact, and that outcome is only expressible if the two are counted
+separately.
+
+P1 evidenced the pre-T0 nine at commit `4543d4c3`. **That is not carried forward
+as the sole current proof.** `main` has advanced since, and this contract will
+advance it further. The nine are therefore **re-established during S3 against the
+current P2 source and runtime**.
 
 **No pre-T0 record may be presented as prospective lifecycle evidence.** L1
 proves that the machinery works at the P2 commit. It proves nothing about a
@@ -124,7 +144,7 @@ record — never by path.
 | | Lane | Purpose | Credited? |
 | --- | --- | --- | --- |
 | **L0** | retained P1 qualification lane | history | **never** |
-| **L1** | fresh disposable pre-T0 qualification lane, S3 | prove the eight at Mq | **never** |
+| **L1** | fresh disposable pre-T0 qualification lane, S3 | prove the pre-T0 nine at Mq | **never** |
 | **L2** | fresh authoritative post-T0 cohort lane | the cohort | **the only lane that may be** |
 
 ```text
@@ -306,7 +326,7 @@ Its absence is the default, and the default is refusal.
 
 ```text
 S3   qualification run at Mq on L1 → preflight 16/16 · reconcile PASS ·
-     the eight properties · observe image_digest + python_version ·
+     the pre-T0 nine · observe image_digest + python_version ·
      generate the certificate WHILE L1 IS LIVE · stop · seal · archive L1
 S3b  PR: bind the observations and the certificate (class O)  → CI → MERGE → M1
      prove SEMANTIC_IDENTITY(Mq) == SEMANTIC_IDENTITY(M1)
@@ -494,7 +514,8 @@ Replacement-T0 budget is **not granted** by this contract.
 
 ```text
 P2 CLOSED / PASS
-  12/12 properties — the eight from S3 at Mq, the four from credited L2 records ·
+  12/12 properties — the NINE from S3 at Mq, the THREE from credited L2 records;
+  full_trade_lifecycle is reported beside them and is never counted among them ·
   reconciliation PASS · chains verify from genesis · one (commit, role, cohort,
   lane) identity throughout · equivalence proof holds · safe end-state ·
   archives sealed and digests published · closure record merged

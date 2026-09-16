@@ -251,22 +251,69 @@ before anything runs. `--t0` is required and never defaulted: only the Owner
 knows when the freeze will be merged, and a guessed T0 buys an activation gap
 nobody chose.
 
-### The property count — NOT settled, and S2 did not settle it
+### The property model — resolved, and reduced to one statement
 
-Contract §3 lists **twelve** properties and names the lifecycle ones as *"paper
-order/fill · position state · no duplicate execution · and the completed
-entry→fill→position→exit→realised-PnL chain"*. Three of those four are items in
-the list of twelve; the completed chain is an aggregate and is not a
-thirteenth item. Twelve minus three is nine, so *"the non-lifecycle eight"* and
-the `12/12` aggregate do not close arithmetically.
+The contract's original split — *"eight non-lifecycle"* plus *"four
+lifecycle"* — did not close, and the reason it did not close is that the
+completed entry→fill→position→exit→realised-PnL chain was being counted as the
+fourth lifecycle property.
 
-S2 did not pick a resolution. The binding schema carries the **nine** names the
-list actually leaves, asserts no count, and records the discrepancy in its own
-description. This is a governance question about what P2 PASS requires, it
-affects the S3 certificate and the closure record, and it is the Owner's to
-settle **before S3 runs**.
+The authority that first enumerated the twelve is
+[`FP_CONTROL_1_ACTIVATION_PACK.md`](../fp-boot-1/FP_CONTROL_1_ACTIVATION_PACK.md)
+section A, and it reports the chain **separately** from the capability verdict.
+The registry schema agrees: `full_trade_lifecycle` is its own outcome field with
+its own enum. The aggregate was always outside the twelve; P2's restatement put
+it inside.
 
----
+```text
+PRE_T0 QUALIFIABLE   9   real market input · event-time/timestamp knowability ·
+                         paper-only authority · decision logging ·
+                         risk/admission · persistence · restart recovery ·
+                         ledger reconciliation · data integrity
+POST_T0 LIFECYCLE    3   paper order/fill · position state ·
+                         no duplicate execution
+                    ---
+                     12
+
+FULL_TRADE_LIFECYCLE     aggregate status, reported beside the twelve,
+                         never counted among them
+```
+
+This is not a bookkeeping preference. Folding the aggregate into the count would
+let a cohort reach `12/12` with a genuine property unevidenced and the aggregate
+standing in for it. It would also collapse the distinction
+`P2 INCONCLUSIVE / INSUFFICIENT` depends on: a quiet window can leave the
+lifecycle unobserved while every capability is intact, and that outcome is only
+expressible when the two are counted separately.
+
+`research/fp/capability.py` is now the single source. The binding schema's enum
+is derived from it, `seal_pre_t0_qualification` imports it rather than restating
+it, and `tests/test_p2_capability_model.py` asserts the four invariants — twelve
+unique properties, every one in exactly one bucket, the buckets summing to
+twelve, and the aggregate unable to enter or leave the count — plus a parse of
+the activation pack's own sentence that requires the twelve names to match it
+exactly.
+
+### The reconciliation finding count — P1 closed on 13, P2's law is 14
+
+`registry_source_commit_equivalence` is a new check, so a reconciliation now
+emits **fourteen** findings where P1's emitted thirteen.
+
+Both numbers stand, about different things. `docs/p1/P1_CLOSURE.md` records
+`13/13 findings, exit 0`; that describes what P1 observed at the commit it was
+written for, it is evidence, and it is **not edited** to agree with a later
+system. A test asserts the file is unmodified on this branch. The other
+thirteens in the repository are unrelated counts — the S19 record's thirteen
+required capture-loop test proofs, and CLOUD-0's thirteen inventory findings —
+and are untouched.
+
+What changes is the **expectation**. `reconcile.EXPECTED_FINDINGS` now names all
+fourteen, every report carries `findings_complete`, `missing_findings` and
+`unexpected_findings`, and an incomplete report is forced to `FAIL`. A check
+that silently stops being emitted is a check that stopped running, and from
+outside that is indistinguishable from it passing — `preflight.MECHANISM_KEYS`
+exists for the same reason. `tests/test_p2_reconciliation_version.py` stops a
+future P2 closure inheriting the stale number.
 
 ## 6. What S2 did not do
 

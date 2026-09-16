@@ -112,7 +112,7 @@
           "maximum": 16
         },
         "properties_evidenced": {
-          "description": "The non-lifecycle operational-capability properties re-established at Mq. The lifecycle properties are NOT here: no pre-T0 record may be presented as prospective lifecycle evidence. NOTE ON THE COUNT: contract section 3 lists twelve properties and names three of them as lifecycle (paper order/fill, position state, no duplicate execution) plus the completed entry-to-realised-PnL chain, which is an aggregate rather than a thirteenth list item. Twelve minus three is nine, so the contract's 'non-lifecycle eight' and its 12/12 aggregate do not close arithmetically. The enum below carries the nine names the list actually leaves; no count is asserted here, because a schema is the wrong place to resolve a governance question. It is settled before S3, by the Owner.",
+          "description": "The NINE pre-T0 qualifiable capability properties, re-established at Mq. The three lifecycle properties (paper order/fill, position state, no duplicate execution) are NOT here: no pre-T0 record may be presented as prospective lifecycle evidence. Nor is full_trade_lifecycle, which is an aggregate status outside the twelve and has its own field on the registry row. research/fp/capability.py is the single source of this model; this enum is derived from it and tests/test_p2_capability_model.py asserts they agree.",
           "type": "array",
           "uniqueItems": true,
           "items": {
@@ -128,7 +128,8 @@
               "data_integrity"
             ]
           },
-          "minItems": 1
+          "minItems": 9,
+          "maxItems": 9
         },
         "lane_archive_name": {
           "type": [
