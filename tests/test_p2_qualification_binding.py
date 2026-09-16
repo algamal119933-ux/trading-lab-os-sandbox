@@ -17,7 +17,9 @@ would be a record that could name any commit at all.
 The binding binds. It does not authorize: authority is
 ``docs/p2/OWNER_T0_AUTHORIZATION.md`` on main by an Owner merge, and
 ``tests/test_p2_scope_audit.py`` holds the invariant that no T0 exists without
-it.
+it. Where that authorization has been granted, it must name the run this binding
+pins — an authorization for one qualification and a binding for another would be
+two records that agree about nothing.
 """
 
 from __future__ import annotations
@@ -96,14 +98,36 @@ def test_the_binding_claims_a_passing_pre_t0_qualification_and_nothing_more(bind
 
 
 def test_the_binding_does_not_authorize(binding):
-    """A binding that had grown authority would be a T0 nobody merged."""
+    """A binding that had grown authority would be a T0 nobody merged.
+
+    The subject here is the binding, and the claim is that it carries no
+    authority of its own. An earlier version also asserted that no Owner
+    authorization existed anywhere — a fact about the repository on the day this
+    was written, not a property of the binding, and one the Owner's lawful grant
+    ends. Authority living in a separate merged file is the invariant; that file
+    being absent is not.
+    """
     for forbidden in ("t0_utc", "cohort_id", "authorization", "authorized",
                       "expires_utc", "owner", "approval"):
         assert forbidden not in binding, (
             f"the binding carries {forbidden!r}; authority is a merged Owner file, never a "
             "field in a record Claude Code writes"
         )
-    assert not Path("docs/p2/OWNER_T0_AUTHORIZATION.md").exists()
+    # Authority is a different object at a different path. Where it exists, it
+    # is read with the repository's own parser rather than a second one written
+    # here, and it must name the run this binding pins.
+    import freeze_t0
+
+    authorization = Path("docs/p2/OWNER_T0_AUTHORIZATION.md")
+    if authorization.exists():
+        granted: dict[str, str] = {}
+        for line in authorization.read_text(encoding="utf-8").splitlines():
+            match = freeze_t0.AUTHORIZATION_LINE.match(line)
+            if match and match.group(1) in freeze_t0.AUTHORIZATION_KEYS:
+                granted[match.group(1)] = match.group(2)
+        assert granted["ROLE"] == binding["role"]
+        assert granted["QUALIFICATION_COMMIT"] == binding["qualification_commit"]
+        assert granted["QUALIFICATION_CERTIFICATE_SHA256"] == binding["certificate_sha256"]
 
 
 def test_the_certificate_is_pinned_by_digest_and_is_not_in_git(binding):
