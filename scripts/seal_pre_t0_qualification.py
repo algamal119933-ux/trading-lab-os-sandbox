@@ -4,7 +4,20 @@
     scripts/seal_pre_t0_qualification.py FP-CONTROL-2 \
         --evidence-dir freqtrade/user_data/fp-control-2/evidence \
         --image-digest sha256:<64hex> --python-version 3.14.6 \
+        --freqtrade-url http://127.0.0.1:8080 \
+        --exporter-url http://127.0.0.1:9108/metrics \
+        --prometheus-url http://127.0.0.1:9090 --check-market-route \
         -o artifacts/p2-s3-qualification/certificate.json
+
+The endpoints are not optional decoration. The preflight this seal requires is
+the RUNTIME-ATTACHED one, and three of its sixteen checks — real market-data
+ingestion, monitoring liveness, and clock tolerance against the exchange — are
+statements about a system that is running right now. Given no endpoints and no
+market route they answer UNPROVEN, which blocks exactly as FAIL does, so a seal
+that built its own endpoint-less context could never produce a certificate at
+all. It refused every time, and it named the three checks rather than the
+missing wiring. The endpoints are therefore required here, and the refusal for
+their absence says so in those words.
 
 Contract section 6, S3: the certificate is generated WHILE L1 IS LIVE, and only
 then is the lane stopped, sealed and archived. That ordering is not a
@@ -30,8 +43,10 @@ PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -101,8 +116,15 @@ def seal(
     image_digest: str,
     python_version: str,
     lane_archive_name: str | None = None,
+    runtime: fp_preflight.RuntimeContext | None = None,
 ) -> dict:
-    """Build the certificate, or refuse. Never writes anything."""
+    """Build the certificate, or refuse. Never writes anything.
+
+    ``runtime`` carries the live instance's observability endpoints and the
+    market-route flag. Its ``evidence_dir`` and ``role`` are ignored and
+    overwritten with the ones this function validated: the caller supplies the
+    endpoints, and the lane the gates run over is never the caller's to choose.
+    """
     if not IMAGE_DIGEST_RE.match(image_digest or ""):
         raise SealError(
             f"--image-digest {image_digest!r} is not a sha256 digest. It is observed from the "
@@ -156,8 +178,30 @@ def seal(
             f"{reconciliation['failing_checks']}"
         )
 
-    runtime = fp_preflight.RuntimeContext(evidence_dir=evidence_dir, role=role)
-    preflight = fp_preflight.run(runtime=runtime)
+    # The runtime must be attached before the gates that need it run. It is
+    # checked here rather than at argument-parsing time so the refusals above —
+    # a started row, a lane this role does not declare, a dirty tree — keep
+    # coming first: those are facts about the evidence, and an operator who has
+    # sealed the wrong lane should hear that before hearing about a flag.
+    attached = dataclasses.replace(
+        runtime or fp_preflight.RuntimeContext(),
+        evidence_dir=evidence_dir,
+        role=role,
+    )
+    if not attached.check_market_route:
+        raise SealError(
+            "--check-market-route is required: 'real market-data ingestion works' and "
+            "'clock/timestamp handling is within tolerance' are statements about the exchange "
+            "route as it is now, and without the probe they answer UNPROVEN, which blocks"
+        )
+    if not (attached.exporter_url or attached.freqtrade_url):
+        raise SealError(
+            "one of --exporter-url or --freqtrade-url is required: 'monitoring is alive' is a "
+            "statement about a running instance, and without an endpoint it answers UNPROVEN, "
+            "which blocks"
+        )
+
+    preflight = fp_preflight.run(runtime=attached)
     if preflight["preflight"] != fp_preflight.PASS:
         failing = [c["check"] for c in preflight["checks"] if c["result"] != fp_preflight.PASS]
         raise SealError(f"preflight is {preflight['preflight']}; not PASS: {failing}")
@@ -205,6 +249,16 @@ def seal(
             "reconciliation": reconciliation["reconciliation"],
             "properties_evidenced": list(NON_LIFECYCLE_PROPERTIES),
             "lane_archive_name": lane_archive_name,
+            # Which live surfaces the sixteen checks were answered against. A
+            # reader who only sees "preflight PASS 16/16" cannot tell whether
+            # the three runtime-attached checks were probed or excused; these
+            # are the URLs that were probed. Credentials are never recorded.
+            "runtime_attached": {
+                "freqtrade_url": attached.freqtrade_url,
+                "exporter_url": attached.exporter_url,
+                "prometheus_url": attached.prometheus_url,
+                "market_route_probed": attached.check_market_route,
+            },
         },
         "evidence": {
             "evidence_dir": str(evidence_dir),
@@ -252,6 +306,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image-digest", required=True, help="observed from the running engine")
     parser.add_argument("--python-version", required=True, help="observed from the running engine")
     parser.add_argument("--lane-archive-name", default=None)
+    # The same flags and the same environment defaults as research/fp/preflight.py's
+    # own CLI, deliberately: an operator who has just run the attached preflight by
+    # hand seals with the identical arguments, and a second spelling for one set of
+    # endpoints is a second chance to point the two at different things.
+    parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL") or None)
+    parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER") or None)
+    parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD") or None)
+    parser.add_argument("--exporter-url", default=os.environ.get("EXPORTER_URL") or None)
+    parser.add_argument("--prometheus-url", default=os.environ.get("PROMETHEUS_URL") or None)
+    parser.add_argument(
+        "--check-market-route",
+        action="store_true",
+        help="probe the public market route and measure clock skew against the exchange",
+    )
     parser.add_argument("-o", "--out", required=True)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -263,6 +331,14 @@ def main(argv: list[str] | None = None) -> int:
             image_digest=args.image_digest,
             python_version=args.python_version,
             lane_archive_name=args.lane_archive_name,
+            runtime=fp_preflight.RuntimeContext(
+                freqtrade_url=args.freqtrade_url,
+                api_user=args.api_user,
+                api_password=args.api_password,
+                exporter_url=args.exporter_url,
+                prometheus_url=args.prometheus_url,
+                check_market_route=args.check_market_route,
+            ),
         )
         path, digest = write_certificate(certificate, Path(args.out))
     except (SealError, fp_lane.LaneError, fp_semantic.SemanticIdentityError) as exc:
