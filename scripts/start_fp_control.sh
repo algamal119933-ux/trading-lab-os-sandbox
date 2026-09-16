@@ -192,7 +192,60 @@ echo "FP_SOURCE_COMMIT=$FP_SOURCE_COMMIT"
 RENDERED="$(mktemp)"
 docker compose "${COMPOSE_FILES[@]}" config > "$RENDERED"
 python3 scripts/check_fp_overlay.py "$RENDERED" "$FP_ROLE" || { rm -f "$RENDERED"; exit 4; }
+
+# Freqtrade creates any missing user_data sub-directory while loading its
+# configuration, and this overlay mounts user_data read-only on purpose: the
+# writable surface is exactly one lane. Without these present the engine dies at
+# startup on a read-only filesystem — which it did, in a crash loop, while the
+# capture side ran on happily. They are provisioned on the host instead of
+# loosening the mount, and the list is read out of the pinned image rather than
+# copied into this script, because a copy drifts the moment the image moves.
+if ! FT_IMAGE="$(python3 - "$RENDERED" <<'PY'
+import sys, yaml
+rendered = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+service = (rendered.get("services") or {}).get("freqtrade") or {}
+image = service.get("image")
+if not image:
+    raise SystemExit("the rendered freqtrade service declares no image")
+print(image)
+PY
+)"; then
+    echo "FP_USERDATA_FAIL: cannot determine the engine image from the render" >&2
+    rm -f "$RENDERED"
+    exit 4
+fi
 rm -f "$RENDERED"
+
+if ! FT_SUBDIRS="$(docker run --rm --entrypoint python "$FT_IMAGE" -c '
+from freqtrade.constants import (
+    USERPATH_FREQAIMODELS, USERPATH_HYPEROPTS, USERPATH_NOTEBOOKS, USERPATH_STRATEGIES,
+)
+print(" ".join(["backtest_results", "data", USERPATH_HYPEROPTS, "hyperopt_results",
+                "logs", USERPATH_NOTEBOOKS, "plot", USERPATH_STRATEGIES, USERPATH_FREQAIMODELS]))
+' 2>/dev/null)"; then
+    echo "FP_USERDATA_FAIL: cannot read the required user_data layout from $FT_IMAGE" >&2
+    exit 4
+fi
+
+if ! python3 - "$FT_SUBDIRS" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "research")
+from fp.lane_io import LaneHandle, LaneIOError  # noqa: E402
+
+user_data = Path("freqtrade/user_data")
+try:
+    for name in sys.argv[1].split():
+        LaneHandle.open(user_data / name, create=True).close()
+except LaneIOError as exc:
+    print(f"FP_USERDATA_FAIL: {exc}", file=sys.stderr)
+    raise SystemExit(4)
+print(f"FP_USERDATA_PASS: {sys.argv[1]}")
+PY
+then
+    exit 4
+fi
 
 docker compose "${COMPOSE_FILES[@]}" up -d
 
