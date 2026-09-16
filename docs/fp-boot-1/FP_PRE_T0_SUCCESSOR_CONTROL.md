@@ -56,7 +56,7 @@ was written to prevent. Conditions 1 and 2 carry the same fix.
 | qualification creating a T0 or a cohort id | impossible: T0 is read, never written |
 | writing into the closed instance's paths | refused by path exclusivity, including nested paths |
 | unknown or ambiguous role | hard failure before any file is touched |
-| a control being read as a candidate | excluded by role prefix; admission stays `BLOCKED` |
+| a control being read as a candidate | candidacy is an explicit allow-list of candidate roles, so no control matches; admission stays `BLOCKED` |
 
 `tests/test_fp_successor_instance.py` carries a negative control for each row
 above, plus assertions that the closed instance's recorded truth, the Dataset V2
