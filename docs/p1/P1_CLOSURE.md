@@ -1,9 +1,13 @@
 # P1 — closure record
 
 **Stage:** `P1 — HOST RECONSTITUTION`
-**Authoritative main:** `4543d4c330ed7a11c442e9b2ef78a23ac12cea40`
 **Qualification source commit:** `4543d4c330ed7a11c442e9b2ef78a23ac12cea40`
 **Environment:** native Ubuntu host, Docker Engine, public market route only.
+
+The qualification commit is the identity that matters here: it is the single
+commit every authoritative runtime record resolves to. This record reaches main
+by merge afterwards, so it cannot name the commit that carries it — the lineage
+below does that instead.
 
 P1 restored this host to a state where a **pre-T0 qualification runtime** can be
 started, proven and stopped without touching the closed cohort's history. It
@@ -148,7 +152,15 @@ FP-CONTROL-1            CLOSED, registry row byte-identical to pre-P1 main,
 P2_STARTED              NO
 REAL_MONEY_AUTHORIZED   NO     dry_run true throughout, no live execution route
 19d7d7e                 parked, not an ancestor of main
+CODEX_REQUIREMENT       NOT REQUIRED — OWNER AMENDMENT
 ```
+
+The Codex verifier was removed from the P1 closure path by Owner amendment, and
+no substitute AI verifier replaced it. P1's final verification basis is the
+deterministic repository gates, clean-checkout reproducibility, CI, the retained
+single-provenance runtime evidence and its replay, and the governance invariants
+above — each of which is reproducible by a later reader without asking any model
+what it thought.
 
 `preflight` reports `T0_PERMITTED = YES`. P1 deliberately does not take it:
 freezing a T0 and opening a cohort is an Owner decision with no script in this
