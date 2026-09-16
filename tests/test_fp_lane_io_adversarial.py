@@ -899,3 +899,23 @@ def test_a_reconciliation_report_may_not_be_written_into_a_lane(tmp_path, monkey
         "--evidence-dir", str(evidence), "--role", SUCCESSOR, "--out", str(outside),
     ]) in (0, 1, 2)
     assert outside.is_file() and json.loads(outside.read_text(encoding="utf-8"))
+
+
+def test_every_declared_lane_is_ignored_by_git():
+    """Evidence must never be committable, for any instance in the registry.
+
+    Only FP-CONTROL-1 was ignored, so a qualification run under the successor
+    would have produced untracked ledgers, failed the repository integrity gate,
+    and invited the one repair that is forbidden — committing the evidence.
+    Asserted for every declared lane, so registering the next instance without
+    ignoring its lane fails here rather than during a run.
+    """
+    roots = lane.all_lane_roots()
+    assert roots, "the registry declares no lanes"
+    for root in roots:
+        relative = root.relative_to(Path.cwd().resolve())
+        for child in ("evidence/paper_input_ledger.jsonl", "logs/freqtrade.log",
+                      "tradesv3.sqlite", f"evidence/{STATE}"):
+            candidate = relative / child
+            ignored = subprocess.run(["git", "check-ignore", "-q", str(candidate)])
+            assert ignored.returncode == 0, f"{candidate} is not ignored by git"

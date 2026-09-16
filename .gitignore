@@ -33,6 +33,12 @@ freqtrade/user_data/hyperopt.lock
 # deliberately as closure artifacts, not swept in by an incidental commit.
 freqtrade/user_data/fp-control-1/
 
+# The same, for every other declared instance lane. A qualification run writes
+# ledgers, a database and logs into its lane; left untracked they fail the
+# repository's own integrity gate, and the tempting fix — committing them — is
+# exactly what must never happen to evidence.
+freqtrade/user_data/fp-control-2/
+
 # ---------------------------------------------------------------------------
 # Market data and derived artifacts.
 # Datasets are reproduced via scripts/download_data.sh and pinned by
