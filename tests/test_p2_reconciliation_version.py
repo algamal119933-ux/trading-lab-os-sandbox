@@ -112,9 +112,11 @@ def test_p1s_closure_record_still_states_thirteen():
 def test_p1s_closure_record_is_unchanged_on_this_branch():
     import subprocess
 
-    from test_p2_scope_audit import _resolve_base_ref
+    from test_p2_scope_audit import BASE_REF
 
-    base = _resolve_base_ref()
+    if BASE_REF is None:
+        pytest.skip("no baseline in this checkout; covered wherever one exists")
+    base = BASE_REF
     diff = subprocess.run(["git", "diff", "--name-only", base, "HEAD", "--", str(P1_CLOSURE)],
                           capture_output=True, text=True, check=True).stdout.strip()
     assert diff == "", "P1's closure record was modified; it is history, not an expectation"
@@ -170,11 +172,14 @@ def test_no_p2_surface_asserts_the_old_thirteen_finding_expectation(path):
             )
 
 
-@pytest.mark.parametrize("path", P2_SURFACES)
+@pytest.mark.parametrize("path", [p for p in P2_SURFACES if p.endswith(".py")])
 def test_no_p2_surface_hard_codes_the_old_count_in_code(path):
-    """In executable surfaces the number may not appear as a literal at all."""
-    if not path.endswith(".py"):
-        pytest.skip("prose surface; covered by the paragraph rule above")
+    """In executable surfaces the number may not appear as a literal at all.
+
+    Parametrised over the code surfaces only rather than skipping the prose
+    ones: a skip that is always expected is noise, and noise is what an audit
+    step has to be able to distinguish a real skip from.
+    """
     code = Path(path).read_text(encoding="utf-8")
     for stale in ("== 13", "!= 13", "len(findings) == 13", "FINDING_COUNT = 13"):
         assert stale not in code, f"{path} hard-codes the superseded count: {stale!r}"

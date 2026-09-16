@@ -303,6 +303,29 @@ jobs:
           BASE=$(git merge-base HEAD FETCH_HEAD)
           python3 scripts/prove_semantic_equivalence.py "$BASE" HEAD || true
 
+      - name: PR scope audit must actually run here
+        # The scope and reconciliation-version audits compare this branch against
+        # main, and they skip in a checkout that has no main reference at all —
+        # which is correct in a remote-less reproduction clone and would be a
+        # silent hole here. CI is where a reviewer reads the result, so CI proves
+        # the baseline resolved and nothing was skipped.
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python -m pytest tests/test_p2_scope_audit.py tests/test_p2_reconciliation_version.py \
+            -q -rs --no-header | tee "$RUNNER_TEMP/scope-audit.txt"
+          if grep -q "no baseline" "$RUNNER_TEMP/scope-audit.txt"; then
+            echo "::error::the PR scope audit could not resolve a baseline and skipped. It must"
+            echo "::error::run against main here, which is the only place a reviewer reads it."
+            exit 1
+          fi
+          if grep -qE "[1-9][0-9]* skipped" "$RUNNER_TEMP/scope-audit.txt"; then
+            echo "::error::the PR scope audit skipped a check unexpectedly"
+            sed -n "/short test summary/,$ p" "$RUNNER_TEMP/scope-audit.txt"
+            exit 1
+          fi
+          echo "SCOPE_AUDIT = RAN (baseline resolved, no skips)"
+
       - name: Test suite
         run: python -m pytest
 
