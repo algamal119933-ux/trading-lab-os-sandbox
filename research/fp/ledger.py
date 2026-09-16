@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +47,14 @@ GENESIS_DIGEST = "0" * 64
 LEDGER_KINDS = ("input", "decision", "trade", "incident")
 
 _TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+
+
+# Ledger files are evidence entries, so ledger I/O is lane I/O: every read and
+# every append below goes through a LaneHandle rather than through a pathname.
+# The safety properties (no symlinked target, no aliased mutable entry, no
+# traversal, no resolve/open race) are enforced there once, for every file in the
+# lane, instead of being re-remembered at each call site here.
+from .lane_io import LaneHandle, LaneIOError  # noqa: E402
 
 
 class LedgerError(RuntimeError):
@@ -96,19 +105,47 @@ class Ledger:
     lose the record of the decision it just made.
     """
 
-    def __init__(self, path: str | os.PathLike[str], kind: str) -> None:
+    def __init__(
+        self,
+        path: str | os.PathLike[str],
+        kind: str,
+        *,
+        lane: LaneHandle | None = None,
+    ) -> None:
         if kind not in LEDGER_KINDS:
             raise LedgerError(f"unknown ledger kind {kind!r}; expected one of {LEDGER_KINDS}")
         self.path = Path(path)
         self.kind = kind
+        # A caller that already holds the lane open passes it in, and every
+        # operation then uses that one descriptor. A caller that does not gets a
+        # handle opened per operation from the containing directory. Either way
+        # the file is reached through a directory descriptor, never by name.
+        self._lane = lane
+        self._name = self.path.name
+
+    @contextmanager
+    def _open_lane(self) -> Iterator[LaneHandle]:
+        if self._lane is not None:
+            yield self._lane
+            return
+        handle = LaneHandle.open(self.path.parent)
+        try:
+            yield handle
+        finally:
+            handle.close()
 
     # -- reading ---------------------------------------------------------
 
     def __iter__(self) -> Iterator[Record]:
-        if not self.path.exists():
-            return
-        with self.path.open("r", encoding="utf-8") as handle:
-            for line_no, line in enumerate(handle, start=1):
+        try:
+            with self._open_lane() as lane:
+                if not lane.exists(self._name):
+                    return
+                text = lane.read_text(self._name)
+        except LaneIOError as exc:
+            raise LedgerError(str(exc)) from exc
+        if True:
+            for line_no, line in enumerate(text.splitlines(), start=1):
                 line = line.strip()
                 if not line:
                     continue
@@ -131,6 +168,22 @@ class Ledger:
     def records(self) -> list[Record]:
         return list(self)
 
+    def raw_text(self) -> str:
+        """The ledger file's bytes, read through the lane.
+
+        Gates that need the literal lines (a tamper negative control rebuilds
+        them) get them here rather than by opening ``ledger.path`` themselves.
+        A direct ``path.read_text()`` is the same unguarded pattern that let a
+        symlinked evidence entry be read from outside the lane.
+        """
+        try:
+            with self._open_lane() as lane:
+                if not lane.exists(self._name):
+                    return ""
+                return lane.read_text(self._name)
+        except LaneIOError as exc:
+            raise LedgerError(str(exc)) from exc
+
     def head(self) -> tuple[int, str]:
         """Return (next_seq, last_digest) without validating the whole chain."""
         last_seq = -1
@@ -152,11 +205,12 @@ class Ledger:
         digest = record_digest(seq, self.kind, stamp, prev, payload)
         record = Record(seq, self.kind, stamp, prev, digest, payload)
 
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record.as_dict(), sort_keys=True, ensure_ascii=False) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        line = json.dumps(record.as_dict(), sort_keys=True, ensure_ascii=False) + "\n"
+        try:
+            with self._open_lane() as lane:
+                lane.append_text(self._name, line)
+        except LaneIOError as exc:
+            raise LedgerError(str(exc)) from exc
         return record
 
     def extend(self, payloads: list[dict], recorded_utc: str | None = None) -> list[Record]:
@@ -178,17 +232,19 @@ class Ledger:
 
         seq, prev = self.head()
         written: list[Record] = []
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            for payload in payloads:
-                digest = record_digest(seq, self.kind, stamp, prev, payload)
-                record = Record(seq, self.kind, stamp, prev, digest, payload)
-                handle.write(json.dumps(record.as_dict(), sort_keys=True, ensure_ascii=False) + "\n")
-                written.append(record)
-                seq += 1
-                prev = digest
-            handle.flush()
-            os.fsync(handle.fileno())
+        lines: list[str] = []
+        for payload in payloads:
+            digest = record_digest(seq, self.kind, stamp, prev, payload)
+            record = Record(seq, self.kind, stamp, prev, digest, payload)
+            lines.append(json.dumps(record.as_dict(), sort_keys=True, ensure_ascii=False) + "\n")
+            written.append(record)
+            seq += 1
+            prev = digest
+        try:
+            with self._open_lane() as lane:
+                lane.append_text(self._name, "".join(lines))
+        except LaneIOError as exc:
+            raise LedgerError(str(exc)) from exc
         return written
 
     def append_erratum(self, corrects_seq: int, reason: str, correction: dict) -> Record:
@@ -242,10 +298,26 @@ class Ledger:
         return self.head()[1]
 
 
-def open_ledgers(directory: str | os.PathLike[str]) -> dict[str, Ledger]:
-    """Open the four specification ledgers under one evidence directory."""
+def open_ledgers(
+    directory: str | os.PathLike[str],
+    *,
+    lane: LaneHandle | None = None,
+    create: bool = False,
+) -> dict[str, Ledger]:
+    """Open the four specification ledgers under one evidence directory.
+
+    ``create`` is the only way a ledger call creates a directory. It used to
+    happen implicitly on every append, which meant a mistyped evidence path
+    quietly produced a second, plausible-looking lane instead of failing. Lane
+    creation now has one owner, and it is whoever passes ``create=True``.
+    """
     base = Path(directory)
-    return {kind: Ledger(base / f"paper_{kind}_ledger.jsonl", kind) for kind in LEDGER_KINDS}
+    if lane is None and create:
+        LaneHandle.open(base, create=True).close()
+    return {
+        kind: Ledger(base / f"paper_{kind}_ledger.jsonl", kind, lane=lane)
+        for kind in LEDGER_KINDS
+    }
 
 
 def daily_pack_digest(ledgers: Iterable[Ledger]) -> str:

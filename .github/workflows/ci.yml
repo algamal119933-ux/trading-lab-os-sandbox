@@ -252,13 +252,27 @@ jobs:
           docker compose config
           docker compose config --services
 
-      - name: Render the FP-CONTROL-1 overlay and assert it stays paper-safe
+      - name: Render the FP control overlay and assert it stays paper-safe
         run: |
           set -euo pipefail
+          # The overlay is rendered for the instance the registry says may run,
+          # resolved the same fail-closed way the launcher resolves it. Rendering
+          # without a selection is now a hard failure rather than an empty lane.
+          eval "$(python3 scripts/fp_instance.py FP-CONTROL-2)"
+          export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME FP_DB_PATH FP_LOG_PATH FP_EVIDENCE_DIR
           docker compose -f docker-compose.yml -f docker-compose.fp.yml config > /tmp/fp-rendered.yml
           docker compose -f docker-compose.yml -f docker-compose.fp.yml config --services
           python3 -m pip install --quiet "PyYAML==6.0.3"
-          python3 scripts/check_fp_overlay.py /tmp/fp-rendered.yml
+          python3 scripts/check_fp_overlay.py /tmp/fp-rendered.yml "$FP_ROLE"
+
+      - name: An unselected FP overlay render must fail closed
+        run: |
+          set -euo pipefail
+          if docker compose -f docker-compose.yml -f docker-compose.fp.yml config >/dev/null 2>&1; then
+            echo "FP_OVERLAY_FAIL: the overlay rendered with no instance selected" >&2
+            exit 1
+          fi
+          echo "FP_OVERLAY_PASS: rendering without a selected instance is refused"
 
       - name: Build the read-only exporter image
         run: docker build -t tradinglab-exporter:ci monitoring/exporter

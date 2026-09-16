@@ -60,6 +60,8 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import lane as fp_lane  # noqa: E402
+from fp.lane_io import LaneHandle, LaneIOError, read_identity_text  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import market as fp_market  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
@@ -79,7 +81,12 @@ PAPER_FILL_MODEL_SEMANTICS = (
 )
 
 STRATEGY_PATH = REPO_ROOT / "freqtrade" / "user_data" / "strategies" / "BaselineEmaRegimeV1.py"
-DEFAULT_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+# The configuration the engine actually reads. One file is the runtime identity:
+# validated, hashed, mounted, executed and stamped. The committed example is a
+# template and must never stand in for it in evidence.
+RUNTIME_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.json"
+EXAMPLE_CONFIG_PATH = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+DEFAULT_CONFIG_PATH = EXAMPLE_CONFIG_PATH
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 LOCK_FILENAME = ".fp_capture.lock"
@@ -103,6 +110,16 @@ class CaptureError(RuntimeError):
     """Raised when the capture loop cannot run safely."""
 
 
+class InstanceSelectionError(CaptureError):
+    """The registry cannot name exactly one runnable instance for a role.
+
+    Selection fails closed for every ambiguity. A loop that silently fell back
+    to "the first row" would, the moment a cohort closed and a successor was
+    registered, start stamping a closed cohort's identity onto new evidence —
+    which is the one failure the closure record exists to prevent.
+    """
+
+
 class DuplicateInstanceError(CaptureError):
     """Raised when another capture process already holds this evidence directory."""
 
@@ -112,9 +129,15 @@ def utc_now() -> str:
 
 
 def sha256_file(path: Path) -> str | None:
+    """Hash a file whose digest is stamped into evidence as an identity.
+
+    Read through the boundary: a symlink at this path would make the hash
+    describe a different file from the one under discussion, and the digest
+    would still look authoritative in the record.
+    """
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
+        return hashlib.sha256(read_identity_text(path).encode("utf-8")).hexdigest()
+    except (OSError, LaneIOError, UnicodeDecodeError):
         return None
 
 
@@ -194,6 +217,10 @@ class RuntimeIdentity:
         return {
             "runtime_id": self.runtime_id,
             "run_id": self.run_id,
+            # The role is what preflight and reconciliation compare a record
+            # against. Leaving it out made the consumer check a field the writer
+            # never wrote, so attribution was asserted rather than proven.
+            "role": self.role,
             "cohort_id": self.cohort_id,
             "restart_counter": self.restart_counter,
             "source_commit": self.source_commit,
@@ -203,29 +230,160 @@ class RuntimeIdentity:
         }
 
 
+def select_instance(
+    role: str,
+    registry: dict | None = None,
+    *,
+    allowed_statuses: tuple[str, ...] | None = fp_lane.EXECUTABLE_STATUSES,
+) -> dict:
+    """The one registry row this operation may act on, or a hard failure.
+
+    Delegates to the shared resolver so the launcher, preflight, the compose
+    guard and this loop all decide identity the same way. There is no default
+    row and no first-row fallback: an unknown role, a duplicated role, and a
+    malformed or missing status each raise.
+
+    ``allowed_statuses`` defaults to the executable set, because the callers in
+    this module are all about to write evidence. A CLOSED row is refused because
+    its cohort's evidence stream ended; a PAUSED row is refused because a human
+    paused it and silently resuming would erase that decision. Read-only and
+    stop-class callers pass their own set — one global rule would either let a
+    paused cohort start or make it unstoppable.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    try:
+        fp_lane.resolve_lane(role, registry, allowed_statuses=allowed_statuses)
+    except fp_lane.LaneError as exc:
+        raise InstanceSelectionError(str(exc)) from exc
+    return fp_lane.select_row(role, registry)
+
+
+def _collides(a: Path, b: Path) -> bool:
+    """True when two paths are the same, or one contains the other.
+
+    Prefix-string comparison is not enough: ``/x/fp-control-2`` and
+    ``/x/fp-control-2-evil`` share a prefix and are different lanes, while
+    ``/x/lane`` and ``/x/lane/nested`` do not look equal and are the same lane.
+    Comparing resolved path *components* answers both correctly.
+    """
+    if a == b:
+        return True
+    return a in b.parents or b in a.parents
+
+
+def assert_paths_are_exclusive(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
+    """Refuse a runtime that would write anywhere another instance declares.
+
+    Every declared path field of every other instance is compared, in both
+    directions, for equality and for containment — not only the evidence
+    directory, and not by string prefix. Distinct paths in the registry are a
+    declaration; this is the check that the process about to write honours it.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    resolved = Path(evidence_dir).resolve()
+    for item in registry.get("instances", []):
+        if item.get("role") == role:
+            continue
+        identity = item.get("runtime_identity") or {}
+        for field in ("evidence_dir", "db_path", "log_path"):
+            other = identity.get(field)
+            if not other:
+                continue
+            # Both namespaces: the container path the registry declares, and the
+            # host path it maps to. A run started on the host collides with
+            # another lane through the host path, and the container path alone
+            # would never see it.
+            candidates = [Path(other)]
+            try:
+                candidates.append(fp_lane.container_to_host(other))
+            except fp_lane.LaneError:
+                pass  # an unmappable path has no host twin
+            for other_path in candidates:
+                if _collides(resolved, other_path):
+                    raise InstanceSelectionError(
+                        f"{role} would write to {resolved}, which collides with "
+                        f"{item.get('role')}.{field} ({other_path})"
+                    )
+
+
+def assert_no_symlinked_children(evidence_dir: Path) -> None:
+    """No entry inside the evidence directory may be a symbolic link.
+
+    Containment answered "is this directory the right one" and stopped there.
+    The files inside it are write targets too, and a linked one leaves the lane
+    while the directory itself still passes. Checked before anything is opened,
+    and backed at open time by O_NOFOLLOW so a link created afterwards cannot be
+    followed either.
+    """
+    root = Path(evidence_dir)
+    if not root.exists():
+        return
+    if root.is_symlink():
+        raise InstanceSelectionError(f"{root} is a symbolic link, not a directory this runtime owns")
+    for entry in root.rglob("*"):
+        if entry.is_symlink():
+            raise InstanceSelectionError(
+                f"{entry} inside the evidence lane is a symbolic link to {os.readlink(entry)}; "
+                "a write target that leaves the lane is refused"
+            )
+
+
+def assert_evidence_dir_is_declared(role: str, evidence_dir: Path, registry: dict | None = None) -> None:
+    """The runtime's evidence directory must be the one the registry declares.
+
+    Collision-freedom alone permits an arbitrary third lane: a run could write to
+    a path no instance declares, and its evidence would then belong to no
+    registered instance at all. This is asserted by the launcher and the runtime
+    entry point, where the real declared path is available — unit tests build
+    loops in temporary directories on purpose, and they go through
+    ``assert_paths_are_exclusive`` instead.
+    """
+    registry = registry if registry is not None else (_load_json(COHORT_REGISTRY) or {})
+    try:
+        lane = fp_lane.resolve_lane(role, registry, allowed_statuses=fp_lane.EXECUTABLE_STATUSES)
+    except fp_lane.LaneError as exc:
+        raise InstanceSelectionError(str(exc)) from exc
+    # Either namespace names the same lane: a capture process inside the
+    # container knows the container path, a host qualification knows the host
+    # path. Accepting only one of them is what made host-side qualification
+    # impossible.
+    if not lane.matches_evidence_dir(evidence_dir):
+        raise InstanceSelectionError(
+            f"{role} must write its evidence to the declared {lane.container_evidence_dir} "
+            f"(host {lane.host_evidence_dir}), not {Path(evidence_dir).resolve()}"
+        )
+
+
 def build_identity(
     evidence_dir: Path,
     config_path: Path = DEFAULT_CONFIG_PATH,
-    role: str = "FP-CONTROL-1",
+    *,
+    role: str,
     restart_counter: int = 0,
-    cohort_id: str | None = None,
-    bot_name: str | None = None,
-    db_path: str | None = None,
-    log_path: str | None = None,
 ) -> RuntimeIdentity:
+    """The runtime identity of one selected instance, taken only from the registry.
+
+    Every field that says *which cohort this is* — cohort_id, bot_name, db_path,
+    log_path — comes from the selected row and from nowhere else. They used to be
+    caller-overridable, which meant a caller could stamp a cohort id the registry
+    never froze, or point a run at another instance's database, without the
+    selection gate ever seeing it. A forged identity is indistinguishable from a
+    real one once it is in a ledger, so the parameters are gone rather than
+    guarded.
+    """
     registry = _load_json(COHORT_REGISTRY) or {}
-    instance = next(
-        (item for item in registry.get("instances", []) if item.get("role") == role),
-        {},
-    )
+    instance = select_instance(role, registry)
+    assert_paths_are_exclusive(role, evidence_dir, registry)
     identity = instance.get("runtime_identity") or {}
-    resolved_bot = bot_name or identity.get("bot_name") or "fp-control-1"
+    resolved_bot = identity.get("bot_name")
+    if not resolved_bot:
+        raise InstanceSelectionError(f"{role} declares no bot_name; a runtime identity must be bound before use")
     return RuntimeIdentity(
         # The instance identity is the bot name: it is what a second process
         # would collide on, and it survives restarts by construction.
         runtime_id=f"{role}:{resolved_bot}",
         run_id=uuid.uuid4().hex,
-        cohort_id=cohort_id if cohort_id is not None else instance.get("cohort_id"),
+        cohort_id=instance.get("cohort_id"),
         role=role,
         source_commit=git_commit(),
         strategy_name=STRATEGY_PATH.stem,
@@ -236,8 +394,8 @@ def build_identity(
         paper_fill_model_version=PAPER_FILL_MODEL_VERSION,
         bot_name=resolved_bot,
         evidence_dir=str(evidence_dir),
-        db_path=db_path or identity.get("db_path"),
-        log_path=log_path or identity.get("log_path"),
+        db_path=identity.get("db_path"),
+        log_path=identity.get("log_path"),
         host=socket.gethostname(),
         pid=os.getpid(),
         restart_counter=restart_counter,
@@ -245,8 +403,13 @@ def build_identity(
 
 
 def _load_json(path: Path) -> dict | None:
+    """Load an identity source — the registry, or the runtime configuration.
+
+    Through the boundary, so a substituted path fails instead of supplying
+    forged identity that then agrees with itself through every later check.
+    """
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 
@@ -258,23 +421,27 @@ def _registry_t0_ms(role: str) -> int | None:
     Owner-authorised act performed once, and a capture loop that could invent
     one could manufacture prospective evidence out of warm-up.
     """
-    registry = _load_json(COHORT_REGISTRY) or {}
-    for instance in registry.get("instances", []):
-        if instance.get("role") != role:
-            continue
-        raw = instance.get("t0_utc")
-        if not raw:
-            return None
-        try:
-            return int(
-                datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
-                * 1000
-            )
-        except ValueError:
-            return None
-    return None
+    # Selection, not a scan: an unknown role, a duplicated role or a CLOSED row
+    # raises here exactly as it does everywhere else. A malformed T0 also raises
+    # rather than reading as unfrozen — "the boundary is unreadable" and "there
+    # is no boundary" must never collapse into the same answer, because the
+    # second one silently files post-T0 bars as qualification evidence.
+    instance = select_instance(role)
+    raw = instance.get("t0_utc")
+    if not raw:
+        # A NOT_STARTED successor carries no T0, and the loop may never write
+        # one: t0_relation then reads T0_NOT_FROZEN and every captured bar is
+        # qualification evidence, not prospective evidence.
+        return None
+    try:
+        return int(
+            datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+            * 1000
+        )
+    except ValueError as exc:
+        raise InstanceSelectionError(f"{role} declares an unparseable t0_utc {raw!r}") from exc
 
 
 # --------------------------------------------------------------------------
@@ -292,19 +459,28 @@ class EvidenceLock:
     self-heals while a genuine second instance is still refused.
     """
 
-    def __init__(self, evidence_dir: Path) -> None:
+    def __init__(self, evidence_dir: Path, *, lane: LaneHandle | None = None) -> None:
         self.path = Path(evidence_dir) / LOCK_FILENAME
+        self._lane = lane
+        self._own_lane = False
         self._handle = None
 
     def acquire(self, identity: RuntimeIdentity | None = None) -> "EvidenceLock":
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        handle = self.path.open("a+", encoding="utf-8")
+        # The lock file is an entry in the evidence lane, so it is opened the way
+        # every other entry is: from the lane's own directory descriptor. The
+        # lane is not created here — a lock that conjures its own directory is a
+        # lock over a lane nobody selected.
+        if self._lane is None:
+            self._lane = LaneHandle.open(self.path.parent)
+            self._own_lane = True
+        handle = self._lane.open_lock_file(LOCK_FILENAME)
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
             handle.seek(0)
             holder = handle.read().strip()
             handle.close()
+            self._close_own_lane()
             raise DuplicateInstanceError(
                 f"another capture process already holds {self.path}: {holder or 'unknown holder'}"
             ) from exc
@@ -326,6 +502,12 @@ class EvidenceLock:
         self._handle = handle
         return self
 
+    def _close_own_lane(self) -> None:
+        if self._own_lane and self._lane is not None:
+            self._lane.close()
+            self._lane = None
+            self._own_lane = False
+
     def release(self) -> None:
         if self._handle is not None:
             try:
@@ -333,6 +515,7 @@ class EvidenceLock:
             finally:
                 self._handle.close()
                 self._handle = None
+        self._close_own_lane()
 
     def __enter__(self) -> "EvidenceLock":
         return self
@@ -371,9 +554,9 @@ class RecoveredState:
         return len(self.prior_runs)
 
 
-def recover_state(evidence_dir: Path) -> RecoveredState:
+def recover_state(evidence_dir: Path, *, lane: LaneHandle | None = None) -> RecoveredState:
     """Reconstruct capture state by reading the ledgers back from disk."""
-    ledgers = fp_ledger.open_ledgers(evidence_dir)
+    ledgers = fp_ledger.open_ledgers(evidence_dir, lane=lane)
     state = RecoveredState()
 
     for record in ledgers["input"]:
@@ -702,10 +885,11 @@ class CaptureLoop:
         evidence_dir: Path,
         pairs: list[str],
         timeframe: str = "1h",
-        config_path: Path = DEFAULT_CONFIG_PATH,
+        config_path: Path = RUNTIME_CONFIG_PATH,
         client: FreqtradeClient | None = None,
-        identity: RuntimeIdentity | None = None,
         market_module=fp_market,
+        role: str | None = None,
+        lane: LaneHandle | None = None,
     ) -> None:
         self.evidence_dir = Path(evidence_dir)
         self.pairs = list(pairs)
@@ -715,14 +899,36 @@ class CaptureLoop:
         self.config = _load_json(self.config_path) or {}
         self.client = client
         self.market = market_module
-        self.ledgers = fp_ledger.open_ledgers(self.evidence_dir)
-        self.state = recover_state(self.evidence_dir)
-        self.identity = identity or build_identity(
-            self.evidence_dir, self.config_path, restart_counter=self.state.restart_counter
+        assert_no_symlinked_children(self.evidence_dir)
+        # One open descriptor on the lane, held for the life of the loop, and
+        # every ledger append, lock write and state snapshot goes through it.
+        # Re-deriving the lane from its pathname per write is what let a symlink
+        # planted between two cycles redirect one of them.
+        self.lane = lane if lane is not None else LaneHandle.open(self.evidence_dir)
+        self._own_lane = lane is None
+        self.ledgers = fp_ledger.open_ledgers(self.evidence_dir, lane=self.lane)
+        self.state = recover_state(self.evidence_dir, lane=self.lane)
+        # The identity is built here or not at all. It used to be injectable,
+        # and an injected one bypassed selection entirely: a forged FP-CONTROL-1
+        # identity could write into the closed cohort's ledgers with no gate in
+        # its way.
+        if not role:
+            raise InstanceSelectionError(
+                "CaptureLoop requires an explicit role; there is no default, because a default "
+                "would select whichever row came first, including a closed one"
+            )
+        self.identity = build_identity(
+            self.evidence_dir, self.config_path, role=role, restart_counter=self.state.restart_counter
         )
         self.t0_ms = _registry_t0_ms(self.identity.role)
 
     # -- helpers ---------------------------------------------------------
+
+    def close(self) -> None:
+        """Release the lane descriptor if this loop opened it."""
+        if self._own_lane and self.lane is not None:
+            self.lane.close()
+            self._own_lane = False
 
     def _append(self, kind: str, payload: dict):
         enriched = dict(payload)
@@ -938,6 +1144,11 @@ class CaptureLoop:
         it. It exists so an operator can see the runtime's position without
         parsing four ledgers, and it is regenerated from the ledgers each cycle.
         """
+        # Once per cycle, confirm the pathname still names the directory this
+        # loop holds open. A substituted lane is a split runtime — capture
+        # writing one directory while the gates read another — and the only
+        # honest answer is to stop, not to pick one.
+        self.lane.assert_identity_unchanged()
         path = self.evidence_dir / STATE_FILENAME
         snapshot = {
             "written_utc": utc_now(),
@@ -955,7 +1166,10 @@ class CaptureLoop:
             "daily_pack_digest": fp_ledger.daily_pack_digest(self.ledgers.values()),
             "real_money_authorized": False,
         }
-        path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+        # Replaced in place inside the lane, never written through its name: a
+        # symlink planted here previously sent the snapshot outside the lane,
+        # and pointing it at the cohort registry truncated the registry.
+        self.lane.replace_atomically(STATE_FILENAME, json.dumps(snapshot, indent=2) + "\n")
         return path
 
 
@@ -967,9 +1181,21 @@ class CaptureLoop:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument(
+        "--role",
+        required=True,
+        help=(
+            "the registry instance this runtime is. Required and never defaulted: after a cohort "
+            "closes, a default would quietly select the closed row and stamp its identity onto new evidence."
+        ),
+    )
     parser.add_argument("--pair", action="append", dest="pairs", default=None)
     parser.add_argument("--timeframe", default="1h")
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    parser.add_argument(
+        "--config",
+        default=str(RUNTIME_CONFIG_PATH),
+        help="the runtime configuration the engine reads; the committed example is not accepted here",
+    )
     parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL", ""))
     parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER", ""))
     parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD", ""))
@@ -998,9 +1224,49 @@ def main(argv: list[str] | None = None) -> int:
         client = FreqtradeClient(args.freqtrade_url, args.api_user or None, args.api_password or None)
 
     try:
-        lock = EvidenceLock(evidence_dir).acquire()
+        select_instance(args.role)
+        assert_paths_are_exclusive(args.role, evidence_dir)
+        assert_evidence_dir_is_declared(args.role, evidence_dir)
+        assert_no_symlinked_children(evidence_dir)
+        # A runtime that cannot name the configuration it is running under
+        # cannot stamp an honest identity onto its evidence. The template is not
+        # a stand-in: refusing here is what stops records being written against
+        # one config and attributed to another.
+        config_path = Path(args.config).resolve()
+        # An allow-list of the two real locations, not a suffix match: a decoy
+        # at /anywhere/freqtrade/user_data/config.json satisfied the suffix and
+        # had its own hash recorded.
+        permitted = {
+            RUNTIME_CONFIG_PATH.resolve(),                       # host namespace
+            Path("/freqtrade/user_data/config.json"),            # container namespace
+            Path("/app/freqtrade/user_data/config.json"),        # capture container
+        }
+        if config_path not in permitted:
+            raise InstanceSelectionError(
+                f"capture must run against the declared runtime configuration; {config_path} is not "
+                f"one of {sorted(str(p) for p in permitted)}"
+            )
+        if not config_path.is_file():
+            raise InstanceSelectionError(f"the runtime configuration {config_path} does not exist")
+    except InstanceSelectionError as exc:
+        print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        return 5
+
+    # The lane is created here and nowhere else. It used to appear as a side
+    # effect of the first ledger append, so a mistyped --evidence-dir produced a
+    # second plausible-looking lane instead of a refusal; now the runtime that
+    # passed selection is the only thing that can bring a lane into existence.
+    try:
+        lane = LaneHandle.open(evidence_dir, create=True)
+    except LaneIOError as exc:
+        print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        return 5
+
+    try:
+        lock = EvidenceLock(evidence_dir, lane=lane).acquire()
     except DuplicateInstanceError as exc:
         print(f"CAPTURE_REFUSED: {exc}", file=sys.stderr)
+        lane.close()
         return 3
 
     try:
@@ -1010,6 +1276,8 @@ def main(argv: list[str] | None = None) -> int:
             timeframe=args.timeframe,
             config_path=Path(args.config),
             client=client,
+            role=args.role,
+            lane=lane,
         )
         loop.record_run_started()
         print(
@@ -1049,6 +1317,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         lock.release()
+        lane.close()
 
 
 if __name__ == "__main__":

@@ -42,6 +42,8 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import lane_io as fp_lane_io  # noqa: E402
+
 SCHEMA_PATH = REPO_ROOT / "research" / "schema" / "paper_candidate_admission.schema.json"
 RECORDS_DIR = REPO_ROOT / "research" / "records"
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
@@ -100,8 +102,9 @@ def _git_commit() -> str:
 
 
 def _load_json(path: Path) -> dict | None:
+    """Identity-bearing records, read through the same boundary as the registry."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(fp_lane_io.read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 
@@ -228,11 +231,12 @@ def _frozen_configuration() -> tuple[str, str]:
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
-    identified = [
-        item
-        for item in registry.get("instances", [])
-        if item.get("role") != "FP-CONTROL-1" and (item.get("runtime_identity") or {}).get("config_sha256")
-    ]
+    shape, identified = candidate_cardinality(registry)
+    if shape == "AMBIGUOUS":
+        return FAIL, (
+            f"{len(identified)} eligible candidates ({[r.get('role') for r in identified]}); "
+            "admission cannot choose between them and fails closed"
+        )
     if not identified:
         return UNPROVEN, (
             "no candidate instance names a frozen configuration hash; a configuration cannot be identified "
@@ -312,6 +316,21 @@ def _replay_available() -> tuple[str, str]:
     return PASS, detail
 
 
+CONTROL_ROLE_PREFIX = "FP-CONTROL"
+# Candidacy is decided by an allow-list, not by "anything that is not a control".
+# A prefix test answers the wrong question: an unknown or malformed role would
+# fall through it and be read as a candidate, and a control's records would then
+# satisfy candidate-scoped conditions.
+CANDIDATE_ROLES = ("FP-CANDIDATE-A", "FP-CANDIDATE-B")
+
+
+def _candidate_role() -> str:
+    shape, rows = candidate_cardinality()
+    if shape == "UNIQUE":
+        return rows[0]["role"]
+    return CANDIDATE_ROLES[0]
+
+
 def identified_candidate() -> str | None:
     """The candidate strategy name under evaluation, or None if there is none.
 
@@ -321,17 +340,55 @@ def identified_candidate() -> str | None:
     is exactly what happened: lookahead and timestamp-knowability reported PASS
     on the control's records while no candidate existed at all.
     """
-    registry = _load_json(COHORT_REGISTRY)
-    if registry is None:
+    eligible = eligible_candidates()
+    if len(eligible) != 1:
+        # Zero is the honest answer when nothing is admissible, and more than one
+        # is an ambiguity, not a menu. Returning the first match made the result
+        # depend on registry order: reversing two rows changed which candidate
+        # the gate believed it was evaluating.
         return None
+    return (eligible[0].get("runtime_identity") or {}).get("candidate_family")
+
+
+def eligible_candidates(registry: dict | None = None) -> list[dict]:
+    """Every row that could be *the* candidate, in a deterministic order.
+
+    Eligibility is a set membership question, answered the same way everywhere:
+
+    * a control is never a candidate, whichever control it is;
+    * a CLOSED row is never eligible — its evidence stream ended;
+    * a row without a frozen strategy hash names no candidate to evaluate.
+
+    Sorted by role so the answer cannot depend on how the file was written.
+    """
+    registry = registry if registry is not None else _load_json(COHORT_REGISTRY)
+    if registry is None:
+        return []
+    from fp import lane as fp_lane  # noqa: PLC0415 — avoids a module import cycle
+
+    found = []
     for item in registry.get("instances", []):
-        if item.get("role") == "FP-CONTROL-1":
+        if item.get("role") not in CANDIDATE_ROLES:
+            continue
+        # A row whose status cannot be read is not a candidate. Excluding only
+        # CLOSED let a malformed or status-less row through, which is the wrong
+        # direction for a gate that exists to fail closed.
+        if item.get("status") not in fp_lane.VALID_STATUSES:
+            continue
+        if item.get("status") == "CLOSED":
             continue
         identity = item.get("runtime_identity") or {}
-        family = identity.get("candidate_family")
-        if family and identity.get("strategy_sha256"):
-            return family
-    return None
+        if identity.get("candidate_family") and identity.get("strategy_sha256"):
+            found.append(item)
+    return sorted(found, key=lambda row: row.get("role") or "")
+
+
+def candidate_cardinality(registry: dict | None = None) -> tuple[str, list[dict]]:
+    """(NONE | UNIQUE | AMBIGUOUS, rows) — the shape of the candidate set."""
+    rows = eligible_candidates(registry)
+    if not rows:
+        return "NONE", rows
+    return ("UNIQUE" if len(rows) == 1 else "AMBIGUOUS"), rows
 
 
 def _from_gate_records(key: str, description: str) -> tuple[str, str]:
@@ -418,12 +475,16 @@ def _candidate_identity_frozen() -> tuple[str, str]:
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable"
+    shape, eligible = candidate_cardinality(registry)
+    if shape == "AMBIGUOUS":
+        return FAIL, (
+            f"{len(eligible)} eligible candidates ({[r.get('role') for r in eligible]}); "
+            "a candidate identity cannot be frozen while the choice is ambiguous"
+        )
     frozen = [
         item
-        for item in registry.get("instances", [])
-        if item.get("role") != "FP-CONTROL-1"
-        and (item.get("runtime_identity") or {}).get("strategy_sha256")
-        and (item.get("runtime_identity") or {}).get("config_sha256")
+        for item in eligible
+        if (item.get("runtime_identity") or {}).get("config_sha256")
         and (item.get("runtime_identity") or {}).get("source_commit")
     ]
     if not frozen:
@@ -448,7 +509,10 @@ def _baseline_lineage_is_authoritative() -> tuple[bool, str]:
     with git rather than asserted, so it flips by itself the moment the merge
     lands.
     """
-    for ref in ("origin/main", "main"):
+    # HEAD is the last resort so the answer is deterministic in any checkout: a
+    # fresh clone of a branch has neither origin/main nor a local main, and the
+    # gate must not report a different result there than in the writer's tree.
+    for ref in ("origin/main", "main", "HEAD"):
         try:
             subprocess.check_output(
                 ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", f"{ref}^{{commit}}"],
@@ -504,7 +568,16 @@ def benchmark_closure_state() -> tuple[str, str]:
     * ``CLOSED`` - the scorecard carries at least one experiment row and no
       amendment says otherwise.
     """
-    for ref in ("origin/main", "main"):
+    for ref in ("origin/main", "main", "HEAD"):
+        # A ref that does not exist in this checkout is skipped, not answered
+        # for. Returning NOT_MERGED on the first missing ref made a fresh clone
+        # — which has no origin/main — report a different state than the
+        # writer's tree, from identical content.
+        if _git_show(ref, "research/external/candidate_registry.json") is None and \
+           _git_show(ref, "research/external/sprint_closure.json") is None and \
+           _git_show(ref, "research/external/qualification_scorecard.csv") is None:
+            continue
+
         # An Owner amendment can end a sprint without closing it. That state is
         # recorded additively in sprint_closure.json rather than by editing the
         # frozen preregistration, and it must be read *before* the scorecard:
@@ -543,7 +616,10 @@ def benchmark_closure_state() -> tuple[str, str]:
                 "pre-registered, not executed"
             )
         return "CLOSED", f"qualification scorecard on {ref} carries {len(rows)} experiment row(s)"
-    return "NOT_MERGED", "no main ref is available in this checkout"
+    return "NOT_MERGED", (
+        "no POST-BASELINE-EXTBENCH-1 artifacts are reachable from any ref in this checkout; "
+        "the sprint lineage has not been merged (section 3.2)"
+    )
 
 
 def _project_integrity() -> tuple[str, str]:
@@ -649,7 +725,10 @@ def evaluate() -> dict:
         "evaluated_utc": _utc_now(),
         "code_commit": _git_commit(),
         "candidate": {
-            "role": "FP-CANDIDATE-A",
+            # The uniquely eligible role, or the first declared candidate role as
+            # a placeholder when there is none. Hard-coding FP-CANDIDATE-A made
+            # the record lie whenever the real candidate was B.
+            "role": _candidate_role(),
             "name": None,
             "strategy_file": None,
             "strategy_sha256": None,

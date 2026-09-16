@@ -41,6 +41,7 @@ for extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
+from fp import lane_io as fp_lane_io  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
 
@@ -52,6 +53,7 @@ from fp import market as fp_market  # noqa: E402
 from fp import reconcile as fp_reconcile  # noqa: E402
 
 EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.example"
+RUNTIME_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.json"
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 PASS, FAIL, UNPROVEN = "PASS", "FAIL", "UNPROVEN"
@@ -71,6 +73,10 @@ class RuntimeContext:
     """
 
     evidence_dir: Path | None = None
+    # Which registry instance this runtime is. A runtime that cannot name its
+    # own instance cannot be compared against a frozen identity, and comparing
+    # it against "every row that has hashes" silently includes closed ones.
+    role: str | None = None
     freqtrade_url: str | None = None
     api_user: str | None = None
     api_password: str | None = None
@@ -159,7 +165,7 @@ CHECKS = (
 
 def _load_json(path: Path) -> dict | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(fp_lane_io.read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 
@@ -244,21 +250,55 @@ def _capture_sample(evidence_dir: Path, pair: str = "BTC/USDT") -> tuple[fp_ledg
 # --------------------------------------------------------------------------
 
 
-def _check_guard() -> tuple[str, str]:
+class MissingRuntimeConfig(Exception):
+    """A runtime is attached but its configuration is not on disk."""
+
+
+def _effective_config(runtime=None) -> Path:
+    """The configuration a check should read.
+
+    With a runtime attached the answer is the runtime's own config: validating
+    the template while a different file executes is exactly the config-truth
+    split this boundary closes. With no runtime — the CI case — the template is
+    the only configuration that exists, and is used knowingly.
+    """
+    if runtime is not None:
+        if not RUNTIME_CONFIG.is_file():
+            # No silent substitution: with a runtime attached, the template is
+            # not evidence about what that runtime is executing.
+            raise MissingRuntimeConfig(
+                f"a runtime is attached but {RUNTIME_CONFIG} does not exist; its configuration "
+                "identity cannot be established"
+            )
+        return RUNTIME_CONFIG
+    return EXAMPLE_CONFIG
+
+
+def _check_guard(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
     try:
         import paper_guard  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover
         return FAIL, f"paper_guard unavailable: {exc}"
     violations = paper_guard.Violations()
-    paper_guard.check_config(EXAMPLE_CONFIG, violations)
+    paper_guard.check_config(_effective_config(runtime), violations)
     paper_guard.check_strategies(violations)
     if violations:
         return FAIL, "; ".join(violations[:5])
-    return PASS, "scripts/paper_guard.py accepts the shipped paper config and every strategy file"
+    return PASS, (
+        f"scripts/paper_guard.py accepts {_effective_config(runtime).name} and every strategy file"
+    )
 
 
-def _check_dry_run() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_dry_run(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     if config.get("dry_run") is not True:
@@ -266,8 +306,12 @@ def _check_dry_run() -> tuple[str, str]:
     return PASS, "dry_run is exactly true (not truthy: the guard rejects 1, 'true' and null)"
 
 
-def _check_spot_mode() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_spot_mode(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     if config.get("trading_mode") != "spot":
@@ -445,8 +489,12 @@ def _check_restart_drill(evidence_dir: Path) -> tuple[str, str, dict]:
     )
 
 
-def _check_no_secret() -> tuple[str, str]:
-    config = _load_json(EXAMPLE_CONFIG)
+def _check_no_secret(runtime: "RuntimeContext | None" = None) -> tuple[str, str]:
+    try:
+        _effective_config(runtime)
+    except MissingRuntimeConfig as exc:
+        return FAIL, str(exc)
+    config = _load_json(_effective_config(runtime))
     if config is None:
         return FAIL, "shipped paper config is missing or unreadable"
     exchange = config.get("exchange") or {}
@@ -466,11 +514,20 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     registry = _load_json(COHORT_REGISTRY)
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
-    frozen = [
-        item
-        for item in registry.get("instances", [])
-        if (item.get("runtime_identity") or {}).get("strategy_sha256")
-    ]
+    if runtime is not None and runtime.role:
+        # Bound: compare against exactly the instance this runtime declares.
+        # select_instance refuses unknown, duplicated and CLOSED rows.
+        try:
+            frozen = [fp_capture.select_instance(runtime.role, registry)]
+        except fp_capture.InstanceSelectionError as exc:
+            return FAIL, f"the runtime names an unusable instance: {exc}", {}
+    else:
+        frozen = [
+            item
+            for item in registry.get("instances", [])
+            if (item.get("runtime_identity") or {}).get("strategy_sha256")
+            and item.get("status") != "CLOSED"
+        ]
     if not frozen:
         return UNPROVEN, (
             "the registry declares no frozen runtime identity to compare against "
@@ -480,22 +537,71 @@ def _check_hashes_match_registry(runtime: RuntimeContext | None = None) -> tuple
     if runtime is None or not runtime.has_evidence:
         return UNPROVEN, "hash comparison requires the running instance; not executed here", {}
 
+    # The runtime config is what the engine reads. Hashing only the committed
+    # example meant a drifted config.json could not be detected, and a record
+    # stamped with any config hash at all was accepted.
+    # No fallback: when a runtime is attached, its configuration must exist and
+    # be the one on disk. Falling back to the example made "validated config" and
+    # "executed config" two different files.
+    if not RUNTIME_CONFIG.is_file():
+        return FAIL, (
+            f"the runtime configuration {RUNTIME_CONFIG} does not exist, so the running instance's "
+            "configuration identity cannot be established"
+        ), {}
+    runtime_config = RUNTIME_CONFIG
     on_disk = {
         "strategy_sha256": fp_capture.sha256_file(fp_capture.STRATEGY_PATH),
-        "config_sha256": fp_capture.sha256_file(EXAMPLE_CONFIG),
+        "config_sha256": fp_capture.sha256_file(runtime_config),
     }
 
     ledgers = fp_ledger.open_ledgers(Path(runtime.evidence_dir))
+    # Every ledger, not only decisions: a foreign input or incident record is
+    # just as unattributable, and checking one ledger let the others through.
+    live_records = [
+        record
+        for name in ("input", "decision", "trade", "incident")
+        for record in ledgers[name].records()
+        if not record.payload.get("erratum")
+    ]
+    if runtime.role:
+        stamped_roles = {(r.payload.get("identity") or {}).get("role") for r in live_records}
+        # A record with no role is not "not contradicting" — it is unattributable,
+        # and discarding it turned a missing stamp into a pass.
+        if live_records and None in stamped_roles:
+            missing = [r.seq for r in live_records if not (r.payload.get("identity") or {}).get("role")]
+            return FAIL, (
+                f"{len(missing)} record(s) in {runtime.evidence_dir} carry no role and cannot be "
+                f"attributed to {runtime.role}: seq {missing[:5]}"
+            ), {}
+        if stamped_roles and stamped_roles != {runtime.role}:
+            return FAIL, (
+                f"the evidence in {runtime.evidence_dir} was written by {sorted(stamped_roles)}, "
+                f"not by {runtime.role}"
+            ), {}
+        stamped_cohorts = {(r.payload.get("identity") or {}).get("cohort_id") for r in live_records}
+        declared_cohort = frozen[0].get("cohort_id")
+        if stamped_cohorts - {declared_cohort}:
+            return FAIL, (
+                f"the evidence carries cohort ids {sorted(c for c in stamped_cohorts if c)} that the "
+                f"registry does not declare for {runtime.role} ({declared_cohort})"
+            ), {}
     stamped = {
         (r.payload.get("identity") or {}).get("strategy_sha256")
-        for r in ledgers["decision"].records()
-        if not r.payload.get("erratum")
+        for r in live_records
     }
     stamped.discard(None)
     if not stamped:
         return UNPROVEN, "the runtime has stamped no strategy hash onto its evidence yet", {}
     if len(stamped) > 1:
         return FAIL, f"the running instance changed strategy hash mid-run: {sorted(stamped)}", {}
+
+    stamped_configs = {(r.payload.get("identity") or {}).get("config_sha256") for r in live_records}
+    stamped_configs.discard(None)
+    if stamped_configs and stamped_configs != {on_disk["config_sha256"]}:
+        return FAIL, (
+            f"the evidence was written against config hash(es) {sorted(s[:12] for s in stamped_configs)}, "
+            f"but {runtime_config.name} hashes to {on_disk['config_sha256'][:12]}"
+        ), {}
 
     mismatches = []
     for item in frozen:
@@ -597,15 +703,20 @@ def _check_input_ledger_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     # Negative control against the real ledger: altering a captured candle must
     # break the chain. Proving it on real evidence, not only on a synthetic
     # copy, is the point of this check.
-    lines = facts["ledgers"]["input"].path.read_text(encoding="utf-8").splitlines()
+    lines = facts["ledgers"]["input"].raw_text().splitlines()
     target = len(lines) // 2
-    tampered_path = Path(runtime.evidence_dir) / "tampered_real_input.jsonl"
     record = json.loads(lines[target])
     record["payload"]["candle"]["close"] = float(record["payload"]["candle"]["close"]) + 1.0
     lines[target] = json.dumps(record, sort_keys=True, ensure_ascii=False)
-    tampered_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    detected = bool(fp_ledger.Ledger(tampered_path, "input").verify())
-    tampered_path.unlink(missing_ok=True)
+    # The negative control is written to a throwaway temporary directory, never
+    # into the evidence lane it is testing. A gate that writes a file named
+    # "tampered_..." into a cohort's own lane is one crash away from leaving it
+    # there, and the directory it was handed might not even be the lane it
+    # belongs to.
+    with tempfile.TemporaryDirectory(prefix="fp-preflight-tamper-") as scratch:
+        tampered_path = Path(scratch) / "tampered_real_input.jsonl"
+        tampered_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        detected = bool(fp_ledger.Ledger(tampered_path, "input").verify())
     if not detected:
         return FAIL, "the input ledger did not detect an altered real candle payload", {}
 
@@ -637,14 +748,19 @@ def _check_input_ledger(evidence_dir: Path) -> tuple[str, str, dict]:
     if problems:
         return FAIL, "; ".join(problems[:3]), {}
 
-    # Negative control: an altered payload must break the chain.
-    text = input_ledger.path.read_text(encoding="utf-8").splitlines()
-    tampered = evidence_dir / "tampered_input.jsonl"
+    # Negative control: an altered payload must break the chain. The lines are
+    # read through the lane like any other evidence read, and the altered copy
+    # is built in a throwaway directory — a gate that leaves a file named
+    # "tampered_*" inside a cohort's own lane is one crash away from leaving it
+    # there permanently.
+    text = input_ledger.raw_text().splitlines()
     record = json.loads(text[10])
     record["payload"]["candle"]["close"] = record["payload"]["candle"]["close"] + 1
     text[10] = json.dumps(record, sort_keys=True, ensure_ascii=False)
-    tampered.write_text("\n".join(text) + "\n", encoding="utf-8")
-    detected = bool(fp_ledger.Ledger(tampered, "input").verify())
+    with tempfile.TemporaryDirectory(prefix="fp-preflight-tamper-") as scratch:
+        tampered = Path(scratch) / "tampered_input.jsonl"
+        tampered.write_text("\n".join(text) + "\n", encoding="utf-8")
+        detected = bool(fp_ledger.Ledger(tampered, "input").verify())
     if not detected:
         return FAIL, "the input ledger did not detect an altered candle payload", {}
 
@@ -707,7 +823,25 @@ def _check_db_isolation() -> tuple[str, str]:
         values = [item[field] for item in populated if item[field]]
         if len(values) != len(set(values)):
             return FAIL, f"two instances share the same {field}; section 14 forbids shared mutable state"
-    return PASS, f"{len(populated)} instances declare distinct {', '.join(fields)}"
+
+    # Same-field equality is the weakest form of the question. Two lanes also
+    # collide when one path contains the other, and when one instance's log path
+    # sits inside another's evidence directory — so every path field is compared
+    # against every other instance's path fields, in both directions.
+    path_fields = ("db_path", "log_path", "evidence_dir")
+    for i, first in enumerate(populated):
+        for second in populated[i + 1:]:
+            for field_a in path_fields:
+                for field_b in path_fields:
+                    a, b = first[field_a], second[field_b]
+                    if not a or not b:
+                        continue
+                    if fp_capture._collides(Path(a), Path(b)):
+                        return FAIL, (
+                            f"instance paths overlap: {field_a} {a} and {field_b} {b} are the same lane; "
+                            "section 14 forbids shared mutable state"
+                        )
+    return PASS, f"{len(populated)} instances declare distinct, non-overlapping {', '.join(fields)}"
 
 
 def _check_monitoring(runtime: RuntimeContext | None = None) -> tuple[str, str, dict]:
@@ -759,7 +893,9 @@ def _check_monitoring(runtime: RuntimeContext | None = None) -> tuple[str, str, 
 
 def _check_replay_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     """Section 16.12 — event-time replay on a bounded *real-data* sample."""
-    report = fp_reconcile.reconcile(Path(runtime.evidence_dir))
+    # The runtime names its role; reconciliation must judge the evidence as that
+    # instance's, not as anyone's.
+    report = fp_reconcile.reconcile(Path(runtime.evidence_dir), expected_role=runtime.role)
     if report["reconciliation"] != PASS:
         return FAIL, f"reconciliation of the real capture failed: {report['failing_checks']}", {
             "reconciliation": report["reconciliation"],
@@ -864,10 +1000,13 @@ def _check_duplicate_instance(runtime: RuntimeContext | None = None) -> tuple[st
     if registry is None:
         return FAIL, "forward_paper_cohort_registry.json is missing or unreadable", {}
     instances = registry.get("instances", [])
+    all_roles = [item.get("role") for item in instances]
+    if len(all_roles) != len(set(all_roles)):
+        # Checking only RUNNING rows was too narrow: a duplicated role makes
+        # selection ambiguous before anything starts, and ambiguity is what lets
+        # a runtime pick up the wrong identity.
+        return FAIL, f"two instances share a role: {sorted(r for r in all_roles if r)}", {}
     running = [item for item in instances if item.get("status") == "RUNNING"]
-    roles = [item.get("role") for item in running]
-    if len(roles) != len(set(roles)):
-        return FAIL, f"two running instances share a role: {roles}", {}
 
     if runtime is None or not runtime.has_evidence:
         if not running:
@@ -931,6 +1070,14 @@ def run(evidence_dir: Path | None = None, runtime: RuntimeContext | None = None)
     gate must not become easier to pass by being run somewhere with less
     evidence available.
     """
+    # A runtime that names a role must be the lane that role declares, and the
+    # records in it must carry that role. Accepting an unbound or mismatched
+    # runtime is how evidence from one instance ends up answering another's gate.
+    if runtime is not None and runtime.has_evidence:
+        if not runtime.role:
+            raise ValueError("a runtime with evidence must name its role")
+        fp_capture.assert_evidence_dir_is_declared(runtime.role, Path(runtime.evidence_dir))
+
     temp_dir = None
     if evidence_dir is None:
         temp_dir = Path(tempfile.mkdtemp(prefix="fp-preflight-"))
@@ -979,10 +1126,10 @@ def run(evidence_dir: Path | None = None, runtime: RuntimeContext | None = None)
             return result, evidence
 
         outcomes = [
-            _check_guard(),
-            _check_dry_run(),
-            _check_spot_mode(),
-            _check_no_secret(),
+            _check_guard(runtime),
+            _check_dry_run(runtime),
+            _check_spot_mode(runtime),
+            _check_no_secret(runtime),
             _drop_extra(_check_hashes_match_registry(runtime)),
             _drop_extra(_check_market_data_ingestion(runtime)),
             _check_external_features(),
@@ -1041,6 +1188,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="a live capture-loop evidence directory; enables the real-runtime checks",
     )
+    parser.add_argument(
+        "--role",
+        default=None,
+        help=(
+            "the registry instance the attached runtime is. Required whenever --evidence-dir is given: "
+            "an unbound runtime would be compared against every hashed row, closed ones included."
+        ),
+    )
     parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL") or None)
     parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER") or None)
     parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD") or None)
@@ -1053,12 +1208,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Role validation happens before anything else and regardless of which other
+    # flags were passed: a refusal that only fires when a runtime happens to be
+    # attached is not a gate.
+    if args.role:
+        try:
+            fp_capture.select_instance(args.role)
+        except fp_capture.InstanceSelectionError as exc:
+            print(f"PREFLIGHT_REFUSED: {exc}", file=sys.stderr)
+            return 2
+
     runtime = None
     if any(
-        (args.evidence_dir, args.freqtrade_url, args.exporter_url, args.prometheus_url, args.check_market_route)
+        (args.evidence_dir, args.role, args.freqtrade_url, args.exporter_url, args.prometheus_url,
+         args.check_market_route)
     ):
+        if args.evidence_dir and not args.role:
+            print(
+                "PREFLIGHT_REFUSED: --evidence-dir requires --role, so the runtime is compared against "
+                "the instance it actually is",
+                file=sys.stderr,
+            )
+            return 2
         runtime = RuntimeContext(
             evidence_dir=Path(args.evidence_dir) if args.evidence_dir else None,
+            role=args.role,
             freqtrade_url=args.freqtrade_url,
             api_user=args.api_user,
             api_password=args.api_password,

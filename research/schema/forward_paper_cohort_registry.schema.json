@@ -28,14 +28,21 @@
     "adopted_prior_t0": { "type": "boolean" },
     "instances": {
       "type": "array",
-      "maxItems": 3,
-      "description": "Section 4: at most one control plus two survivor candidates.",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "FP-CONTROL-1" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CONTROL-2" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-A" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
+        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-B" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 }
+      ],
+      "description": "Section 4: control instances plus at most two survivor candidates. Capacity is four because a closed control is kept as history beside the pre-T0 successor that replaced it.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["role", "cohort_id", "status", "t0_utc", "runtime_identity"],
         "properties": {
-          "role": { "enum": ["FP-CONTROL-1", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
+          "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
           "cohort_id": { "type": ["string", "null"] },
           "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED", "CLOSED"] },
           "t0_utc": {
@@ -137,6 +144,34 @@
         },
         "allOf": [
           {
+            "description": "The converse invariant: a row that has started - RUNNING, PAUSED or CLOSED - must carry the T0, cohort id and source commit that were frozen together by the one authorised act. The values must be semantically valid, not merely present: an empty string is a JSON string and would otherwise satisfy a type check while carrying no boundary at all.",
+            "if": { "required": ["status"], "properties": { "status": { "enum": ["RUNNING", "PAUSED", "CLOSED"] } } },
+            "then": {
+              "properties": {
+                "t0_utc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+                "cohort_id": { "type": "string", "minLength": 1, "pattern": "^\\S.*\\S$|^\\S$" },
+                "runtime_identity": {
+                  "required": ["source_commit"],
+                  "properties": { "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" } }
+                }
+              },
+              "required": ["t0_utc", "cohort_id"]
+            }
+          },
+          {
+            "description": "A NOT_STARTED row has started nothing, so it may carry no T0, no cohort id and no source commit. Without this, a pre-T0 successor could quietly acquire the identity of a run that never happened.",
+            "if": { "required": ["status"], "properties": { "status": { "const": "NOT_STARTED" } } },
+            "then": {
+              "properties": {
+                "t0_utc": { "const": null },
+                "cohort_id": { "const": null },
+                "closed_utc": { "const": null },
+                "closure_reason": { "const": null },
+                "runtime_identity": { "properties": { "source_commit": { "const": null } } }
+              }
+            }
+          },
+          {
             "description": "An outcome belongs to a finished window. A row that is not CLOSED must not carry one: an outcome on a live row is a verdict written before the evidence that would support it exists.",
             "if": { "required": ["status"], "properties": { "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED"] } } },
             "then": { "not": { "required": ["outcome"] } }
@@ -145,7 +180,7 @@
             "description": "A closed control must say when it closed, why, and what its window established. Without all three, a cohort that established nothing is indistinguishable from one whose result was simply never written down.",
             "if": {
               "required": ["status", "role"],
-              "properties": { "status": { "const": "CLOSED" }, "role": { "const": "FP-CONTROL-1" } }
+              "properties": { "status": { "const": "CLOSED" }, "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2"] } }
             },
             "then": { "required": ["closed_utc", "closure_reason", "outcome"] }
           },

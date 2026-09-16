@@ -1,4 +1,5 @@
-# FP-CONTROL-1 overlay — BASELINE-1 as operational control, paper only.
+# FP control overlay — BASELINE-1 as operational control, paper only.
+# The instance is chosen by scripts/start_fp_control.sh, never by this file.
 #
 # Applied on top of docker-compose.yml:
 #
@@ -6,42 +7,56 @@
 #
 # It exists as an overlay rather than as edits to the base file because the base
 # stack is the CLOUD-0 plumbing stack, which runs the smoke strategy and is
-# still the thing its own tests describe. FP-CONTROL-1 is a different runtime
+# still the thing its own tests describe. An FP control is a different runtime
 # with a different strategy, its own database, its own logs and its own evidence
 # directory, and conflating the two would let a smoke run write into the
 # evidence lane of a forward-paper cohort.
 #
-# Every path here matches the runtime_identity frozen in
-# research/fp/records/forward_paper_cohort_registry.json. They are not
-# re-chosen here; if they drift apart, preflight check 5 fails.
+# Every path here comes from the runtime_identity of the instance the launcher
+# selected in research/fp/records/forward_paper_cohort_registry.json — it is not
+# re-chosen here, and scripts/start_fp_control.sh is what binds FP_ROLE,
+# FP_INSTANCE_DIR and FP_BOT_NAME after a fail-closed selection. A closed
+# instance can never be selected, so this overlay can never be pointed at a
+# terminated cohort's paths. If they drift apart, preflight check 5 fails.
+#
+# The three FP_* variables are required, not defaulted: `docker compose ... up`
+# run by hand with them unset now fails to render rather than mounting the whole
+# of freqtrade/user_data writable and starting on an unnamed lane.
 #
 # PAPER / DRY-RUN ONLY. No exchange credential is passed to any service.
 services:
   freqtrade:
-    container_name: tradinglab-fp-freqtrade
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-freqtrade
     # BASELINE-1, frozen. The strategy name, the database and the log path are
     # the registry's bound values; nothing about the strategy's behaviour is
     # configured here.
     command: >
       trade
-      --logfile /freqtrade/user_data/fp-control-1/logs/freqtrade.log
-      --db-url sqlite:////freqtrade/user_data/fp-control-1/tradesv3.sqlite
+      --logfile ${FP_LOG_PATH:?set by scripts/start_fp_control.sh after a fail-closed selection}
+      --db-url sqlite:///${FP_DB_PATH:?set by scripts/start_fp_control.sh after a fail-closed selection}
       --config /freqtrade/user_data/config.json
       --strategy BaselineEmaRegimeV1
     environment:
-      FREQTRADE__BOT_NAME: fp-control-1
+      FREQTRADE__BOT_NAME: ${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}
+    # The base stack mounts the whole of user_data writable, which would leave
+    # Freqtrade able to write the closed cohort's database and logs even though
+    # capture refuses to. Here it gets user_data read-only plus exactly one
+    # writable lane: the instance the launcher selected.
+    volumes:
+      - ./freqtrade/user_data:/freqtrade/user_data:ro
+      - ./freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}:/freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}
 
   freqtrade-exporter:
-    container_name: tradinglab-fp-exporter
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-exporter
 
   prometheus:
-    container_name: tradinglab-fp-prometheus
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-prometheus
 
   grafana:
-    container_name: tradinglab-fp-grafana
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-grafana
 
   mlflow:
-    container_name: tradinglab-fp-mlflow
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-mlflow
 
   # The as-seen capture loop: the process the activation pack's section 0.1
   # named as missing. It reads public market data and Freqtrade's read-only API
@@ -49,7 +64,7 @@ services:
   # it uses exposes no execution endpoint.
   fp-capture:
     image: python:3.12-slim
-    container_name: tradinglab-fp-capture
+    container_name: tradinglab-${FP_BOT_NAME:?set by scripts/start_fp_control.sh after a fail-closed selection}-capture
     restart: unless-stopped
     depends_on:
       - freqtrade
@@ -67,11 +82,12 @@ services:
       - ./research:/app/research:ro
       - ./freqtrade:/app/freqtrade:ro
       # The evidence lane is the only writable mount.
-      - ./freqtrade/user_data/fp-control-1:/freqtrade/user_data/fp-control-1
+      - ./freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}:/freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}
     command:
       - python
       - /app/research/fp/capture.py
-      - --evidence-dir=/freqtrade/user_data/fp-control-1/evidence
+      - --role=${FP_ROLE:?set by scripts/start_fp_control.sh after a fail-closed selection}
+      - --evidence-dir=/freqtrade/user_data/${FP_INSTANCE_DIR:?set by scripts/start_fp_control.sh after a fail-closed selection}/evidence
       - --config=/app/freqtrade/user_data/config.json
       - --pair=BTC/USDT
       - --pair=ETH/USDT
