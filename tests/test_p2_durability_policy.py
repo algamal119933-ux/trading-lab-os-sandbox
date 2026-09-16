@@ -184,22 +184,98 @@ def test_an_unidentifiable_repository_disk_offers_nothing(monkeypatch):
     assert report["blocks_t0"] is False
 
 
-def test_a_device_that_is_not_writable_is_unhealthy_not_selected(monkeypatch):
+@pytest.fixture
+def synthetic_host(monkeypatch, tmp_path):
+    """A host with exactly two physical disks, whatever this machine really has.
+
+    The health logic must be testable everywhere — in CI, and in a reproduction
+    clone on tmpfs where the checkout has no block device at all. Depending on
+    this workstation's real layout would make these assertions pass or fail for
+    reasons that have nothing to do with the code.
+    """
+    repo = tmp_path / "repo"
+    second = tmp_path / "second"
+    repo.mkdir()
+    second.mkdir()
+    monkeypatch.setattr(discovery, "_mounts", lambda: [
+        {"source": "/dev/nvme0n1p2", "target": str(repo), "fstype": "ext4"},
+        {"source": "/dev/sda2", "target": str(second), "fstype": "ntfs3"},
+    ])
+    monkeypatch.setattr(
+        discovery, "_block_device_of",
+        lambda source: {"/dev/nvme0n1p2": "nvme0n1", "/dev/sda2": "sda"}.get(source),
+    )
+    monkeypatch.setattr(discovery, "_device_model", lambda disk: f"MODEL-{disk}")
+    monkeypatch.setattr(discovery, "_is_rotational", lambda disk: disk == "sda")
+    monkeypatch.setattr(discovery, "_read_only", lambda disk: False)
+    return repo, second
+
+
+def test_a_healthy_second_disk_is_selected(synthetic_host):
+    repo, second = synthetic_host
+    report = discovery.discover(repo_root=repo)
+    assert report["repository_block_device"] == "nvme0n1"
+    assert report["status"] == discovery.AVAILABLE
+    assert report["selected"]["block_device"] == "sda"
+    assert report["SAME_HOST_SECOND_DEVICE"] == "YES"
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
+
+
+def test_a_device_that_is_not_writable_is_unhealthy_not_selected(synthetic_host, monkeypatch):
+    repo, _ = synthetic_host
     monkeypatch.setattr(discovery, "_writable", lambda target: (False, "read-only file system"))
-    report = discovery.discover()
+    report = discovery.discover(repo_root=repo)
     assert report["selected"] is None
     assert report["status"] == discovery.UNAVAILABLE
     assert report["SAME_HOST_SECOND_DEVICE"] == "NO"
+    assert report["candidates"], "the candidate must still be reported, as unhealthy"
     for candidate in report["candidates"]:
         assert candidate["health"] == discovery.UNHEALTHY
         assert any("not writable" in problem for problem in candidate["problems"])
 
 
-def test_a_device_without_room_is_unhealthy(monkeypatch):
+def test_a_device_the_kernel_marks_read_only_is_unhealthy(synthetic_host, monkeypatch):
+    repo, _ = synthetic_host
+    monkeypatch.setattr(discovery, "_read_only", lambda disk: True)
+    report = discovery.discover(repo_root=repo)
+    assert report["selected"] is None
+    assert any("read-only" in p for c in report["candidates"] for p in c["problems"])
+
+
+def test_a_device_without_room_is_unhealthy(synthetic_host, monkeypatch):
+    repo, _ = synthetic_host
     monkeypatch.setattr(discovery, "MIN_FREE_BYTES", 1 << 60)
-    report = discovery.discover()
+    report = discovery.discover(repo_root=repo)
     assert report["selected"] is None
     assert any("free" in p for c in report["candidates"] for p in c["problems"])
+
+
+def test_a_second_partition_of_the_repository_disk_is_never_a_candidate(monkeypatch, tmp_path):
+    """/boot/efi is a second filesystem and the SAME device."""
+    repo, efi = tmp_path / "repo", tmp_path / "efi"
+    repo.mkdir()
+    efi.mkdir()
+    monkeypatch.setattr(discovery, "_mounts", lambda: [
+        {"source": "/dev/nvme0n1p2", "target": str(repo), "fstype": "ext4"},
+        {"source": "/dev/nvme0n1p1", "target": str(efi), "fstype": "vfat"},
+    ])
+    monkeypatch.setattr(discovery, "_block_device_of", lambda source: "nvme0n1")
+    report = discovery.discover(repo_root=repo)
+    assert report["candidates"] == []
+    assert report["status"] == discovery.UNAVAILABLE
+    assert report["SAME_HOST_SECOND_DEVICE"] == "NO"
+
+
+def test_this_workstations_real_layout_is_reported_without_being_assumed():
+    """A finding about this host, asserted only where it is knowable."""
+    report = discovery.discover()
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
+    assert report["blocks_t0"] is False
+    if report["repository_block_device"] is None:
+        assert report["candidates"] == []
+        return
+    for candidate in report["candidates"]:
+        assert candidate["block_device"] != report["repository_block_device"]
 
 
 # -- replication is append-only, by refusal ------------------------------

@@ -176,9 +176,24 @@ def discover(repo_root: Path | None = None) -> dict:
             "total_bytes": usage.total,
             "st_dev": stat.st_dev,
         }
-        if repo_stat is not None and stat.st_dev == repo_stat.st_dev:
-            repo_mount = entry
         candidates.append(entry)
+
+    # Which mount holds the repository? The longest mount point that is a prefix
+    # of its resolved path — the standard answer, and the right one: st_dev alone
+    # is shared by bind mounts, so it can name the wrong entry when two mount
+    # points sit on one filesystem.
+    resolved = root.resolve()
+    best = -1
+    for entry in candidates:
+        target = Path(entry["target"]).resolve()
+        if target == resolved or target in resolved.parents:
+            depth = len(target.parts)
+            if depth > best:
+                best, repo_mount = depth, entry
+    if repo_mount is None and repo_stat is not None:
+        repo_mount = next(
+            (e for e in candidates if e["st_dev"] == repo_stat.st_dev), None
+        )
 
     repo_disk = repo_mount["block_device"] if repo_mount else None
 
