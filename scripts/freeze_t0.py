@@ -336,14 +336,27 @@ def check_preconditions(role: str, t0: str, *, head: str | None = None) -> dict:
 def apply_freeze(facts: dict) -> dict:
     """Write the seven values, regenerate MANIFEST, and verify what was written.
 
-    The verification is not decoration. It re-reads the file from disk, re-runs
-    the registry law over it, and requires the diff against HEAD to name exactly
-    the two permitted files — so a freeze that wrote anything else is caught by
-    the same gate CI will run, before a commit exists rather than after.
+    ORDER MATTERS, and it is not obvious. ``scripts/verify_repo.py --fix`` hashes
+    each tracked file **as it stands in the git index**, not as it sits in the
+    working tree — deliberately, so an unstaged edit cannot slip a hash into the
+    manifest for content that is never committed. That means the registry has to
+    be STAGED before the manifest is regenerated. Regenerating first produces a
+    manifest built from the pre-freeze registry, which is byte-identical to the
+    one already committed, and the transaction then fails its own two-file check
+    every time. A freeze tool that can never succeed is a worse failure than one
+    that fails loudly, because it only reveals itself the one time it is run.
+
+    The verification afterwards is not decoration either: it re-reads the file
+    from disk, re-runs the registry law over it, and requires the staged diff
+    against HEAD to name exactly the two permitted files — so a freeze that
+    touched anything else is caught by the same rule CI applies, before a commit
+    exists rather than after.
     """
     role = facts["role"]
     registry_path = REPO_ROOT / REGISTRY_PATH
+    manifest_path = REPO_ROOT / MANIFEST_PATH
     before = registry_path.read_text(encoding="utf-8")
+    before_manifest = manifest_path.read_text(encoding="utf-8")
     registry = json.loads(before)
     row = next(item for item in registry["instances"] if item["role"] == role)
 
@@ -381,29 +394,47 @@ def apply_freeze(facts: dict) -> dict:
             raise FreezeRefused(
                 "the registry this freeze produced is not lawful: " + "; ".join(violations[:3])
             )
+        _git(["add", "--", REGISTRY_PATH])
         fix = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "verify_repo.py"), "--fix"],
             capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT),
         )
         if fix.returncode != 0:
             raise FreezeRefused(f"MANIFEST regeneration failed: {fix.stderr.strip()[:300]}")
+        _git(["add", "--", MANIFEST_PATH])
 
-        changed = sorted(
+        expected = sorted([MANIFEST_PATH, REGISTRY_PATH])
+        staged = sorted(
+            line for line in _git(["diff", "--cached", "--name-only"]).stdout.splitlines()
+            if line.strip()
+        )
+        if staged != expected:
+            raise FreezeRefused(f"the freeze staged {staged}, not exactly {expected}")
+        unstaged = sorted(
             line for line in _git(["diff", "--name-only"]).stdout.splitlines() if line.strip()
         )
-        if changed != sorted([MANIFEST_PATH, REGISTRY_PATH]):
+        if unstaged:
             raise FreezeRefused(
-                f"the freeze changed {changed}, not exactly [{MANIFEST_PATH}, {REGISTRY_PATH}]"
+                f"the freeze left {unstaged} unstaged; what is committed would not be what was "
+                "verified"
             )
-    except Exception:
-        # All-or-nothing. A half-applied freeze is a registry claiming a cohort
-        # whose MANIFEST, lane or commit disagree, and that is harder to unpick
-        # than never having started.
-        registry_path.write_text(before, encoding="utf-8")
-        subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts" / "verify_repo.py"), "--fix"],
+        verify = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "verify_repo.py")],
             capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT),
         )
+        if verify.returncode != 0:
+            raise FreezeRefused(
+                f"the repository does not verify after the freeze: {verify.stdout.strip()[:300]}"
+            )
+    except Exception:
+        # All-or-nothing, index included. A half-applied freeze is a registry
+        # claiming a cohort whose MANIFEST, lane or commit disagree, and that is
+        # harder to unpick than never having started.
+        registry_path.write_text(before, encoding="utf-8")
+        manifest_path.write_text(before_manifest, encoding="utf-8")
+        _git(["restore", "--staged", "--", REGISTRY_PATH, MANIFEST_PATH], check=False)
+        registry_path.write_text(before, encoding="utf-8")
+        manifest_path.write_text(before_manifest, encoding="utf-8")
         raise
 
     return registry

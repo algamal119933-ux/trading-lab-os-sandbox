@@ -390,3 +390,139 @@ def test_a_t0_far_in_the_future_refuses(lawful):
 def test_a_malformed_t0_refuses(lawful):
     with pytest.raises(freeze_t0.FreezeRefused, match="not YYYY"):
         freeze_t0.check_preconditions(ROLE, "2026-09-20 14:00")
+
+
+# =========================================================================
+# The transaction itself, applied to a real repository.
+#
+# Every test above proves a refusal. None of them proves the freeze can
+# SUCCEED, and that gap hid a defect that would only have surfaced the one time
+# the tool is ever run: `verify_repo.py --fix` hashes each tracked file as it
+# stands in the git INDEX, so regenerating the manifest before staging the
+# registry produced a manifest built from the pre-freeze registry — byte
+# identical to the committed one — and the transaction failed its own two-file
+# check every time. A freeze tool that can never succeed is worse than one that
+# fails loudly.
+#
+# So the transaction is applied to a disposable clone of this repository at its
+# own HEAD, and the result is required to be exactly what the CI gate will
+# demand of it.
+# =========================================================================
+
+
+@pytest.fixture
+def clone(tmp_path, monkeypatch):
+    from conftest import clone_at_head
+
+    destination, head = clone_at_head(tmp_path / "clone")
+    monkeypatch.setattr(freeze_t0, "REPO_ROOT", destination)
+    return destination, head
+
+
+def facts_for(clone_root: Path, head: str) -> dict:
+    return {
+        "role": ROLE,
+        "head": head,
+        "m1": head,
+        "mq": MQ,
+        "t0_utc": T0,
+        "cohort_id": fp_law.cohort_id_for(ROLE, T0),
+        "certificate_sha256": CERT,
+        "semantic_identity_digest": "9" * 64,
+        "expires_utc": _future(),
+        "registry": None,
+    }
+
+
+def test_the_freeze_transaction_produces_exactly_two_staged_files(clone):
+    root, head = clone
+    freeze_t0.apply_freeze(facts_for(root, head))
+
+    staged = sorted(
+        subprocess.run(["git", "-C", str(root), "diff", "--cached", "--name-only"],
+                       capture_output=True, text=True, check=True).stdout.split()
+    )
+    assert staged == sorted([freeze_t0.MANIFEST_PATH, freeze_t0.REGISTRY_PATH])
+    unstaged = subprocess.run(["git", "-C", str(root), "diff", "--name-only"],
+                              capture_output=True, text=True, check=True).stdout.split()
+    assert unstaged == []
+
+
+def test_the_frozen_registry_carries_the_seven_values(clone):
+    root, head = clone
+    freeze_t0.apply_freeze(facts_for(root, head))
+
+    registry = json.loads(
+        (root / freeze_t0.REGISTRY_PATH).read_text(encoding="utf-8")
+    )
+    row = next(item for item in registry["instances"] if item["role"] == ROLE)
+    assert row["t0_utc"] == T0
+    assert row["cohort_id"] == fp_law.cohort_id_for(ROLE, T0)
+    assert row["status"] == "RUNNING"
+    assert row["runtime_identity"]["source_commit"] == head
+    assert len(row["change_log"]) == 1 and row["change_log"][0]["class"] == "O"
+    assert registry["fp_run_active"] is True
+    assert registry["registry_updated_utc"] != "2026-09-14T00:00:00Z"
+    assert fp_law.check_registry(registry) == []
+
+
+def test_the_closed_row_is_byte_identical_after_the_freeze(clone):
+    root, head = clone
+    before = json.loads((root / freeze_t0.REGISTRY_PATH).read_text(encoding="utf-8"))
+    closed_before = next(i for i in before["instances"] if i["role"] == "FP-CONTROL-1")
+    freeze_t0.apply_freeze(facts_for(root, head))
+    after = json.loads((root / freeze_t0.REGISTRY_PATH).read_text(encoding="utf-8"))
+    closed_after = next(i for i in after["instances"] if i["role"] == "FP-CONTROL-1")
+    assert closed_before == closed_after
+
+
+def test_the_repository_still_verifies_after_the_freeze(clone):
+    """The manifest must describe the registry the freeze actually wrote."""
+    import sys as _sys
+
+    root, head = clone
+    freeze_t0.apply_freeze(facts_for(root, head))
+    verify = subprocess.run(
+        [_sys.executable, str(root / "scripts" / "verify_repo.py")],
+        capture_output=True, text=True, cwd=str(root),
+    )
+    assert verify.returncode == 0, verify.stdout + verify.stderr
+    assert "REPO_CHECK_PASS" in verify.stdout
+
+
+def test_the_freeze_candidate_passes_the_ci_gate_it_will_face(clone):
+    """The tool and the gate must agree, or the Owner is asked to merge a refusal."""
+    import check_freeze_candidate as gate
+
+    root, head = clone
+    subprocess.run(["git", "-C", str(root), "checkout", "--quiet", "-b", "claude/p2-freeze"],
+                   check=True)
+    freeze_t0.apply_freeze(facts_for(root, head))
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@example.invalid",
+                    "-c", "user.name=t", "commit", "--quiet", "-m", "Freeze T0"], check=True)
+
+    report = gate.check(head, "HEAD", repo_root=root)
+    assert report["classification"] == gate.FREEZE_CANDIDATE
+    assert report["result"] == "PASS", report["problems"]
+    assert report["cohort_id"] == fp_law.cohort_id_for(ROLE, T0)
+
+
+def test_an_unlawful_freeze_rolls_back_completely(clone):
+    """All-or-nothing, index included."""
+    root, head = clone
+    registry_before = (root / freeze_t0.REGISTRY_PATH).read_bytes()
+    manifest_before = (root / freeze_t0.MANIFEST_PATH).read_bytes()
+
+    broken = facts_for(root, head)
+    broken["cohort_id"] = "FP-CONTROL-2-NOT-DERIVED-FROM-T0"
+    with pytest.raises(freeze_t0.FreezeRefused, match="not lawful"):
+        freeze_t0.apply_freeze(broken)
+
+    assert (root / freeze_t0.REGISTRY_PATH).read_bytes() == registry_before
+    assert (root / freeze_t0.MANIFEST_PATH).read_bytes() == manifest_before
+    staged = subprocess.run(["git", "-C", str(root), "diff", "--cached", "--name-only"],
+                            capture_output=True, text=True, check=True).stdout.split()
+    assert staged == []
+    unstaged = subprocess.run(["git", "-C", str(root), "diff", "--name-only"],
+                              capture_output=True, text=True, check=True).stdout.split()
+    assert unstaged == []

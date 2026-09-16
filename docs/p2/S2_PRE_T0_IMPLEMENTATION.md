@@ -77,6 +77,33 @@ repair enumerates the whole tree and filters in Python, and refuses outright if
 any declared rule matches no file: a rule that stops matching removes files from
 the comparison without anyone deciding it should.
 
+### A second defect, found because a refusal test is not a success test
+
+Every freeze test written first proved a **refusal**. None proved the
+transaction could **succeed**, and that gap hid a defect that would have
+surfaced exactly once — the one time `freeze_t0` is ever run.
+
+`scripts/verify_repo.py --fix` hashes each tracked file **as it stands in the
+git index**, deliberately, so an unstaged edit cannot slip a hash into the
+manifest for content that is never committed. `apply_freeze` regenerated the
+manifest *before* staging the registry, so the manifest was rebuilt from the
+pre-freeze registry, came out byte-identical to the committed one, and the
+transaction then failed its own two-file check:
+
+```text
+the freeze staged ['research/fp/records/forward_paper_cohort_registry.json'],
+not exactly ['MANIFEST.txt', 'research/fp/records/forward_paper_cohort_registry.json']
+```
+
+A freeze tool that can never succeed is a worse failure than one that fails
+loudly. The order is now register → stage → regenerate → stage, the rollback
+restores the index as well as the worktree, and six tests apply the real
+transaction to a disposable clone of this repository at its own HEAD: exactly
+two staged files, nothing unstaged, the seven values written, the FP-CONTROL-1
+row byte-identical, `verify_repo` passing afterwards, and the resulting commit
+passing the very CI gate it will face. The ordering was reverted once to confirm
+those tests fail against the defect rather than passing for unrelated reasons.
+
 ### The whole lane moves, or nothing does
 
 Archiving only `evidence/` would carry pre-T0 wallet and position state into a
