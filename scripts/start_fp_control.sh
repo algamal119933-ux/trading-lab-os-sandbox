@@ -57,11 +57,19 @@ require_paper_config
 python3 - <<'PY' || exit 3
 import hashlib, json, os, pathlib, sys
 
-registry = json.loads(
-    pathlib.Path("research/fp/records/forward_paper_cohort_registry.json").read_text(encoding="utf-8")
-)
 sys.path.insert(0, "research")
 from fp.capture import InstanceSelectionError, select_instance
+from fp.lane_io import LaneIOError, read_identity_text
+
+# Read through the boundary: the file that is hashed here must be the same
+# object the runtime later reads, not a link that agrees with itself.
+try:
+    registry = json.loads(
+        read_identity_text("research/fp/records/forward_paper_cohort_registry.json")
+    )
+except LaneIOError as exc:
+    print(f"FP_IDENTITY_FAIL: {exc}", file=sys.stderr)
+    sys.exit(3)
 
 try:
     instance = select_instance(os.environ["FP_ROLE"], registry)
@@ -83,7 +91,11 @@ expected = {
 problems = []
 for field, path in expected.items():
     declared = identity.get(field)
-    actual = hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+    try:
+        actual = hashlib.sha256(read_identity_text(path).encode("utf-8")).hexdigest()
+    except LaneIOError as exc:
+        problems.append(f"{field}: {exc}")
+        continue
     if not declared:
         problems.append(f"{field} is not bound in the registry")
     elif declared != actual:
@@ -154,6 +166,20 @@ except LaneIOError as exc:
     raise SystemExit(3)
 print(f"FP_LANE_PASS: {resolved}")
 PY
+
+# The stamped commit must describe what actually ran. A tracked file that
+# differs from HEAD — an edited registry, a substituted strategy, a planted link
+# where an identity file belongs — makes that stamp a false statement, and the
+# forged content would agree with itself through every later identity check.
+if ! FP_TREE_STATE="$(git status --porcelain --untracked-files=no 2>/dev/null)"; then
+    echo "FP_SOURCE_FAIL: not a git repository, so the source commit cannot be established" >&2
+    exit 3
+fi
+if [ -n "$FP_TREE_STATE" ]; then
+    echo "FP_SOURCE_FAIL: tracked files differ from HEAD; the stamped source commit would not describe what runs:" >&2
+    echo "$FP_TREE_STATE" >&2
+    exit 3
+fi
 
 # Stamped into the capture container, which has no git of its own.
 FP_SOURCE_COMMIT="$(git rev-parse HEAD)"

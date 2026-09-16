@@ -33,7 +33,7 @@ from pathlib import Path
 import pytest
 
 from fp import capture, lane, ledger as fp_ledger, preflight
-from fp.lane_io import LaneHandle, LaneIdentity, LaneIOError
+from fp.lane_io import LaneDurabilityUnproven, LaneHandle, LaneIdentity, LaneIOError
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 SUCCESSOR = "FP-CONTROL-2"
@@ -353,7 +353,8 @@ def test_8_a_failed_state_replacement_leaves_no_torn_state_and_no_debris(
     assert (evidence / STATE).read_bytes() == good, "the previous state was torn"
     assert sorted(p.name for p in evidence.iterdir()) == entries_before, "a temporary entry survived"
 
-    # And a failure earlier, while the temporary file is being written.
+    # And a failure earlier, while the temporary file is being written: the
+    # rename never happens, so the previous state really is still the state.
     def failing_fsync(fd):
         raise OSError(errno.EIO, "simulated I/O error during fsync")
 
@@ -369,6 +370,55 @@ def test_8_a_failed_state_replacement_leaves_no_torn_state_and_no_debris(
     loop.write_runtime_state()
     assert json.loads((evidence / STATE).read_text(encoding="utf-8"))["real_money_authorized"] is False
     loop.close()
+
+
+def test_8b_a_failure_after_the_rename_is_reported_as_durability_not_rollback(
+    evidence, config_path, registry_pinned, monkeypatch
+):
+    """The two failure regions are different facts, and must not be conflated.
+
+    Failing the directory sync happens *after* the replacement is visible. The
+    new content is the current state; only its survival across a power loss is
+    unproven. Reporting that as "the previous state survived" would be false.
+    """
+    loop = make_loop(evidence, config_path)
+    loop.cycle(limit=5)
+    loop.write_runtime_state()
+    previous = json.loads((evidence / STATE).read_text(encoding="utf-8"))
+    entries_before = sorted(p.name for p in evidence.iterdir())
+
+    real_fsync = os.fsync
+    seen = {"calls": 0}
+
+    def fsync_that_fails_on_the_directory(fd):
+        seen["calls"] += 1
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError(errno.EIO, "simulated I/O error syncing the directory")
+        return real_fsync(fd)
+
+    # Newer bars, so the snapshot that follows genuinely differs from the one
+    # already on disk and "the replacement is visible" is a real assertion.
+    loop.market = StubMarket(count=60)
+    monkeypatch.setattr(os, "fsync", fsync_that_fails_on_the_directory)
+    loop.cycle(limit=5)
+    with pytest.raises(LaneDurabilityUnproven) as excinfo:
+        loop.write_runtime_state()
+    monkeypatch.undo()
+
+    message = str(excinfo.value)
+    assert "durability" in message and "unproven" in message
+    assert "previous content is gone" in message
+
+    current = json.loads((evidence / STATE).read_text(encoding="utf-8"))
+    assert current != previous, "the replacement was not visible after the rename"
+    assert current["input_records"] > previous["input_records"]
+    assert sorted(p.name for p in evidence.iterdir()) == entries_before, "a temporary entry survived"
+    loop.close()
+
+
+def test_8c_the_durability_error_is_still_a_fail_closed_lane_error():
+    """Callers that catch the boundary's error type keep failing closed."""
+    assert issubclass(LaneDurabilityUnproven, LaneIOError)
 
 
 # --------------------------------------------------------------------------
@@ -651,3 +701,169 @@ def test_the_launcher_creates_its_lane_through_the_boundary(tmp_path):
     assert refused.returncode == 3, refused.stdout + refused.stderr
     assert "FP_LANE_FAIL" in refused.stderr
     assert sorted(p.name for p in outside.iterdir()) == [], "the launcher created a lane outside"
+
+
+# --------------------------------------------------------------------------
+# identity sources: the registry, the runtime config and the strategy
+# --------------------------------------------------------------------------
+
+
+def _launcher_repo(tmp_path: Path) -> Path:
+    """A git repository holding the *working tree's* code, with a clean tree.
+
+    `git clone` would carry the committed branch instead, so a launcher gate
+    that exists but is not yet committed would silently not be under test — and
+    the launcher would run on the old code all the way to `compose up`. The
+    tracked content here is what is being developed, committed once so the
+    source-commit gate has a HEAD to compare against.
+    """
+    repo = tmp_path / "launcher-repo"
+    repo.mkdir()
+    for relative in subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                                   check=True).stdout.split():
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(relative, target)
+    for command in (["git", "init", "-q"],
+                    ["git", "add", "-A"],
+                    ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                     "commit", "-q", "-m", "launcher fixture"]):
+        subprocess.run(command, cwd=repo, capture_output=True, text=True, check=True)
+
+    shutil.copy2("freqtrade/user_data/config.paper.json.example",
+                 repo / "freqtrade" / "user_data" / "config.json")
+    # Placeholder credentials so the launcher reaches the gates under test. Both
+    # this and config.json are gitignored, so the tracked tree stays clean.
+    (repo / ".env").write_text(
+        "FREQTRADE_API_USER=x\nFREQTRADE_API_PASSWORD=x\nFREQTRADE_JWT_SECRET=x\n"
+        "FREQTRADE_WS_TOKEN=x\nGRAFANA_ADMIN_USER=x\nGRAFANA_ADMIN_PASSWORD=x\n",
+        encoding="utf-8",
+    )
+    clean = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
+                           cwd=repo, capture_output=True, text=True).stdout
+    assert clean == "", clean
+    return repo
+
+
+def _run_launcher(repo: Path, tmp_path: Path) -> tuple[subprocess.CompletedProcess, str]:
+    """Run the launcher with a `docker` that cannot start anything.
+
+    A test proving a refusal must not depend on that refusal working: if a gate
+    regresses, the real launcher reaches `compose up -d` and starts a runtime.
+    The stub makes that impossible and records what was attempted, so "nothing
+    was started" is asserted rather than assumed.
+    """
+    shim = tmp_path / "shim"
+    shim.mkdir(exist_ok=True)
+    log = tmp_path / "docker-calls.log"
+    (shim / "docker").write_text(
+        "#!/bin/bash\necho \"$*\" >> " + str(log) + "\nexit 98\n", encoding="utf-8"
+    )
+    (shim / "docker").chmod(0o755)
+    environment = dict(os.environ, PATH=f"{shim}:{os.environ['PATH']}")
+    result = subprocess.run(["bash", "scripts/start_fp_control.sh", SUCCESSOR],
+                            cwd=repo, capture_output=True, text=True, timeout=600,
+                            env=environment)
+    calls = log.read_text(encoding="utf-8") if log.exists() else ""
+    assert "up -d" not in calls, f"the launcher tried to start a runtime: {calls}"
+    return result, calls
+
+
+def test_a_substituted_registry_is_refused_rather_than_read(tmp_path):
+    """Reproduced: the read followed the link and the forged rows were believed.
+
+    The forged registry is self-consistent — it declares hashes matching files
+    the same attacker planted — so nothing downstream would have caught it.
+    """
+    repo = _launcher_repo(tmp_path)
+    registry = repo / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
+    forged = tmp_path / "forged_registry.json"
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    for instance in data["instances"]:
+        if instance["role"] == SUCCESSOR:
+            instance["runtime_identity"]["config_sha256"] = "f" * 64
+    forged.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    registry.unlink()
+    registry.symlink_to(forged)
+
+    read_attempt = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, 'research')\n"
+         "from fp import lane\n"
+         "print(lane.select_row('FP-CONTROL-2'))"],
+        cwd=repo, capture_output=True, text=True, timeout=300,
+    )
+    assert read_attempt.returncode != 0, read_attempt.stdout
+    assert "symbolic link" in read_attempt.stderr, read_attempt.stderr
+    assert "f" * 64 not in read_attempt.stdout
+
+    # The launcher refuses at its first registry read — selection — before the
+    # identity hashes are even compared, and before anything is rendered.
+    launcher, calls = _run_launcher(repo, tmp_path)
+    assert launcher.returncode != 0
+    assert "FP_SELECTION_FAIL" in launcher.stderr, launcher.stderr
+    assert "symbolic link" in launcher.stderr, launcher.stderr
+    assert calls == "", f"the launcher reached docker at all: {calls}"
+
+
+def test_a_substituted_strategy_is_refused_by_the_identity_gate(tmp_path):
+    """The hashed file and the executed file must be the same object."""
+    repo = _launcher_repo(tmp_path)
+    strategy = repo / "freqtrade" / "user_data" / "strategies" / "BaselineEmaRegimeV1.py"
+    decoy = tmp_path / "decoy_strategy.py"
+    decoy.write_bytes(strategy.read_bytes())
+    strategy.unlink()
+    strategy.symlink_to(decoy)
+
+    launcher, calls = _run_launcher(repo, tmp_path)
+    assert launcher.returncode != 0
+    assert "FP_IDENTITY_FAIL" in launcher.stderr, launcher.stderr
+    assert "symbolic link" in launcher.stderr, launcher.stderr
+    assert calls == "", f"the launcher reached docker at all: {calls}"
+
+
+def test_a_substituted_runtime_config_is_refused_by_the_identity_gate(tmp_path):
+    repo = _launcher_repo(tmp_path)
+    runtime_config = repo / "freqtrade" / "user_data" / "config.json"
+    decoy = tmp_path / "decoy_config.json"
+    decoy.write_bytes(runtime_config.read_bytes())
+    runtime_config.unlink()
+    runtime_config.symlink_to(decoy)
+
+    launcher, calls = _run_launcher(repo, tmp_path)
+    assert launcher.returncode != 0, launcher.stdout
+    assert "symbolic link" in launcher.stderr, launcher.stderr
+    assert calls == "", f"the launcher reached docker at all: {calls}"
+
+
+def test_the_launcher_refuses_a_tracked_tree_that_differs_from_head(tmp_path):
+    """The stamped source commit must describe what actually runs.
+
+    An edited tracked file is the same attack as a planted link by a shorter
+    route: the content that runs is not the content the commit names. This is
+    the control that covers direct edits, which no-follow reads cannot see.
+    """
+    repo = _launcher_repo(tmp_path)
+    doc = repo / "README.md"
+    doc.write_text(doc.read_text(encoding="utf-8") + "\nlocal edit\n", encoding="utf-8")
+
+    launcher, calls = _run_launcher(repo, tmp_path)
+    assert launcher.returncode == 3, launcher.stdout + launcher.stderr
+    assert "FP_SOURCE_FAIL" in launcher.stderr, launcher.stderr
+    assert "README.md" in launcher.stderr
+    assert calls == "", f"the launcher reached docker despite a dirty tree: {calls}"
+
+
+def test_a_clean_tracked_tree_reaches_the_render_step_and_stops_there(tmp_path):
+    """The positive control: the gates pass, and the stub proves where it got to.
+
+    Without this, every assertion above could pass because the launcher failed
+    for some unrelated reason long before the gate under test.
+    """
+    repo = _launcher_repo(tmp_path)
+    launcher, calls = _run_launcher(repo, tmp_path)
+    assert "FP_IDENTITY_PASS" in launcher.stdout, launcher.stdout + launcher.stderr
+    assert "FP_LANE_PASS" in launcher.stdout
+    assert "FP_SOURCE_FAIL" not in launcher.stderr
+    assert "config" in calls, f"the launcher never reached the render step: {calls}"
+    assert "up -d" not in calls

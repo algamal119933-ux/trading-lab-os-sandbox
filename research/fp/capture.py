@@ -61,7 +61,7 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
         sys.path.insert(0, _extra)
 
 from fp import lane as fp_lane  # noqa: E402
-from fp.lane_io import LaneHandle, LaneIOError  # noqa: E402
+from fp.lane_io import LaneHandle, LaneIOError, read_identity_text  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import market as fp_market  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
@@ -129,9 +129,15 @@ def utc_now() -> str:
 
 
 def sha256_file(path: Path) -> str | None:
+    """Hash a file whose digest is stamped into evidence as an identity.
+
+    Read through the boundary: a symlink at this path would make the hash
+    describe a different file from the one under discussion, and the digest
+    would still look authoritative in the record.
+    """
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
+        return hashlib.sha256(read_identity_text(path).encode("utf-8")).hexdigest()
+    except (OSError, LaneIOError, UnicodeDecodeError):
         return None
 
 
@@ -397,8 +403,13 @@ def build_identity(
 
 
 def _load_json(path: Path) -> dict | None:
+    """Load an identity source — the registry, or the runtime configuration.
+
+    Through the boundary, so a substituted path fails instead of supplying
+    forged identity that then agrees with itself through every later check.
+    """
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 

@@ -789,8 +789,22 @@ def repo_copy(tmp_path: Path) -> Path:
 
 
 def run_in(repo: Path, *args: str, env_extra: dict | None = None) -> subprocess.CompletedProcess:
+    """Run a command in the disposable copy, with a `docker` that cannot start anything.
+
+    These tests drive the real launcher to prove it refuses. If a gate ever
+    regresses, the launcher would run on to `compose up -d` and start a runtime
+    from a test — so the stub removes that possibility instead of trusting the
+    gate under test to hold.
+    """
+    shim = repo.parent / "docker-shim"
+    shim.mkdir(exist_ok=True)
+    stub = shim / "docker"
+    if not stub.exists():
+        stub.write_text('#!/bin/bash\necho "docker $*" >&2\nexit 98\n', encoding="utf-8")
+        stub.chmod(0o755)
     env = dict(os.environ)
     env["PYTHONPATH"] = f"{repo / 'research'}:{env.get('PYTHONPATH', '')}"
+    env["PATH"] = f"{shim}:{env['PATH']}"
     env.update(env_extra or {})
     return subprocess.run(list(args), cwd=repo, capture_output=True, text=True, timeout=300, env=env)
 

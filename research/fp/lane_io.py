@@ -43,6 +43,10 @@ Threat boundary, stated plainly rather than implied:
   entry that is already aliased is refused. A link created after the descriptor
   is open cannot be detected through that descriptor, and the write would then
   appear under both names.
+* Durability is bounded: file bytes and the directory entry are both synced,
+  but a failure of the directory sync happens *after* the rename is visible and
+  is reported as unproven durability, never as a surviving previous state. Full
+  power-loss durability of the whole evidence tree is later work.
 * A concurrent process running as the same user can write the lane directly.
   Nothing here prevents that, and P1 does not attempt to: separate users, mount
   namespaces and immutable storage are outside this stage.
@@ -63,6 +67,16 @@ _COMMON_FLAGS = os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
 
 class LaneIOError(Exception):
     """A lane operation was refused. Always fatal, never advisory."""
+
+
+class LaneDurabilityUnproven(LaneIOError):
+    """A replacement is already visible, but its durability was not established.
+
+    Separate from :class:`LaneIOError` because the honest answer differs: an
+    ordinary refusal means nothing was written, while this means the new content
+    *is* the current state and only its survival across a power loss is unproven.
+    Callers that catch the base class still fail closed.
+    """
 
 
 @dataclass(frozen=True)
@@ -199,8 +213,8 @@ class LaneHandle:
         except OSError as exc:
             if exc.errno == errno.ELOOP:
                 raise LaneIOError(
-                    f"{name} in {self._path} is a symbolic link; an evidence entry that leads "
-                    "outside the lane is refused, for reads and writes alike"
+                    f"{name} in {self._path} is a symbolic link; an entry that leads outside "
+                    f"{self._path} is refused, for reads and writes alike"
                 ) from exc
             if exc.errno in (errno.ENXIO, errno.EWOULDBLOCK, errno.EISDIR, errno.ENOTDIR):
                 # A FIFO with no reader, a socket, a directory: the kernel
@@ -252,9 +266,21 @@ class LaneHandle:
 
         ``os.replace`` acts on the *name*, so a symlinked destination is replaced
         rather than followed — the link's target is never touched. The temporary
-        entry is created exclusively in the same directory and removed on any
-        failure, so a crash leaves either the old content or the new, and no
-        stray file.
+        entry is created exclusively in the same directory and removed if
+        anything fails before the rename, so a reader sees either the old
+        content or the new, never a partial file, and no stray entry is left
+        behind.
+
+        Two failure regions, deliberately reported differently, because they are
+        not the same fact:
+
+        * **Before the rename** — nothing was published. The previous entry is
+          still the visible state, and the raised error says so.
+        * **After the rename** — the new content *is* the visible state. If the
+          directory sync that follows fails, what is unproven is durability
+          across a power loss, not which content is current. That case raises
+          :class:`LaneDurabilityUnproven`, and it must never be reported as
+          "the previous state survived", because it did not.
         """
         _validate_child_name(name)
         existing = self.stat_entry(name)
@@ -276,11 +302,26 @@ class LaneHandle:
                 os.fsync(handle.fileno())
             os.replace(temporary, name, src_dir_fd=self._fd, dst_dir_fd=self._fd)
         except Exception:
+            # Reached only before the rename published anything: the previous
+            # entry is untouched and the temporary one is removed.
             try:
                 os.unlink(temporary, dir_fd=self._fd)
             except FileNotFoundError:
                 pass
             raise
+
+        # The rename has happened. The file's own bytes are already synced; this
+        # syncs the directory entry that names them, which is what carries the
+        # replacement across a power loss. A failure here cannot be undone, so it
+        # is reported as what it is rather than as a rollback.
+        try:
+            os.fsync(self._fd)
+        except OSError as exc:
+            raise LaneDurabilityUnproven(
+                f"{name} in {self._path} now holds the new content, but the directory entry "
+                f"could not be synced ({exc}); the replacement is visible and its durability "
+                "across a power loss is unproven. The previous content is gone."
+            ) from exc
 
     def child_dir(self, name: str, *, create: bool = False) -> "LaneHandle":
         """A handle on a subdirectory of this lane — the governed way to nest."""
@@ -298,3 +339,33 @@ class LaneHandle:
 
     def entries(self) -> list[str]:
         return sorted(os.listdir(self._fd))
+
+
+def read_identity_text(path: str | os.PathLike[str]) -> str:
+    """Read a file whose *content decides an identity*, refusing a substituted one.
+
+    The registry, the runtime configuration and the strategy are not lane
+    entries, but their bytes decide which cohort a runtime claims to be and
+    which configuration it claims to run. A planted symlink at one of those
+    paths was reproduced being followed, and the forged content then agreed with
+    itself all the way through the identity gate.
+
+    So they are read the same way lane entries are: open the containing
+    directory, then open the single named child ``O_NOFOLLOW`` and check the
+    opened descriptor. This does not make the file tamper-proof — anyone who can
+    plant a link there can also edit the file in place — and the control for
+    that is the launcher's refusal to run with a tracked tree that differs from
+    HEAD. What it removes is the case where the file that was checked and the
+    file that was read are different objects.
+    """
+    target = Path(path)
+    parent = target.parent if str(target.parent) else Path(".")
+    try:
+        directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | _COMMON_FLAGS)
+    except OSError as exc:
+        raise LaneIOError(f"{parent} cannot be opened: {exc}") from exc
+    try:
+        with LaneHandle(directory, parent) as handle:
+            return handle.read_text(target.name)
+    except LaneIOError:
+        raise

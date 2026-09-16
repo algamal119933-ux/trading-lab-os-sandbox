@@ -42,6 +42,8 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
+from fp import lane_io as fp_lane_io  # noqa: E402
+
 SCHEMA_PATH = REPO_ROOT / "research" / "schema" / "paper_candidate_admission.schema.json"
 RECORDS_DIR = REPO_ROOT / "research" / "records"
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
@@ -100,8 +102,9 @@ def _git_commit() -> str:
 
 
 def _load_json(path: Path) -> dict | None:
+    """Identity-bearing records, read through the same boundary as the registry."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(fp_lane_io.read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 

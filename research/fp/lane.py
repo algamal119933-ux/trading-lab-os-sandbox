@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+from .lane_io import read_identity_text  # noqa: E402
+
 COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 
 CONTAINER_USER_DATA = PurePosixPath("/freqtrade/user_data")
@@ -150,7 +152,10 @@ def _load_registry(registry: dict | None) -> dict:
     if registry is not None:
         return registry
     try:
-        return json.loads(COHORT_REGISTRY.read_text(encoding="utf-8"))
+        # Through the I/O boundary: the registry decides which cohort a runtime
+        # is, and a planted link at this path was reproduced supplying forged
+        # rows that then agreed with themselves through every later check.
+        return json.loads(read_identity_text(COHORT_REGISTRY))
     except Exception as exc:  # noqa: BLE001
         raise LaneError(f"the cohort registry is unreadable: {exc}") from exc
 

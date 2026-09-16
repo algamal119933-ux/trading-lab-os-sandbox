@@ -41,6 +41,7 @@ for extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
+from fp import lane_io as fp_lane_io  # noqa: E402
 from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
 
@@ -164,7 +165,7 @@ CHECKS = (
 
 def _load_json(path: Path) -> dict | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(fp_lane_io.read_identity_text(path))
     except Exception:  # noqa: BLE001
         return None
 
