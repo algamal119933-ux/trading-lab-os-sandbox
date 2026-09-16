@@ -33,11 +33,16 @@ freqtrade/user_data/hyperopt.lock
 # deliberately as closure artifacts, not swept in by an incidental commit.
 freqtrade/user_data/fp-control-1/
 
-# The same, for every other declared instance lane. A qualification run writes
-# ledgers, a database and logs into its lane; left untracked they fail the
-# repository's own integrity gate, and the tempting fix — committing them — is
-# exactly what must never happen to evidence.
-freqtrade/user_data/fp-control-2/
+# The same, for every other declared instance lane, and for the disposable
+# lanes the adversarial tests build. A qualification run writes ledgers, a
+# database and logs into its lane; left untracked they fail the repository's own
+# integrity gate, and the tempting fix — committing them — is exactly what must
+# never happen to evidence. The pattern is a prefix rather than two literals
+# because lane.resolve_lane insists a lane live under this directory, so a test
+# that exercises archival has nowhere else to build one, and a test that fails
+# mid-run would otherwise leave the worktree dirty and stop a forward-paper
+# window on its own clean-worktree condition.
+freqtrade/user_data/fp-control-*/
 
 # ---------------------------------------------------------------------------
 # Market data and derived artifacts.

@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/p2_qualification_binding.schema.json",
+  "title": "P2 pre-T0 qualification binding (contract sections 6 and 9)",
+  "description": "The S3b class-O binding: what the S3 qualification run observed at Mq, and the sha256 of the certificate it produced. This record does not exist until S3b, and its absence is a refusal \u2014 freeze_t0 reads it from git at HEAD and will not freeze a T0 without it. It binds; it does not authorize. Authority is docs/p2/OWNER_T0_AUTHORIZATION.md, which only an Owner merge can place on main.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "binding_version",
+    "role",
+    "qualification_commit",
+    "certificate_sha256",
+    "observations",
+    "qualification_result",
+    "real_money_authorized"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "binding_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_utc": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$"
+    },
+    "role": {
+      "enum": [
+        "FP-CONTROL-1",
+        "FP-CONTROL-2",
+        "FP-CANDIDATE-A",
+        "FP-CANDIDATE-B"
+      ]
+    },
+    "qualification_commit": {
+      "description": "Mq \u2014 the commit at which the runtime-attached pre-T0 gates actually passed.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "certificate_sha256": {
+      "description": "sha256 of the qualification certificate file as sealed. The certificate itself stays out of Git: it is a runtime artifact under artifacts/, and its bytes are pinned here.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "semantic_identity_digest": {
+      "description": "SEMANTIC_IDENTITY(Mq). Recorded so the equivalence proof at freeze time has a value frozen at binding time to compare against, rather than recomputing both sides from whatever the tree says later.",
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "observations": {
+      "description": "Class O only \u2014 observability, no trading semantics. These are observations OF a runtime, not instructions TO one, which is why they are excluded from SEMANTIC_IDENTITY.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "image_digest",
+        "python_version"
+      ],
+      "properties": {
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "python_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "engine_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "qualification_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preflight",
+        "reconciliation",
+        "properties_evidenced"
+      ],
+      "properties": {
+        "preflight": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNPROVEN",
+            "BLOCKED"
+          ]
+        },
+        "reconciliation": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNPROVEN"
+          ]
+        },
+        "preflight_checks_passed": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 16
+        },
+        "properties_evidenced": {
+          "description": "The non-lifecycle operational-capability properties re-established at Mq. The lifecycle properties are NOT here: no pre-T0 record may be presented as prospective lifecycle evidence. NOTE ON THE COUNT: contract section 3 lists twelve properties and names three of them as lifecycle (paper order/fill, position state, no duplicate execution) plus the completed entry-to-realised-PnL chain, which is an aggregate rather than a thirteenth list item. Twelve minus three is nine, so the contract's 'non-lifecycle eight' and its 12/12 aggregate do not close arithmetically. The enum below carries the nine names the list actually leaves; no count is asserted here, because a schema is the wrong place to resolve a governance question. It is settled before S3, by the Owner.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "real_market_input",
+              "event_time_timestamp_knowability",
+              "paper_only_authority",
+              "decision_logging",
+              "risk_admission",
+              "persistence",
+              "restart_recovery",
+              "ledger_reconciliation",
+              "data_integrity"
+            ]
+          },
+          "minItems": 1
+        },
+        "lane_archive_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "t0_relation_of_every_record": {
+      "description": "Always T0_NOT_FROZEN. An L1 qualification record that carried any other value would be a record whose boundary did not come from the registry.",
+      "const": "T0_NOT_FROZEN"
+    },
+    "prospective_evidence": {
+      "description": "Always NONE. L1 proves the machinery works at the P2 commit. It proves nothing about a forward window.",
+      "const": "NONE"
+    },
+    "real_money_authorized": {
+      "const": false
+    }
+  }
+}

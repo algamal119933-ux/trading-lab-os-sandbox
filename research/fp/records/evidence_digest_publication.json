@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "publication_version": "FP_EVIDENCE_DIGEST_V1",
+  "published_utc": null,
+  "durability_tier": 2,
+  "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
+  "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
+  "host_loss_redundancy": false,
+  "real_money_authorized": false,
+  "archives": []
+}
