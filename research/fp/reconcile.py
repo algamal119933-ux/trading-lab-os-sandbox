@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -40,6 +41,12 @@ from fp import ledger as fp_ledger  # noqa: E402
 from fp import replay as fp_replay  # noqa: E402
 
 PASS, FAIL = "PASS", "FAIL"
+# A finding that could not be established is neither a pass nor a contradiction.
+# It is reported as itself and still withholds an overall PASS, because a check
+# that could not run is not a check that succeeded.
+UNPROVEN = "UNPROVEN"
+# capture.git_commit stamps this when it cannot name the source it ran from.
+UNKNOWN_COMMIT = "0" * 40
 
 RECONCILE_ENGINE_VERSION = "FP_RECONCILE_V1"
 
@@ -64,12 +71,40 @@ def _live(records) -> list:
     return [r for r in records if not r.payload.get("erratum")]
 
 
-def reconcile(evidence_dir: Path, pairs: list[str] | None = None, expected_role: str | None = None) -> dict:
+def repository_head() -> str | None:
+    """The commit this repository is actually on, or None if that is unknowable.
+
+    Deliberately not :func:`fp_capture.git_commit`, which prefers the
+    ``FP_SOURCE_COMMIT`` environment variable: the value being checked must not
+    be able to supply the answer it is checked against.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def reconcile(
+    evidence_dir: Path,
+    pairs: list[str] | None = None,
+    expected_role: str | None = None,
+    expected_source_commit: str | None = None,
+) -> dict:
     """Cross-ledger reconciliation.
 
     ``expected_role`` binds the evidence to the instance it claims to belong to.
     Without it, reconciliation reported PASS over records written by another
     role — attribution that is recorded but never compared proves nothing.
+
+    ``expected_source_commit`` does the same for the source: every record states
+    the commit its runtime was built from, and until now nothing compared that
+    statement to anything. A stamp that is required to exist but never checked
+    is not evidence of the source, and the runtime's own claim cannot be its own
+    corroboration. Defaults to this repository's HEAD.
     """
     evidence_dir = Path(evidence_dir)
     ledgers = fp_ledger.open_ledgers(evidence_dir)
@@ -141,6 +176,39 @@ def reconcile(evidence_dir: Path, pairs: list[str] | None = None, expected_role:
             len(unattributed),
         )
     )
+
+    # -- 2b. the stamped commit must be the commit this repository is on ---
+    expected_commit = expected_source_commit or repository_head()
+    stamped = {
+        (r.payload.get("identity") or {}).get("source_commit")
+        for r in live
+        if (r.payload.get("identity") or {}).get("source_commit")
+    }
+    unknown_commit = {UNKNOWN_COMMIT}
+    if not live:
+        commit_result, commit_detail = UNPROVEN, "no live records to attribute to a commit"
+    elif stamped & unknown_commit:
+        commit_result = FAIL
+        commit_detail = (
+            f"records stamped with the unknown-commit sentinel {UNKNOWN_COMMIT[:8]}…: the runtime "
+            "could not name the source it was built from"
+        )
+    elif expected_commit is None:
+        commit_result = UNPROVEN
+        commit_detail = (
+            f"the evidence claims commit(s) {sorted(c[:8] for c in stamped)}, but this repository's "
+            "HEAD could not be read, so the claim is unchecked"
+        )
+    elif stamped != {expected_commit}:
+        commit_result = FAIL
+        commit_detail = (
+            f"evidence claims commit(s) {sorted(c[:8] for c in stamped)} but the repository is on "
+            f"{expected_commit[:8]}: the runtime that ran is not the source being verified"
+        )
+    else:
+        commit_result = PASS
+        commit_detail = f"all {len(live)} live records were written from {expected_commit[:8]}, this repository's HEAD"
+    findings.append(Finding("record_source_commit", commit_result, commit_detail, len(stamped)))
 
     # -- 3. market events captured exactly once ---------------------------
     event_ids = [r.payload.get("market_event_id") for r in inputs]
@@ -369,12 +437,25 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--pair", action="append", dest="pairs", default=None)
+    parser.add_argument(
+        "--source-commit",
+        default=None,
+        help=(
+            "the commit the evidence must have been written from. Defaults to this "
+            "repository's HEAD; pass it explicitly when verifying evidence away from "
+            "the checkout that produced it."
+        ),
+    )
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--require-pass", action="store_true", help="exit 2 unless reconciliation passes")
     parser.add_argument("-o", "--out", default=None)
     args = parser.parse_args(argv)
 
-    report = reconcile(Path(args.evidence_dir), args.pairs, expected_role=args.role)
+    report = reconcile(
+        Path(args.evidence_dir), args.pairs,
+        expected_role=args.role,
+        expected_source_commit=args.source_commit,
+    )
     text = json.dumps(report, indent=2) + "\n"
 
     if args.out:

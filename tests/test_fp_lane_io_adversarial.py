@@ -919,3 +919,91 @@ def test_every_declared_lane_is_ignored_by_git():
             candidate = relative / child
             ignored = subprocess.run(["git", "check-ignore", "-q", str(candidate)])
             assert ignored.returncode == 0, f"{candidate} is not ignored by git"
+
+
+# --------------------------------------------------------------------------
+# the stamped source commit must be the source being verified
+# --------------------------------------------------------------------------
+
+
+def _stamped_evidence(evidence: Path, commit: str, role: str = SUCCESSOR) -> None:
+    """Four ledgers carrying one identity, as a runtime would write them."""
+    ledgers = fp_ledger.open_ledgers(evidence, create=True)
+    identity = {
+        "run_id": "a" * 32, "runtime_id": f"{role}:fp-control-2",
+        "source_commit": commit, "role": role, "cohort_id": None,
+    }
+    ledgers["input"].append({"pair": "BTC/USDT", "candle_ts": BASE_TS, "identity": identity})
+
+
+def _source_finding(report: dict) -> dict:
+    return next(f for f in report["findings"] if f["check"] == "record_source_commit")
+
+
+def test_a_foreign_source_commit_fails_reconciliation(tmp_path):
+    """A stamp nothing compares is not evidence of the source.
+
+    `source_commit` was required to exist and never checked against anything, so
+    evidence could claim any provenance and reconcile as PASS.
+    """
+    from fp import reconcile as fp_reconcile
+
+    evidence = tmp_path / "evidence"
+    _stamped_evidence(evidence, "b" * 40)
+
+    report = fp_reconcile.reconcile(evidence, expected_role=SUCCESSOR)
+    finding = _source_finding(report)
+    assert finding["result"] == "FAIL", finding
+    assert "not the source being verified" in finding["detail"]
+    assert report["reconciliation"] == "FAIL"
+    assert "record_source_commit" in report["failing_checks"]
+
+
+def test_the_unknown_commit_sentinel_fails_reconciliation(tmp_path):
+    """"Unknown" is recorded honestly by the runtime, and is not a provenance."""
+    from fp import reconcile as fp_reconcile
+
+    evidence = tmp_path / "evidence"
+    _stamped_evidence(evidence, "0" * 40)
+
+    finding = _source_finding(fp_reconcile.reconcile(evidence, expected_role=SUCCESSOR))
+    assert finding["result"] == "FAIL"
+    assert "unknown-commit sentinel" in finding["detail"]
+
+
+def test_the_repository_head_passes_and_the_environment_cannot_supply_it(tmp_path, monkeypatch):
+    """The value under test must not be able to answer the question about itself.
+
+    `capture.git_commit()` prefers FP_SOURCE_COMMIT, so reconciliation deriving
+    the expectation that way would let a forged environment agree with forged
+    evidence. It reads git directly instead.
+    """
+    from fp import reconcile as fp_reconcile
+
+    head = fp_reconcile.repository_head()
+    assert head and head != "0" * 40
+
+    matching = tmp_path / "matching"
+    _stamped_evidence(matching, head)
+    assert _source_finding(fp_reconcile.reconcile(matching, expected_role=SUCCESSOR))["result"] == "PASS"
+
+    forged = tmp_path / "forged"
+    _stamped_evidence(forged, "c" * 40)
+    monkeypatch.setenv("FP_SOURCE_COMMIT", "c" * 40)
+    assert fp_reconcile.repository_head() == head, "the environment decided the expected commit"
+    assert _source_finding(fp_reconcile.reconcile(forged, expected_role=SUCCESSOR))["result"] == "FAIL"
+
+
+def test_an_unreadable_repository_head_is_unproven_not_passed(tmp_path, monkeypatch):
+    """A check that could not run is not a check that succeeded."""
+    from fp import reconcile as fp_reconcile
+
+    evidence = tmp_path / "evidence"
+    _stamped_evidence(evidence, "d" * 40)
+    monkeypatch.setattr(fp_reconcile, "repository_head", lambda: None)
+
+    report = fp_reconcile.reconcile(evidence, expected_role=SUCCESSOR)
+    finding = _source_finding(report)
+    assert finding["result"] == "UNPROVEN"
+    assert "unchecked" in finding["detail"]
+    assert report["reconciliation"] != "PASS"
