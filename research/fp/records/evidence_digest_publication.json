@@ -1,11 +1,51 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": null,
+  "published_utc": "2026-09-16T16:33:42Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
   "host_loss_redundancy": false,
   "real_money_authorized": false,
-  "archives": []
+  "archives": [
+    {
+      "archive_name": "p1-l0-qualification-4543d4c3",
+      "role": "FP-CONTROL-2",
+      "cohort_id": null,
+      "lane_status_at_archival": "NOT_STARTED",
+      "reason": "P1 qualification lane (L0), retained from docs/p1/P1_CLOSURE.md at source commit 4543d4c330ed7a11c442e9b2ef78a23ac12cea40. Archived as S3's first act so the L1 pre-T0 qualification lane is created fresh and empty. Never credited: contract section 4.",
+      "archived_utc": "2026-09-16T16:33:24Z",
+      "verified_utc": "2026-09-16T16:33:42Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-2",
+      "file_count": 8,
+      "total_bytes": 6355013,
+      "files": {
+        "evidence/.fp_capture.lock": "38fd4338bd6bba82d8db00eaa01b847392e3a8deb1c65017ac6d4cc3d0af4e62",
+        "evidence/capture_runtime.json": "10429e86b0c8386120ea4ee5612db90c50735dec2ca393335e11131fe1b8df7b",
+        "evidence/paper_decision_ledger.jsonl": "7f8d092192dd599cb551550c50e1efdd2ce28280f564792bdc76a73774425851",
+        "evidence/paper_incident_ledger.jsonl": "900fc8d19586258b381b73a0dc281936cc0239f69cc5b15a2c4865fcdba9d277",
+        "evidence/paper_input_ledger.jsonl": "95103326de2b73145be3e28b5e2d6b91b348ad62a323c2e1b78095f9bccf61ea",
+        "logs/freqtrade.log": "b01b07c2d0c0b60478e617e110b7f4dab9db69909e4350c5834b7f4928a6e6de",
+        "tradesv3.sqlite": "fd6da1f3a86931cb73bb7fabcef5efd9e64f01785a11b7923603ac44a76caaef",
+        "x.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "27f95df081f7db226f76267ecbe8def65e4361889cec153230b10d2ff4a2f3b9",
+          "incident": "762de6ee71656968228c84cd6d259ff103a49794d01618320200b6b6b4273088",
+          "input": "566e86c8bb7f83eb77bb353f8cfa64b2edd07bdeb6073e6e756479dab3b79b97",
+          "trade": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "daily_pack_digest": "fa347aa5d9084777c311cc93f9c29ae04815aea26b22e867422cc5fa1bada1d0",
+        "counts": {
+          "decision": 1998,
+          "incident": 3,
+          "input": 1998,
+          "trade": 0
+        },
+        "chain_problems": []
+      }
+    }
+  ]
 }

@@ -101,6 +101,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py": "S3 — the scope audit is pinned to ranges so it cannot decay",
+    "research/fp/records/evidence_digest_publication.json": "S3 — Tier 2, the sealed lanes' digests",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
