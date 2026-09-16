@@ -42,7 +42,6 @@ SCOPE: dict[str, str] = {
     "scripts/validate_activation.py": "activation validation",
     "scripts/fp_watch.py": "continuity/stall watch tooling",
     "scripts/check_freeze_candidate.py": "CI freeze-candidate guards",
-    "scripts/tier3_discovery.py": "durability policy — superseded, renamed to second_device_discovery",
     "scripts/second_device_discovery.py": "durability policy — second-device availability",
     "scripts/replicate_to_second_device.py": "durability policy — append-only second-device copy",
     "research/fp/capability.py": "property model — one source for the twelve",
@@ -142,8 +141,13 @@ def changed_paths() -> list[str]:
         # reason: the destination because it is new, and the source because its
         # disappearance is itself a change someone has to account for.
         if " -> " in entry:
-            source, destination = (part.strip().strip('"') for part in entry.split(" -> ", 1))
-            paths.update({source, destination})
+            # A rename in the working tree reads `old -> new`. Only the
+            # destination is counted: against main, a file created and renamed
+            # within this branch has one net path, and requiring a scope entry
+            # for an intermediate name that never reached main would make the
+            # map wrong the moment it was committed.
+            entry = entry.split(" -> ", 1)[1].strip().strip('"')
+            paths.add(entry)
         else:
             paths.add(entry)
     return sorted(paths)

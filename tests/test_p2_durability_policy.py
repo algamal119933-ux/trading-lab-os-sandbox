@@ -154,9 +154,34 @@ def test_two_partitions_of_one_disk_are_not_a_second_device():
     """The repository's own disk cannot be its own redundancy, however partitioned."""
     report = discovery.discover()
     repo_disk = report["repository_block_device"]
-    assert repo_disk, "the repository's block device could not be determined"
+    if repo_disk is None:
+        # A checkout on tmpfs or an overlay — a reproduction clone under /tmp is
+        # the normal case. Nothing may be offered at all; see the fail-closed
+        # test below, which is where that path is actually asserted.
+        assert report["candidates"] == []
+        assert report["status"] == discovery.UNAVAILABLE
+        return
     for candidate in report["candidates"]:
         assert candidate["block_device"] != repo_disk, candidate
+
+
+def test_an_unidentifiable_repository_disk_offers_nothing(monkeypatch):
+    """Fail closed: if we cannot name our own disk, nothing is a different one.
+
+    Offering a candidate here could hand back the repository's own drive as its
+    own redundancy — the exact conflation this section exists to prevent. Found
+    by running the suite in a reproduction clone on tmpfs, where the repository
+    has no block device at all.
+    """
+    monkeypatch.setattr(discovery, "_block_device_of", lambda source: None)
+    report = discovery.discover()
+    assert report["status"] == discovery.UNAVAILABLE
+    assert report["candidates"] == []
+    assert report["selected"] is None
+    assert report["SAME_HOST_SECOND_DEVICE"] == "NO"
+    assert "could not be identified" in report["unresolved"]
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
+    assert report["blocks_t0"] is False
 
 
 def test_a_device_that_is_not_writable_is_unhealthy_not_selected(monkeypatch):

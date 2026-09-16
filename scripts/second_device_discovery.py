@@ -182,9 +182,25 @@ def discover(repo_root: Path | None = None) -> dict:
 
     repo_disk = repo_mount["block_device"] if repo_mount else None
 
+    # Fail closed. If the repository's own physical disk cannot be identified,
+    # nothing can be shown to be a DIFFERENT one — and offering a candidate
+    # anyway could hand back the repository's own drive as its own redundancy,
+    # which is precisely the conflation this whole section exists to prevent.
+    # This is the normal case when the checkout sits on tmpfs or an overlay,
+    # e.g. a reproduction clone under /tmp.
+    if repo_disk is None:
+        return _report(
+            root, repo_disk, [], None,
+            unresolved=(
+                "the repository's physical disk could not be identified from /proc/self/mounts "
+                f"and /sys/block ({root}); no device can be shown to be a different one, so none "
+                "is offered"
+            ),
+        )
+
     seconds = []
     for entry in candidates:
-        if repo_disk is not None and entry["block_device"] == repo_disk:
+        if entry["block_device"] == repo_disk:
             continue  # same physical disk, however many partitions it has
         if entry["block_device"] is None:
             continue
@@ -209,7 +225,11 @@ def discover(repo_root: Path | None = None) -> dict:
 
     usable = [entry for entry in seconds if entry["health"] == AVAILABLE]
     chosen = max(usable, key=lambda e: e["free_bytes"]) if usable else None
+    return _report(root, repo_disk, seconds, chosen)
 
+
+def _report(root: Path, repo_disk: str | None, seconds: list[dict], chosen: dict | None,
+            *, unresolved: str = "") -> dict:
     return {
         "second_device_discovery_version": "FP_SECOND_DEVICE_V1",
         "observed_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -220,6 +240,7 @@ def discover(repo_root: Path | None = None) -> dict:
         "candidates": seconds,
         "selected": chosen,
         "status": AVAILABLE if chosen else UNAVAILABLE,
+        "unresolved": unresolved,
         SAME_HOST_SECOND_DEVICE_LABEL: "YES" if chosen else "NO",
         "host_loss_redundancy": HOST_LOSS_REDUNDANCY,
         "provisioned": False,
