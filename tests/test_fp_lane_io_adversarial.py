@@ -486,14 +486,13 @@ def test_10_a_legitimate_capture_produces_its_lane_and_nothing_else(
 
 def test_11_these_proofs_reproduce_in_a_clean_checkout(tmp_path):
     """No dependence on untracked or gitignored state in the writer tree."""
-    branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True,
-                            text=True, check=True).stdout.strip()
-    clone = tmp_path / "clone"
-    subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--single-branch",
-                    "--branch", branch, ".", str(clone)],
-                   capture_output=True, text=True, timeout=600, check=True)
-    subprocess.run(["git", "-C", str(clone), "remote", "remove", "origin"],
-                   capture_output=True, check=True)
+    from conftest import clone_at_head
+
+    clone, head = clone_at_head(tmp_path / "clone")
+    assert subprocess.run(["git", "-C", str(clone), "rev-parse", "HEAD"], capture_output=True,
+                          text=True, check=True).stdout.strip() == head
+    assert subprocess.run(["git", "-C", str(clone), "remote"], capture_output=True,
+                          text=True, check=True).stdout.strip() == ""
     assert not (clone / "freqtrade" / "user_data" / "config.json").exists()
 
     result = subprocess.run(

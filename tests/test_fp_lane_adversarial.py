@@ -991,13 +991,9 @@ def test_preflight_validates_the_runtime_config_when_one_is_attached(tmp_path, m
 
 def test_the_lineage_check_answers_the_same_way_in_a_fresh_clone(tmp_path):
     """A clone of a branch has neither origin/main nor main; the answer must hold."""
-    clone = tmp_path / "clone"
-    subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", "--single-branch",
-                    "--branch", subprocess.run(["git", "branch", "--show-current"],
-                                               capture_output=True, text=True, check=True).stdout.strip(),
-                    ".", str(clone)],
-                   capture_output=True, text=True, timeout=300, check=True)
-    subprocess.run(["git", "-C", str(clone), "remote", "remove", "origin"], capture_output=True, check=True)
+    from conftest import clone_at_head
+
+    clone, _ = clone_at_head(tmp_path / "clone")
     code = (
         "import sys, json; sys.path.insert(0, 'research');"
         "from fp import admission;"

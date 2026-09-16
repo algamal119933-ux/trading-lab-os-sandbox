@@ -49,3 +49,28 @@ def write_config(tmp_path):
         return path
 
     return _write
+
+
+def clone_at_head(destination):
+    """A disposable clone positioned at this working copy's exact commit.
+
+    Cloning by branch name looked equivalent and was not: a `pull_request` CI
+    checkout is detached, so `git branch --show-current` is empty and the clone
+    failed there while passing on every branch checkout. The commit is the
+    identity that matters for a reproduction proof, so the clone is taken at the
+    SHA and `origin` is removed — leaving no remote-tracking refs and no way for
+    the copy to depend on the repository it came from.
+    """
+    import subprocess
+    from pathlib import Path as _Path
+
+    destination = _Path(destination)
+    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+    subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", ".", str(destination)],
+                   capture_output=True, text=True, timeout=600, check=True)
+    subprocess.run(["git", "-C", str(destination), "checkout", "--quiet", "--detach", head],
+                   capture_output=True, text=True, timeout=300, check=True)
+    subprocess.run(["git", "-C", str(destination), "remote", "remove", "origin"],
+                   capture_output=True, check=True)
+    return destination, head
