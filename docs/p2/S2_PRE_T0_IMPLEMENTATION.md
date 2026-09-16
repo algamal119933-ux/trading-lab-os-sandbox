@@ -7,7 +7,7 @@ it and does not extend it.
 ```text
 CREATED   no T0 · no cohort · no cohort id · no prospective evidence
 CHANGED   no strategy semantics · no risk semantics · no Dataset authority
-TIER3_DESTINATION = OPEN_OWNER_DECISION
+SECOND_PHYSICAL_DEVICE = AVAILABLE   HOST_LOSS_REDUNDANCY = NOT_PROVEN
 PAPER / RESEARCH ONLY        REAL_MONEY_AUTHORIZED = NO
 ```
 
@@ -32,7 +32,8 @@ a flag, because the thing it reads does not exist.
 | `scripts/validate_activation.py` | activation | the nine checks, and what the gap cost |
 | `scripts/fp_watch.py` | continuity | wedged loop · stopped stack · silent corruption |
 | `scripts/check_freeze_candidate.py` | the CI gate | a freeze candidate is the whole transaction or none of it |
-| `scripts/tier3_discovery.py` | Tier 3, discovery only | what is already lawfully here |
+| `scripts/second_device_discovery.py` | durability | is there a healthy second physical device? |
+| `scripts/replicate_to_second_device.py` | durability | an append-only copy on it |
 | `research/fp/capability.py` | the property model | the twelve, their two buckets, and the aggregate outside them |
 
 Two existing modules were corrected rather than extended:
@@ -120,59 +121,108 @@ an assumption, not a copy.
 
 ---
 
-## 3. Durability — what each tier may truthfully claim
+## 3. Durability — what each mechanism may truthfully claim
+
+Amended by Owner decision after the merge-readiness audit. Independent-host
+storage is **no longer a P2 T0 precondition** — it was an Owner-added precaution
+and is superseded, removed as a blocker rather than satisfied. Off-host storage,
+restore qualification and disaster recovery are **P3 operational-hardening
+scope**, and no cloud or NAS provisioning is required for P2.
 
 ```text
-TIER 1  SAME-HOST ARCHIVAL                                    IMPLEMENTED
+TIER 1  WHOLE-LANE ARCHIVAL                                   REQUIRED
+  Whole-lane archival with provenance and digest verification.
   MAY      lanes cannot be commingled or cross-credited; no running container
            can reach an archived lane; operator error in the live lane cannot
            destroy archived evidence
   MAY NOT  survival of host loss, disk failure, filesystem corruption, or this
            machine being decommissioned
 
-TIER 2  DIGEST PUBLICATION                                    IMPLEMENTED
-  research/fp/records/evidence_digest_publication.json — tracked, empty, valid
+TIER 2  DIGEST PUBLICATION                                    REQUIRED
+  research/fp/records/evidence_digest_publication.json — tracked, empty, valid.
+  Counts, ledger tips, pack digest and per-file hashes: enough to prove the
+  identity and extent of sealed evidence.
   MAY      surviving evidence is provably the evidence that was sealed; a loss
            and its exact extent are provable rather than reconstructed
   MAY NOT  that anything is recoverable. A digest is not a backup.
 
-TIER 3  INDEPENDENT-HOST SNAPSHOT                             DISCOVERY ONLY
-  TIER3_DESTINATION = OPEN_OWNER_DECISION
+SECOND PHYSICAL DEVICE                 REQUIRED WHEN AVAILABLE AND HEALTHY
+  SAME_HOST_SECOND_DEVICE = YES        HOST_LOSS_REDUNDANCY = NOT_PROVEN
+  MAY      the sealed evidence exists on a second physical device, so the
+           failure of either single drive does not by itself destroy it
+  MAY NOT  host loss · workstation destruction · theft · host-wide filesystem
+           or OS catastrophe
+  NOT CALLED TIER 3, in any record, at any time.
 ```
 
 A same-host copy is never described as host-loss redundancy, in any record, at
-any time. That is a sentence rather than a code path, so
-`tests/test_p2_contract_invariants.py` asserts it against the text every tool
-emits.
+any time. That sentence survives the amendment unchanged, and it is why the
+second device carries `HOST_LOSS_REDUNDANCY = NOT_PROVEN` on its face: two
+drives in one chassis share a power supply, a room, and a thief.
 
-### What Tier-3 discovery found on this host
-
-Discovery ran. It provisioned nothing, contacted nothing, and created no
-credential.
+### What the second device actually is, on this host
 
 ```text
-/                          ext4     same device as the repository
-/boot/efi                  vfat     a second partition, SAME failure domain
-/run/media/hamza/…         ntfs3    a separate block device, ~924 GiB free
-git remote origin                   off-host, and NOT an evidence destination
-
-VERDICT = CANDIDATE_FOUND_INDEPENDENCE_UNPROVEN
+repository   nvme0n1   Lexar SSD NM620 256GB     /            ext4
+second       sda       WDC WD10EZEX-00BBHA0      /run/media/… ntfs3, ~924 GiB free
+             AVAILABLE — writable (probed), not read-only, ample room
 ```
 
-One candidate exists and its independence is **unproven**. Whether a removable
-volume mounted at this desk is outside this workstation's failure domain depends
-on facts no tool can determine — whether it is a different physical disk, and
-whether it ever leaves the desk. A second partition or a second disk in the same
-machine is a different filesystem and the *same* failure domain: a theft, a
-fire, a PSU failure or a decommission takes both.
+`/boot/efi` is correctly **not** a candidate: it is a second partition of the
+repository's own disk, which is a second filesystem and the same device.
+Candidacy is decided by whole-disk identity read from `/sys/block`, not by
+mount point.
 
-The git remote is genuinely off-host and is deliberately **not** offered: the
-evidence lane is gitignored by design, the worktree must stay clean for the
-whole window, and committing evidence is precisely what the repository's own
-integrity gate exists to prevent. Tier 2 already publishes digests through it,
-and digests are not a backup.
+`scripts/replicate_to_second_device.py` places a sealed archive there. It is
+**append-only by refusal, not by filesystem attribute** — the device is NTFS and
+carries no POSIX immutability, and pretending otherwise would be the same class
+of overclaim this section exists to prevent. A replica is written once via a
+staging name that is renamed into place only after every byte has been re-read
+from the device; a repeat run re-verifies; and an archive whose bytes no longer
+match an existing replica is **refused rather than reconciled**, because that
+divergence is the single most important thing either copy could report.
 
----
+An unavailable or unhealthy device does not block T0. It is recorded as
+unavailable and the cohort proceeds on Tier 1 and Tier 2, which are
+unconditional.
+
+## 3b. The window law
+
+Owner decision, materialized in the contract SSOT and in the validator.
+
+```text
+ACTIVATION_UTC   the instant activation validation FIRST proves a lawful
+                 POST_T0 + LIVE cohort record
+WINDOW STARTS    at ACTIVATION_UTC, not at T0_UTC
+NORMAL END       first naturally completed full paper trade lifecycle
+                 AND all twelve capability properties satisfied
+                 AND reconciliation / evidence / safety PASS
+HARD CAP         ACTIVATION_UTC + 30 calendar days, no automatic extension
+AT THE CAP       close as P2 INCONCLUSIVE / INSUFFICIENT — a lawful outcome
+```
+
+Clocking from T0 would run the window through the one interval whose records are
+explicitly **not** credited — the structural gap between the freeze and the first
+process start. That shortens the observed window while lengthening the recorded
+one, which is the wrong direction for every party reading the result.
+
+`T0_UTC` does not move and keeps doing its own job as the crediting boundary;
+`ACTIVATION_UTC` is only the active-window clock. Records between them remain
+`POST_T0 + WARMUP` — contextual, counted, never credited.
+
+`ACTIVATION_UTC` is derived from the **evidence**, not from when the validator
+ran: it is the decision timestamp of the first credited record, so re-running the
+tool a week later reports the same instant. It is emitted at second precision,
+the same shape the registry uses for `t0_utc` — two timestamp shapes for one kind
+of field in one report is how a later comparison ends up working by string
+truncation.
+
+Nothing may manufacture the end of the window: no artificial trade, no threshold
+change, no forced entry or exit, no strategy modification. That prohibition is
+what makes the cap meaningful — a window extendable until it produced a trade
+would be a window that always produces one, and the result would say nothing
+about the system. The validator has no extension mechanism, and a test asserts
+none appears.
 
 ## 4. Every mechanism refuses its own violation
 

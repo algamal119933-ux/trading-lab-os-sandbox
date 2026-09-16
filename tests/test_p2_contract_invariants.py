@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-import tier3_discovery
+import second_device_discovery
 
 S2_TOOLS = (
     "scripts/archive_fp_lane.py",
@@ -38,7 +38,8 @@ S2_TOOLS = (
     "scripts/prove_semantic_equivalence.py",
     "scripts/publish_evidence_digest.py",
     "scripts/seal_pre_t0_qualification.py",
-    "scripts/tier3_discovery.py",
+    "scripts/second_device_discovery.py",
+    "scripts/replicate_to_second_device.py",
     "scripts/validate_activation.py",
     "research/fp/archive.py",
     "research/fp/capability.py",
@@ -132,49 +133,43 @@ def test_the_tier_2_schema_forbids_a_host_loss_claim():
 
 
 def test_no_tool_describes_a_same_host_copy_as_redundancy():
-    """The conflation is a sentence, not a code path, so it is checked as text."""
+    """The conflation is a sentence, not a code path, so it is checked as text.
+
+    Claim-shaped rather than vocabulary-shaped: a tool must be able to say
+    "disaster recovery is P3 scope", which is the disclaimer doing its job.
+    """
     for path in S2_TOOLS:
         text = _source(path).lower()
         for claim in ("host-loss redundancy is provided", "survives host loss",
-                      "offsite backup", "disaster recovery"):
+                      "is an offsite copy", "provides disaster recovery",
+                      "host_loss_redundancy = yes"):
             assert claim not in text, f"{path} claims {claim!r}"
 
 
 # -- Tier 3 discovers. It does not provision. ------------------------------
 
 
-def test_tier3_discovery_provisions_nothing():
-    report = tier3_discovery.discover()
+def test_second_device_discovery_provisions_nothing():
+    report = second_device_discovery.discover()
     assert report["provisioned"] is False
-    assert report["tier3_destination"] == "OPEN_OWNER_DECISION"
     assert report["actions_taken"].startswith("NONE")
     assert report["real_money_authorized"] is False
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
 
 
-def test_tier3_discovery_makes_no_outbound_call():
-    source = _source("scripts/tier3_discovery.py")
+def test_second_device_discovery_makes_no_outbound_call():
+    source = _source("scripts/second_device_discovery.py")
     for needle in ("urllib", "requests", "socket.create_connection", "boto3", "rclone",
                    "scp ", "rsync", "curl"):
         assert needle not in source, f"tier3_discovery reaches for {needle}"
 
 
-def test_a_second_device_on_this_host_is_not_a_different_failure_domain():
-    """A theft, a fire, a PSU failure or a decommission takes both."""
-    report = tier3_discovery.discover()
-    for mount in report["mounts"]:
-        if mount["failure_domain"] == tier3_discovery.POSSIBLY_INDEPENDENT:
-            assert mount["fstype"] in tier3_discovery.NETWORK_FSTYPES
-    assert report["verdict"] in (
-        "NO_CANDIDATE_FOUND",
-        "CANDIDATE_FOUND_INDEPENDENCE_UNPROVEN",
-        "CANDIDATE_FOUND_PENDING_OWNER_DECISION",
-    )
-
-
-def test_the_git_remote_is_not_offered_as_an_evidence_destination():
-    report = tier3_discovery.discover()
-    for remote in report["git_remotes"]:
-        assert remote["eligible_as_evidence_destination"] is False
+def test_a_second_device_on_this_host_is_never_host_loss_redundancy():
+    """A theft, a fire, a PSU failure or a decommission takes both drives."""
+    report = second_device_discovery.discover()
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
+    assert report["status"] in (second_device_discovery.AVAILABLE,
+                                second_device_discovery.UNAVAILABLE)
 
 
 # -- P2 never converts a measurement into an edge claim --------------------

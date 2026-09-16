@@ -42,7 +42,9 @@ SCOPE: dict[str, str] = {
     "scripts/validate_activation.py": "activation validation",
     "scripts/fp_watch.py": "continuity/stall watch tooling",
     "scripts/check_freeze_candidate.py": "CI freeze-candidate guards",
-    "scripts/tier3_discovery.py": "Tier-3 availability/check mechanism only",
+    "scripts/tier3_discovery.py": "durability policy — superseded, renamed to second_device_discovery",
+    "scripts/second_device_discovery.py": "durability policy — second-device availability",
+    "scripts/replicate_to_second_device.py": "durability policy — append-only second-device copy",
     "research/fp/capability.py": "property model — one source for the twelve",
     # -- corrections to existing modules ------------------------------------
     "research/fp/reconcile.py": "registry/source-commit equivalence reconciliation",
@@ -67,6 +69,10 @@ SCOPE: dict[str, str] = {
     "tests/test_p2_gitignore_boundary.py": "gitignore boundary audit",
     "tests/test_p2_reconciliation_version.py": "reconciliation version audit",
     "tests/test_p2_scope_audit.py": "PR scope audit",
+    "tests/test_p2_durability_policy.py": "Owner amendment 1 — durability policy",
+    "tests/test_p2_window_law.py": "Owner amendment 2 — P2 window law",
+    "tests/test_p2_capability_model.py": "property model invariants",
+    "CLAUDE.md": "durability policy — the Tier-3 return trigger is superseded",
 }
 
 
@@ -129,8 +135,17 @@ def changed_paths() -> list[str]:
     """
     paths = {p for p in _git("diff", "--name-only", merge_base()).split("\n") if p.strip()}
     for line in _git("status", "--porcelain").split("\n"):
-        if line.strip():
-            paths.add(line[3:].strip().strip('"'))
+        if not line.strip():
+            continue
+        entry = line[3:].strip().strip('"')
+        # A rename reads `old -> new`. Both ends are changes and both need a
+        # reason: the destination because it is new, and the source because its
+        # disappearance is itself a change someone has to account for.
+        if " -> " in entry:
+            source, destination = (part.strip().strip('"') for part in entry.split(" -> ", 1))
+            paths.update({source, destination})
+        else:
+            paths.add(entry)
     return sorted(paths)
 
 
@@ -167,7 +182,7 @@ def test_the_scope_map_has_no_stale_entries():
 @needs_baseline
 def test_no_changed_file_lies_outside_the_directories_s2_may_touch():
     allowed_prefixes = ("research/", "scripts/", "tests/", "docs/p2/", ".github/workflows/")
-    allowed_files = (".gitignore", "MANIFEST.txt")
+    allowed_files = (".gitignore", "MANIFEST.txt", "CLAUDE.md")
     for path in changed_paths():
         assert path in allowed_files or path.startswith(allowed_prefixes), path
 
@@ -271,13 +286,15 @@ def test_no_cohort_was_created():
     assert registry["paper_alpha_cohort"] == "NONE"
 
 
-def test_no_tier3_resource_was_provisioned():
-    import tier3_discovery
+def test_no_storage_resource_was_provisioned():
+    """Discovery only. The second device is found, never formatted or mounted."""
+    import second_device_discovery
 
-    report = tier3_discovery.discover()
+    report = second_device_discovery.discover()
     assert report["provisioned"] is False
-    assert report["tier3_destination"] == "OPEN_OWNER_DECISION"
     assert report["actions_taken"].startswith("NONE")
+    assert report["host_loss_redundancy"] == "NOT_PROVEN"
+    assert report["blocks_t0"] is False
 
 
 def test_the_parked_branch_is_untouched():

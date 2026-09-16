@@ -32,7 +32,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +55,12 @@ ACTIVATION_ENGINE_VERSION = "FP_ACTIVATION_VALIDATION_V1"
 # not its first prospective bar. The bound is the instant the gap becomes
 # evidentially visible, which is the only non-arbitrary place to put it.
 MAX_ACTIVATION_GAP_CANDLE_PERIODS = 1
+
+# Contract section 7, the window law. The prospective active window is clocked
+# from ACTIVATION_UTC — the instant this validator first proves a lawful
+# POST_T0 + LIVE record — and not from T0_UTC. Counting from T0 would run the
+# clock through the one interval whose records are explicitly not credited.
+WINDOW_HARD_CAP_DAYS = 30
 
 
 @dataclass
@@ -321,6 +327,52 @@ def validate(role: str, source_commit: str | None = None, registry: dict | None 
                             f"{timeframe} candle period ({gap['max_elapsed_seconds']}s); at least "
                             "one bar that should have been observed live was not"))
 
+    # -- the window clock --------------------------------------------------
+    # ACTIVATION_UTC is a property of the EVIDENCE, not of when this tool ran:
+    # it is the decision timestamp of the first lawful POST_T0 + LIVE record, so
+    # re-running the validator a week later reports the same instant.
+    activation_utc = None
+    if credited:
+        first = credited[0].payload
+        activation_ms = first.get("decision_ts_ms")
+        if not isinstance(activation_ms, int):
+            activation_ms = (first.get("candle_ts") or 0) + timeframe_ms
+        # Second precision, the same shape the registry uses for t0_utc. Two
+        # timestamp shapes for the same kind of field in one report is how a
+        # later comparison ends up working by string truncation.
+        activation_utc = datetime.fromtimestamp(
+            activation_ms / 1000, timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    window = {
+        "t0_utc": t0_utc,
+        "activation_utc": activation_utc,
+        "window_starts_at": "ACTIVATION_UTC",
+        "hard_cap_days": WINDOW_HARD_CAP_DAYS,
+        "hard_cap_utc": None,
+        "elapsed_days": None,
+        "state": "NOT_ACTIVATED",
+        "normal_end": (
+            "the first naturally completed full paper trade lifecycle, AND all twelve "
+            "capability properties satisfied, AND reconciliation, evidence and safety PASS"
+        ),
+        "at_hard_cap_close_as": "P2 INCONCLUSIVE / INSUFFICIENT",
+        "automatic_extension": False,
+        "forbidden_to_end_the_window": (
+            "an artificial trade · a threshold change · a forced entry or exit · any strategy "
+            "modification. A window that could be extended until it produced a trade would be a "
+            "window that always produces one."
+        ),
+    }
+    if activation_utc:
+        activated = datetime.strptime(activation_utc[:19] + "Z", "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+        cap = activated + timedelta(days=WINDOW_HARD_CAP_DAYS)
+        now = datetime.now(timezone.utc)
+        window["hard_cap_utc"] = cap.strftime("%Y-%m-%dT%H:%M:%SZ")
+        window["elapsed_days"] = round((now - activated).total_seconds() / 86400, 3)
+        window["state"] = "OPEN" if now < cap else "HARD_CAP_REACHED"
+
     return _report(role, checks, gap, {
         "cohort_id": cohort_id,
         "t0_utc": t0_utc,
@@ -330,10 +382,11 @@ def validate(role: str, source_commit: str | None = None, registry: dict | None 
         "counts": reconciliation["counts"],
         "ledger_tips": reconciliation["ledger_tips"],
         "daily_pack_digest": reconciliation["daily_pack_digest"],
-    })
+    }, window=window)
 
 
-def _report(role: str, checks: list[Check], gap: dict, cohort: dict) -> dict:
+def _report(role: str, checks: list[Check], gap: dict, cohort: dict,
+            window: dict | None = None) -> dict:
     status = PASS if checks and all(c.result == PASS for c in checks) else FAIL
     return {
         "activation_engine_version": ACTIVATION_ENGINE_VERSION,
@@ -343,6 +396,7 @@ def _report(role: str, checks: list[Check], gap: dict, cohort: dict) -> dict:
         "checks": [c.as_dict() for c in checks],
         "failing_checks": [c.number for c in checks if c.result != PASS],
         "activation_gap": gap,
+        "window": window or {"state": "NOT_ACTIVATED", "window_starts_at": "ACTIVATION_UTC"},
         "activation": status,
         "prospective_paper_edge": "NOT_EVALUATED",
         "real_money_authorized": False,
@@ -387,6 +441,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  elapsed        {gap['elapsed_seconds']}s (bound {gap['max_elapsed_seconds']}s)")
             print(f"  gap bars       {gap['post_t0_warmup_decisions']} {gap['candles_covered'][:4]}")
             print(f"  {gap['disposition']}")
+        window = report["window"]
+        if window.get("activation_utc"):
+            print()
+            print(f"WINDOW          starts at ACTIVATION_UTC, not T0_UTC")
+            print(f"  T0_UTC         {window['t0_utc']}")
+            print(f"  ACTIVATION_UTC {window['activation_utc']}")
+            print(f"  hard cap       {window['hard_cap_utc']} "
+                  f"({window['hard_cap_days']} days, no automatic extension)")
+            print(f"  elapsed        {window['elapsed_days']} days — {window['state']}")
+            print(f"  at the cap     close as {window['at_hard_cap_close_as']}")
         print()
         print(f"ACTIVATION = {report['activation']}")
         print("PROSPECTIVE_PAPER_EDGE = NOT_EVALUATED")
