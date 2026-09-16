@@ -33,6 +33,7 @@ a flag, because the thing it reads does not exist.
 | `scripts/fp_watch.py` | continuity | wedged loop · stopped stack · silent corruption |
 | `scripts/check_freeze_candidate.py` | the CI gate | a freeze candidate is the whole transaction or none of it |
 | `scripts/tier3_discovery.py` | Tier 3, discovery only | what is already lawfully here |
+| `research/fp/capability.py` | the property model | the twelve, their two buckets, and the aggregate outside them |
 
 Two existing modules were corrected rather than extended:
 

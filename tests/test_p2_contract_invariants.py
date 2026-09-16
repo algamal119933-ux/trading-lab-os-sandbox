@@ -41,6 +41,7 @@ S2_TOOLS = (
     "scripts/tier3_discovery.py",
     "scripts/validate_activation.py",
     "research/fp/archive.py",
+    "research/fp/capability.py",
     "research/fp/registry_law.py",
     "research/fp/semantic_identity.py",
 )

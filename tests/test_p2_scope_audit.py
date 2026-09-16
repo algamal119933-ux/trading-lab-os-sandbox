@@ -74,8 +74,32 @@ def _git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
+def _resolve_base_ref() -> str:
+    """The merge base against main, however this checkout happens to name it.
+
+    A local clone has `origin/main`; a CI `pull_request` checkout is detached and
+    may have only `FETCH_HEAD`, or neither until something fetches. Resolving
+    this robustly matters more than it looks: if it raised, every audit below
+    would error out for an environmental reason and the pass/fail signal would
+    be about the checkout rather than about the diff.
+    """
+    for ref in ("origin/main", "refs/remotes/origin/main", "FETCH_HEAD"):
+        probe = subprocess.run(["git", "merge-base", "HEAD", ref], capture_output=True, text=True)
+        if probe.returncode == 0 and probe.stdout.strip():
+            return probe.stdout.strip()
+    subprocess.run(["git", "fetch", "--quiet", "origin", "main"], capture_output=True, text=True)
+    probe = subprocess.run(["git", "merge-base", "HEAD", "FETCH_HEAD"],
+                           capture_output=True, text=True)
+    if probe.returncode == 0 and probe.stdout.strip():
+        return probe.stdout.strip()
+    raise AssertionError(
+        "no merge base against main could be resolved; the scope audit cannot run "
+        "against an unknown baseline, and passing silently would be worse"
+    )
+
+
 def merge_base() -> str:
-    return _git("merge-base", "HEAD", "origin/main").strip()
+    return _resolve_base_ref()
 
 
 def changed_paths() -> list[str]:

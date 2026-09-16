@@ -112,8 +112,9 @@ def test_p1s_closure_record_still_states_thirteen():
 def test_p1s_closure_record_is_unchanged_on_this_branch():
     import subprocess
 
-    base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"],
-                          capture_output=True, text=True, check=True).stdout.strip()
+    from test_p2_scope_audit import _resolve_base_ref
+
+    base = _resolve_base_ref()
     diff = subprocess.run(["git", "diff", "--name-only", base, "HEAD", "--", str(P1_CLOSURE)],
                           capture_output=True, text=True, check=True).stdout.strip()
     assert diff == "", "P1's closure record was modified; it is history, not an expectation"
