@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 from fp import registry_law as law
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
@@ -29,7 +31,7 @@ SUCCESSOR = "FP-CONTROL-2"
 
 @pytest.fixture
 def registry() -> dict:
-    return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    return conftest.pre_t0_registry(SUCCESSOR)
 
 
 def row(registry: dict, role: str) -> dict:

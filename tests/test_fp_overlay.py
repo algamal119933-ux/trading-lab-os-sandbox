@@ -155,7 +155,11 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
     # never described, which is the drift this test exists to catch.
     instance = next(i for i in registry["instances"] if i["role"] == ROLE)
     identity = instance["runtime_identity"]
-    assert instance["status"] == "NOT_STARTED", "the qualifying instance must be pre-T0"
+    # The subject here is path drift between the overlay template and the
+    # registry, which is a question about the declared paths and not about the
+    # instance's status. Requiring NOT_STARTED made this test fail the moment a
+    # lawful T0 was frozen, on a claim it was never making.
+    assert instance["status"] in ("NOT_STARTED", "RUNNING"), instance["status"]
     instance_dir = identity["evidence_dir"].rsplit("/", 2)[-2]
 
     # The variables are required-with-message (`${VAR:?...}`), so the overlay
