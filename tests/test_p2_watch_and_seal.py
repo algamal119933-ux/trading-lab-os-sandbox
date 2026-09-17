@@ -29,6 +29,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 import fp_watch
 import seal_pre_t0_qualification as sealer
 from fp import lane as fp_lane
@@ -50,7 +52,11 @@ def _iso(when: datetime) -> str:
 
 @pytest.fixture
 def lane_env(tmp_path, monkeypatch):
-    registry = copy.deepcopy(json.loads(REGISTRY_PATH.read_text(encoding="utf-8")))
+    # A pre-T0 row, asked for by name. These tests drive the seal and the
+    # watch, both of which require a row that has started nothing; inheriting
+    # that state from whatever is committed is what broke them the first time
+    # a lawful T0 was frozen.
+    registry = copy.deepcopy(conftest.pre_t0_registry(ROLE))
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     for field in ("db_path", "log_path", "evidence_dir"):
         row["runtime_identity"][field] = (

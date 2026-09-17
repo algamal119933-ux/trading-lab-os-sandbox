@@ -29,6 +29,60 @@ for extra in (
         sys.path.insert(0, str(extra))
 
 
+COHORT_REGISTRY = (REPO_ROOT / "research" / "fp" / "records"
+                   / "forward_paper_cohort_registry.json")
+
+# The seven values the T0 freeze writes, and the pre-freeze value of each.
+# Contract section 6 fixes this list; it is restated here as data so that a test
+# needing the pre-freeze state can ask for it by name.
+_PRE_FREEZE_ROW = {
+    "cohort_id": None,
+    "status": "NOT_STARTED",
+    "t0_utc": None,
+    "closed_utc": None,
+    "closure_reason": None,
+}
+
+
+def committed_registry() -> dict:
+    """The cohort registry exactly as committed — whatever state it is in."""
+    return json.loads(COHORT_REGISTRY.read_text(encoding="utf-8"))
+
+
+def pre_t0_registry(role: str = "FP-CONTROL-2") -> dict:
+    """The committed registry, with ``role`` forced to its pre-freeze state.
+
+    A test that drives a mechanism requiring a pre-T0 row must SAY it needs one.
+    Before the Owner froze a T0 the committed registry supplied that state for
+    free, so dozens of fixtures read the real file and inherited it without ever
+    naming the dependency — and the moment the freeze was applied, every one of
+    them failed against a registry that was perfectly lawful. Inheriting a state
+    is not the same as requiring it, and this function is where the difference
+    is written down.
+
+    The paths, identity and every other field stay exactly as committed: only
+    the freeze's own seven values are wound back, so a test still runs against
+    the real runtime identity rather than a hand-built imitation of it.
+    """
+    registry = committed_registry()
+    registry["fp_run_active"] = False
+    for row in registry["instances"]:
+        if row.get("role") != role:
+            continue
+        row.update(_PRE_FREEZE_ROW)
+        row["change_log"] = []
+        identity = row.get("runtime_identity")
+        if isinstance(identity, dict):
+            identity["source_commit"] = None
+        row.pop("outcome", None)
+    return registry
+
+
+@pytest.fixture
+def pre_t0_registry_dict() -> dict:
+    return pre_t0_registry()
+
+
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
     return REPO_ROOT

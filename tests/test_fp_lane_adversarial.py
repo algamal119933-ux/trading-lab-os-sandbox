@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+import conftest
 import yaml
 
 import check_fp_overlay
@@ -33,7 +35,7 @@ HOST_USER_DATA = lane.HOST_USER_DATA
 
 @pytest.fixture(scope="module")
 def registry() -> dict:
-    return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    return conftest.pre_t0_registry(SUCCESSOR)
 
 
 def row(registry: dict, role: str) -> dict:
@@ -509,7 +511,7 @@ def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
     stubbed `docker` on PATH, so the test proves the script reaches the stop
     command without starting or stopping anything real.
     """
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    registry = conftest.pre_t0_registry(SUCCESSOR)
     paused = row(registry, SUCCESSOR)
     paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
                   cohort_id="FP-CONTROL-2-20260914T000000Z")
@@ -549,7 +551,7 @@ def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
 
 
 def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch):
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    registry = conftest.pre_t0_registry(SUCCESSOR)
     paused = row(registry, SUCCESSOR)
     paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
                   cohort_id="FP-CONTROL-2-20260914T000000Z")
@@ -564,10 +566,32 @@ def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch)
     assert "PAUSED" in str(excinfo.value)
 
 
+def _use_pre_t0_registry(tmp_path, monkeypatch) -> Path:
+    """Point capture and lane at a registry whose successor row is pre-T0.
+
+    These two tests write records that declare ``cohort_id: None`` and then read
+    them back, so they need a row that declares none either. Pointing them at
+    the committed file gave exactly that for free until a T0 was frozen onto it,
+    at which point the assertions were comparing a stated null against a real
+    cohort id. The row is written here instead of borrowed.
+    """
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(conftest.pre_t0_registry(SUCCESSOR), indent=2) + "\n",
+                    encoding="utf-8")
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", path.resolve())
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", path.resolve())
+    # preflight reads the registry through its own module constant, so a caller
+    # that patched only capture and lane would be running two halves of the same
+    # check against two different cohorts.
+    from fp import preflight as _preflight
+
+    monkeypatch.setattr(_preflight, "COHORT_REGISTRY", path.resolve())
+    return path
+
+
 def test_evidence_records_carry_the_writing_role(tmp_path, monkeypatch):
     """Attribution must be written, not assumed by the consumer."""
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
-    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    _use_pre_t0_registry(tmp_path, monkeypatch)
 
     class StubMarket:
         TIMEFRAME_MS = {"1h": 3_600_000}
@@ -606,8 +630,7 @@ def test_preflight_refuses_evidence_written_by_another_role(tmp_path, monkeypatc
     """
     from fp import ledger as fp_ledger, preflight
 
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
-    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    _use_pre_t0_registry(tmp_path, monkeypatch)
     monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
     runtime_config_for(tmp_path, monkeypatch)
 
@@ -642,8 +665,7 @@ def test_preflight_compares_the_stamped_config_hash(tmp_path, monkeypatch):
     """A record written against some other config must not pass unnoticed."""
     from fp import ledger as fp_ledger, preflight
 
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
-    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+    _use_pre_t0_registry(tmp_path, monkeypatch)
     monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
     runtime_config_for(tmp_path, monkeypatch)
 

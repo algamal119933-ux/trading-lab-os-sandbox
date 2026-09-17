@@ -31,6 +31,8 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+import conftest
+
 from fp import ledger as fp_ledger
 
 import publish_evidence_digest as publisher
@@ -50,8 +52,10 @@ def lane_registry(tmp_path):
     anywhere else is refused by ``resolve_lane``, which is the behaviour being
     relied on, so the fixture cannot sidestep it by using tmp_path.
     """
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
-    registry = copy.deepcopy(registry)
+    # Archival records the lane's status at the moment it was archived, and
+    # these tests assert that value. They therefore need a stated pre-T0 row
+    # rather than whichever status the committed registry happens to carry.
+    registry = copy.deepcopy(conftest.pre_t0_registry(ROLE))
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     identity = row["runtime_identity"]
     for field in ("db_path", "log_path", "evidence_dir"):

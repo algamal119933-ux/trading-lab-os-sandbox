@@ -109,9 +109,25 @@ S3_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #19, merged. Two parents: d6b1eeb3 (main before) + 4e058f08 (the branch).
+S4_MERGE = "19301eb4c943f084b1d91bdf53312174c7b3cd7e"
+
+# Every path S4 touched → the requirement it satisfies.
+S4_SCOPE: dict[str, str] = {
+    "docs/p2/OWNER_T0_AUTHORIZATION.md": "S4 — the Owner's merged T0 authorization record",
+    "tests/test_p2_scope_audit.py": "S4 — S3 pinned to its merge range; the absence of an "
+                                    "authorization stops being asserted as law",
+    "tests/test_p2_freeze_t0.py": "S4 — the authority controls construct the absence they need",
+    "tests/test_p2_qualification_binding.py": "S4 — the binding's claim is separated from the "
+                                              "authorization's existence",
+    ".github/workflows/ci.yml": "S4 — the authority gate proves the boundary in both states",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -119,14 +135,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/OWNER_T0_AUTHORIZATION.md": "S4 — the Owner's merged T0 authorization record",
-    "tests/test_p2_scope_audit.py": "S4 — S3's scope is pinned to its merge range; the absence "
-                                    "of an authorization stops being asserted as law",
-    "tests/test_p2_freeze_t0.py": "S4 — the authority controls construct the absence they need "
-                                  "instead of depending on this repository having it",
-    "tests/test_p2_qualification_binding.py": "S4 — the binding's own claim is separated from the "
-                                              "authorization's existence",
-    ".github/workflows/ci.yml": "S4 — the authority gate proves the boundary in both states",
+    "tests/conftest.py": "S5 — one place that states a pre-T0 registry instead of inheriting one",
+    "tests/test_p2_watch_and_seal.py": "S5 — the seal/watch fixtures state the row they need",
+    "tests/test_p2_archival.py": "S5 — archival asserts a stated lane status",
+    "tests/test_p2_activation.py": "S5 — activation starts from a stated pre-T0 baseline",
+    "tests/test_p2_freeze_t0.py": "S5 — the lawful fixture states its registry",
+    "tests/test_p2_registry_law.py": "S5 — the law tests build their cases from a stated baseline",
+    "tests/test_fp_lane_adversarial.py": "S5 — capture/lane/preflight read one stated registry",
+    "tests/test_fp_successor_instance.py": "S5 — non-inheritance is tested against a stated successor",
+    "tests/test_fp_admission.py": "S5 — a running CONTROL is lawful; a running candidate is not",
+    "tests/test_fp_overlay.py": "S5 — the overlay test is about path drift, not about status",
+    "tests/test_p2_scope_audit.py": "S5 — S4 pinned to its merge range; the freeze candidate is "
+                                    "deferred to the gate that audits it",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -359,9 +379,27 @@ def test_s2_created_no_t0_and_no_qualification_binding():
 # -- the branch layer: the stage in flight, against the merge base ----------
 
 
+# The freeze candidate's own two files, which contract section 6 fixes exactly.
+FREEZE_CANDIDATE_SCOPE = {
+    "research/fp/records/forward_paper_cohort_registry.json":
+        "the T0 freeze transaction — audited by scripts/check_freeze_candidate.py",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+def branch_scope() -> dict[str, str]:
+    """What this branch is allowed to change.
+
+    A freeze candidate is not an ordinary branch: it may change exactly the two
+    files section 6 names, and nothing else — which is a narrower rule than this
+    map, not a wider one.
+    """
+    return FREEZE_CANDIDATE_SCOPE if branch_is_a_freeze_candidate() else BRANCH_SCOPE
+
+
 @needs_baseline
 def test_every_changed_file_on_this_branch_is_in_scope():
-    unexplained = [path for path in changed_paths() if path not in BRANCH_SCOPE]
+    unexplained = [path for path in changed_paths() if path not in branch_scope()]
     assert unexplained == [], (
         f"these files changed without naming a requirement: {unexplained}. Either name the "
         "requirement they satisfy or remove the change"
@@ -386,7 +424,7 @@ def test_the_branch_scope_map_has_no_stale_entries():
             "The diff is not empty because this is merged main; something is wrong with it"
         )
         return
-    stale = sorted(path for path in BRANCH_SCOPE if path not in changed)
+    stale = sorted(path for path in branch_scope() if path not in changed)
     assert stale == [], f"the branch scope map lists files this branch does not change: {stale}"
 
 
@@ -452,6 +490,30 @@ def test_no_candidate_or_admission_widening():
     assert record["entry_state"] == "C"
 
 
+def branch_is_a_freeze_candidate() -> bool:
+    """Is this branch the T0 freeze transaction itself?
+
+    The audits below forbid touching the registry, and say in their own comments
+    that the one branch permitted to write it is the freeze candidate, "which is
+    audited by scripts/check_freeze_candidate.py rather than here". That
+    exemption was described and never implemented, so the first real freeze
+    candidate failed the audit that had deliberately excluded it.
+
+    The answer comes from the freeze gate itself rather than from a second
+    detector written here: two checkers that disagree about what a freeze looks
+    like would be worse than one.
+    """
+    if BASE_REF is None:
+        return False
+    try:
+        import check_freeze_candidate
+
+        verdict = check_freeze_candidate.check(merge_base(), "HEAD")
+    except Exception:
+        return False
+    return verdict.get("classification") == check_freeze_candidate.FREEZE_CANDIDATE
+
+
 @needs_baseline
 def test_the_fp_control_1_row_is_byte_identical():
     base = merge_base()
@@ -462,6 +524,13 @@ def test_the_fp_control_1_row_is_byte_identical():
     # branch permitted to write it is the freeze candidate, which is audited by
     # scripts/check_freeze_candidate.py rather than here.
     registry_path = "research/fp/records/forward_paper_cohort_registry.json"
+    if branch_is_a_freeze_candidate():
+        # The freeze writes the registry by design. Its transaction — two files,
+        # seven values, the closed row untouched — is audited by
+        # scripts/check_freeze_candidate.py, which has just classified this
+        # branch. The FP-CONTROL-1 assertion above still holds and has already
+        # run: a freeze that moved the closed row would fail it here.
+        return
     assert blob_at(base, registry_path) == blob_at("HEAD", registry_path)
     assert registry_path not in changed_paths()
 
@@ -492,6 +561,10 @@ def test_no_t0_was_created():
     freeze and is not the freeze. The authorization's own lawfulness is checked
     below.
     """
+    if branch_is_a_freeze_candidate():
+        # This branch IS the freeze. Its transaction is audited by
+        # scripts/check_freeze_candidate.py, which has just classified it.
+        return
     row = next(r for r in registry_at("HEAD")["instances"] if r["role"] == "FP-CONTROL-2")
     assert row["t0_utc"] is None
     assert row["status"] == "NOT_STARTED"
@@ -531,8 +604,11 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
     assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"
     freeze_t0._parse_utc(granted["EXPIRES_UTC"][0], "EXPIRES_UTC")
 
-    # It authorizes a freeze; it does not perform one. Both the registry and the
-    # manifest of what this branch touched say so.
+    # It authorizes a freeze; it does not perform one — unless this branch IS
+    # the freeze, which is the one lawful way the registry may move and is
+    # audited by the freeze-candidate gate rather than here.
+    if branch_is_a_freeze_candidate():
+        return
     registry = registry_at("HEAD")
     row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
     assert row["t0_utc"] is None and row["cohort_id"] is None
@@ -543,6 +619,8 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
 
 
 def test_no_cohort_was_created():
+    if branch_is_a_freeze_candidate():
+        return
     registry = registry_at("HEAD")
     row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
     assert row["cohort_id"] is None

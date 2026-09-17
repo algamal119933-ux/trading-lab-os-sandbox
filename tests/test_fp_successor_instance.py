@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 from fp import capture
 
 REGISTRY_PATH = "research/fp/records/forward_paper_cohort_registry.json"
@@ -28,7 +30,15 @@ SUCCESSOR = "FP-CONTROL-2"
 
 @pytest.fixture(scope="module")
 def registry(request) -> dict:
-    return json.loads((request.config.rootpath / REGISTRY_PATH).read_text(encoding="utf-8"))
+    """The committed registry, with the SUCCESSOR row stated as pre-T0.
+
+    This file is about what the successor inherited from the cohort that closed
+    — which is nothing — and every test here was written while the successor had
+    not started. The helper winds back only the freeze's own seven values, and
+    only for the successor: FP-CONTROL-1 is returned exactly as committed, so
+    the historical assertions below still read the real closed row.
+    """
+    return conftest.pre_t0_registry(SUCCESSOR)
 
 
 @pytest.fixture(scope="module")
@@ -90,8 +100,16 @@ def test_the_successor_inherits_no_outcome_or_evidence(successor):
     assert successor["runtime_identity"]["source_commit"] is None
 
 
+def _pre_t0_registry_file(tmp_path) -> Path:
+    """A real registry file whose successor row is stated pre-T0."""
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(conftest.pre_t0_registry(SUCCESSOR), indent=2) + "\n",
+                    encoding="utf-8")
+    return path
+
+
 def test_a_capture_identity_for_the_successor_carries_no_cohort(tmp_path, monkeypatch):
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", _pre_t0_registry_file(tmp_path))
     identity = capture.build_identity(tmp_path, role=SUCCESSOR)
     assert identity.cohort_id is None
     assert identity.bot_name == "fp-control-2"
@@ -164,17 +182,40 @@ def test_the_capture_loop_has_no_registry_write_path():
 
 
 def test_a_pre_t0_instance_reports_t0_not_frozen(tmp_path, monkeypatch):
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", _pre_t0_registry_file(tmp_path))
     loop = capture.CaptureLoop(tmp_path, ["BTC/USDT"], role=SUCCESSOR)
     assert loop.t0_ms is None
     assert loop.t0_relation(1_789_000_000_000) == "T0_NOT_FROZEN"
 
 
-def test_the_successor_stays_pre_t0_in_the_committed_registry(successor, registry):
-    assert successor["status"] == "NOT_STARTED"
-    assert registry["fp_run_active"] is False
+def test_the_committed_successor_is_pre_t0_or_a_lawfully_frozen_cohort():
+    """The one claim here whose subject really is the committed file.
+
+    It used to assert the successor is NOT_STARTED, which was true right up to
+    the moment the Owner lawfully froze a T0 onto it — the state the whole of P2
+    exists to reach. A test that fails when the project succeeds is testing the
+    calendar. What is durable is that the committed row is in one of the two
+    lawful states, that the flag agrees with it, and that a control is never
+    promoted to a candidate by being started.
+    """
+    registry = conftest.committed_registry()
+    successor = next(i for i in registry["instances"] if i["role"] == SUCCESSOR)
+    frozen = successor["status"] == "RUNNING"
+
+    if frozen:
+        assert successor["t0_utc"] and successor["cohort_id"]
+        assert successor["cohort_id"].startswith(SUCCESSOR + "-")
+        assert successor["runtime_identity"]["source_commit"]
+    else:
+        assert successor["status"] == "NOT_STARTED"
+        assert successor["t0_utc"] is None and successor["cohort_id"] is None
+        assert successor["runtime_identity"]["source_commit"] is None
+    assert registry["fp_run_active"] is frozen
+
+    # Neither state promotes a control, and neither admits a candidate.
     assert registry["paper_alpha_cohort"] == "NONE"
     assert registry["entry_state"] == "C"
+    assert registry["real_money_authorized"] is False
 
 
 # -- 9, 10, 11. nothing else moved ----------------------------------------

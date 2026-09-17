@@ -12,6 +12,8 @@ import re
 
 import pytest
 
+import conftest
+
 from fp import admission
 
 REGISTRY = "research/fp/records/forward_paper_cohort_registry.json"
@@ -438,8 +440,12 @@ def test_a_running_control_never_becomes_a_candidate(registry):
     """
     running = [i for i in registry["instances"] if i["status"] == "RUNNING"]
     for instance in running:
-        assert instance["role"] == "FP-CONTROL-1", (
-            f"{instance['role']} is running, but only the control may run in state C"
+        # A CONTROL may run in state C — FP-CONTROL-2 is exactly such a cohort,
+        # and P2 exists to run it. What must never run is a candidate. The
+        # evaluator excludes control roles by this same prefix, so naming one
+        # control by hand was narrower than the law it was checking.
+        assert instance["role"].startswith(admission.CONTROL_ROLE_PREFIX), (
+            f"{instance['role']} is running, but only a control may run in state C"
         )
     assert registry["paper_alpha_cohort"] == "NONE"
 
@@ -682,7 +688,14 @@ def test_an_evidence_loss_closure_may_not_claim_proven_capability(registry, regi
     assert schema_errors(registry_schema, document), "a lost lane cannot prove capability"
 
 
-def test_fp_run_active_must_agree_with_the_instance_rows(registry, registry_schema):
+def test_fp_run_active_must_agree_with_the_instance_rows(registry_schema):
+    """Both halves of the correspondence, each against a registry that states it.
+
+    The first half needs a document with NO live instance, so it says so rather
+    than relying on the committed file not having one — which stopped being true
+    the moment a T0 was lawfully frozen.
+    """
+    registry = conftest.pre_t0_registry("FP-CONTROL-2")
     stale = json.loads(json.dumps(registry))
     stale["fp_run_active"] = True
     assert schema_errors(registry_schema, stale), "active flag with no live instance must be rejected"

@@ -30,10 +30,13 @@ from __future__ import annotations
 import copy
 import json
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+
+import conftest
 
 import freeze_t0
 from fp import registry_law as fp_law
@@ -133,9 +136,19 @@ class ScriptedGit:
 
 @pytest.fixture
 def lawful(monkeypatch):
-    """Everything lawful, so a test that moves one fact tests that fact."""
+    """Everything lawful, so a test that moves one fact tests that fact.
+
+    The committed registry is one of those facts. ``check_preconditions`` reads
+    it through ``fp_law.load_registry``, so before a T0 existed this fixture got
+    a lawful pre-freeze row for free and never said so. Once a T0 is frozen the
+    same file refuses every test here at the registry check — including the ones
+    about T0 formatting, which never reach their own subject. The baseline is
+    stated instead, and the tests that move the registry still override it.
+    """
     scripted = ScriptedGit()
     monkeypatch.setattr(freeze_t0, "_git", scripted)
+    monkeypatch.setattr(freeze_t0.fp_law, "load_registry",
+                        lambda path=None: conftest.pre_t0_registry(ROLE))
     monkeypatch.setattr(freeze_t0.fp_archive, "lane_is_empty",
                         lambda role, registry=None: (True, "empty"))
     monkeypatch.setattr(
@@ -203,12 +216,19 @@ def test_the_authorization_at_this_head_is_absent_or_lawful():
         assert subprocess.run(["git", "merge-base", "--is-ancestor",
                                granted["QUALIFICATION_COMMIT"], head]).returncode == 0
 
+    # An authorization permits a freeze and is not one. Once the freeze itself
+    # is committed the row is lawfully RUNNING, so the durable claim is that the
+    # row is in one of the two lawful states and that a frozen one is internally
+    # consistent — not that no freeze has happened yet.
     row = next(r for r in json.loads(
         subprocess.run(["git", "show", f"{head}:{freeze_t0.REGISTRY_PATH}"],
                        capture_output=True, text=True, check=True).stdout
     )["instances"] if r["role"] == ROLE)
-    assert row["t0_utc"] is None and row["cohort_id"] is None
-    assert row["status"] == "NOT_STARTED"
+    if row["status"] == "NOT_STARTED":
+        assert row["t0_utc"] is None and row["cohort_id"] is None
+    else:
+        assert row["status"] == "RUNNING"
+        assert row["cohort_id"] == fp_law.cohort_id_for(ROLE, row["t0_utc"])
 
 
 def test_the_authorization_is_read_from_git_not_the_working_tree(clone):
@@ -391,7 +411,7 @@ def test_a_non_empty_lane_refuses(lawful, monkeypatch):
 
 
 def test_an_already_started_row_refuses(lawful, monkeypatch):
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    registry = conftest.pre_t0_registry(ROLE)
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     row["status"] = "RUNNING"
     row["t0_utc"] = "2026-01-01T00:00:00Z"
@@ -404,7 +424,7 @@ def test_an_already_started_row_refuses(lawful, monkeypatch):
 
 
 def test_an_unlawful_registry_refuses(lawful, monkeypatch):
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    registry = conftest.pre_t0_registry(ROLE)
     registry["fp_run_active"] = True
     monkeypatch.setattr(freeze_t0.fp_law, "load_registry", lambda path=None: registry)
     with pytest.raises(freeze_t0.FreezeRefused, match="not lawful"):
@@ -412,7 +432,7 @@ def test_an_unlawful_registry_refuses(lawful, monkeypatch):
 
 
 def test_a_non_empty_change_log_refuses(lawful, monkeypatch):
-    registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    registry = conftest.pre_t0_registry(ROLE)
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     row["change_log"] = [{"utc": "2026-09-01T00:00:00Z", "class": "O", "description": "earlier"}]
     monkeypatch.setattr(freeze_t0.fp_law, "load_registry", lambda path=None: registry)
@@ -538,13 +558,39 @@ def test_the_repository_still_verifies_after_the_freeze(clone):
     assert "REPO_CHECK_PASS" in verify.stdout
 
 
+def _commit_pre_t0_registry(root: Path) -> str:
+    """Wind the clone's registry back to pre-T0 and commit it, returning HEAD.
+
+    A freeze is a transition, so a test about one needs a base on the near side
+    of it. While no T0 had ever been frozen the checkout supplied that base for
+    free; afterwards, freezing on top of a frozen row writes nothing and the
+    gate correctly answers NOT_A_FREEZE — a green test turning red on a tool
+    that was working perfectly. The base is written here instead.
+    """
+    registry = root / freeze_t0.REGISTRY_PATH
+    registry.write_text(json.dumps(conftest.pre_t0_registry(ROLE), indent=2) + "\n",
+                        encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "add", "--", freeze_t0.REGISTRY_PATH], check=True)
+    subprocess.run([sys.executable, str(root / "scripts" / "verify_repo.py"), "--fix"],
+                   cwd=root, capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(root), "add", "--", freeze_t0.MANIFEST_PATH], check=True)
+    # --allow-empty: where the checkout is already pre-T0 this commit changes
+    # nothing, and the base still has to exist as a commit of its own.
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@example.invalid",
+                    "-c", "user.name=t", "commit", "--quiet", "--allow-empty", "-m",
+                    "the state before a T0 was frozen"], check=True)
+    return subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
 def test_the_freeze_candidate_passes_the_ci_gate_it_will_face(clone):
     """The tool and the gate must agree, or the Owner is asked to merge a refusal."""
     import check_freeze_candidate as gate
 
-    root, head = clone
+    root, _ = clone
     subprocess.run(["git", "-C", str(root), "checkout", "--quiet", "-b", "claude/p2-freeze"],
                    check=True)
+    head = _commit_pre_t0_registry(root)
     freeze_t0.apply_freeze(facts_for(root, head))
     subprocess.run(["git", "-C", str(root), "-c", "user.email=t@example.invalid",
                     "-c", "user.name=t", "commit", "--quiet", "-m", "Freeze T0"], check=True)

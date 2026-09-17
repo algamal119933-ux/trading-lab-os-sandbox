@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 import validate_activation as activation
 from fp import lane as fp_lane
 from fp import ledger as fp_ledger
@@ -54,7 +56,10 @@ def lane_env(tmp_path, monkeypatch):
     A fixture that patched only the argument would have tested a validator whose
     two halves disagreed about which cohort they were looking at.
     """
-    registry = copy.deepcopy(json.loads(REGISTRY_PATH.read_text(encoding="utf-8")))
+    # Each activation test sets the T0 and cohort it needs on this row; it
+    # starts from a stated pre-T0 baseline so that a committed T0 cannot
+    # silently supply half of the state under test.
+    registry = copy.deepcopy(conftest.pre_t0_registry(ROLE))
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     identity = row["runtime_identity"]
     for field in ("db_path", "log_path", "evidence_dir"):
@@ -352,6 +357,12 @@ def test_starting_before_t0_is_within_bound(lane_env):
 
 
 def test_a_not_started_row_has_no_activation_to_validate():
-    report = activation.validate(ROLE)
+    """The claim is about a NOT_STARTED row, not about the committed registry.
+
+    It reads the same either way while nothing is frozen, and stops being the
+    same claim the moment a T0 is: a RUNNING row has an activation to validate,
+    which is the whole point of freezing one. So the row is stated here.
+    """
+    report = activation.validate(ROLE, registry=conftest.pre_t0_registry(ROLE))
     assert report["activation"] == activation.FAIL
     assert "no activation to validate" in report["checks"][0]["detail"]
