@@ -22,6 +22,10 @@ EXAMPLE_CONFIG = REPO_ROOT / "freqtrade" / "user_data" / "config.paper.json.exam
 for extra in (
     REPO_ROOT / "scripts",
     REPO_ROOT / "research",
+    # CI gates live outside RUNTIME_TREE on purpose (contract section 5): a
+    # module under scripts/ would change SEMANTIC_IDENTITY and break the
+    # equivalence proof the freeze depends on. They are still tested.
+    REPO_ROOT / ".github" / "gates",
     REPO_ROOT / "research" / "external",
     REPO_ROOT / "monitoring" / "exporter",
 ):

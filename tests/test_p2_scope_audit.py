@@ -135,18 +135,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    "tests/conftest.py": "S5 — one place that states a pre-T0 registry instead of inheriting one",
-    "tests/test_p2_watch_and_seal.py": "S5 — the seal/watch fixtures state the row they need",
-    "tests/test_p2_archival.py": "S5 — archival asserts a stated lane status",
-    "tests/test_p2_activation.py": "S5 — activation starts from a stated pre-T0 baseline",
-    "tests/test_p2_freeze_t0.py": "S5 — the lawful fixture states its registry",
-    "tests/test_p2_registry_law.py": "S5 — the law tests build their cases from a stated baseline",
-    "tests/test_fp_lane_adversarial.py": "S5 — capture/lane/preflight read one stated registry",
-    "tests/test_fp_successor_instance.py": "S5 — non-inheritance is tested against a stated successor",
-    "tests/test_fp_admission.py": "S5 — a running CONTROL is lawful; a running candidate is not",
-    "tests/test_fp_overlay.py": "S5 — the overlay test is about path drift, not about status",
-    "tests/test_p2_scope_audit.py": "S5 — S4 pinned to its merge range; the freeze candidate is "
-                                    "deferred to the gate that audits it",
+    ".github/gates/check_t0_authority.py": "S5 — the T0 authority boundary becomes a tested "
+                                           "gate, outside RUNTIME_TREE so the equivalence proof "
+                                           "the freeze needs is untouched",
+    "tests/test_p2_t0_authority_gate.py": "S5 — both lawful states, the unlawful one, and every "
+                                          "disagreement with the merged binding",
+    ".github/workflows/ci.yml": "S5 — CI calls the gate rather than reimplementing it",
+    "tests/conftest.py": "S5 — the suite can import a gate that lives outside RUNTIME_TREE",
+    "tests/test_p2_scope_audit.py": "S5 — this branch's scope, and where a CI gate may live",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -259,7 +255,11 @@ def registry_at(rev: str) -> dict:
 
 
 MERGED_STAGES = sorted(MERGED_STAGE_SCOPES)
-ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/", ".github/workflows/")
+# ".github/gates/" is where a CI gate lives when it must stay OUTSIDE
+# RUNTIME_TREE — contract section 5 puts scripts/*.py inside it, and a gate
+# added there between Mq and the freeze would break the equivalence proof.
+ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/",
+                    ".github/workflows/", ".github/gates/")
 ALLOWED_FILES = (".gitignore", "MANIFEST.txt", "CLAUDE.md")
 
 
