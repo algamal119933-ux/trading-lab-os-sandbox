@@ -143,6 +143,13 @@ def check(head: str = "HEAD", *, base: str | None = None,
                             "of this head")
 
     # -- authority permits a freeze; it is never itself a freeze ----------
+    #
+    # The claim is about what THIS BRANCH DID, not about what the registry
+    # happens to hold. Once the Owner has merged a freeze, every later branch
+    # carries that T0 — it is history, and it was audited when it was written.
+    # An earlier version of this gate failed on "carries a T0 and is not a
+    # freeze candidate", which is every commit after the freeze forever: the
+    # same mistake, one level along, of reading a state as an act.
     registry = _registry_at(resolved, root)
     row = next((r for r in registry["instances"] if r.get("role") == role), None)
     if row is None:
@@ -151,16 +158,41 @@ def check(head: str = "HEAD", *, base: str | None = None,
     frozen_here, detail = _is_freeze_candidate(base, resolved, root)
     carries_t0 = bool(row.get("t0_utc") or row.get("cohort_id")) or row.get("status") == "RUNNING"
 
-    if carries_t0 and not frozen_here:
+    FROZEN_FIELDS = ("t0_utc", "cohort_id", "status")
+    if base:
+        try:
+            base_registry = _registry_at(
+                _git(["merge-base", base, resolved], repo_root=root).stdout.strip() or base, root)
+            base_row = next(
+                (r for r in base_registry["instances"] if r.get("role") == role), {})
+        except Exception as exc:
+            base_row = None
+            problems.append(f"the registry at {base} could not be read ({exc}); whether this "
+                            "branch introduced a T0 cannot be established, and a question that "
+                            "could not be answered has not been answered favourably")
+    else:
+        base_row = None
+
+    if base_row is None and carries_t0 and not problems:
         problems.append(
-            f"{role} carries t0={row.get('t0_utc')!r} cohort={row.get('cohort_id')!r} "
-            f"status={row.get('status')!r}, and this branch is not a freeze candidate: "
-            f"{detail}. A T0 written outside the audited freeze transaction is a cohort "
-            "nobody reviewed"
+            f"{role} carries t0={row.get('t0_utc')!r} and there is no base to compare against, "
+            "so whether this branch introduced it cannot be established. Fail closed"
         )
-    elif carries_t0:
-        notes.append("the registry's T0 is this branch's own freeze transaction, which "
-                     "scripts/check_freeze_candidate.py audits; this gate defers to it")
+    elif base_row is not None:
+        introduced = {f: (base_row.get(f), row.get(f))
+                      for f in FROZEN_FIELDS if base_row.get(f) != row.get(f)}
+        if introduced and not frozen_here:
+            problems.append(
+                f"{role} moves {sorted(introduced)} on this branch "
+                f"({introduced}), and this branch is not a freeze candidate: {detail}. A T0 "
+                "written outside the audited freeze transaction is a cohort nobody reviewed"
+            )
+        elif introduced:
+            notes.append("the registry's T0 is this branch's own freeze transaction, which "
+                         "scripts/check_freeze_candidate.py audits; this gate defers to it")
+        elif carries_t0:
+            notes.append(f"{role} carries t0={row.get('t0_utc')} from history, unchanged by this "
+                         "branch; the transaction that wrote it was audited when it was written")
 
     return {
         "authority": state,
@@ -205,8 +237,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"T0_AUTHORITY = ABSENT — {report['notes'][0] if report['notes'] else ''}")
     for note in report["notes"][1:] if report["authority"] == ABSENT else report["notes"]:
         print(f"  {note}")
-    print("T0_FROZEN_AT_HEAD = " + ("YES (this branch's own freeze candidate)"
-                                    if report["t0_frozen_at_head"] else "NO"))
+    if not report["t0_frozen_at_head"]:
+        state = "NO"
+    elif report["is_freeze_candidate"]:
+        state = "YES (this branch's own freeze candidate)"
+    else:
+        state = "YES (from history, unchanged by this branch)"
+    print(f"T0_FROZEN_AT_HEAD = {state}")
     for problem in report["problems"]:
         print(f"::error::{problem}")
     print(f"T0_AUTHORITY_GATE = {report['result']}")
