@@ -152,19 +152,24 @@ def test_a_lawful_freeze_candidate_passes_and_defers_to_the_freeze_gate(clone):
 # -- the state that must never pass ---------------------------------------
 
 
-def test_a_t0_that_no_freeze_transaction_wrote_fails(clone):
+def test_a_t0_this_branch_wrote_without_freezing_fails(clone):
     """Deferring to the freeze gate must not become a way past it.
 
-    Here the registry carries a T0 and the branch is NOT a freeze candidate —
-    the row was already RUNNING at the base, so nothing went NOT_STARTED ->
-    RUNNING. That is a cohort nobody reviewed, and it is the whole reason this
-    gate still looks at the registry at all.
+    The branch introduces a T0 and a cohort id while leaving ``status`` at
+    NOT_STARTED. ``check_freeze_candidate`` classifies that NOT_A_FREEZE — no
+    row went NOT_STARTED -> RUNNING — so nothing audits it there, and this gate
+    is the thing that must notice. It is the whole reason the registry is still
+    read here at all.
     """
     root, _ = clone
-    _write_registry(root, _frozen_registry())
-    base = _commit(root, "a T0 nobody audited")
+    base = _run(root, "rev-parse", "HEAD")
+    registry = conftest.pre_t0_registry(ROLE)
+    row = next(r for r in registry["instances"] if r["role"] == ROLE)
+    row["t0_utc"] = "2026-12-01T12:00:00Z"
+    row["cohort_id"] = fp_law.cohort_id_for(ROLE, "2026-12-01T12:00:00Z")
+    _write_registry(root, registry)
     _grant(root)
-    head = _commit(root, "later work")
+    head = _commit(root, "a T0 nobody audited")
 
     report = gate.check(head, base=base, repo_root=root)
     assert report["is_freeze_candidate"] is False
@@ -172,8 +177,31 @@ def test_a_t0_that_no_freeze_transaction_wrote_fails(clone):
     assert any("outside the audited freeze transaction" in p for p in report["problems"])
 
 
+def test_a_t0_inherited_from_history_passes(clone):
+    """After the Owner merges a freeze, every later branch carries that T0.
+
+    It is history, audited when it was written, and re-failing it on every
+    subsequent commit would mean the repository could never move again once P2
+    reached the state P2 exists to reach.
+    """
+    root, _ = clone
+    _write_registry(root, _frozen_registry())
+    _grant(root)
+    base = _commit(root, "the merged freeze")
+    head = _commit(root, "ordinary later work")
+
+    report = gate.check(head, base=base, repo_root=root)
+    assert report["t0_frozen_at_head"] is True
+    assert report["is_freeze_candidate"] is False
+    assert report["result"] == "PASS", report["problems"]
+    assert any("from history" in note for note in report["notes"])
+
+
 def test_without_a_base_a_frozen_registry_still_fails_closed(clone):
-    """No base means no freeze gate, and an unexplained T0 is then a failure."""
+    """No base means no comparison, so whether this branch wrote it is unknown.
+
+    A question that could not be answered has not been answered favourably.
+    """
     root, _ = clone
     _write_registry(root, _frozen_registry())
     head = _commit(root, "Freeze T0")

@@ -135,14 +135,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/gates/check_t0_authority.py": "S5 — the T0 authority boundary becomes a tested "
-                                           "gate, outside RUNTIME_TREE so the equivalence proof "
-                                           "the freeze needs is untouched",
-    "tests/test_p2_t0_authority_gate.py": "S5 — both lawful states, the unlawful one, and every "
-                                          "disagreement with the merged binding",
-    ".github/workflows/ci.yml": "S5 — CI calls the gate rather than reimplementing it",
-    "tests/conftest.py": "S5 — the suite can import a gate that lives outside RUNTIME_TREE",
-    "tests/test_p2_scope_audit.py": "S5 — this branch's scope, and where a CI gate may live",
+    "research/fp/records/evidence_digest_publication.json":
+        "S5 — Tier 2: the digest of the pre-start lane, sealed before T0",
+    ".github/gates/check_t0_authority.py":
+        "S5 — the gate judges what a branch DID, not what the registry carries",
+    "tests/test_p2_t0_authority_gate.py":
+        "S5 — a T0 inherited from history passes; one this branch wrote without freezing fails",
+    "tests/test_p2_scope_audit.py":
+        "S5 — the live negatives narrow from 'no T0 exists' to 'this branch wrote none'",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -550,25 +550,34 @@ def test_no_real_money_capability():
     assert paper_guard.main([]) == 0
 
 
-def test_no_t0_was_created():
-    """No T0 exists — which is not the same claim as "no authority was granted".
+FROZEN_FIELDS = ("t0_utc", "cohort_id", "status")
 
-    This test used to assert both, and the second assertion was a description of
-    the day it was written rather than a law: the Owner granting T0 authority is
-    the lawful end of that default, and it would have failed the suite for the
-    Owner's own act. What must hold until the freeze transaction is itself
-    merged is that the registry carries no T0 — an authorization permits the
-    freeze and is not the freeze. The authorization's own lawfulness is checked
-    below.
+
+def _fp_control_2(rev: str) -> dict:
+    return next(r for r in registry_at(rev)["instances"] if r["role"] == "FP-CONTROL-2")
+
+
+@needs_baseline
+def test_this_branch_created_no_t0():
+    """This branch did not write a T0 — which is not "no T0 exists".
+
+    This assertion has been narrowed twice, each time because it described a day
+    rather than stating a law. First it also claimed no Owner authorization
+    existed, and the Owner granting one ended that. Then it claimed the registry
+    carries no T0, and the Owner merging the freeze has ended that too —
+    permanently, for every commit that will ever follow.
+
+    What is durable is that the freeze is the only branch that may move these
+    fields, and that its transaction is audited by
+    scripts/check_freeze_candidate.py rather than here.
     """
     if branch_is_a_freeze_candidate():
-        # This branch IS the freeze. Its transaction is audited by
-        # scripts/check_freeze_candidate.py, which has just classified it.
         return
-    row = next(r for r in registry_at("HEAD")["instances"] if r["role"] == "FP-CONTROL-2")
-    assert row["t0_utc"] is None
-    assert row["status"] == "NOT_STARTED"
-    assert row["runtime_identity"]["source_commit"] is None
+    base, head = _fp_control_2(merge_base()), _fp_control_2("HEAD")
+    moved = {f: (base.get(f), head.get(f)) for f in FROZEN_FIELDS if base.get(f) != head.get(f)}
+    assert moved == {}, f"this branch moves {sorted(moved)} without being a freeze candidate"
+    assert base["runtime_identity"].get("source_commit") == \
+        head["runtime_identity"].get("source_commit"), "this branch moves the declared source_commit"
 
 
 def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
@@ -604,29 +613,41 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
     assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"
     freeze_t0._parse_utc(granted["EXPIRES_UTC"][0], "EXPIRES_UTC")
 
-    # It authorizes a freeze; it does not perform one — unless this branch IS
-    # the freeze, which is the one lawful way the registry may move and is
-    # audited by the freeze-candidate gate rather than here.
-    if branch_is_a_freeze_candidate():
-        return
+    # It authorizes a freeze; it does not perform one. Once the freeze is merged
+    # the registry carries that T0 for good, so what stays checkable is that the
+    # row is internally consistent in whichever lawful state it is in — and that
+    # a cohort id, where one exists, derives from its own T0.
+    from fp import registry_law as _law
+
     registry = registry_at("HEAD")
     row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
-    assert row["t0_utc"] is None and row["cohort_id"] is None
-    assert row["status"] == "NOT_STARTED"
-    assert row["change_log"] == []
-    assert registry["fp_run_active"] is False
+    if row["status"] == "NOT_STARTED":
+        assert row["t0_utc"] is None and row["cohort_id"] is None
+        assert row["change_log"] == []
+        assert registry["fp_run_active"] is False
+    else:
+        assert row["status"] == "RUNNING"
+        assert row["cohort_id"] == _law.cohort_id_for("FP-CONTROL-2", row["t0_utc"])
+        assert row["runtime_identity"]["source_commit"]
+        assert registry["fp_run_active"] is True
     assert registry["real_money_authorized"] is False
 
 
-def test_no_cohort_was_created():
+@needs_baseline
+def test_this_branch_created_no_cohort():
+    """The same narrowing, for the cohort id, the change log and the run flag.
+
+    ``paper_alpha_cohort`` is different in kind and stays absolute: FP-CONTROL-2
+    is a CONTROL, and no lawful P2 act promotes it into the paper-alpha cohort.
+    """
     if branch_is_a_freeze_candidate():
         return
-    registry = registry_at("HEAD")
-    row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
-    assert row["cohort_id"] is None
-    assert row["change_log"] == []
-    assert registry["fp_run_active"] is False
-    assert registry["paper_alpha_cohort"] == "NONE"
+    base, head = _fp_control_2(merge_base()), _fp_control_2("HEAD")
+    assert base.get("cohort_id") == head.get("cohort_id"), "this branch moves the cohort id"
+    assert base.get("change_log") == head.get("change_log"), "this branch writes the change log"
+    assert registry_at(merge_base())["fp_run_active"] == registry_at("HEAD")["fp_run_active"]
+    assert registry_at("HEAD")["paper_alpha_cohort"] == "NONE"
+    assert registry_at("HEAD")["real_money_authorized"] is False
 
 
 def test_a_qualification_binding_if_it_exists_binds_and_does_not_authorize():

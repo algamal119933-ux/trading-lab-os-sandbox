@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": "2026-09-16T17:04:17Z",
+  "published_utc": "2026-09-18T16:43:39Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
@@ -119,6 +119,45 @@
           "incident": 3,
           "input": 2000,
           "trade": 0
+        },
+        "chain_problems": []
+      }
+    },
+    {
+      "archive_name": "l2-prestart-0e920db6",
+      "role": "FP-CONTROL-2",
+      "cohort_id": "FP-CONTROL-2-20260920T120000Z",
+      "lane_status_at_archival": "RUNNING",
+      "reason": "First FP-CONTROL-2 runtime start, stopped before T0 and archived without being credited. The runtime was started 43.6 h before the frozen T0 (2026-09-20T12:00:00Z) to avoid an activation gap. Because t0_relation is decided by candle close, a runtime running before T0 observes live pre-T0 bars: this lane holds 2 PRE_T0 + LIVE decisions, which contract section 4 classifies as a defect and validate_activation check 5 asserts absent. No record here is credited - every decision is PRE_T0 - and the whole lane is sealed so the cohort's L2 can be created fresh and started inside the lawful window [T0, T0 + one candle period). Two paper positions opened pre-T0 are sealed with it: wallet, position and database state are never carried between lanes.",
+      "archived_utc": "2026-09-18T16:43:28Z",
+      "verified_utc": "2026-09-18T16:43:39Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-2",
+      "file_count": 8,
+      "total_bytes": 6444032,
+      "files": {
+        "evidence/.fp_capture.lock": "f97fdd362e957a76f26c3681d948135dceab35e6ddd92399aecdd72d529d5bb6",
+        "evidence/capture_runtime.json": "9fce7dc97f118ebcc27d6bcc338b53ef41910d821bdb661bf26aef063bf4b857",
+        "evidence/paper_decision_ledger.jsonl": "4145298cc8a0e176eeb72eeca02f1e9381bd29330a23d0ec50ac63f4480b3922",
+        "evidence/paper_incident_ledger.jsonl": "dcc5411e002990ddac77d9c35fa349ef648cee751c244d19465ae02adcb6d305",
+        "evidence/paper_input_ledger.jsonl": "6e360413c9f6d315cc285468d94d9286ed86fce4c7f55430039ee7ef8ae032b1",
+        "evidence/paper_trade_ledger.jsonl": "8299ce325446ed38d1b2f60144122060ddc78d4238a44f0a776fc38a130b1051",
+        "logs/freqtrade.log": "dfe693026394c55ab999ed76d30ee98ec36ccbf398c070d545630e6a5a7d5585",
+        "tradesv3.sqlite": "a6ada6da679eeb83418ec97ca4a6a5b97e11c450202a77c6791301969d1429ab"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "ff3a17d9dfe1a8750c73e8259b90f2b5d29d9d839ba3a28ea3940124e0ba673f",
+          "incident": "8e7024e414a0ac47a7e72587c28105502cd3d4e7e1d7ef198308c1eaa8b359b0",
+          "input": "d0c709514bca032c408a06a194908542118c60b40b04f9b26db008c8ab99656f",
+          "trade": "fdb4ea857d6bc883ff30abd1f90ec17177b224fa3c71ad09e93a6a5bb080a2b7"
+        },
+        "daily_pack_digest": "51aecd5e4100a62ed90695b826b97b5cbd6f8240106657569a6edbe2f179ff3a",
+        "counts": {
+          "decision": 1998,
+          "incident": 1,
+          "input": 1998,
+          "trade": 2
         },
         "chain_problems": []
       }
