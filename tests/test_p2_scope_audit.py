@@ -135,14 +135,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    "research/fp/records/evidence_digest_publication.json":
-        "S5 — Tier 2: the digest of the pre-start lane, sealed before T0",
-    ".github/gates/check_t0_authority.py":
-        "S5 — the gate judges what a branch DID, not what the registry carries",
-    "tests/test_p2_t0_authority_gate.py":
-        "S5 — a T0 inherited from history passes; one this branch wrote without freezing fails",
-    "tests/test_p2_scope_audit.py":
-        "S5 — the live negatives narrow from 'no T0 exists' to 'this branch wrote none'",
+    "scripts/validate_activation.py":
+        "S6 — the validator can attach the running runtime, so preflight's four "
+        "live checks can reach a verdict instead of blocking as UNPROVEN",
+    "tests/test_p2_activation.py":
+        "S6 — the attachment is threaded through, and can never redirect the lane or role",
+    "tests/test_p2_freeze_t0.py":
+        "S6 — the lawful-path T0 is computed, not a constant that expires",
+    "tests/test_p2_archival.py":
+        "S6 — the disposable lane gets a disposable bot name, so a live cohort's "
+        "containers do not fail tests about another lane",
+    "docs/p2/S6_ACTIVATION.md": "S6 — the activation record",
+    "tests/test_p2_scope_audit.py": "S6 — this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
