@@ -114,7 +114,42 @@ M2's validator.
 Check 8 could never have reached PASS here even if no restart had happened,
 because M2's validator cannot attach a running runtime at all.
 
-## 5. The repair in this change
+### 4.3 A validator defect cannot be repaired while its cohort runs
+
+4.2 said the pinned checkout would never receive a repair. The truth is harder,
+and a gate established it rather than an argument.
+
+The freeze writes `runtime_identity.source_commit = M1` and it is immutable for
+the cohort's life. `reconcile`'s `registry_source_commit_equivalence` then asks
+whether the declared commit and the stamped one are **the same system**. Any new
+commit that alters `RUNTIME_TREE` is semantically different from M1, so evidence
+stamped at it fails that finding:
+
+```text
+SEMANTIC_EQUIVALENCE(3924986a, <branch with the validator repair>) = DIFFERENT
+  1 semantic difference(s): scripts/validate_activation.py
+→ tests/test_fp_capture.py::test_reconciliation_passes_on_a_clean_capture
+  FAILED: ['registry_source_commit_equivalence']
+```
+
+CI caught it on the first push. `scripts/validate_activation.py` matches
+`scripts/*.py`, so **the repair may not be merged while FP-CONTROL-2 is
+RUNNING** — not because a test is wrong, but because §5's equivalence law is
+right. Moving the file out of `RUNTIME_TREE` would not help: removing it changes
+the tree too.
+
+So the repair is withdrawn from this change and held. What remains here touches
+nothing inside `RUNTIME_TREE`, and this branch is `EQUIVALENT` to the declared
+M1.
+
+**The consequence, stated plainly: for the whole life of a cohort, any defect in
+the tools inside `RUNTIME_TREE` — the activation validator among them — is
+unfixable.** Check 8 could never have passed for this cohort under any sequence
+of events available to me.
+
+---
+
+## 5. The repair that is held, not merged
 
 `validate_activation` built its preflight context from an evidence directory and
 a role alone. Four of preflight's sixteen checks are statements about a system
@@ -130,6 +165,10 @@ evidence, and a test asserts that absence.
 
 Proven against the live cohort: check 8 reports `PREFLIGHT = PASS (16/16)`.
 
+That repair is written and tested, and it is **not in this change** — §4.3 is
+why. It waits for a lawful moment: after this cohort closes, or under an Owner
+decision.
+
 **Check 1 is deliberately left alone.** Changing what it asserts would decide,
 on my own authority, that my cohort passes — and §17 forbids weakening a gate
 and §23 forbids optimising evidence to obtain a verdict. That is the Owner's
@@ -144,6 +183,8 @@ is running and lawful. The options, none of which I may take unilaterally:
 a  read check 1 as "the FIRST start was fresh, counters contiguous, continuity
    verified" rather than "only one start ever" — aligns it with §7's restart law
    and with preflight check 16, which demands the second run
+   NOTE: any such change is inside RUNTIME_TREE and so is barred while the
+   cohort runs, exactly as the validator repair is — see 4.3
 b  evaluate preflight check 16 against the pre-T0 qualification lane rather than
    L2 when validating activation — it is a pre-T0 drill by its own name
 c  accept two-invocation evidence for this cohort: the validator's other checks
@@ -156,7 +197,16 @@ Nothing here is a replacement-T0 situation on the evidence: a cohort is
 invalidated only by a technical defect in its evidence or identity, and there is
 none. The frozen T0 and cohort remain lawful.
 
-## 7. What this change does not do
+## 7. How this reached CI
+
+The suite was run after staging but **before committing**, when `git rev-parse
+HEAD` still resolved to merged main — and
+`test_reconciliation_passes_on_a_clean_capture` stamps its synthetic evidence
+with HEAD. It therefore passed against a commit that did not yet contain the
+change under test. Running the gates again after the commit, not only before it,
+is the discipline that was missing.
+
+## 8. What this change does not do
 
 ```text
 no T0 moved · no cohort created · no lane reused · no sealed evidence credited

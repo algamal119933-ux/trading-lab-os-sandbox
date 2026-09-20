@@ -135,11 +135,6 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/validate_activation.py":
-        "S6 — the validator can attach the running runtime, so preflight's four "
-        "live checks can reach a verdict instead of blocking as UNPROVEN",
-    "tests/test_p2_activation.py":
-        "S6 — the attachment is threaded through, and can never redirect the lane or role",
     "tests/test_p2_freeze_t0.py":
         "S6 — the lawful-path T0 is computed, not a constant that expires",
     "tests/test_p2_archival.py":

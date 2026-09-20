@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -83,39 +82,8 @@ def _identity(record) -> dict:
     return record.payload.get("identity") or {}
 
 
-@dataclass
-class Attachment:
-    """The live runtime this validation may interrogate.
-
-    Contract section 7 requires ``preflight --require-pass`` — 16/16 — at
-    activation. Four of those sixteen are statements about a system running
-    right now: market-data ingestion, monitoring liveness, clock tolerance
-    against the exchange, and the restart drill. With no endpoints they answer
-    UNPROVEN, and UNPROVEN blocks exactly as FAIL does.
-
-    This validator used to build its preflight context from an evidence
-    directory and a role alone, so check 8 could never reach PASS for ANY
-    cohort, however healthy — the same defect ``seal_pre_t0_qualification``
-    carried until S3 repaired it there. The lesson did not generalise on its
-    own, which is the second time this stage has paid for that.
-
-    The lane and the role are still the validator's own and are never taken
-    from here: a caller supplies endpoints and can never redirect the checks at
-    another cohort's evidence.
-    """
-
-    freqtrade_url: str | None = None
-    api_user: str | None = None
-    api_password: str | None = None
-    exporter_url: str | None = None
-    prometheus_url: str | None = None
-    check_market_route: bool = False
-
-
-def validate(role: str, source_commit: str | None = None, registry: dict | None = None,
-             runtime: "Attachment | None" = None) -> dict:
+def validate(role: str, source_commit: str | None = None, registry: dict | None = None) -> dict:
     """The nine activation checks of contract section 7, plus the gap report."""
-    runtime = runtime if runtime is not None else Attachment()
     checks: list[Check] = []
     registry = registry if registry is not None else fp_law.load_registry()
 
@@ -276,13 +244,7 @@ def validate(role: str, source_commit: str | None = None, registry: dict | None 
 
     # -- 8. preflight, with check 5 now passing for the frozen cohort ------
     preflight = fp_preflight.run(
-        runtime=fp_preflight.RuntimeContext(
-            evidence_dir=evidence_dir, role=role,
-            freqtrade_url=runtime.freqtrade_url, api_user=runtime.api_user,
-            api_password=runtime.api_password, exporter_url=runtime.exporter_url,
-            prometheus_url=runtime.prometheus_url,
-            check_market_route=runtime.check_market_route,
-        )
+        runtime=fp_preflight.RuntimeContext(evidence_dir=evidence_dir, role=role)
     )
     passed = sum(1 for c in preflight["checks"] if c["result"] == PASS)
     checks.append(Check(
@@ -448,26 +410,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("role")
     parser.add_argument("--source-commit", default=None,
                         help="M2, the commit the runtime ran at. Defaults to this repository's HEAD.")
-    parser.add_argument("--freqtrade-url", default=os.environ.get("FREQTRADE_URL") or None)
-    parser.add_argument("--api-user", default=os.environ.get("FREQTRADE_API_USER") or None)
-    parser.add_argument("--api-password", default=os.environ.get("FREQTRADE_API_PASSWORD") or None)
-    parser.add_argument("--exporter-url", default=os.environ.get("EXPORTER_URL") or None)
-    parser.add_argument("--prometheus-url", default=os.environ.get("PROMETHEUS_URL") or None)
-    parser.add_argument("--check-market-route", action="store_true",
-                        help="probe the public market route and measure clock skew")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("-o", "--out", default=None)
     args = parser.parse_args(argv)
 
-    report = validate(
-        args.role, args.source_commit,
-        runtime=Attachment(
-            freqtrade_url=args.freqtrade_url, api_user=args.api_user,
-            api_password=args.api_password, exporter_url=args.exporter_url,
-            prometheus_url=args.prometheus_url,
-            check_market_route=args.check_market_route,
-        ),
-    )
+    report = validate(args.role, args.source_commit)
     text = json.dumps(report, indent=2) + "\n"
 
     if args.out:
