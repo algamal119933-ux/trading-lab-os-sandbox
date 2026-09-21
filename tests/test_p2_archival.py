@@ -60,6 +60,12 @@ def lane_registry(tmp_path):
     identity = row["runtime_identity"]
     for field in ("db_path", "log_path", "evidence_dir"):
         identity[field] = identity[field].replace("/fp-control-2/", f"/{TEST_LANE}/")
+    # The archival guard refuses to seal a lane whose containers are running,
+    # and it finds them by the row's bot_name. Leaving the real one here meant
+    # these tests failed against a HEALTHY live cohort — the guard doing its job
+    # to a lane that was never the subject. The disposable lane gets a
+    # disposable bot name, so the guard looks for containers that cannot exist.
+    identity["bot_name"] = TEST_LANE
     root = fp_lane.HOST_USER_DATA / TEST_LANE
     if root.exists():
         shutil.rmtree(root)

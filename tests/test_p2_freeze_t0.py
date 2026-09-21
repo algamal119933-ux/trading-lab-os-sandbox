@@ -48,7 +48,12 @@ HEAD = "a" * 40
 PARENT_ONE, PARENT_TWO = "b" * 40, "c" * 40
 MQ = "d" * 40
 CERT = "e" * 64
-T0 = "2026-09-20T14:00:00Z"
+# A T0 must be in the future when the freeze runs, so it cannot be a constant:
+# this one was written as 2026-09-20T14:00:00Z and started failing the moment
+# that hour passed, taking the whole lawful-path suite with it. Computed from
+# now, on an hour boundary, it stays the fact it is asserting.
+T0 = (datetime.now(timezone.utc) + timedelta(days=2)).replace(
+    minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _future(days: int = 3) -> str:
