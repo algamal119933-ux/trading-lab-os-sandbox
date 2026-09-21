@@ -36,7 +36,7 @@ from fp import capture, lane, ledger as fp_ledger, preflight
 from fp.lane_io import LaneDurabilityUnproven, LaneHandle, LaneIdentity, LaneIOError
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
-SUCCESSOR = "FP-CONTROL-2"
+SUCCESSOR = "FP-CONTROL-3"
 STATE = capture.STATE_FILENAME
 LOCK = capture.LOCK_FILENAME
 INPUT_LEDGER = "paper_input_ledger.jsonl"
@@ -682,7 +682,7 @@ def _disposable_repo(tmp_path: Path) -> Path:
 def test_the_launcher_creates_its_lane_through_the_boundary(tmp_path):
     block = _launcher_lane_block()
     repo = _disposable_repo(tmp_path)
-    lane_dir = repo / "freqtrade" / "user_data" / "fp-control-2"
+    lane_dir = repo / "freqtrade" / "user_data" / "fp-control-3"
 
     created = subprocess.run([sys.executable, "-c", block, SUCCESSOR, str(lane_dir)],
                              cwd=repo, capture_output=True, text=True, timeout=300)
@@ -789,7 +789,7 @@ def test_a_substituted_registry_is_refused_rather_than_read(tmp_path):
         [sys.executable, "-c",
          "import sys; sys.path.insert(0, 'research')\n"
          "from fp import lane\n"
-         "print(lane.select_row('FP-CONTROL-2'))"],
+         "print(lane.select_row('FP-CONTROL-3'))"],
         cwd=repo, capture_output=True, text=True, timeout=300,
     )
     assert read_attempt.returncode != 0, read_attempt.stdout
@@ -930,7 +930,7 @@ def _stamped_evidence(evidence: Path, commit: str, role: str = SUCCESSOR) -> Non
     """Four ledgers carrying one identity, as a runtime would write them."""
     ledgers = fp_ledger.open_ledgers(evidence, create=True)
     identity = {
-        "run_id": "a" * 32, "runtime_id": f"{role}:fp-control-2",
+        "run_id": "a" * 32, "runtime_id": f"{role}:fp-control-3",
         "source_commit": commit, "role": role, "cohort_id": None,
     }
     ledgers["input"].append({"pair": "BTC/USDT", "candle_ts": BASE_TS, "identity": identity})

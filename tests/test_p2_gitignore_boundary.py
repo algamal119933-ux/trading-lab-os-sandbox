@@ -6,7 +6,7 @@ stop condition depends on. So every ignore rule covering that directory is a
 decision about what an operator will never be shown.
 
 A prefix pattern `fp-control-*/` was written during S2 and withdrawn here. It
-covered the two declared lanes — and also `fp-control-3`, `fp-control-A` and
+covered the declared lanes — and also `fp-control-4`, `fp-control-A` and
 `fp-control-PRODUCTION`, which the registry does not declare and whose role
 names the schema's closed enum cannot even express. A second runtime writing
 evidence nobody authorised is precisely the thing that must stay visible, and
@@ -36,11 +36,11 @@ TEST_NAMESPACE = "fp-testlane-"
 
 # Lanes the registry actually declares. Anything else under user_data is
 # unauthorised by construction.
-DECLARED_LANES = ("fp-control-1", "fp-control-2")
+DECLARED_LANES = ("fp-control-1", "fp-control-2", "fp-control-3")
 
 # Each of these is a directory an operator must be shown if it ever appears.
 UNAUTHORISED_SIBLINGS = (
-    "fp-control-3",              # an undeclared successor
+    "fp-control-4",              # an undeclared successor
     "fp-control-PRODUCTION",     # an unexpected production lane
     "fp-control-A",              # a plausible-looking typo of a real lane
     "fp-candidate-a",            # a foreign role's lane
@@ -158,7 +158,7 @@ def test_the_role_enum_cannot_express_a_test_namespace_lane():
     """The registry's role enum is closed, so no future row can claim one either."""
     schema = json.loads(REGISTRY_SCHEMA.read_text(encoding="utf-8"))
     roles = schema["properties"]["instances"]["items"]["properties"]["role"]["enum"]
-    assert roles == ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CANDIDATE-A", "FP-CANDIDATE-B"]
+    assert roles == ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CONTROL-3", "FP-CANDIDATE-A", "FP-CANDIDATE-B"]
     for role in roles:
         assert not role.lower().startswith(TEST_NAMESPACE)
 

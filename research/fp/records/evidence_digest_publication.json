@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": "2026-09-18T16:43:39Z",
+  "published_utc": "2026-09-21T17:03:41Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
@@ -158,6 +158,46 @@
           "incident": 1,
           "input": 1998,
           "trade": 2
+        },
+        "chain_problems": []
+      }
+    },
+    {
+      "archive_name": "l2-cohort-20260920T120000Z",
+      "role": "FP-CONTROL-2",
+      "cohort_id": "FP-CONTROL-2-20260920T120000Z",
+      "lane_status_at_archival": "RUNNING",
+      "reason": "FP-CONTROL-2 cohort lane, T0 2026-09-20T12:00:00Z, sealed on a Class-B disposition. Activation certification was not mechanically achievable under the frozen activation contract: validate_activation check 1 requires exactly one run_started while preflight check 16 - which contract section 7 requires at 16/16 - requires at least two, and both read this same lane, so the requirement set is internally incompatible. Repairing it requires editing scripts/validate_activation.py or research/fp/preflight.py, both inside RUNTIME_TREE, which would make the repository semantically different from the declared source commit and fail reconcile's registry_source_commit_equivalence. The evidence in this lane is valid and attributable throughout: all four chains verify from genesis, reconciliation is PASS 14/14, one role, one cohort id, one source commit 0e920db6, paper-only authority holds, 60 credited POST_T0 + LIVE decisions and zero trades. This lane is NOT sealed for evidence corruption and NOT for trading performance. No record here may be credited to any future cohort.",
+      "archived_utc": "2026-09-21T17:03:13Z",
+      "verified_utc": "2026-09-21T17:03:41Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-2",
+      "file_count": 9,
+      "total_bytes": 6867115,
+      "files": {
+        "evidence/.fp_capture.lock": "5112df47e887a60c41ae90a59ff731813374186cad33fd0e0f48001ff16c89b3",
+        "evidence/capture_runtime.json": "e7d38bd2cbe894dfd5baefba25d09caf6c49be5cc984c6122a18489e9d6a895d",
+        "evidence/paper_decision_ledger.jsonl": "18636ddf9ea1ced73858f072d10ccf92fb23e36b192f518b3f97332f61dd939a",
+        "evidence/paper_incident_ledger.jsonl": "05eec9ebecd88f59104abfedaad70e1f0245f3bad3c99f783e3f0c3c93cdbcb2",
+        "evidence/paper_input_ledger.jsonl": "a1a4669adb9f268e6a9c67de44ae93bff286be45632dcfb8d014c8dc0eb4dbf3",
+        "logs/freqtrade.log": "4356f2f7da225743f6e181001d74c5b0e3ac499fa5f22d4d6c938cf005bc78e9",
+        "tradesv3.sqlite": "d3aab858be27fb1cf9759dbae8622379a5237605b15f35f5c0c3d660ae2443d9",
+        "tradesv3.sqlite-shm": "40d8d729f5876c7398881760d89c2e0eb54a6bcedb03df18b06f672ec3a05d2e",
+        "tradesv3.sqlite-wal": "3e08a3dad89702a393632cf395c51f3d5c7c5ea0faf07102023f36a6c0b077eb"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "c3fed13fe18b4542e7421b0227f13426feb111279a7b225f7fd97b601901565b",
+          "incident": "14afb211d72381537eeeaaca7e5891f9f40e301fcef60f0fae5f923183a2ea53",
+          "input": "3f433536e1814b2618547835854bbb6b778c8c4cabdfb1f82169d6d4caf1bef6",
+          "trade": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "daily_pack_digest": "c0356770a21e69106b71d032b4a6245431295b6c60b557a9cbbdfcbacd344cc8",
+        "counts": {
+          "decision": 2056,
+          "incident": 5,
+          "input": 2056,
+          "trade": 0
         },
         "chain_problems": []
       }

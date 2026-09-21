@@ -25,7 +25,7 @@ from fp import capture
 REGISTRY_PATH = "research/fp/records/forward_paper_cohort_registry.json"
 SCHEMA_PATH = "research/schema/forward_paper_cohort_registry.schema.json"
 HISTORICAL = "FP-CONTROL-1"
-SUCCESSOR = "FP-CONTROL-2"
+SUCCESSOR = "FP-CONTROL-3"
 
 
 @pytest.fixture(scope="module")
@@ -112,7 +112,7 @@ def test_a_capture_identity_for_the_successor_carries_no_cohort(tmp_path, monkey
     monkeypatch.setattr(capture, "COHORT_REGISTRY", _pre_t0_registry_file(tmp_path))
     identity = capture.build_identity(tmp_path, role=SUCCESSOR)
     assert identity.cohort_id is None
-    assert identity.bot_name == "fp-control-2"
+    assert identity.bot_name == "fp-control-3"
     assert capture._registry_t0_ms(SUCCESSOR) is None
 
 
@@ -141,8 +141,8 @@ def test_there_is_no_first_row_fallback(registry, tmp_path, monkeypatch):
     # And the successor's identity is the successor's, not whichever row is first.
     identity = capture.build_identity(tmp_path, role=SUCCESSOR)
     assert identity.role == SUCCESSOR
-    assert identity.bot_name == "fp-control-2"
-    assert identity.db_path == "/freqtrade/user_data/fp-control-2/tradesv3.sqlite"
+    assert identity.bot_name == "fp-control-3"
+    assert identity.db_path == "/freqtrade/user_data/fp-control-3/tradesv3.sqlite"
 
 
 # -- 6. path collisions fail ----------------------------------------------
@@ -324,11 +324,11 @@ def test_an_undeclared_evidence_lane_is_refused(tmp_path, registry):
 
 
 def test_prefix_neighbours_are_not_treated_as_the_same_lane(registry):
-    """`/x/fp-control-2-evil` shares a prefix with `/x/fp-control-2` and is a
+    """`/x/fp-control-3-evil` shares a prefix with `/x/fp-control-3` and is a
     different lane; `/x/lane/nested` looks different and is the same lane."""
     assert capture._collides(Path("/x/lane"), Path("/x/lane/nested"))
     assert capture._collides(Path("/x/lane/nested"), Path("/x/lane"))
-    assert not capture._collides(Path("/x/fp-control-2"), Path("/x/fp-control-2-evil"))
+    assert not capture._collides(Path("/x/fp-control-3"), Path("/x/fp-control-3-evil"))
 
 
 def test_a_malformed_t0_is_not_read_as_unfrozen(tmp_path, monkeypatch):
@@ -351,7 +351,7 @@ def test_the_overlay_refuses_to_render_without_a_selection():
 
 
 def test_the_overlay_guard_rejects_a_prefix_neighbour_lane():
-    """Substring checking passed `fp-control-2-evil`; component checking must not."""
+    """Substring checking passed `fp-control-3-evil`; component checking must not."""
     import check_fp_overlay
 
     rendered = {
@@ -359,26 +359,26 @@ def test_the_overlay_guard_rejects_a_prefix_neighbour_lane():
             "freqtrade": {
                 "command": [
                     "trade",
-                    "--logfile", "/freqtrade/user_data/fp-control-2-evil/logs/freqtrade.log",
-                    "--db-url", "sqlite:////freqtrade/user_data/fp-control-2-evil/tradesv3.sqlite",
+                    "--logfile", "/freqtrade/user_data/fp-control-3-evil/logs/freqtrade.log",
+                    "--db-url", "sqlite:////freqtrade/user_data/fp-control-3-evil/tradesv3.sqlite",
                     "--config", "/freqtrade/user_data/config.json",
                     "--strategy", "BaselineEmaRegimeV1",
                 ],
             },
             "fp-capture": {
                 "volumes": [
-                    {"source": "./freqtrade/user_data/fp-control-2-evil",
-                     "target": "/freqtrade/user_data/fp-control-2-evil", "read_only": False},
+                    {"source": "./freqtrade/user_data/fp-control-3-evil",
+                     "target": "/freqtrade/user_data/fp-control-3-evil", "read_only": False},
                 ],
             },
         }
     }
-    assert check_fp_overlay.check(rendered, "fp-control-2"), "a prefix-neighbour lane must be rejected"
+    assert check_fp_overlay.check(rendered, "fp-control-3"), "a prefix-neighbour lane must be rejected"
 
 
 def test_ci_selects_an_instance_before_rendering_the_overlay():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "scripts/fp_instance.py FP-CONTROL-2" in workflow
+    assert "scripts/fp_instance.py FP-CONTROL-3" in workflow
     assert "An unselected FP overlay render must fail closed" in workflow
 
 
@@ -481,7 +481,12 @@ def test_the_registry_schema_enforces_role_uniqueness_and_started_state(request,
 def test_the_overlay_guard_requires_the_declared_paths_and_role():
     import check_fp_overlay
 
-    registry_identity = json.loads(Path(REGISTRY_PATH).read_text(encoding="utf-8"))["instances"][1][
+    # Selected by ROLE, never by index: the registry gained a third row when
+    # FP-CONTROL-2 closed, and instances[1] silently became the closed cohort.
+    registry_identity = next(
+        r for r in json.loads(Path(REGISTRY_PATH).read_text(encoding="utf-8"))["instances"]
+        if r["role"] == SUCCESSOR
+    )[
         "runtime_identity"
     ]
     good = {
@@ -496,16 +501,16 @@ def test_the_overlay_guard_requires_the_declared_paths_and_role():
                 "environment": {"FREQTRADE__BOT_NAME": registry_identity["bot_name"]},
                 "volumes": [
                     {"source": "./freqtrade/user_data", "target": "/freqtrade/user_data", "read_only": True},
-                    {"source": "./freqtrade/user_data/fp-control-2",
-                     "target": "/freqtrade/user_data/fp-control-2", "read_only": False},
+                    {"source": "./freqtrade/user_data/fp-control-3",
+                     "target": "/freqtrade/user_data/fp-control-3", "read_only": False},
                 ],
             },
             "fp-capture": {
-                "command": ["python", "/app/research/fp/capture.py", "--role=FP-CONTROL-2",
+                "command": ["python", "/app/research/fp/capture.py", "--role=FP-CONTROL-3",
                             f"--evidence-dir={registry_identity['evidence_dir']}"],
                 "volumes": [
-                    {"source": "./freqtrade/user_data/fp-control-2",
-                     "target": "/freqtrade/user_data/fp-control-2", "read_only": False},
+                    {"source": "./freqtrade/user_data/fp-control-3",
+                     "target": "/freqtrade/user_data/fp-control-3", "read_only": False},
                 ],
             },
         }

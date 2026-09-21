@@ -47,7 +47,7 @@ CONTRACT = Path("docs/p2/P2_CONTRACT.md")
 
 def _window(registry, evidence, t0_ms, cohort, **kwargs):
     write_lane(evidence, cohort, t0_ms, **kwargs)
-    return activation.validate("FP-CONTROL-2", source_commit=COMMIT, registry=registry)["window"]
+    return activation.validate("FP-CONTROL-3", source_commit=COMMIT, registry=registry)["window"]
 
 
 # -- the contract states it -------------------------------------------------
@@ -106,7 +106,7 @@ def test_activation_utc_is_a_property_of_the_evidence_not_of_when_we_looked(lane
     """Re-running the validator later must report the same instant."""
     registry, evidence, t0_ms, cohort = lane_env
     first = _window(registry, evidence, t0_ms, cohort)
-    second = activation.validate("FP-CONTROL-2", source_commit=COMMIT,
+    second = activation.validate("FP-CONTROL-3", source_commit=COMMIT,
                                  registry=registry)["window"]
     assert first["activation_utc"] == second["activation_utc"]
     assert first["hard_cap_utc"] == second["hard_cap_utc"]
@@ -142,12 +142,12 @@ def test_a_window_inside_the_cap_is_open(lane_env):
     registry, evidence, t0_ms, cohort = lane_env
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     recent_t0 = now_ms - 3 * HOUR_MS
-    row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-2")
+    row = next(r for r in registry["instances"] if r["role"] == "FP-CONTROL-3")
     from fp import market as fp_market
 
     t0_iso = fp_market.iso_from_ms((recent_t0 // HOUR_MS) * HOUR_MS)[:19] + "Z"
     row["t0_utc"] = t0_iso
-    row["cohort_id"] = fp_law.cohort_id_for("FP-CONTROL-2", t0_iso)
+    row["cohort_id"] = fp_law.cohort_id_for("FP-CONTROL-3", t0_iso)
     row["change_log"] = [{"utc": t0_iso, "class": "O", "description": "T0 frozen."}]
     aligned = (recent_t0 // HOUR_MS) * HOUR_MS
     window = _window(registry, evidence, aligned, row['cohort_id'])

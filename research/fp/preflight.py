@@ -58,6 +58,10 @@ COHORT_REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_coh
 
 PASS, FAIL, UNPROVEN = "PASS", "FAIL", "UNPROVEN"
 
+# The two lifecycle points at which a live runtime may be judged.
+PRE_T0_QUALIFICATION = "PRE_T0_QUALIFICATION"
+INITIAL_ACTIVATION = "INITIAL_ACTIVATION"
+
 
 @dataclass
 class RuntimeContext:
@@ -83,6 +87,25 @@ class RuntimeContext:
     exporter_url: str | None = None
     prometheus_url: str | None = None
     check_market_route: bool = False
+    # Which point of the lifecycle this runtime is judged at.
+    #
+    # PRE_T0_QUALIFICATION is the default and the historical behaviour: before
+    # any T0 is frozen the candidate must be shown to survive a real stop/start,
+    # so check 16 demands a second run in the evidence.
+    #
+    # INITIAL_ACTIVATION is a fresh cohort's FIRST validation. Such a lane holds
+    # exactly one run by construction, so demanding a second one there is not a
+    # stronger gate but an unsatisfiable one: contract section 7 requires
+    # "exactly one run_started, restart_counter 0" at activation while this
+    # check required at least two, and both read the same lane. Under
+    # INITIAL_ACTIVATION the check asserts the opposite and equally strict fact
+    # - exactly one run, counter 0, chains intact, no bar decided twice - and
+    # restart continuity is proven where it is meaningful: on the pre-T0
+    # qualification lane before the freeze, by reconcile's restart_continuity
+    # finding on every reconciliation afterwards, and by the A15 restart drill
+    # before closure. Nothing is deleted; each requirement moves to the
+    # lifecycle point at which it can be true.
+    lifecycle: str = "PRE_T0_QUALIFICATION"
 
     @property
     def has_evidence(self) -> bool:
@@ -397,6 +420,31 @@ def _check_restart_drill_real(runtime: RuntimeContext) -> tuple[str, str, dict]:
     ledgers = fp_ledger.open_ledgers(evidence_dir)
     incidents = ledgers["incident"].records()
     starts = [r for r in incidents if r.payload.get("category") == "run_started"]
+
+    if runtime.lifecycle == INITIAL_ACTIVATION:
+        counters = [(r.payload.get("full_identity") or {}).get("restart_counter") for r in starts]
+        if len(starts) != 1 or counters != [0]:
+            return FAIL, (
+                f"initial activation expects exactly one run_started with restart_counter 0; this "
+                f"lane holds {len(starts)} with counters {counters}"
+            ), {"mechanism_restart": FAIL}
+        for kind, led in sorted(ledgers.items()):
+            problems = led.verify()
+            if problems:
+                return FAIL, f"the {kind} chain is broken: {problems[0]}", {"mechanism_restart": FAIL}
+        decisions = [r for r in ledgers["decision"].records() if not r.payload.get("erratum")]
+        bars = [(r.payload.get("pair"), r.payload.get("candle_ts")) for r in decisions]
+        if len(bars) != len(set(bars)):
+            duplicated = [bar for bar in set(bars) if bars.count(bar) > 1]
+            return FAIL, f"a bar was decided twice on the first run: {duplicated[:3]}", {
+                "mechanism_restart": FAIL}
+        return PASS, (
+            f"initial activation: exactly one run_started with restart_counter 0, all four chains "
+            f"verify, {len(bars)} decisions unique per bar and none re-recorded. The stop/start "
+            "drill is a PRE-T0 qualification requirement, proven on the qualification lane before "
+            "the freeze; continuity after activation is proven by reconcile's restart_continuity "
+            "finding and by the A15 restart drill"
+        ), {"mechanism_restart": PASS}
 
     if len(starts) < 2:
         return UNPROVEN, (

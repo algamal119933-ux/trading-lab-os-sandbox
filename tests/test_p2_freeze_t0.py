@@ -232,7 +232,9 @@ def test_the_authorization_at_this_head_is_absent_or_lawful():
     if row["status"] == "NOT_STARTED":
         assert row["t0_utc"] is None and row["cohort_id"] is None
     else:
-        assert row["status"] == "RUNNING"
+        # RUNNING or CLOSED: either way the cohort id must derive from its own
+        # T0. A closure does not rewrite the identity it closes.
+        assert row["status"] in ("RUNNING", "CLOSED")
         assert row["cohort_id"] == fp_law.cohort_id_for(ROLE, row["t0_utc"])
 
 

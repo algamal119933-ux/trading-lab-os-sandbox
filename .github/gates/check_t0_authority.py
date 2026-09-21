@@ -158,7 +158,11 @@ def check(head: str = "HEAD", *, base: str | None = None,
     frozen_here, detail = _is_freeze_candidate(base, resolved, root)
     carries_t0 = bool(row.get("t0_utc") or row.get("cohort_id")) or row.get("status") == "RUNNING"
 
-    FROZEN_FIELDS = ("t0_utc", "cohort_id", "status")
+    # A T0 is written by t0_utc and cohort_id appearing, and by a row entering
+    # RUNNING. A row LEAVING RUNNING for CLOSED is a lawful cohort closure -
+    # FP-CONTROL-1's own closure was exactly that - and refusing it would make
+    # this gate forbid the disposition contract section 11 class B requires.
+    FROZEN_FIELDS = ("t0_utc", "cohort_id")
     if base:
         try:
             base_registry = _registry_at(
@@ -181,6 +185,12 @@ def check(head: str = "HEAD", *, base: str | None = None,
     elif base_row is not None:
         introduced = {f: (base_row.get(f), row.get(f))
                       for f in FROZEN_FIELDS if base_row.get(f) != row.get(f)}
+        if row.get("status") == "RUNNING" and base_row.get("status") != "RUNNING":
+            introduced["status"] = (base_row.get("status"), row.get("status"))
+        before_sc = (base_row.get("runtime_identity") or {}).get("source_commit")
+        after_sc = (row.get("runtime_identity") or {}).get("source_commit")
+        if before_sc != after_sc:
+            introduced["source_commit"] = (before_sc, after_sc)
         if introduced and not frozen_here:
             problems.append(
                 f"{role} moves {sorted(introduced)} on this branch "

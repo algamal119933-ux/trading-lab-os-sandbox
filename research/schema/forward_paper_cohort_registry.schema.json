@@ -16,42 +16,152 @@
     "real_money_authorized"
   ],
   "properties": {
-    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
-    "spec_version": { "type": "string", "minLength": 1 },
-    "registry_updated_utc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
-    "entry_state": { "enum": ["A", "B", "C"] },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "spec_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "registry_updated_utc": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "entry_state": {
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
     "paper_alpha_cohort": {
       "description": "Section 3, STATE C: recorded as the string NONE when no paper-admissible survivor exists.",
       "type": "string"
     },
-    "fp_run_active": { "type": "boolean" },
-    "adopted_prior_t0": { "type": "boolean" },
+    "fp_run_active": {
+      "type": "boolean"
+    },
+    "adopted_prior_t0": {
+      "type": "boolean"
+    },
     "instances": {
       "type": "array",
       "maxItems": 4,
       "uniqueItems": true,
       "allOf": [
-        { "contains": { "properties": { "role": { "const": "FP-CONTROL-1" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
-        { "contains": { "properties": { "role": { "const": "FP-CONTROL-2" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
-        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-A" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 },
-        { "contains": { "properties": { "role": { "const": "FP-CANDIDATE-B" } }, "required": ["role"] }, "maxContains": 1, "minContains": 0 }
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "FP-CONTROL-1"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 0
+        },
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "FP-CONTROL-2"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 0
+        },
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "FP-CANDIDATE-A"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 0
+        },
+        {
+          "contains": {
+            "properties": {
+              "role": {
+                "const": "FP-CANDIDATE-B"
+              }
+            },
+            "required": [
+              "role"
+            ]
+          },
+          "maxContains": 1,
+          "minContains": 0
+        }
       ],
       "description": "Section 4: control instances plus at most two survivor candidates. Capacity is four because a closed control is kept as history beside the pre-T0 successor that replaced it.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["role", "cohort_id", "status", "t0_utc", "runtime_identity"],
+        "required": [
+          "role",
+          "cohort_id",
+          "status",
+          "t0_utc",
+          "runtime_identity"
+        ],
         "properties": {
-          "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CANDIDATE-A", "FP-CANDIDATE-B"] },
-          "cohort_id": { "type": ["string", "null"] },
-          "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED", "CLOSED"] },
+          "role": {
+            "enum": [
+              "FP-CONTROL-1",
+              "FP-CONTROL-2",
+              "FP-CONTROL-3",
+              "FP-CANDIDATE-A",
+              "FP-CANDIDATE-B"
+            ]
+          },
+          "cohort_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "NOT_STARTED",
+              "RUNNING",
+              "PAUSED",
+              "CLOSED"
+            ]
+          },
           "t0_utc": {
             "description": "null until preflight passes. A T0 may never be back-dated or reused across a semantic change.",
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)?$"
           },
-          "closed_utc": { "type": ["string", "null"] },
-          "closure_reason": { "type": ["string", "null"] },
+          "closed_utc": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closure_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "runtime_identity": {
             "type": "object",
             "additionalProperties": false,
@@ -73,71 +183,238 @@
               "evidence_dir"
             ],
             "properties": {
-              "candidate_family": { "type": ["string", "null"] },
-              "source_commit": { "type": ["string", "null"] },
-              "strategy_sha256": { "type": ["string", "null"], "pattern": "^([a-f0-9]{64})?$" },
-              "params_sha256": { "type": ["string", "null"] },
-              "config_sha256": { "type": ["string", "null"] },
-              "engine_version": { "type": ["string", "null"] },
-              "image_digest": { "type": ["string", "null"] },
-              "python_version": { "type": ["string", "null"] },
-              "pairs": { "type": "array", "items": { "type": "string" } },
-              "timeframe": { "type": ["string", "null"] },
-              "detail_timeframe": { "type": ["string", "null"] },
-              "fee_model": { "type": ["object", "null"] },
-              "sizing": { "type": ["object", "null"] },
-              "max_open_trades": { "type": ["integer", "null"] },
-              "order_policy": { "type": ["object", "null"] },
-              "feature_sources": { "type": "array", "items": { "type": "string" } },
-              "paper_fill_model_version": { "type": ["string", "null"] },
-              "environment_variable_allowlist": { "type": "array", "items": { "type": "string" } },
-              "bot_name": { "type": ["string", "null"] },
-              "db_path": { "type": ["string", "null"] },
-              "wallet": { "type": ["number", "null"] },
-              "log_path": { "type": ["string", "null"] },
-              "evidence_dir": { "type": ["string", "null"] }
+              "candidate_family": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source_commit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "strategy_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^([a-f0-9]{64})?$"
+              },
+              "params_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "config_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "engine_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "image_digest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "python_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pairs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "timeframe": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "detail_timeframe": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fee_model": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "sizing": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "max_open_trades": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "order_policy": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "feature_sources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "paper_fill_model_version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "environment_variable_allowlist": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "bot_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "db_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "wallet": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "log_path": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence_dir": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             }
           },
           "outcome": {
             "description": "Recorded only when a cohort is CLOSED: what its window did and did not establish, stated as evidence truth. Every value describes what the surviving evidence supports, never what is believed to have happened out of view of the evidence.",
             "type": "object",
             "additionalProperties": false,
-            "required": ["paper_trading_operational_capability", "full_trade_lifecycle"],
+            "required": [
+              "paper_trading_operational_capability",
+              "full_trade_lifecycle"
+            ],
             "properties": {
-              "paper_trading_operational_capability": { "enum": ["PROVEN", "NOT_PROVEN"] },
+              "paper_trading_operational_capability": {
+                "enum": [
+                  "PROVEN",
+                  "NOT_PROVEN"
+                ]
+              },
               "full_trade_lifecycle": {
                 "description": "OBSERVED requires evidence of a complete lifecycle. NOT_YET_OBSERVED and NOT_OBSERVED are claims a cohort with an intact evidence lane may make about its own window. NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE means the available evidence cannot answer the question - it is not a claim that no trade occurred, and it is what a cohort whose evidence is unavailable must use.",
-                "enum": ["OBSERVED", "NOT_YET_OBSERVED", "NOT_OBSERVED", "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"]
+                "enum": [
+                  "OBSERVED",
+                  "NOT_YET_OBSERVED",
+                  "NOT_OBSERVED",
+                  "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"
+                ]
               },
-              "prospective_paper_edge": { "enum": ["PROVEN", "NOT_PROVEN", "NOT_EVALUATED"] },
+              "prospective_paper_edge": {
+                "enum": [
+                  "PROVEN",
+                  "NOT_PROVEN",
+                  "NOT_EVALUATED"
+                ]
+              },
               "measurable_post_t0_evidence": {
                 "description": "AVAILABLE where post-T0 evidence can still be read and measured. NONE where an intact evidence lane shows that none was produced. UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE states only that it cannot be read here, without asserting that none was ever produced.",
-                "enum": ["AVAILABLE", "NONE", "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"]
+                "enum": [
+                  "AVAILABLE",
+                  "NONE",
+                  "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"
+                ]
               },
-              "trading_semantics_changed": { "type": "boolean" },
+              "trading_semantics_changed": {
+                "type": "boolean"
+              },
               "change_model_classification": {
                 "description": "Present only where a closure is an administrative evidence disposition rather than a section-15 change. It records that no O/R/S classification is being asserted; it does not extend, replace or reinterpret the O/R/S model, which continues to govern changes to a running cohort.",
-                "enum": ["NOT_APPLICABLE_TO_TRADING_SEMANTICS / OWNER_EVIDENCE_DISPOSITION"]
+                "enum": [
+                  "NOT_APPLICABLE_TO_TRADING_SEMANTICS / OWNER_EVIDENCE_DISPOSITION"
+                ]
               },
               "owner_disposition": {
                 "description": "An Owner decision recorded as a decision. It is never evidence about what did or did not happen during the window.",
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
-              "detail": { "type": "string" }
+              "detail": {
+                "type": "string"
+              }
             }
           },
           "change_log": {
             "type": "array",
-            "description": "Section 15: every post-T0 change classified O (observability), R (runtime repair, semantics preserved) or S (semantic — closes the cohort).",
+            "description": "Section 15: every post-T0 change classified O (observability), R (runtime repair, semantics preserved) or S (semantic \u2014 closes the cohort).",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["utc", "class", "description"],
+              "required": [
+                "utc",
+                "class",
+                "description"
+              ],
               "properties": {
-                "utc": { "type": "string" },
-                "class": { "enum": ["O", "R", "S"] },
-                "description": { "type": "string" },
-                "replay_parity_before_after": { "type": ["string", "null"] }
+                "utc": {
+                  "type": "string"
+                },
+                "class": {
+                  "enum": [
+                    "O",
+                    "R",
+                    "S"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "replay_parity_before_after": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
               }
             }
           }
@@ -145,53 +422,152 @@
         "allOf": [
           {
             "description": "The converse invariant: a row that has started - RUNNING, PAUSED or CLOSED - must carry the T0, cohort id and source commit that were frozen together by the one authorised act. The values must be semantically valid, not merely present: an empty string is a JSON string and would otherwise satisfy a type check while carrying no boundary at all.",
-            "if": { "required": ["status"], "properties": { "status": { "enum": ["RUNNING", "PAUSED", "CLOSED"] } } },
+            "if": {
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "RUNNING",
+                    "PAUSED",
+                    "CLOSED"
+                  ]
+                }
+              }
+            },
             "then": {
               "properties": {
-                "t0_utc": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
-                "cohort_id": { "type": "string", "minLength": 1, "pattern": "^\\S.*\\S$|^\\S$" },
+                "t0_utc": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+                },
+                "cohort_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S.*\\S$|^\\S$"
+                },
                 "runtime_identity": {
-                  "required": ["source_commit"],
-                  "properties": { "source_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" } }
+                  "required": [
+                    "source_commit"
+                  ],
+                  "properties": {
+                    "source_commit": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  }
                 }
               },
-              "required": ["t0_utc", "cohort_id"]
+              "required": [
+                "t0_utc",
+                "cohort_id"
+              ]
             }
           },
           {
             "description": "A NOT_STARTED row has started nothing, so it may carry no T0, no cohort id and no source commit. Without this, a pre-T0 successor could quietly acquire the identity of a run that never happened.",
-            "if": { "required": ["status"], "properties": { "status": { "const": "NOT_STARTED" } } },
+            "if": {
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "const": "NOT_STARTED"
+                }
+              }
+            },
             "then": {
               "properties": {
-                "t0_utc": { "const": null },
-                "cohort_id": { "const": null },
-                "closed_utc": { "const": null },
-                "closure_reason": { "const": null },
-                "runtime_identity": { "properties": { "source_commit": { "const": null } } }
+                "t0_utc": {
+                  "const": null
+                },
+                "cohort_id": {
+                  "const": null
+                },
+                "closed_utc": {
+                  "const": null
+                },
+                "closure_reason": {
+                  "const": null
+                },
+                "runtime_identity": {
+                  "properties": {
+                    "source_commit": {
+                      "const": null
+                    }
+                  }
+                }
               }
             }
           },
           {
             "description": "An outcome belongs to a finished window. A row that is not CLOSED must not carry one: an outcome on a live row is a verdict written before the evidence that would support it exists.",
-            "if": { "required": ["status"], "properties": { "status": { "enum": ["NOT_STARTED", "RUNNING", "PAUSED"] } } },
-            "then": { "not": { "required": ["outcome"] } }
+            "if": {
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "NOT_STARTED",
+                    "RUNNING",
+                    "PAUSED"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": [
+                  "outcome"
+                ]
+              }
+            }
           },
           {
             "description": "A closed control must say when it closed, why, and what its window established. Without all three, a cohort that established nothing is indistinguishable from one whose result was simply never written down.",
             "if": {
-              "required": ["status", "role"],
-              "properties": { "status": { "const": "CLOSED" }, "role": { "enum": ["FP-CONTROL-1", "FP-CONTROL-2"] } }
+              "required": [
+                "status",
+                "role"
+              ],
+              "properties": {
+                "status": {
+                  "const": "CLOSED"
+                },
+                "role": {
+                  "enum": [
+                    "FP-CONTROL-1",
+                    "FP-CONTROL-2"
+                  ]
+                }
+              }
             },
-            "then": { "required": ["closed_utc", "closure_reason", "outcome"] }
+            "then": {
+              "required": [
+                "closed_utc",
+                "closure_reason",
+                "outcome"
+              ]
+            }
           },
           {
             "description": "A closure whose reason is a lost evidence lane may not claim what the lost evidence would have had to support. Capability stays NOT_PROVEN, prospective edge may not read PROVEN, a full lifecycle may not read OBSERVED, and post-T0 evidence must be declared unavailable rather than absent.",
             "if": {
-              "required": ["closure_reason"],
-              "properties": { "closure_reason": { "const": "EVIDENCE_LANE_LOST_IN_HOST_MIGRATION" } }
+              "required": [
+                "closure_reason"
+              ],
+              "properties": {
+                "closure_reason": {
+                  "const": "EVIDENCE_LANE_LOST_IN_HOST_MIGRATION"
+                }
+              }
             },
             "then": {
-              "required": ["outcome"],
+              "required": [
+                "outcome"
+              ],
               "properties": {
                 "outcome": {
                   "required": [
@@ -202,10 +578,21 @@
                     "trading_semantics_changed"
                   ],
                   "properties": {
-                    "paper_trading_operational_capability": { "const": "NOT_PROVEN" },
-                    "prospective_paper_edge": { "enum": ["NOT_PROVEN", "NOT_EVALUATED"] },
-                    "full_trade_lifecycle": { "const": "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE" },
-                    "measurable_post_t0_evidence": { "const": "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE" }
+                    "paper_trading_operational_capability": {
+                      "const": "NOT_PROVEN"
+                    },
+                    "prospective_paper_edge": {
+                      "enum": [
+                        "NOT_PROVEN",
+                        "NOT_EVALUATED"
+                      ]
+                    },
+                    "full_trade_lifecycle": {
+                      "const": "NOT_ESTABLISHED_BY_AVAILABLE_EVIDENCE"
+                    },
+                    "measurable_post_t0_evidence": {
+                      "const": "UNAVAILABLE_IN_CURRENT_EVIDENCE_LANE"
+                    }
                   }
                 }
               }
@@ -214,22 +601,52 @@
         ]
       }
     },
-    "real_money_authorized": { "const": false },
-    "notes": { "type": "string" }
+    "real_money_authorized": {
+      "const": false
+    },
+    "notes": {
+      "type": "string"
+    }
   },
   "allOf": [
     {
       "description": "fp_run_active and the instance rows must agree in both directions. A registry that says a run is active while every instance is closed - or the reverse - is the state in which a runtime is restarted in the belief that a cohort is still collecting evidence for it.",
       "if": {
-        "required": ["instances"],
+        "required": [
+          "instances"
+        ],
         "properties": {
           "instances": {
-            "contains": { "required": ["status"], "properties": { "status": { "enum": ["RUNNING", "PAUSED"] } } }
+            "contains": {
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "RUNNING",
+                    "PAUSED"
+                  ]
+                }
+              }
+            }
           }
         }
       },
-      "then": { "properties": { "fp_run_active": { "const": true } } },
-      "else": { "properties": { "fp_run_active": { "const": false } } }
+      "then": {
+        "properties": {
+          "fp_run_active": {
+            "const": true
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "fp_run_active": {
+            "const": false
+          }
+        }
+      }
     }
   ]
 }

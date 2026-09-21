@@ -16,8 +16,8 @@ import check_fp_overlay
 
 # The role the guard is asked about. FP-CONTROL-1 is closed, so the only
 # instance a rendered stack may describe is the pre-T0 successor.
-ROLE = "FP-CONTROL-2"
-LANE = "/freqtrade/user_data/fp-control-2"
+ROLE = "FP-CONTROL-3"
+LANE = "/freqtrade/user_data/fp-control-3"
 
 SAFE = {
     "services": {
@@ -31,11 +31,11 @@ SAFE = {
             ],
             "environment": {
                 "FREQTRADE__API_SERVER__JWT_SECRET_KEY": "local-only",
-                "FREQTRADE__BOT_NAME": "fp-control-2",
+                "FREQTRADE__BOT_NAME": "fp-control-3",
             },
             "volumes": [
                 {"source": "./freqtrade/user_data", "target": "/freqtrade/user_data", "read_only": True},
-                {"source": "./freqtrade/user_data/fp-control-2", "target": LANE, "read_only": False},
+                {"source": "./freqtrade/user_data/fp-control-3", "target": LANE, "read_only": False},
             ],
         },
         "fp-capture": {
@@ -47,7 +47,7 @@ SAFE = {
                 {"source": "./research", "target": "/app/research", "read_only": True},
                 {"source": "./freqtrade", "target": "/app/freqtrade", "read_only": True},
                 {
-                    "source": "./freqtrade/user_data/fp-control-2",
+                    "source": "./freqtrade/user_data/fp-control-3",
                     "target": LANE,
                     "read_only": False,
                 },
@@ -195,7 +195,7 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
 
     capture_command = render(" ".join(overlay["services"]["fp-capture"]["command"]))
     assert identity["evidence_dir"] in capture_command
-    assert "--role=FP-CONTROL-2" in capture_command, "the capture service must name its instance explicitly"
+    assert "--role=FP-CONTROL-3" in capture_command, "the capture service must name its instance explicitly"
 
     # And the closed instance's paths must appear nowhere in the template.
     closed = next(i for i in registry["instances"] if i["role"] == "FP-CONTROL-1")["runtime_identity"]
