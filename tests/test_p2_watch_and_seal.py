@@ -40,7 +40,8 @@ from fp import registry_law as fp_law
 from fp import semantic_identity as fp_semantic
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
-ROLE = "FP-CONTROL-2"
+# Resolved, not named — see tests/conftest.py::live_role.
+ROLE = conftest.live_role()
 TEST_LANE = "fp-testlane-s2watch"
 HOUR_MS = 3_600_000
 COMMIT = "a" * 40
@@ -58,9 +59,14 @@ def lane_env(tmp_path, monkeypatch):
     # a lawful T0 was frozen.
     registry = copy.deepcopy(conftest.pre_t0_registry(ROLE))
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
+    # The segment to redirect is the row's OWN lane directory, not a literal.
+    # Spelled "/fp-control-2/" this replace silently became a no-op for any
+    # other role: the paths went on pointing at the real lane, and the seal
+    # refused them for naming a directory the role does not declare.
+    lane_segment = row["runtime_identity"]["bot_name"]
     for field in ("db_path", "log_path", "evidence_dir"):
         row["runtime_identity"][field] = (
-            row["runtime_identity"][field].replace("/fp-control-2/", f"/{TEST_LANE}/")
+            row["runtime_identity"][field].replace(f"/{lane_segment}/", f"/{TEST_LANE}/")
         )
     registry_file = tmp_path / "registry.json"
     registry_file.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")

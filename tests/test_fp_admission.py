@@ -695,7 +695,7 @@ def test_fp_run_active_must_agree_with_the_instance_rows(registry_schema):
     than relying on the committed file not having one — which stopped being true
     the moment a T0 was lawfully frozen.
     """
-    registry = conftest.pre_t0_registry("FP-CONTROL-2")
+    registry = conftest.pre_t0_registry()
     stale = json.loads(json.dumps(registry))
     stale["fp_run_active"] = True
     assert schema_errors(registry_schema, stale), "active flag with no live instance must be rejected"

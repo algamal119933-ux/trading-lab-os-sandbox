@@ -43,7 +43,8 @@ from fp import registry_law as fp_law
 from fp import semantic_identity as fp_semantic
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
-ROLE = "FP-CONTROL-2"
+# Resolved, not named — see tests/conftest.py::live_role.
+ROLE = conftest.live_role()
 HEAD = "a" * 40
 PARENT_ONE, PARENT_TWO = "b" * 40, "c" * 40
 MQ = "d" * 40

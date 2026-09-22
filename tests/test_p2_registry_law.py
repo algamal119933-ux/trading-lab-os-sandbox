@@ -26,7 +26,10 @@ from fp import registry_law as law
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 CLOSED = "FP-CONTROL-1"
-SUCCESSOR = "FP-CONTROL-2"
+# The cohort this repository is freezing, resolved from the registry rather
+# than named: a literal here winds back a row nobody froze while another row
+# is RUNNING, which is an unlawful registry, not a pre-T0 one.
+SUCCESSOR = conftest.live_role()
 
 
 @pytest.fixture

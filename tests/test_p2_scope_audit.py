@@ -160,20 +160,12 @@ RECOVERY_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-}
+# PR #27, merged. Two parents: 909bf5fa (main before) + 58e27f2f (the branch).
+S8_MERGE = "e6fa7eebe37592d982ca5c09066e84cd32465e71"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
-
-BRANCH_SCOPE: dict[str, str] = {
+# Every path S8 touched → the requirement it satisfies. These entries were
+# BRANCH_SCOPE while the stage was in flight.
+S8_SCOPE: dict[str, str] = {
     "research/schema/p2_qualification_binding.schema.json":
         "S8 — the binding may name the successor control",
     "research/fp/records/p2_qualification_binding.json":
@@ -194,6 +186,33 @@ BRANCH_SCOPE: dict[str, str] = {
         "S8 — the gate judges the role under authority, not a hardcoded cohort",
     "docs/p2/S8_SUCCESSOR_QUALIFICATION.md": "S8 stage record",
     "tests/test_p2_scope_audit.py": "S8 — the recovery pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "tests/conftest.py":
+        "S9a — the live role is resolved from the registry, not named",
+    "tests/test_p2_registry_law.py": "S9a — repointed to the resolved live role",
+    "tests/test_p2_watch_and_seal.py":
+        "S9a — resolved live role, and the lane redirect derives its own segment",
+    "tests/test_p2_freeze_t0.py": "S9a — repointed to the resolved live role",
+    "tests/test_fp_admission.py": "S9a — the pre-T0 fixture is asked for by default",
+    "tests/test_p2_scope_audit.py": "S9a — S8 pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
