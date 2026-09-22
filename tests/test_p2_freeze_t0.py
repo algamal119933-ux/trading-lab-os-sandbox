@@ -210,7 +210,13 @@ def test_the_authorization_at_this_head_is_absent_or_lawful():
             subprocess.run(["git", "show", f"{head}:{freeze_t0.BINDING_PATH}"],
                            capture_output=True, text=True, check=True).stdout
         )
-        assert granted["ROLE"] == ROLE == merged_binding["role"]
+        # Not compared against this module's fixture ROLE: that constant names
+        # the synthetic cohort the negative controls below are built around,
+        # and tying a live assertion about the real merged records to it made
+        # this test fail the moment the repository lawfully qualified a
+        # successor. What the live records must satisfy is that they agree with
+        # each other.
+        assert granted["ROLE"] == merged_binding["role"]
         assert granted["QUALIFICATION_COMMIT"] == merged_binding["qualification_commit"]
         assert granted["QUALIFICATION_CERTIFICATE_SHA256"] == merged_binding["certificate_sha256"]
         assert granted["REAL_MONEY_AUTHORIZED"].strip().upper() == "NO"
