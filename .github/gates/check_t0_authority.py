@@ -59,7 +59,6 @@ for _extra in (REPO_ROOT / "scripts", REPO_ROOT / "research"):
 import check_freeze_candidate as freeze_gate  # noqa: E402
 import freeze_t0  # noqa: E402
 
-ROLE = "FP-CONTROL-2"
 ABSENT, GRANTED = "ABSENT", "GRANTED"
 
 
@@ -91,11 +90,47 @@ def _is_freeze_candidate(base: str | None, head: str, repo_root: Path | None) ->
     )
 
 
+def _role_under_authority(rev: str, repo_root: Path) -> str:
+    """The role this gate must judge at ``rev``, resolved rather than hardcoded.
+
+    A constant here names one cohort, and a constant naming one cohort is wrong
+    from the first successor onwards: the gate would go on auditing a CLOSED
+    row's frozen T0 while the row actually being authorised moved unwatched.
+    So the role is read from the state, in the order authority establishes it —
+    the Owner's merged authorization where one exists, otherwise the single row
+    that has not closed.
+
+    A CLOSED row is never the answer, even as a last resort. Its T0 is immutable
+    history that no later branch can have created, so auditing one would report
+    a frozen T0 for every branch forever and say nothing about the branch. Where
+    more than one row is open the first is taken and the surrounding checks
+    report on it; passing ``role=`` explicitly overrides all of this.
+    """
+    try:
+        named = freeze_t0.read_authorization(rev).get("ROLE", "").strip()
+        if named:
+            return named
+    except freeze_t0.FreezeRefused:
+        pass
+    rows = _registry_at(rev, repo_root=repo_root).get("instances") or []
+    open_rows = [row for row in rows if row.get("status") != "CLOSED"]
+    if open_rows:
+        return open_rows[0].get("role", "")
+    return rows[0].get("role", "") if rows else ""
+
+
 def check(head: str = "HEAD", *, base: str | None = None,
-          repo_root: Path | None = None, role: str = ROLE) -> dict:
+          repo_root: Path | None = None, role: str | None = None) -> dict:
     """The boundary, as it stands at ``head``."""
     root = repo_root or REPO_ROOT
     resolved = _git(["rev-parse", head], repo_root=root).stdout.strip() or head
+    if role is None:
+        previous_repo_root = freeze_t0.REPO_ROOT
+        freeze_t0.REPO_ROOT = root
+        try:
+            role = _role_under_authority(resolved, root)
+        finally:
+            freeze_t0.REPO_ROOT = previous_repo_root
     problems: list[str] = []
     notes: list[str] = []
 

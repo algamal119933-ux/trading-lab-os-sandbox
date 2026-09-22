@@ -1,16 +1,16 @@
 {
   "binding_version": "P2_QUALIFICATION_BINDING_V1",
-  "bound_utc": "2026-09-16T17:05:00Z",
-  "certificate_sha256": "9780df85a8d05b7534d7cc46f9ea0114a325f668a185011edf1a26092211f915",
+  "bound_utc": "2026-09-22T18:05:00Z",
+  "certificate_sha256": "b339c995943649dd3cbfead74cbef92a6cb103517ad1eae4485b8bdbde31e8ec",
   "observations": {
     "engine_version": "freqtradeorg/freqtrade:2026.7",
     "image_digest": "sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643",
     "python_version": "3.14.6"
   },
   "prospective_evidence": "NONE",
-  "qualification_commit": "af17c3b80dad535b524e5ffbe40bef0785b3f605",
+  "qualification_commit": "909bf5fa551e9cb4351de6eb40cc42f9cbe28cbd",
   "qualification_result": {
-    "lane_archive_name": "l1-qualification-af17c3b8",
+    "lane_archive_name": "l1-qualification-909bf5fa",
     "preflight": "PASS",
     "preflight_checks_passed": 16,
     "properties_evidenced": [
@@ -27,8 +27,8 @@
     "reconciliation": "PASS"
   },
   "real_money_authorized": false,
-  "role": "FP-CONTROL-2",
+  "role": "FP-CONTROL-3",
   "schema_version": "1.0.0",
-  "semantic_identity_digest": "4e0c48359c312efb06993b4d3f9972e10abfd84368f23a0c949da1deffa43f34",
+  "semantic_identity_digest": "04578497dc515a87c404e10fac61e9c451ff35f4097667eadb549da303f7dfba",
   "t0_relation_of_every_record": "T0_NOT_FROZEN"
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": "2026-09-21T17:03:41Z",
+  "published_utc": "2026-09-22T18:02:56Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
@@ -197,6 +197,44 @@
           "decision": 2056,
           "incident": 5,
           "input": 2056,
+          "trade": 0
+        },
+        "chain_problems": []
+      }
+    },
+    {
+      "archive_name": "l1-qualification-909bf5fa",
+      "role": "FP-CONTROL-3",
+      "cohort_id": null,
+      "lane_status_at_archival": "NOT_STARTED",
+      "reason": "L1 pre-T0 qualification lane for the successor control, source commit 909bf5fa551e9cb4351de6eb40cc42f9cbe28cbd. Preflight 16/16 PASS and reconciliation 14/14 PASS at that commit while live; certificate b339c995943649dd sealed from this lane before it was stopped. Never credited: contract section 4.",
+      "archived_utc": "2026-09-22T18:02:44Z",
+      "verified_utc": "2026-09-22T18:02:56Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-3",
+      "file_count": 7,
+      "total_bytes": 6364145,
+      "files": {
+        "evidence/.fp_capture.lock": "ef67791678c429a0c492bf4254c1fd6f4b369b67f775df8cfcd9fdf82235c6db",
+        "evidence/capture_runtime.json": "bc53bdf7fb4225e7bcbf791cbf9f653ce7d8d5cd450fe0010d60b3f4fabbf2e4",
+        "evidence/paper_decision_ledger.jsonl": "d6213075aa9e914e0dd6607100a8b495f3a0f6e1421d0610bf0ac6e4bddc0a89",
+        "evidence/paper_incident_ledger.jsonl": "3e47a7b2eaf5cdf8a381543bf6fd3ad5b8966082898bfce9f3ea3cf17b639b8a",
+        "evidence/paper_input_ledger.jsonl": "6b24967cc16d94209db7cb92890cd9a1beb0db162a0ff8144fb691508a07f39d",
+        "logs/freqtrade.log": "3db36a033c41446a40abab226a2941e26b7a1b1774ead9365aac72363a95fe84",
+        "tradesv3.sqlite": "a6f3b8d16105f1eb2f36be4efa751716784d0d49688b73a9385e37ba0d6f06ba"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "b3788f08bf7ed8d18c904db8b0fd91fe42dda231ee0dceea3b16801bd595eb83",
+          "incident": "3db2c078b0aa4c8561ed8a3d076aec3aae36ddc8578e9ccaf50d46131335cb62",
+          "input": "5fbfad293a974a0b0caf466f71f23721689543d3f9c19c9ff494956ef278eec6",
+          "trade": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "daily_pack_digest": "11c877ed76b175a9f26634f4ea2c257066755927e6ea5c3f83be91c4001217eb",
+        "counts": {
+          "decision": 2000,
+          "incident": 3,
+          "input": 2000,
           "trade": 0
         },
         "chain_problems": []

@@ -124,17 +124,12 @@ S4_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-}
+# PR #26, merged. Two parents: 66ec5da2 (main before) + b7f8f992 (the branch).
+RECOVERY_MERGE = "909bf5fa551e9cb4351de6eb40cc42f9cbe28cbd"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-BRANCH_SCOPE: dict[str, str] = {
+# Every path the recovery transaction touched → the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+RECOVERY_SCOPE: dict[str, str] = {
     "research/fp/preflight.py": "recovery — the restart drill moves to the lifecycle point "
                                 "where it can be true; nothing deleted",
     "scripts/validate_activation.py": "recovery — the validator can attach the runtime it validates",
@@ -162,6 +157,43 @@ BRANCH_SCOPE: dict[str, str] = {
                                            "leaving it for CLOSED is a closure",
     "tests/test_p2_freeze_t0.py": "recovery — a closed row is a lawful third state",
     "tests/test_p2_scope_audit.py": "recovery — this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "research/schema/p2_qualification_binding.schema.json":
+        "S8 — the binding may name the successor control",
+    "research/fp/records/p2_qualification_binding.json":
+        "S8 — the class-O binding of the fresh Mq and certificate",
+    "tests/test_p2_qualification_binding.py":
+        "S8 — the binding's claims are recomputed against the run that produced them",
+    "research/fp/records/evidence_digest_publication.json":
+        "S8 — Tier 2 digest of the sealed FP-CONTROL-3 qualification lane",
+    "research/schema/evidence_digest_publication.schema.json":
+        "S8 — the publication may name the successor control",
+    "tests/test_p2_t0_authority_gate.py":
+        "S8 — the gate's controls are driven at the role actually under authority",
+    "tests/test_p2_freeze_t0.py":
+        "S8 — the live authorization assertion checks agreement, not a fixture's cohort name",
+    "docs/p2/OWNER_T0_AUTHORIZATION.md":
+        "S8 — the Owner's T0 authorization for the successor control",
+    ".github/gates/check_t0_authority.py":
+        "S8 — the gate judges the role under authority, not a hardcoded cohort",
+    "docs/p2/S8_SUCCESSOR_QUALIFICATION.md": "S8 stage record",
+    "tests/test_p2_scope_audit.py": "S8 — the recovery pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -647,7 +679,19 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
 
     binding = json.loads(Path("research/fp/records/p2_qualification_binding.json")
                          .read_text(encoding="utf-8"))
-    assert granted["ROLE"][0] == binding["role"] == "FP-CONTROL-2"
+    # The two records must name the SAME role, and it must be a role the
+    # registry still has open. Naming a literal cohort here would have to be
+    # edited at every successor, and an assertion that has to be edited to keep
+    # passing is not holding anything: what matters is that the Owner's grant
+    # and the binding agree, and that they agree about a row that can still be
+    # frozen rather than one whose T0 is already history.
+    assert granted["ROLE"][0] == binding["role"]
+    registry = json.loads(Path("research/fp/records/forward_paper_cohort_registry.json")
+                          .read_text(encoding="utf-8"))
+    open_roles = {row["role"] for row in registry["instances"] if row.get("status") != "CLOSED"}
+    assert binding["role"] in open_roles, (
+        f"the authorization and binding name {binding['role']}, which is not an open row"
+    )
     assert granted["QUALIFICATION_COMMIT"][0] == binding["qualification_commit"]
     assert granted["QUALIFICATION_CERTIFICATE_SHA256"][0] == binding["certificate_sha256"]
     assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"
@@ -715,7 +759,7 @@ def test_a_qualification_binding_if_it_exists_binds_and_does_not_authorize():
 
     jsonschema.validate(record, schema)
     assert record["real_money_authorized"] is False
-    assert record["role"] == "FP-CONTROL-2"
+    assert record["role"] == "FP-CONTROL-3"
     assert record.get("t0_relation_of_every_record", "T0_NOT_FROZEN") == "T0_NOT_FROZEN"
     assert record.get("prospective_evidence", "NONE") == "NONE"
     for forbidden in ("t0_utc", "cohort_id", "authorization", "authorized", "expires_utc"):

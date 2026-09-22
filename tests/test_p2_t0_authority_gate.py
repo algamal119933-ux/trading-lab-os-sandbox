@@ -29,7 +29,7 @@ import conftest
 import freeze_t0
 from fp import registry_law as fp_law
 
-ROLE = "FP-CONTROL-2"
+ROLE = "FP-CONTROL-3"
 
 
 def _run(root: Path, *args: str) -> str:

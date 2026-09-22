@@ -50,7 +50,7 @@
         "properties": {
           "archive_name": { "type": "string", "minLength": 1 },
           "role": {
-            "enum": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CANDIDATE-A", "FP-CANDIDATE-B"]
+            "enum": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CONTROL-3", "FP-CANDIDATE-A", "FP-CANDIDATE-B"]
           },
           "cohort_id": { "type": ["string", "null"] },
           "lane_status_at_archival": {

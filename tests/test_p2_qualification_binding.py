@@ -36,6 +36,10 @@ from fp import semantic_identity as fp_semantic
 
 BINDING_PATH = Path("research/fp/records/p2_qualification_binding.json")
 SCHEMA_PATH = Path("research/schema/p2_qualification_binding.schema.json")
+# The artifact the CURRENT binding pins. It moves when a new qualification is
+# sealed, because a certificate is the product of one run and a later run
+# produces a different one.
+CERTIFICATE_PATH = Path("artifacts/p2-s8-qualification/certificate.json")
 
 pytestmark = pytest.mark.skipif(
     not BINDING_PATH.exists(),
@@ -94,7 +98,7 @@ def test_the_binding_claims_a_passing_pre_t0_qualification_and_nothing_more(bind
     assert binding["t0_relation_of_every_record"] == "T0_NOT_FROZEN"
     assert binding["prospective_evidence"] == "NONE"
     assert binding["real_money_authorized"] is False
-    assert binding["role"] == "FP-CONTROL-2"
+    assert binding["role"] == "FP-CONTROL-3"
 
 
 def test_the_binding_does_not_authorize(binding):
@@ -136,7 +140,13 @@ def test_the_certificate_is_pinned_by_digest_and_is_not_in_git(binding):
     tracked = _git("ls-files").stdout.split()
     assert not any("certificate" in path for path in tracked)
     # And if this host still has the artifact, its bytes must be the pinned ones.
-    certificate = Path("artifacts/p2-s3-qualification/certificate.json")
+    #
+    # The path names THIS qualification's artifact, not "a certificate somewhere":
+    # earlier qualifications' certificates are still on the host under their own
+    # directories, and comparing one of those against the pin would fail for the
+    # correct reason expressed as the wrong claim. Superseded certificates are
+    # history and are neither re-hashed nor removed.
+    certificate = CERTIFICATE_PATH
     if certificate.exists():
         import hashlib
 
