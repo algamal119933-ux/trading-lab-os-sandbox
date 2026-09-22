@@ -53,7 +53,7 @@ def committed_registry() -> dict:
     return json.loads(COHORT_REGISTRY.read_text(encoding="utf-8"))
 
 
-def pre_t0_registry(role: str = "FP-CONTROL-2") -> dict:
+def pre_t0_registry(role: str = "FP-CONTROL-3") -> dict:
     """The committed registry, with ``role`` forced to its pre-freeze state.
 
     A test that drives a mechanism requiring a pre-T0 row must SAY it needs one.

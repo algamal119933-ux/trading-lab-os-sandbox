@@ -47,6 +47,10 @@ freqtrade/user_data/fp-control-1/
 # forward-paper protocol's own clean-worktree stop condition depends on.
 freqtrade/user_data/fp-control-2/
 
+# And the successor control the registry now declares. Listed literally for the
+# reason stated above: `fp-control-*/` would also hide lanes nobody authorised.
+freqtrade/user_data/fp-control-3/
+
 # Disposable lanes built by the adversarial tests, and nothing else.
 # `lane.resolve_lane` insists a lane root live under this directory, so a test
 # that exercises archival has nowhere else to build one, and a test that fails

@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-18T16:26:32Z",
+  "registry_updated_utc": "2026-09-21T17:30:00Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
-  "fp_run_active": true,
+  "fp_run_active": false,
   "adopted_prior_t0": false,
   "instances": [
     {
@@ -96,10 +96,10 @@
     {
       "role": "FP-CONTROL-2",
       "cohort_id": "FP-CONTROL-2-20260920T120000Z",
-      "status": "RUNNING",
+      "status": "CLOSED",
       "t0_utc": "2026-09-20T12:00:00Z",
-      "closed_utc": null,
-      "closure_reason": null,
+      "closed_utc": "2026-09-21T17:30:00Z",
+      "closure_reason": "ACTIVATION_CONTRACT_UNSATISFIABLE",
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
         "source_commit": "3924986af8a709059a61a90aeb308999e1e3d02e",
@@ -161,7 +161,80 @@
           "description": "T0 frozen for FP-CONTROL-2 under the P2 contract. Authority is the Owner-merged docs/p2/OWNER_T0_AUTHORIZATION.md read from git at 3924986af8a7, naming qualification commit af17c3b80dad and certificate sha256 9780df85a8d0, which matches the merged S3b binding. SEMANTIC_IDENTITY(af17c3b8) == SEMANTIC_IDENTITY(3924986a) == 4e0c48359c31, so the declared source commit and the commit the runtime will stamp run the same system. The lane was verified empty before this entry was written. This entry records the freeze; it changes no trading semantics.",
           "replay_parity_before_after": null
         }
-      ]
+      ],
+      "outcome": {
+        "paper_trading_operational_capability": "NOT_PROVEN",
+        "full_trade_lifecycle": "NOT_OBSERVED",
+        "prospective_paper_edge": "NOT_EVALUATED",
+        "measurable_post_t0_evidence": "AVAILABLE",
+        "trading_semantics_changed": false,
+        "change_model_classification": "NOT_APPLICABLE_TO_TRADING_SEMANTICS / OWNER_EVIDENCE_DISPOSITION",
+        "owner_disposition": "Section 11 class B - a repair needing a tracked runtime change. The Owner declined to certify activation from narrative evidence and declined to weaken the activation PASS condition, and authorised one bounded technical replacement for this named defect.",
+        "detail": "Activation certification was not achievable under the frozen activation contract. Its requirements were internally incompatible: validate_activation check 1 passes only when the lane holds exactly one run_started, while preflight check 16 - required at 16/16 by contract section 7 - reported UNPROVEN until the same lane held at least two, and UNPROVEN blocks as FAIL does. Both read the evidence_dir this row declares, so no lane could satisfy both and no operator action could have produced a passing validation. Repairing either check means editing scripts/validate_activation.py or research/fp/preflight.py, both inside RUNTIME_TREE; such a commit is semantically different from the declared source_commit 3924986a, so evidence stamped against it fails reconcile's registry_source_commit_equivalence - CI rejected exactly such a commit. The frozen cohort could not consume the repair it needed. THE EVIDENCE REMAINED ATTRIBUTABLE AND INTACT: all four chains verify from genesis over 2056 records, reconciliation PASS across all fourteen findings, one role, one cohort id, one source commit 0e920db6, paper-only authority held, no PRE_T0 record was LIVE, the first credited bar closed exactly at T0, no activation gap occurred, and 60 credited POST_T0 + LIVE decisions remain readable in the sealed archive l2-cohort-20260920T120000Z, pack digest c0356770a21e6910, replicated and re-verified on the second device. No evidence corruption was found or is claimed. No Strategy, Risk or Dataset drift occurred. The trade ledger is empty because the frozen strategy signalled hold on every live bar; that is an OBSERVED RESULT and explicitly not the defect - section 11 class F is that a result never invalidates a cohort. This cohort is not reopened or reused; its T0, cohort id, source identity, evidence, incidents, digests and archive are immutable history, and no record in it may be credited to any successor."
+      }
+    },
+    {
+      "role": "FP-CONTROL-3",
+      "cohort_id": null,
+      "status": "NOT_STARTED",
+      "t0_utc": null,
+      "closed_utc": null,
+      "closure_reason": null,
+      "runtime_identity": {
+        "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
+        "source_commit": null,
+        "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
+        "params_sha256": null,
+        "config_sha256": "d1d078c63adc5e4283632a1c3e65df8cd0d7c23a249575054491c6356d97a9ff",
+        "engine_version": "freqtradeorg/freqtrade:2026.7",
+        "image_digest": null,
+        "python_version": null,
+        "pairs": [
+          "BTC/USDT",
+          "ETH/USDT"
+        ],
+        "timeframe": "1h",
+        "detail_timeframe": "5m",
+        "fee_model": {
+          "per_side_ratio": 0.001,
+          "slippage": "none modelled"
+        },
+        "sizing": {
+          "dry_run_wallet": 100,
+          "stake_amount": 10,
+          "stake_currency": "USDT"
+        },
+        "max_open_trades": 2,
+        "order_policy": {
+          "execution": "freqtrade dry-run simulation only; no live order route exists",
+          "entry_pricing": "order book, price_side 'other', order_book_top 1",
+          "exit_pricing": "order book, price_side 'other', order_book_top 1",
+          "unfilled_timeout_minutes": 10,
+          "fee_per_side_ratio": 0.001,
+          "slippage_model": "none modelled",
+          "latency_model": "none modelled",
+          "partial_fill_model": "none modelled",
+          "risk_limits": "stoploss -0.25 and max_open_trades 2 only",
+          "additional_risk_limits": "none. No further limit is introduced before T0: an untested parameter added here would be presented as a control while never having been evaluated."
+        },
+        "feature_sources": [
+          "binance spot public OHLCV 1h"
+        ],
+        "paper_fill_model_version": "FREQTRADE_2026.7_DRYRUN_ORDERBOOK_V1",
+        "environment_variable_allowlist": [
+          "FREQTRADE_API_USER",
+          "FREQTRADE_API_PASSWORD",
+          "FREQTRADE_JWT_SECRET",
+          "FREQTRADE_WS_TOKEN",
+          "FREQTRADE_IMAGE"
+        ],
+        "bot_name": "fp-control-3",
+        "db_path": "/freqtrade/user_data/fp-control-3/tradesv3.sqlite",
+        "wallet": 100,
+        "log_path": "/freqtrade/user_data/fp-control-3/logs/freqtrade.log",
+        "evidence_dir": "/freqtrade/user_data/fp-control-3/evidence"
+      },
+      "change_log": []
     }
   ],
   "real_money_authorized": false,

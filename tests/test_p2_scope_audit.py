@@ -135,13 +135,33 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 BRANCH_SCOPE: dict[str, str] = {
-    "tests/test_p2_freeze_t0.py":
-        "S6 — the lawful-path T0 is computed, not a constant that expires",
-    "tests/test_p2_archival.py":
-        "S6 — the disposable lane gets a disposable bot name, so a live cohort's "
-        "containers do not fail tests about another lane",
-    "docs/p2/S6_ACTIVATION.md": "S6 — the activation record",
-    "tests/test_p2_scope_audit.py": "S6 — this branch's scope",
+    "research/fp/preflight.py": "recovery — the restart drill moves to the lifecycle point "
+                                "where it can be true; nothing deleted",
+    "scripts/validate_activation.py": "recovery — the validator can attach the runtime it validates",
+    "research/schema/forward_paper_cohort_registry.schema.json":
+        "recovery — one successor control role, FP-CONTROL-3",
+    "research/fp/records/forward_paper_cohort_registry.json":
+        "recovery — FP-CONTROL-2 closed class B; FP-CONTROL-3 created NOT_STARTED",
+    "research/fp/records/evidence_digest_publication.json":
+        "recovery — Tier 2 digest of the sealed FP-CONTROL-2 cohort lane",
+    "docs/p2/FP_CONTROL_2_COHORT_CLOSURE.md": "recovery — the cohort closure record",
+    "docs/p2/OWNER_REPLACEMENT_AUTHORIZATION.md": "recovery — the bounded replacement grant",
+    "docs/p2/P2_RECOVERY.md": "recovery — what this transaction is and why it is one",
+    ".gitignore": "recovery — the successor lane, listed literally",
+    ".github/workflows/ci.yml": "recovery — the overlay render names the runnable control",
+    "tests/conftest.py": "recovery — the default runnable control is the successor",
+    "tests/test_p2_activation.py": "recovery — positive and negative initial-activation controls",
+    "tests/test_fp_capture.py": "recovery — repointed to the runnable control",
+    "tests/test_fp_lane_adversarial.py": "recovery — repointed to the runnable control",
+    "tests/test_fp_lane_io_adversarial.py": "recovery — repointed to the runnable control",
+    "tests/test_fp_overlay.py": "recovery — repointed to the runnable control",
+    "tests/test_fp_successor_instance.py": "recovery — repointed, and the row selected by role",
+    "tests/test_p2_window_law.py": "recovery — repointed to the runnable control",
+    "tests/test_p2_gitignore_boundary.py": "recovery — fp-control-3 declared; fp-control-4 undeclared",
+    ".github/gates/check_t0_authority.py": "recovery — entering RUNNING is a freeze; "
+                                           "leaving it for CLOSED is a closure",
+    "tests/test_p2_freeze_t0.py": "recovery — a closed row is a lawful third state",
+    "tests/test_p2_scope_audit.py": "recovery — this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -530,8 +550,24 @@ def test_the_fp_control_1_row_is_byte_identical():
         # branch. The FP-CONTROL-1 assertion above still holds and has already
         # run: a freeze that moved the closed row would fail it here.
         return
-    assert blob_at(base, registry_path) == blob_at("HEAD", registry_path)
-    assert registry_path not in changed_paths()
+    if registry_path not in changed_paths():
+        assert blob_at(base, registry_path) == blob_at("HEAD", registry_path)
+        return
+    # The registry did change. The freeze is not the only lawful writer: a
+    # cohort CLOSURE is another, and FP-CONTROL-1's own closure was exactly such
+    # a commit. What no branch may do is move an existing row's FROZEN IDENTITY,
+    # so that is what is checked instead of forbidding the file outright.
+    before_reg, after_reg = registry_at(base), registry_at("HEAD")
+    for row in before_reg["instances"]:
+        role = row["role"]
+        after_row = next((r for r in after_reg["instances"] if r["role"] == role), None)
+        assert after_row is not None, f"{role} disappeared from the registry"
+        for field in ("t0_utc", "cohort_id"):
+            assert row.get(field) == after_row.get(field), (
+                f"{role}.{field} moved: {row.get(field)!r} -> {after_row.get(field)!r}")
+        assert (row.get("runtime_identity") or {}).get("source_commit") == \
+            (after_row.get("runtime_identity") or {}).get("source_commit"), \
+            f"{role} source_commit moved"
 
 
 # -- the state layer: answerable in any checkout ----------------------------
@@ -549,7 +585,10 @@ def test_no_real_money_capability():
     assert paper_guard.main([]) == 0
 
 
-FROZEN_FIELDS = ("t0_utc", "cohort_id", "status")
+# A T0 is written by t0_utc and cohort_id appearing and by a row ENTERING
+# RUNNING. Leaving RUNNING for CLOSED is a lawful cohort closure, checked
+# separately below, so status is not in this tuple.
+FROZEN_FIELDS = ("t0_utc", "cohort_id")
 
 
 def _fp_control_2(rev: str) -> dict:
@@ -575,6 +614,8 @@ def test_this_branch_created_no_t0():
     base, head = _fp_control_2(merge_base()), _fp_control_2("HEAD")
     moved = {f: (base.get(f), head.get(f)) for f in FROZEN_FIELDS if base.get(f) != head.get(f)}
     assert moved == {}, f"this branch moves {sorted(moved)} without being a freeze candidate"
+    assert not (head.get("status") == "RUNNING" and base.get("status") != "RUNNING"), (
+        "this branch puts a row into RUNNING without being a freeze candidate")
     assert base["runtime_identity"].get("source_commit") == \
         head["runtime_identity"].get("source_commit"), "this branch moves the declared source_commit"
 
@@ -623,7 +664,11 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
     if row["status"] == "NOT_STARTED":
         assert row["t0_utc"] is None and row["cohort_id"] is None
         assert row["change_log"] == []
-        assert registry["fp_run_active"] is False
+    elif row["status"] == "CLOSED":
+        # A closed cohort keeps its frozen identity and carries an outcome.
+        assert row["t0_utc"] and row["cohort_id"]
+        assert row["cohort_id"] == _law.cohort_id_for(row["role"], row["t0_utc"])
+        assert row.get("outcome"), "a closed cohort must record what it established"
     else:
         assert row["status"] == "RUNNING"
         assert row["cohort_id"] == _law.cohort_id_for("FP-CONTROL-2", row["t0_utc"])
@@ -643,8 +688,11 @@ def test_this_branch_created_no_cohort():
         return
     base, head = _fp_control_2(merge_base()), _fp_control_2("HEAD")
     assert base.get("cohort_id") == head.get("cohort_id"), "this branch moves the cohort id"
-    assert base.get("change_log") == head.get("change_log"), "this branch writes the change log"
-    assert registry_at(merge_base())["fp_run_active"] == registry_at("HEAD")["fp_run_active"]
+    if head.get("status") != "CLOSED":
+        # A closure legitimately appends its own class-O entry and clears the
+        # run flag; what it may never do is invent a cohort.
+        assert base.get("change_log") == head.get("change_log"), "this branch writes the change log"
+        assert registry_at(merge_base())["fp_run_active"] == registry_at("HEAD")["fp_run_active"]
     assert registry_at("HEAD")["paper_alpha_cohort"] == "NONE"
     assert registry_at("HEAD")["real_money_authorized"] is False
 

@@ -29,7 +29,7 @@ from fp import admission, capture, lane
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
 SCHEMA_PATH = Path("research/schema/forward_paper_cohort_registry.schema.json")
 CLOSED = "FP-CONTROL-1"
-SUCCESSOR = "FP-CONTROL-2"
+SUCCESSOR = "FP-CONTROL-3"
 HOST_USER_DATA = lane.HOST_USER_DATA
 
 
@@ -132,7 +132,7 @@ def test_the_host_twin_of_another_lane_collides(registry):
 
 
 def test_a_prefix_neighbour_lane_is_rejected_for_a_valid_role():
-    """`fp-control-2-evil` shares a prefix with the real lane and is not it.
+    """`fp-control-3-evil` shares a prefix with the real lane and is not it.
 
     The earlier version of this proof passed for the wrong reason — it supplied
     an unknown role, so selection stopped before the path was ever considered.
@@ -140,11 +140,11 @@ def test_a_prefix_neighbour_lane_is_rejected_for_a_valid_role():
     """
     rendered = rendered_overlay()
     for _, volume in writable_sources(rendered):
-        volume["source"] = str(HOST_USER_DATA / "fp-control-2-evil")
-        volume["target"] = "/freqtrade/user_data/fp-control-2-evil"
+        volume["source"] = str(HOST_USER_DATA / "fp-control-3-evil")
+        volume["target"] = "/freqtrade/user_data/fp-control-3-evil"
     problems = check_fp_overlay.check(rendered, SUCCESSOR)
     assert problems, "a prefix-neighbour lane must be rejected"
-    assert any("fp-control-2-evil" in p for p in problems), problems
+    assert any("fp-control-3-evil" in p for p in problems), problems
 
 
 def test_prefix_neighbours_are_not_containment(registry):
@@ -189,7 +189,7 @@ def test_an_evidence_dir_argument_spoof_is_rejected():
     rendered = rendered_overlay()
     command = rendered["services"]["fp-capture"]["command"]
     rendered["services"]["fp-capture"]["command"] = [
-        "--evidence-dir=/freqtrade/user_data/fp-control-2/evidence-evil"
+        "--evidence-dir=/freqtrade/user_data/fp-control-3/evidence-evil"
         if str(c).startswith("--evidence-dir=") else c
         for c in command
     ]
@@ -198,8 +198,8 @@ def test_an_evidence_dir_argument_spoof_is_rejected():
 
 
 def test_argument_parsing_returns_exact_values():
-    parsed = check_fp_overlay.parse_args(["python", "x.py", "--role=FP-CONTROL-2", "--evidence-dir", "/a/b"])
-    assert parsed["--role"] == "FP-CONTROL-2"
+    parsed = check_fp_overlay.parse_args(["python", "x.py", "--role=FP-CONTROL-3", "--evidence-dir", "/a/b"])
+    assert parsed["--role"] == "FP-CONTROL-3"
     assert parsed["--evidence-dir"] == "/a/b"
 
 
@@ -238,7 +238,7 @@ def test_a_paused_row_may_not_start_or_capture_but_may_be_stopped(registry):
     target = row(paused, SUCCESSOR)
     target["status"] = "PAUSED"
     target["t0_utc"] = "2026-09-14T00:00:00Z"
-    target["cohort_id"] = "FP-CONTROL-2-20260914T000000Z"
+    target["cohort_id"] = "FP-CONTROL-3-20260914T000000Z"
     target["runtime_identity"]["source_commit"] = "0" * 40
 
     with pytest.raises(lane.LaneError) as excinfo:
@@ -276,7 +276,7 @@ def test_an_empty_started_identity_field_is_rejected(registry, field):
     target["status"] = "RUNNING"
     doc["fp_run_active"] = True
     target["t0_utc"] = "2026-09-14T00:00:00Z"
-    target["cohort_id"] = "FP-CONTROL-2-20260914T000000Z"
+    target["cohort_id"] = "FP-CONTROL-3-20260914T000000Z"
     target["runtime_identity"]["source_commit"] = "0" * 40
     if field == "source_commit":
         target["runtime_identity"][field] = ""
@@ -291,7 +291,7 @@ def test_a_well_formed_started_row_still_validates(registry):
     target["status"] = "RUNNING"
     doc["fp_run_active"] = True
     target["t0_utc"] = "2026-09-14T00:00:00Z"
-    target["cohort_id"] = "FP-CONTROL-2-20260914T000000Z"
+    target["cohort_id"] = "FP-CONTROL-3-20260914T000000Z"
     target["runtime_identity"]["source_commit"] = "a" * 40
     assert list(validator().iter_errors(doc)) == [], "the repair must not forbid a legitimate started row"
 
@@ -394,10 +394,10 @@ def test_the_activation_pack_has_no_runnable_registry_write(tmp_path):
 
 def test_the_successor_lane_resolves_in_both_namespaces(registry):
     resolved = lane.resolve_lane(SUCCESSOR, registry, allowed_statuses=lane.EXECUTABLE_STATUSES)
-    assert resolved.instance_dir == "fp-control-2"
-    assert resolved.bot_name == "fp-control-2"
-    assert str(resolved.container_evidence_dir) == "/freqtrade/user_data/fp-control-2/evidence"
-    assert resolved.host_evidence_dir == HOST_USER_DATA / "fp-control-2" / "evidence"
+    assert resolved.instance_dir == "fp-control-3"
+    assert resolved.bot_name == "fp-control-3"
+    assert str(resolved.container_evidence_dir) == "/freqtrade/user_data/fp-control-3/evidence"
+    assert resolved.host_evidence_dir == HOST_USER_DATA / "fp-control-3" / "evidence"
     assert resolved.matches_evidence_dir(resolved.container_evidence_dir)
     assert resolved.matches_evidence_dir(resolved.host_evidence_dir)
     # and the host path a real qualification would use is accepted by the runtime gate
@@ -431,7 +431,7 @@ def test_every_component_resolves_the_lane_through_one_module():
 REPO_ROOT_LITERAL = Path(__file__).resolve().parent.parent
 HOST_USER_DATA_LITERAL = REPO_ROOT_LITERAL / "freqtrade" / "user_data"
 CLOSED_LANE_LITERAL = HOST_USER_DATA_LITERAL / "fp-control-1"
-SUCCESSOR_LANE_LITERAL = HOST_USER_DATA_LITERAL / "fp-control-2"
+SUCCESSOR_LANE_LITERAL = HOST_USER_DATA_LITERAL / "fp-control-3"
 
 
 def all_service_names(rendered: dict) -> list[str]:
@@ -480,8 +480,8 @@ def test_shared_read_only_mounts_remain_acceptable():
     "argument,spoof",
     [
         ("--strategy", "BaselineEmaRegimeV1Evil"),
-        ("--db-url", "sqlite:////freqtrade/user_data/fp-control-2/tradesv3.sqlite-evil"),
-        ("--logfile", "/freqtrade/user_data/fp-control-2/logs/freqtrade.log-evil"),
+        ("--db-url", "sqlite:////freqtrade/user_data/fp-control-3/tradesv3.sqlite-evil"),
+        ("--logfile", "/freqtrade/user_data/fp-control-3/logs/freqtrade.log-evil"),
         ("--config", "/freqtrade/user_data/config.json-evil"),
     ],
 )
@@ -514,7 +514,7 @@ def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
     registry = conftest.pre_t0_registry(SUCCESSOR)
     paused = row(registry, SUCCESSOR)
     paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
-                  cohort_id="FP-CONTROL-2-20260914T000000Z")
+                  cohort_id="FP-CONTROL-3-20260914T000000Z")
     paused["runtime_identity"]["source_commit"] = "0" * 40
     patched = tmp_path / "registry.json"
     patched.write_text(json.dumps(registry), encoding="utf-8")
@@ -547,14 +547,14 @@ def test_the_paused_stop_path_works_at_the_real_entrypoint(tmp_path):
     assert result.returncode == 0, f"the stop script must handle a PAUSED row: {result.stderr}"
     assert marker.exists(), "the stop script never reached the compose command"
     assert "down" in marker.read_text(), marker.read_text()
-    assert "Stopped FP-CONTROL-2" in result.stdout
+    assert "Stopped FP-CONTROL-3" in result.stdout
 
 
 def test_paused_refuses_capture_at_the_capture_entrypoint(tmp_path, monkeypatch):
     registry = conftest.pre_t0_registry(SUCCESSOR)
     paused = row(registry, SUCCESSOR)
     paused.update(status="PAUSED", t0_utc="2026-09-14T00:00:00Z",
-                  cohort_id="FP-CONTROL-2-20260914T000000Z")
+                  cohort_id="FP-CONTROL-3-20260914T000000Z")
     paused["runtime_identity"]["source_commit"] = "0" * 40
     patched = tmp_path / "registry.json"
     patched.write_text(json.dumps(registry), encoding="utf-8")
@@ -674,7 +674,7 @@ def test_preflight_compares_the_stamped_config_hash(tmp_path, monkeypatch):
     ledgers["decision"].append({
         "candle_ts": 1_700_000_000_000,
         "identity": {
-            "runtime_id": "FP-CONTROL-2:fp-control-2", "run_id": "a" * 32, "role": SUCCESSOR,
+            "runtime_id": "FP-CONTROL-3:fp-control-3", "run_id": "a" * 32, "role": SUCCESSOR,
             "cohort_id": None, "source_commit": "0" * 40,
             "strategy_sha256": capture.sha256_file(capture.STRATEGY_PATH),
             "config_sha256": "d" * 64,          # not the config on disk
@@ -725,7 +725,7 @@ def test_host_container_mapping_against_independently_written_paths():
     assert resolved.host_evidence_dir == SUCCESSOR_LANE_LITERAL / "evidence"
     assert resolved.host_db_path == SUCCESSOR_LANE_LITERAL / "tradesv3.sqlite"
     assert resolved.host_log_path == SUCCESSOR_LANE_LITERAL / "logs" / "freqtrade.log"
-    assert str(resolved.container_evidence_dir) == "/freqtrade/user_data/fp-control-2/evidence"
+    assert str(resolved.container_evidence_dir) == "/freqtrade/user_data/fp-control-3/evidence"
     assert lane.container_to_host("/freqtrade/user_data/fp-control-1/evidence") == \
         CLOSED_LANE_LITERAL / "evidence"
 
@@ -841,25 +841,25 @@ def test_an_escaped_lane_root_is_refused_by_every_consumer(tmp_path):
     repo = repo_copy(tmp_path)
     escape = tmp_path / "elsewhere"
     escape.mkdir()
-    (repo / "freqtrade/user_data/fp-control-2").symlink_to(escape, target_is_directory=True)
+    (repo / "freqtrade/user_data/fp-control-3").symlink_to(escape, target_is_directory=True)
 
     # 1. the resolver itself refuses to produce a lane at all
     resolver = run_in(
         repo, sys.executable, "-c",
         "import sys; sys.path.insert(0,'research');"
         "from fp import lane;"
-        "\ntry:\n lane.resolve_lane('FP-CONTROL-2'); print('ACCEPTED')\nexcept lane.LaneError as e: print('REFUSED')",
+        "\ntry:\n lane.resolve_lane('FP-CONTROL-3'); print('ACCEPTED')\nexcept lane.LaneError as e: print('REFUSED')",
     )
     assert resolver.stdout.strip() == "REFUSED", resolver
 
     # 2. the launcher's resolver CLI refuses
-    instance = run_in(repo, sys.executable, "scripts/fp_instance.py", "FP-CONTROL-2")
+    instance = run_in(repo, sys.executable, "scripts/fp_instance.py", "FP-CONTROL-3")
     assert instance.returncode != 0, instance.stdout
 
     # 3. capture refuses, and writes nothing into the escaped directory
     capture_run = run_in(
         repo, sys.executable, "research/fp/capture.py",
-        "--role", "FP-CONTROL-2",
+        "--role", "FP-CONTROL-3",
         "--evidence-dir", str(escape / "evidence"),
         "--config", "freqtrade/user_data/config.json",
         "--cycles", "1",
@@ -892,7 +892,7 @@ def test_the_runtime_config_identity_cannot_be_overridden():
     # Behavioural: capture refuses to stamp evidence against the template.
     result = subprocess.run(
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
-         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", "freqtrade/user_data/config.paper.json.example", "--cycles", "1"],
         capture_output=True, text=True, timeout=120,
     )
@@ -945,7 +945,7 @@ def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
     proofs depend on.
     """
     before = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
-    lane = Path("freqtrade/user_data/fp-control-2")
+    lane = Path("freqtrade/user_data/fp-control-3")
     # What the lane looked like before this test — which, during a qualification
     # run, is a live directory full of evidence. The question is whether this
     # test moved it, not whether it exists: asserting absence made a legitimate
@@ -957,7 +957,7 @@ def test_destructive_proofs_use_a_disposable_repository_copy(tmp_path):
     assert (repo / "freqtrade/user_data/config.json").exists(), "the copy carries a runtime config"
 
     (repo / "freqtrade/user_data/config.json").write_text("{}", encoding="utf-8")
-    (repo / "freqtrade/user_data/fp-control-2").mkdir(parents=True, exist_ok=True)
+    (repo / "freqtrade/user_data/fp-control-3").mkdir(parents=True, exist_ok=True)
 
     # The authoritative tree must be exactly as it was — not necessarily clean,
     # since a writer may have work in progress, but unchanged by this test.
@@ -994,7 +994,7 @@ def test_capture_requires_the_declared_runtime_config_path(tmp_path):
     decoy.write_bytes(Path("freqtrade/user_data/config.paper.json.example").read_bytes())
     result = subprocess.run(
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
-         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", str(decoy), "--cycles", "1"],
         capture_output=True, text=True, timeout=120,
     )
@@ -1087,7 +1087,7 @@ def test_a_decoy_config_path_is_refused(tmp_path):
     (decoy / "config.json").write_bytes(Path("freqtrade/user_data/config.paper.json.example").read_bytes())
     result = subprocess.run(
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
-         "--evidence-dir", "/freqtrade/user_data/fp-control-2/evidence",
+         "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", str(decoy / "config.json"), "--cycles", "1"],
         capture_output=True, text=True, timeout=120,
     )

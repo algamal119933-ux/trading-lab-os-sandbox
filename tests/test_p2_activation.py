@@ -34,7 +34,7 @@ from fp import ledger as fp_ledger
 from fp import registry_law as fp_law
 
 REGISTRY_PATH = Path("research/fp/records/forward_paper_cohort_registry.json")
-ROLE = "FP-CONTROL-2"
+ROLE = "FP-CONTROL-3"
 TEST_LANE = "fp-testlane-s2activation"
 HOUR_MS = 3_600_000
 COMMIT = "a" * 40
@@ -63,7 +63,7 @@ def lane_env(tmp_path, monkeypatch):
     row = next(item for item in registry["instances"] if item["role"] == ROLE)
     identity = row["runtime_identity"]
     for field in ("db_path", "log_path", "evidence_dir"):
-        identity[field] = identity[field].replace("/fp-control-2/", f"/{TEST_LANE}/")
+        identity[field] = identity[field].replace("/fp-control-3/", f"/{TEST_LANE}/")
 
     # T0 on an exact hour boundary, so "the first boundary at or after T0" is
     # unambiguous and the expected first credited bar can be named exactly.
@@ -98,7 +98,7 @@ def lane_env(tmp_path, monkeypatch):
 
 def stamp(cohort_id: str, *, commit: str = COMMIT, restart: int = 0) -> dict:
     return {
-        "runtime_id": f"{ROLE}:fp-control-2",
+        "runtime_id": f"{ROLE}:fp-control-3",
         "run_id": "run-" + str(restart),
         "role": ROLE,
         "cohort_id": cohort_id,
@@ -366,3 +366,108 @@ def test_a_not_started_row_has_no_activation_to_validate():
     report = activation.validate(ROLE, registry=conftest.pre_t0_registry(ROLE))
     assert report["activation"] == activation.FAIL
     assert "no activation to validate" in report["checks"][0]["detail"]
+
+
+# -- the repaired activation contract: one lawful cohort CAN pass ----------
+
+
+def _attached(monkeypatch, *, preflight_result=activation.PASS):
+    """Stand in for the live endpoints preflight would interrogate."""
+    seen = {}
+
+    def fake_run(*, runtime=None, **kw):
+        seen["ctx"] = runtime
+        return {"preflight": preflight_result, "checks": [], "blocking_checks": []}
+
+    monkeypatch.setattr(activation.fp_preflight, "run", fake_run)
+    return seen
+
+
+def test_one_lawful_fresh_activation_passes_every_check(lane_env, monkeypatch):
+    """The whole point of the repair: a lawful cohort can now be certified.
+
+    Before it, check 1 demanded exactly one run while preflight check 16 demanded
+    at least two, both against this same lane — so no cohort could ever reach
+    exit 0, however healthy. This is the positive control that the contract is
+    satisfiable at all.
+    """
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    _attached(monkeypatch)
+    report = activation.validate(ROLE, source_commit=COMMIT, registry=registry)
+    # Check 7 is reconciliation, which compares the stamped commit against this
+    # repository's HEAD; a synthetic lane stamps a synthetic commit, so it is
+    # excluded here exactly as the clean-activation test above excludes it. Every
+    # other check must pass — including 1 and 8 TOGETHER, which is the pair that
+    # could not both pass before this repair and is the whole point of it.
+    failing = [c for c in report["checks"]
+               if c["result"] != activation.PASS and c["check"] != 7]
+    assert failing == [], failing
+    assert result_of(report, 1) == activation.PASS
+    assert result_of(report, 8) == activation.PASS
+
+
+def test_initial_activation_declares_its_lifecycle_to_preflight(lane_env, monkeypatch):
+    """The lifecycle is stated, not inferred — and it is the initial one."""
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    seen = _attached(monkeypatch)
+    activation.validate(ROLE, source_commit=COMMIT, registry=registry)
+    assert seen["ctx"].lifecycle == activation.fp_preflight.INITIAL_ACTIVATION
+
+
+def test_the_restart_drill_still_demands_a_restart_before_t0(lane_env):
+    """The safety property is not deleted — it moved to where it is meaningful.
+
+    Under PRE_T0_QUALIFICATION, the default and what S3 used, a single-run lane
+    still refuses.
+    """
+    from fp import preflight as fp_preflight
+
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    ctx = fp_preflight.RuntimeContext(evidence_dir=evidence, role=ROLE)
+    assert ctx.lifecycle == fp_preflight.PRE_T0_QUALIFICATION
+    result, detail, _ = fp_preflight._check_restart_drill_real(ctx)
+    assert result == fp_preflight.UNPROVEN
+    assert "restart drill needs the instance stopped and started again" in detail
+
+
+def test_initial_activation_refuses_a_lane_that_already_restarted(lane_env):
+    """The initial lifecycle is not a free pass: two runs fail it."""
+    from fp import ledger as fp_ledger, preflight as fp_preflight
+
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    led = fp_ledger.open_ledgers(evidence)
+    led["incident"].append({"category": "run_started", "detail": "second",
+                            "full_identity": {"restart_counter": 1, "run_id": "b" * 32}})
+    ctx = fp_preflight.RuntimeContext(evidence_dir=evidence, role=ROLE,
+                                      lifecycle=fp_preflight.INITIAL_ACTIVATION)
+    result, detail, _ = fp_preflight._check_restart_drill_real(ctx)
+    assert result == fp_preflight.FAIL
+    assert "exactly one run_started" in detail
+
+
+def test_a_blocked_preflight_still_fails_activation(lane_env, monkeypatch):
+    """Attaching a runtime must not become a way to pass a blocked preflight."""
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    _attached(monkeypatch, preflight_result="BLOCKED")
+    report = activation.validate(ROLE, source_commit=COMMIT, registry=registry)
+    assert report["activation"] == activation.FAIL
+    preflight = next(c for c in report["checks"] if c["name"] == "preflight")
+    assert preflight["result"] == activation.FAIL
+
+
+def test_the_attachment_can_never_redirect_the_lane_or_the_role(lane_env, monkeypatch):
+    """A caller supplies endpoints; it does not get to choose the evidence."""
+    registry, evidence, t0_ms, cohort = lane_env
+    write_lane(evidence, cohort, t0_ms)
+    seen = _attached(monkeypatch)
+    activation.validate(ROLE, source_commit=COMMIT, registry=registry,
+                        runtime=activation.Attachment(freqtrade_url="http://x.invalid"))
+    assert seen["ctx"].role == ROLE
+    assert seen["ctx"].freqtrade_url == "http://x.invalid"
+    assert not hasattr(activation.Attachment(), "evidence_dir")
+    assert not hasattr(activation.Attachment(), "role")

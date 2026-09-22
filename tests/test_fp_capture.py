@@ -24,7 +24,7 @@ from fp import capture as fp_capture
 # The runnable control instance. FP-CONTROL-1 is CLOSED, and selection refuses a
 # closed row, so every loop these tests build must name the pre-T0 successor —
 # which is exactly what a real qualification run does.
-QUALIFYING_ROLE = "FP-CONTROL-2"
+QUALIFYING_ROLE = "FP-CONTROL-3"
 
 
 def make_loop(*args, **kwargs):
