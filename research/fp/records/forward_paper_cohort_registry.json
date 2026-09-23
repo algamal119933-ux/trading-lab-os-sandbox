@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-21T17:30:00Z",
+  "registry_updated_utc": "2026-09-23T18:51:56Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
-  "fp_run_active": false,
+  "fp_run_active": true,
   "adopted_prior_t0": false,
   "instances": [
     {
@@ -175,14 +175,14 @@
     },
     {
       "role": "FP-CONTROL-3",
-      "cohort_id": null,
-      "status": "NOT_STARTED",
-      "t0_utc": null,
+      "cohort_id": "FP-CONTROL-3-20260924T120000Z",
+      "status": "RUNNING",
+      "t0_utc": "2026-09-24T12:00:00Z",
       "closed_utc": null,
       "closure_reason": null,
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
-        "source_commit": null,
+        "source_commit": "83c49414cc9eaba9a4e25809672d65d032669616",
         "strategy_sha256": "8c0bc6c5f705fbeabf5d6ce37e651309d8ee3fefb81fdd59490fefab22b021bc",
         "params_sha256": null,
         "config_sha256": "d1d078c63adc5e4283632a1c3e65df8cd0d7c23a249575054491c6356d97a9ff",
@@ -234,7 +234,14 @@
         "log_path": "/freqtrade/user_data/fp-control-3/logs/freqtrade.log",
         "evidence_dir": "/freqtrade/user_data/fp-control-3/evidence"
       },
-      "change_log": []
+      "change_log": [
+        {
+          "utc": "2026-09-24T12:00:00Z",
+          "class": "O",
+          "description": "T0 frozen for FP-CONTROL-3 under the P2 contract. Authority is the Owner-merged docs/p2/OWNER_T0_AUTHORIZATION.md read from git at 83c49414cc9e, naming qualification commit 909bf5fa551e and certificate sha256 b339c9959436, which matches the merged S3b binding. SEMANTIC_IDENTITY(909bf5fa) == SEMANTIC_IDENTITY(83c49414) == 04578497dc51, so the declared source commit and the commit the runtime will stamp run the same system. The lane was verified empty before this entry was written. This entry records the freeze; it changes no trading semantics.",
+          "replay_parity_before_after": null
+        }
+      ]
     }
   ],
   "real_money_authorized": false,
