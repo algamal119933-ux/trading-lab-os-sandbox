@@ -190,12 +190,46 @@ S8_SCOPE: dict[str, str] = {
 }
 
 
+# PR #28, merged. Two parents: e6fa7eeb (main before) + 575997dd (the branch).
+S9A_MERGE = "83c49414cc9eaba9a4e25809672d65d032669616"
+
+# Every path S9a touched → the requirement it satisfies. These entries were
+# BRANCH_SCOPE while the stage was in flight.
+S9A_SCOPE: dict[str, str] = {
+    "tests/conftest.py":
+        "S9a — the live role is resolved from the registry, not named",
+    "tests/test_p2_registry_law.py": "S9a — repointed to the resolved live role",
+    "tests/test_p2_watch_and_seal.py":
+        "S9a — resolved live role, and the lane redirect derives its own segment",
+    "tests/test_p2_freeze_t0.py": "S9a — repointed to the resolved live role",
+    "tests/test_fp_admission.py": "S9a — the pre-T0 fixture is asked for by default",
+    "tests/test_p2_scope_audit.py": "S9a — S8 pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #29, merged. Two parents: 83c49414 (main before) + cc9688e4 (the branch).
+# The T0 freeze transaction for FP-CONTROL-3. Its scope is not this file's
+# ordinary branch map but contract section 6's exact pair, which is why it
+# equals FREEZE_CANDIDATE_SCOPE below: a freeze that had changed anything else
+# would have been refused by scripts/check_freeze_candidate.py before reaching
+# main, and pinning it here says so permanently rather than by exemption.
+S9B_MERGE = "3191285a28823907f62c6eb915327599cd6ed90b"
+
+S9B_SCOPE: dict[str, str] = {
+    "research/fp/records/forward_paper_cohort_registry.json":
+        "S9b — the T0 freeze transaction, audited by scripts/check_freeze_candidate.py",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
     "S4": (S4_MERGE, S4_SCOPE),
     "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
     "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -205,14 +239,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "tests/conftest.py":
-        "S9a — the live role is resolved from the registry, not named",
-    "tests/test_p2_registry_law.py": "S9a — repointed to the resolved live role",
-    "tests/test_p2_watch_and_seal.py":
-        "S9a — resolved live role, and the lane redirect derives its own segment",
-    "tests/test_p2_freeze_t0.py": "S9a — repointed to the resolved live role",
-    "tests/test_fp_admission.py": "S9a — the pre-T0 fixture is asked for by default",
-    "tests/test_p2_scope_audit.py": "S9a — S8 pinned to its merge range; this branch's scope",
+    "docs/p2/S9C_ACTIVATION.md":
+        "S9c — the contract section 6 activation record for FP-CONTROL-3 (M3)",
+    "tests/test_p2_scope_audit.py":
+        "S9c — S9a and S9b pinned to their merge ranges; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
