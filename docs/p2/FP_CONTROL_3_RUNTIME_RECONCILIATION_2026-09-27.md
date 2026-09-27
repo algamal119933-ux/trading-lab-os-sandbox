@@ -74,8 +74,9 @@ Three lines of evidence were checked for a specific trigger:
    **This path is ruled out by direct evidence, not assumed absent.**
 2. **systemd journal.** `journalctl --user` (full boot 0, which covers
    2026-09-08 through today) shows `tlos-p2-activate-fp-control-3.timer`
-   being armed at `2026-09-24T11:07:41+03:00` (≈`08:07:41Z` — consistent with
-   the pre-T0 guard refusal `S9C_ACTIVATION.md` §1 records at `11:06:58Z`), but
+   being armed at `2026-09-24T11:07:41Z` (per `journalctl --utc` — approximately
+   43 seconds after the pre-T0 guard refusal `S9C_ACTIVATION.md` §1 records at
+   `11:06:58Z`), but
    **no journal entry for the activation service's execution, for
    `scripts/start_fp_control.sh`, or for any Docker container-lifecycle event**
    in either the 12:01 or the 14:28 window, in either the user or the system
