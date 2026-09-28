@@ -221,6 +221,17 @@ S9B_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #30, merged. Two parents: 3191285a (main before, M2) + 96feb8ed (the branch).
+S9C_MERGE = "52e0d2bf7f05496a6adf10de318ed8061bd3fcd1"
+
+S9C_SCOPE: dict[str, str] = {
+    "docs/p2/S9C_ACTIVATION.md":
+        "S9c — the contract section 6 activation record for FP-CONTROL-3 (M3)",
+    "tests/test_p2_scope_audit.py":
+        "S9c — S9a and S9b pinned to their merge ranges; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -230,6 +241,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S8": (S8_MERGE, S8_SCOPE),
     "S9A": (S9A_MERGE, S9A_SCOPE),
     "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -239,10 +251,11 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/S9C_ACTIVATION.md":
-        "S9c — the contract section 6 activation record for FP-CONTROL-3 (M3)",
+    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-27.md":
+        "runtime reconciliation — the two TRADING-STATE-RECONCILIATION-0 findings, "
+        "plus the §1.2.2 timer-arming timestamp correction",
     "tests/test_p2_scope_audit.py":
-        "S9c — S9a and S9b pinned to their merge ranges; this branch's scope",
+        "runtime reconciliation — S9C pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
