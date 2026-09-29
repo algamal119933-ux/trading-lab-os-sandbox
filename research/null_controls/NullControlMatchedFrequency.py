@@ -26,7 +26,12 @@ from freqtrade.strategy import IStrategy
 class NullControlMatchedFrequency(IStrategy):
     INTERFACE_VERSION = 3
     timeframe = "1h"
-    startup_candle_count = 0
+    # No indicators are computed; entry/exit are a precomputed schedule and a
+    # fixed hold duration, so no warm-up window is actually needed. 30 is a
+    # nominal, non-zero value only to satisfy Freqtrade's recursive-analysis
+    # tooling, which refuses startup_candle_count == 0 regardless of whether
+    # any indicator exists.
+    startup_candle_count = 30
     process_only_new_candles = True
 
     minimal_roi = {"0": 100.0}
