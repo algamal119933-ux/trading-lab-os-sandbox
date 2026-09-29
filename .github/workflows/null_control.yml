@@ -1,0 +1,302 @@
+name: Null control (COMPRESSED RESEARCH FOUNDATION, Unit B)
+
+# Runs a deterministic, in-repo, non-market-derived entry schedule through
+# the exact same acquisition, data-integrity, backtest, lookahead/recursive
+# and metrics-normalisation steps extbench.yml uses for an external
+# candidate. It exists to calibrate whether the measurement pipeline itself
+# obviously promotes noise (COMPRESSED RESEARCH FOUNDATION, Unit B) — not to
+# evaluate a candidate strategy. There is no upstream source, so the
+# upstream-fetch and V3B license gate that extbench.yml runs do not apply
+# here and are not reproduced.
+#
+# Manual dispatch only. No order-placing command is ever issued; dry_run
+# stays true throughout and the paper guard runs over every config used.
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: "Null-control strategy to run"
+        type: choice
+        required: true
+        options:
+          - NullControlMatchedFrequency
+          - NullControlBlockShuffled
+  push:
+    branches:
+      - "null-control/run/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: null-control-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: freqtradeorg/freqtrade:2026.7
+  DATA_DIR: freqtrade/user_data/data/binance
+  CACHE_DIR: dataset-cache/binance
+  OVERLAY_DIR: overlay-data/binance
+  STRATEGY_DIR: freqtrade/user_data/strategies
+  DEV_TIMERANGE: "20210101-20250101"
+  DEV_START: "2021-01-01T00:00:00Z"
+  DEV_END: "2024-12-31T23:00:00Z"
+  FIRST_SCORED_UTC: "2021-01-01T00:00:00Z"
+  WALLET: "100"
+  FEE: "0.001"
+
+jobs:
+  null_control:
+    name: Null control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install "pandas==2.2.3" "pyarrow==18.1.0"
+
+      - name: Resolve the strategy
+        id: lane
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.strategy }}" ]; then
+            STRATEGY="${{ inputs.strategy }}"
+          else
+            STRATEGY="${GITHUB_REF_NAME##*/}"
+          fi
+          case "$STRATEGY" in
+            NullControlMatchedFrequency|NullControlBlockShuffled) ;;
+            *) echo "::error::unregistered null-control strategy: $STRATEGY"; exit 1 ;;
+          esac
+          echo "strategy=$STRATEGY" >> "$GITHUB_OUTPUT"
+          echo "STRATEGY=$STRATEGY"
+
+      - name: Recompute the schedule and diff against the committed one
+        run: |
+          set -euo pipefail
+          python3 research/null_controls/generate_schedules.py --check
+
+      - name: Materialise the strategy and its frozen schedule
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts "$STRATEGY_DIR"
+          S="${{ steps.lane.outputs.strategy }}"
+          cp "research/null_controls/$S.py" "$STRATEGY_DIR/$S.py"
+          SCHEDULE=$([ "$S" = "NullControlMatchedFrequency" ] && echo null_matched_frequency_schedule.json || echo null_block_shuffled_schedule.json)
+          cp "research/null_controls/$SCHEDULE" "$STRATEGY_DIR/$SCHEDULE"
+          echo "--- $S.py ---"; cat "$STRATEGY_DIR/$S.py"
+
+      - name: 'Gate: safety compatibility (read the source before running)'
+        run: |
+          set -euo pipefail
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example \
+            2>&1 | tee artifacts/paper_guard_with_candidate.log
+
+      - name: 'Pin identity: strategy + schedule hashes, engine version'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          def sha(p): return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+          strategy = os.environ["STRATEGY"]
+          sdir = os.environ["STRATEGY_DIR"]
+          schedule_name = ("null_matched_frequency_schedule.json"
+                            if strategy == "NullControlMatchedFrequency"
+                            else "null_block_shuffled_schedule.json")
+          identity = {
+              "trial_class": "null_control",
+              "strategy_source": {"file": f"{sdir}/{strategy}.py", "sha256": sha(f"{sdir}/{strategy}.py")},
+              "schedule_file": {"file": f"{sdir}/{schedule_name}", "sha256": sha(f"{sdir}/{schedule_name}")},
+              "config": {"file": "freqtrade/user_data/config.research.json"},
+              "engine_version": os.environ["IMAGE"],
+              "data_contract": "research/datasets/dataset_v2.lock.json (normalized lane)",
+              "warmup_overlay": "research/datasets/warmup_overlay.lock.json",
+              "fee_model_per_side": float(os.environ["FEE"]),
+              "code_commit": os.environ["GITHUB_SHA"],
+          }
+          pathlib.Path("artifacts/reproduction_identity.json").write_text(json.dumps(identity, indent=2) + "\n")
+          print(json.dumps(identity, indent=2))
+          PY
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: Create and guard the research config
+        run: |
+          set -euo pipefail
+          cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+          python3 - <<'PY'
+          import copy, json, pathlib
+          def merge(base, overlay):
+              out = copy.deepcopy(base)
+              for k, v in overlay.items():
+                  if k.startswith("_"):
+                      continue
+                  out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+              return out
+          base = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
+          overlay = json.loads(pathlib.Path("freqtrade/user_data/config.binance-data-mirror.json.example").read_text())
+          merged = merge(base, overlay)
+          merged["exchange"]["pair_whitelist"] = ["BTC/USDT"]
+          pathlib.Path("freqtrade/user_data/config.research.json").write_text(json.dumps(merged, indent=2) + "\n")
+          print("exchange.name =", merged["exchange"].get("name"),
+                "| whitelist =", merged["exchange"]["pair_whitelist"])
+          PY
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.research.json
+          mkdir -p "$DATA_DIR" "$OVERLAY_DIR" artifacts freqtrade/user_data/backtest_results freqtrade/user_data/logs
+          chmod -R a+rwX freqtrade/user_data artifacts
+
+      - name: Restore the market-data cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            dataset-cache
+            overlay-data
+          key: extbench-data-v1-${{ hashFiles('research/datasets/dataset_v2.lock.json') }}
+          restore-keys: extbench-data-v1-
+
+      - name: Acquire Dataset V2 and the warm-up overlay from the public archive
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          mkdir -p "$CACHE_DIR"
+          if [ ! -f "$CACHE_DIR/BTC_USDT-1h.feather" ] || [ ! -f "$CACHE_DIR/ETH_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --symbol ETHUSDT --timeframe 1h --timeframe 5m \
+              --start 2020-12-01 --end 2026-08-31 \
+              --out-dir "$CACHE_DIR" --manifest artifacts/acquisition_dataset_v2.json
+          else
+            echo "Dataset V2 restored from cache"
+          fi
+          rm -rf "$DATA_DIR"
+          mkdir -p "$DATA_DIR"
+          cp "$CACHE_DIR"/*.feather "$DATA_DIR"/
+          chmod -R a+rwX freqtrade/user_data
+          if [ ! -f "$OVERLAY_DIR/BTC_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --timeframe 1h \
+              --start 2020-10-01 --end 2020-11-30 \
+              --out-dir "$OVERLAY_DIR" --manifest artifacts/acquisition_overlay.json
+          else
+            echo "overlay restored from cache"
+          fi
+
+      - name: 'Gate: data integrity against the frozen lock'
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_data.py \
+            --data-dir "$DATA_DIR" \
+            --pair BTC/USDT --pair ETH/USDT --timeframe 1h --timeframe 5m \
+            --lock research/datasets/dataset_v2.lock.json --gate lock \
+            2>&1 | tee artifacts/v4_dataset_lock_check.log
+
+      - name: 'Gate: join the warm-up overlay under its canonical-identity gate'
+        run: |
+          set -euo pipefail
+          python3 scripts/join_warmup_overlay.py \
+            --data-dir "$DATA_DIR" --overlay-dir "$OVERLAY_DIR" \
+            --lock research/datasets/dataset_v2.lock.json \
+            --pair BTC/USDT --timeframe 1h \
+            --first-scored-utc "$FIRST_SCORED_UTC" \
+            --required-candles 1300 \
+            --out artifacts/v7_warmup_join.json \
+            2>&1 | tee artifacts/v7_warmup_join.log
+
+      - name: Pull the pinned Freqtrade image
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then echo "pulled on attempt $attempt"; exit 0; fi
+            echo "pull attempt $attempt failed; Docker Hub may be rate limiting"; sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts"; exit 1
+
+      - name: Backtest on Dataset V2 Development
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" backtesting \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" --timeframe-detail 5m \
+            --enable-protections --export trades \
+            2>&1 | tee artifacts/backtest_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error|OperationalException' \
+            artifacts/backtest_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: 'Gate: lookahead analysis'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" lookahead-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" \
+            2>&1 | tee artifacts/lookahead_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: 'Gate: recursive analysis'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" recursive-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" -p BTC/USDT \
+            2>&1 | tee artifacts/recursive_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: Passive controls on the same window (BTC only)
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock research/datasets/dataset_v2.lock.json \
+            --period development \
+            --universe btc \
+            --fee "$FEE" --wallet "$WALLET" --stake 10 --max-open-trades 2 \
+            --out artifacts/passive_development.json \
+            2>&1 | tee artifacts/passive_development.log
+
+      - name: Normalise metrics
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          (
+            set -euo pipefail
+            RESULT="$(python3 -c 'import pathlib,sys; d=pathlib.Path("freqtrade/user_data/backtest_results"); c=[p for p in list(d.glob("*.zip")) + list(d.glob("*.json")) if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]; sys.stdout.write(str(max(c, key=lambda p: p.stat().st_mtime)) if c else "")')"
+            if [ -z "$RESULT" ]; then echo "::error::no backtest result produced"; exit 1; fi
+            echo "using result file: $RESULT"
+            python3 research/summarize_backtest.py \
+              --result "$RESULT" \
+              --window-start "$DEV_START" --window-end "$DEV_END" \
+              --wallet "$WALLET" --fee "$FEE" \
+              --passive artifacts/passive_development.json \
+              --out artifacts/metrics_development.json --md artifacts/metrics_development.md
+            cat artifacts/metrics_development.md
+          ) 2>&1 | tee artifacts/metrics_step.log
+          exit "${PIPESTATUS[0]}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: null-control-${{ steps.lane.outputs.strategy }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
