@@ -322,6 +322,42 @@ RESEARCH_FOUNDATION_UNIT_B_SCOPE: dict[str, str] = {
 }
 
 
+# PR #35, merged. Two parents: 4433120d (main before, RESEARCH_FOUNDATION_UNIT_B_MERGE) +
+# d1cf8942 (the branch).
+RESEARCH_FOUNDATION_CLOSURE_1_MERGE = "30064e86a4ec05d27d5e5187596452499503b39e"
+
+# Every path RESEARCH-FOUNDATION-CLOSURE-1 touched -> the requirement it
+# satisfies. These entries were BRANCH_SCOPE while it was in flight.
+RESEARCH_FOUNDATION_CLOSURE_1_SCOPE: dict[str, str] = {
+    "research/OFFLINE_RESEARCH_AUTHORITY_1.md":
+        "Gate 1 - the prospective sibling offline-research authority",
+    ".github/workflows/null_control.yml":
+        "Gate 2/2A - collect the full trade-level backtest result; drop the "
+        "bootstrap push trigger",
+    ".github/workflows/extbench.yml":
+        "Gate 2 - collect the full trade-level backtest result, prospectively",
+    "research/null_controls/generate_schedules.py":
+        "Gate 3 - precompute each entry's matching exit candle",
+    "research/null_controls/null_matched_frequency_schedule.json":
+        "Gate 3 - regenerated with exits_utc",
+    "research/null_controls/null_block_shuffled_schedule.json":
+        "Gate 3 - regenerated with exits_utc",
+    "research/null_controls/NullControlMatchedFrequency.py":
+        "Gate 3 - exit mechanism corrected",
+    "research/null_controls/NullControlBlockShuffled.py":
+        "Gate 3 - exit mechanism corrected",
+    "research/null_controls/__init__.py":
+        "Gate 3 - makes research/null_controls importable for its own test",
+    "tests/test_null_control_schedules.py":
+        "Gate 3 - proves the corrected exit mechanism's schedule-level semantics",
+    "research/records/trial_ledger.jsonl":
+        "Gate 3 - the preregistered Attempt-3 null trials and their outcomes",
+    "tests/test_p2_scope_audit.py":
+        "Unit B (PR #34) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity - regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -335,6 +371,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
     "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
     "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
+    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
+                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -344,39 +382,23 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/OFFLINE_RESEARCH_AUTHORITY_1.md":
-        "RESEARCH-FOUNDATION-CLOSURE-1 Gate 1 — the prospective sibling offline-"
-        "research authority; does not modify docs/p2/P2_CONTRACT.md",
-    ".github/workflows/null_control.yml":
-        "Gate 2/2A — collect the full trade-level backtest result into the "
-        "uploaded artifact; drop the now-unneeded bootstrap push trigger",
-    ".github/workflows/extbench.yml":
-        "Gate 2 — collect the full trade-level backtest result into the "
-        "uploaded artifact, prospectively (no H1 rerun)",
-    "research/null_controls/generate_schedules.py":
-        "Gate 3 — precompute each entry's matching exit candle (entry + "
-        "HOLD_HOURS) instead of deciding it at runtime",
-    "research/null_controls/null_matched_frequency_schedule.json":
-        "Gate 3 — regenerated with exits_utc",
-    "research/null_controls/null_block_shuffled_schedule.json":
-        "Gate 3 — regenerated with exits_utc",
-    "research/null_controls/NullControlMatchedFrequency.py":
-        "Gate 3 — exit mechanism corrected: populate_exit_trend against the "
-        "precomputed exits_utc set, replacing the custom_exit callback that "
-        "never fired in Attempt 1/2",
-    "research/null_controls/NullControlBlockShuffled.py":
-        "Gate 3 — exit mechanism corrected: populate_exit_trend against the "
-        "precomputed exits_utc set, replacing the custom_exit callback that "
-        "never fired in Attempt 1/2",
-    "research/null_controls/__init__.py":
-        "Gate 3 — makes research/null_controls importable for its own test",
-    "tests/test_null_control_schedules.py":
-        "Gate 3 — proves the corrected exit mechanism's schedule-level "
-        "semantics before Attempt 3 runs; no result-search",
+    "research/mean_reversion/PREREGISTRATION.md":
+        "MEAN-REVERSION-CYCLE1-DISCOVERY-1 — the frozen hypothesis, mechanism, "
+        "parameter grid, walk-forward design, cost assumptions, falsification "
+        "and survivor conditions",
+    "research/mean_reversion/MeanReversionZScore.py":
+        "the rolling z-score mean-reversion strategy",
+    "research/mean_reversion/run_walkforward.py":
+        "the 2-fold x 4-config walk-forward campaign driver, reusing the "
+        "existing docker-run-backtesting invocation and summarize_backtest.py",
+    ".github/workflows/mean_reversion.yml":
+        "runs the walk-forward campaign; workflow_dispatch only",
     "research/records/trial_ledger.jsonl":
-        "Gate 3 — the preregistered Attempt-3 null trials and their outcomes",
+        "the preregistered TRIAL-MR-ZSCORE-WF-1 and its REJECTED outcome, "
+        "with every TRAIN/EVAL/cost-stress attempt preserved",
     "tests/test_p2_scope_audit.py":
-        "Unit B (PR #34) pinned to its merge range; this branch's scope",
+        "RESEARCH-FOUNDATION-CLOSURE-1 (PR #35) pinned to its merge range; "
+        "this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
