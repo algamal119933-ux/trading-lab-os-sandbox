@@ -13,13 +13,13 @@ name: H1 paper-readiness qualification (H1-PAPER-READINESS-QUALIFICATION-1)
 
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - "h1-qualification/run/**"
 
 permissions:
   contents: read
 
+  push:
+    branches:
+      - "h1-qualification/run/**"
 concurrency:
   group: h1-qualification-${{ github.ref }}
   cancel-in-progress: false
