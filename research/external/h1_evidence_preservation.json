@@ -1,0 +1,202 @@
+{
+  "record_type": "H1_EVIDENCE_PRESERVATION_MANIFEST",
+  "schema_note": "Not an existing schema instance; no canonical schema in research/schema/ covers preserved external-CI research evidence (as opposed to FP-lane archives, which use evidence_digest_publication.schema.json, or upstream source pins, which use upstream_pins.json). This record follows those conventions' pattern (identity + per-file sha256, content described but not embedded) rather than inventing a new architecture. See DURABLE_STORAGE_LOCATION below for the one open policy question.",
+  "authority": "Owner authorization 'TRADING LAB OS \u2014 STAGE A \u2014 CLOSE & PRESERVE' (2026-09-29), workstream A1",
+  "preserved_utc": "2026-09-29T03:22:00Z",
+  "real_money_authorized": false,
+  "owner_reviewed_utc": "2026-09-29T00:00:00Z",
+  "owner_review_authority": "TRADING-RESEARCH-STAGE0-CLOSURE-1 controlled closure directive (2026-09-29)",
+  "reproducibility_classification": {
+    "H1_REPRODUCIBILITY_PATH": "CONTROLLED_RE_DERIVATION_REQUIRED",
+    "H1_TRUE_REPRODUCTION_AVAILABLE": false,
+    "H1_HISTORICAL_RESULT_PRESERVED": true,
+    "H1_CONTROLLED_RE_DERIVATION_EXECUTED": false,
+    "basis": "The recovered evidence proves important historical identity and result facts (strategy/params hash cross-verified three ways, dataset hashes, engine image tag, historical result cross-verified against sprint_closure.json), but the original run is not fully reconstructable byte-for-byte / environment-for-environment: the run-level config hash was never recorded (see run_level_config_identity), the Freqtrade image is pinned by tag only, not by immutable digest (see engine_and_execution_environment), and the original trade-level ledger does not exist in any recovered form (see trade_level_ledger). A future run against this same pinned identity would be a controlled re-derivation, not a proven exact reproduction, unless and until independently proven otherwise.",
+    "do_not_describe_future_h1_run_as_exact_reproduction_unless_independently_proven": true
+  },
+  "source_identity": {
+    "workflow_file": ".github/workflows/extbench.yml",
+    "workflow_name": "External benchmark (POST-BASELINE-EXTBENCH-1)",
+    "run_id": 34126570635,
+    "job_id": 101756531915,
+    "lane": "H1_DATASET_V2_DEVELOPMENT",
+    "configuration_id": "H1_EMACROSS",
+    "trigger": "push",
+    "head_branch": "extbench/run/H1_DATASET_V2_DEVELOPMENT",
+    "code_commit": "102d4e1f85494a045207fc318b9d81ef901f1271",
+    "run_created_utc": "2026-09-07T13:20:00Z",
+    "status": "FOUND / VERIFIED via `gh run view 34126570635`"
+  },
+  "artifact_identity": {
+    "name": "extbench-H1_DATASET_V2_DEVELOPMENT",
+    "artifact_id": 10020400025,
+    "github_reported_size_bytes": 30847,
+    "github_reported_digest_sha256": "2edb9c32a898d3ec3e409aa7b18d8765e16862fc68a3e3697f64c32d6a1ec501",
+    "independently_recomputed_archive_sha256": "2edb9c32a898d3ec3e409aa7b18d8765e16862fc68a3e3697f64c32d6a1ec501",
+    "digest_match": true,
+    "original_expiry_utc": "2026-10-07T13:19:59Z",
+    "status_at_preservation_time": "NOT_EXPIRED, expired=false per GitHub API",
+    "status": "FOUND / VERIFIED"
+  },
+  "per_file_manifest": {
+    "status": "FOUND / VERIFIED \u2014 every byte re-read and rehashed at preservation time, matching the archive contents exactly",
+    "file_count": 16,
+    "total_bytes": 173523,
+    "files": {
+      "acquisition_dataset_v2.json": {
+        "sha256": "f15a47a82df02c9a5cd13138b0b3df62d6c8f60da1900b9895618192084cdcdf",
+        "size_bytes": 95402
+      },
+      "acquisition_overlay.json": {
+        "sha256": "4f0a3f33106d072355d9d9be5b4d4d8b233932adc6259d43b9f4304f6825931b",
+        "size_bytes": 1033
+      },
+      "backtest_development.log": {
+        "sha256": "373dbc2fad5801bb4b635a05900e1c172b7231ed0f1becf7f5a9b8fc32a7ffb1",
+        "size_bytes": 26884
+      },
+      "lookahead_development.log": {
+        "sha256": "837dd692af0458cd7e394372ee4db1e02f32dc26b1e4ea13334fd5a5e5d7945f",
+        "size_bytes": 25047
+      },
+      "metrics_development.json": {
+        "sha256": "9e55e1a6b2781217939a810d97ed70a6ee33c72594f866a4eb9777799689a47f",
+        "size_bytes": 1795
+      },
+      "metrics_development.md": {
+        "sha256": "0a5a120fcba82edfcb81307da5e1eafb4646b37cc0806686290761d6162c65e0",
+        "size_bytes": 1623
+      },
+      "metrics_step.log": {
+        "sha256": "29fc221393ea1958db7a2649f24f78657b0d72bf804f4ff20ed1c7b73eafeea2",
+        "size_bytes": 1719
+      },
+      "paper_guard_with_candidate.log": {
+        "sha256": "c8954b8dc871639fe91265b5ad69b0ea2083a173193a5cef74a1045fcf57fdc8",
+        "size_bytes": 71
+      },
+      "passive_development.json": {
+        "sha256": "aca11d8747c59522ee1f8ff67917dca0f8b226f0e162db83680ac01e0d5af2a3",
+        "size_bytes": 1151
+      },
+      "passive_development.log": {
+        "sha256": "b86689156889cdf6e405b241bac2061e4e1eb8601d25aa63796ab11e48c93826",
+        "size_bytes": 427
+      },
+      "recursive_development.log": {
+        "sha256": "7478320d396a3870f2eebbb782844dd7c977a7accb8a2ee1c26bb1504ce814df",
+        "size_bytes": 12658
+      },
+      "reproduction_identity.json": {
+        "sha256": "5319b533894ad97031998f5c9c8407f34ac755d0b8b1d41a304ec4476c4f9977",
+        "size_bytes": 739
+      },
+      "upstream_pin_gate.log": {
+        "sha256": "ae9b86612c5b55aafcee11969ad1840f99fe038419f431133306fac104a73e6a",
+        "size_bytes": 2035
+      },
+      "v4_dataset_lock_check.log": {
+        "sha256": "ce64a061c217d3caf78c27f9e062ef74d7ce664a982ab74a66f29036aec8b3b7",
+        "size_bytes": 2000
+      },
+      "v7_warmup_join.json": {
+        "sha256": "a01311a5ebb27603b6d2c5ad01c00992c5043177822436809bfe4b7c6aa40765",
+        "size_bytes": 777
+      },
+      "v7_warmup_join.log": {
+        "sha256": "3e6dc5f7d3588e63ef748fee856599d01c93907380e0d99c622dd64d4d405f1a",
+        "size_bytes": 162
+      }
+    }
+  },
+  "strategy_source_identity": {
+    "file": "freqtrade/user_data/strategies/EmaCross.py",
+    "upstream_repo": "wiktorj137/btc-strategy-lab",
+    "upstream_commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+    "sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+    "sha256_cross_verification": [
+      "matches raw/reproduction_identity.json (recovered CI artifact, sealed 2026-09-07)",
+      "matches research/external/upstream_pins.json (repository, frozen 2026-09-07)",
+      "matches a live re-fetch via research/external/pin_upstream.py --verify performed 2026-09-29 against wiktorj137/btc-strategy-lab@b68a5518 today \u2014 upstream content has NOT drifted since H1 was measured"
+    ],
+    "status": "FOUND / VERIFIED (hash, three independent sources) \u2014 bytes NOT included in this manifest",
+    "SOURCE_BYTES_PRESERVATION": "POLICY_DECISION_REQUIRED",
+    "SOURCE_BYTES_VENDORED": "NO",
+    "source_bytes_note": "EmaCross.py carries GPL-3.0 at the pinned commit and research/external/upstream_pins.json records vendoring_authorised=false for this sprint. Per Stage-A order section 5, evidence preservation must not itself constitute vendoring: no source bytes have been placed in any executable strategy directory, vendoring_authorised has not been changed, and no licensing policy has been improvised. If the Owner later authorizes durable preservation of the actual bytes (as opposed to their hash+identity, which this manifest already preserves), that is a separate decision from evidence preservation."
+  },
+  "parameter_file_identity": {
+    "file": "freqtrade/user_data/strategies/EmaCross.json",
+    "sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee",
+    "sha256_cross_verification": [
+      "matches raw/reproduction_identity.json",
+      "matches research/external/upstream_pins.json",
+      "matches a live re-fetch via pin_upstream.py --verify performed 2026-09-29"
+    ],
+    "status": "FOUND / VERIFIED"
+  },
+  "run_level_config_identity": {
+    "file": "freqtrade/user_data/config.research.json",
+    "sha256": null,
+    "status": "PARTIAL / AMBIGUOUS \u2014 the file is named in raw/reproduction_identity.json but no hash for it was recorded in the recovered artifact or found elsewhere in the repository. Do not treat this as a confirmed identity; only the file name is preserved."
+  },
+  "engine_and_execution_environment": {
+    "freqtrade_image": "freqtradeorg/freqtrade:2026.7",
+    "freqtrade_image_status": "FOUND (tag) \u2014 identical tag to the image currently running live FP-CONTROL-3 (verified 2026-09-29 via `docker inspect`). No image DIGEST (immutable sha256) was captured at H1 run time or found in the recovered artifact, so this pin is by TAG only.",
+    "ci_runner_python_version": "3.12 (pinned in extbench.yml `actions/setup-python@v5`)",
+    "in_container_python_version_observed": "3.14 (observed from pandas/pyarrow site-packages paths inside raw/backtest_development.log; this is the Freqtrade Docker image's own bundled Python, a separate environment from the CI runner's Python 3.12 used only for the pip-installed dev tooling around the container)",
+    "pinned_dependencies_partial": "requirements-dev.txt plus pandas==2.2.3 pyarrow==18.1.0, per extbench.yml; not independently re-verified against a lockfile hash",
+    "H1_EXECUTION_ENVIRONMENT_PINNING": "PARTIAL \u2014 strategy hash, params hash, dataset hashes, and engine image TAG are all pinned and cross-verified; the image is not pinned by digest, and the run-level config file has no recorded hash (see run_level_config_identity above)"
+  },
+  "dataset_and_data_provenance": {
+    "data_contract": "research/datasets/dataset_v2.lock.json (normalized lane)",
+    "warmup_overlay": "research/datasets/warmup_overlay.lock.json",
+    "pair_universe": [
+      "BTC/USDT"
+    ],
+    "timeframe": "1h",
+    "timerange": "2021-01-01T00:00:00Z to 2024-12-31T23:00:00Z",
+    "fee_per_side": 0.001,
+    "wallet": 100.0,
+    "status": "FOUND",
+    "data_integrity_gate_note": "raw/v4_dataset_lock_check.log reports two distinct checks for each of the 4 market-data files: DATA_INTEGRITY_GATE=FAIL (raw byte-level file hash differs from the lock, attributed in the log's own text to serialization-only differences, e.g. feather format version) and DATASET_LOCK_GATE=PASS (canonical, format-invariant content hash matches the frozen lock exactly). The FAIL label is the raw-hash sub-check, not the run's overall data verdict; the canonical-content verdict, which is what the lock file is designed to guarantee, is PASS. Recorded here verbatim rather than summarized as a single PASS/FAIL to avoid manufacturing certainty the source log does not state as one line."
+  },
+  "backtest_command": "freqtrade backtesting -c config.json -s EmaCross --timeframe 1h --timerange 20191001- --fee 0.001",
+  "historical_result_evidence": {
+    "status": "FOUND / VERIFIED",
+    "cross_verification": "raw/metrics_development.json (recovered CI artifact) matches research/external/sprint_closure.json's preserved_h1_evidence field exactly on every shared numeric field (net_return_pct=20.02157908, trades=76, win_rate_pct=25.0, profit_factor=2.168958166224399, max_drawdown_pct=5.182473626914299, sharpe=0.18816686734820506, sortino=2.6934126369412636)",
+    "measurement_validity": "PASS",
+    "candidate_quality": "NOT_DETERMINED (sprint terminated before survivor selection; see research/external/sprint_closure.json)"
+  },
+  "trade_level_ledger": {
+    "status": "MISSING",
+    "note": "No per-trade row-level file exists in the recovered artifact (16 files: aggregate metrics, engine logs, lookahead/recursive analysis logs, dataset/overlay acquisition manifests, gate logs). This is confirmed absent, not merely unrecovered \u2014 the artifact's full contents are now preserved and enumerated above, and none of the 16 files is a trade list."
+  },
+  "lookahead_and_recursive_analysis_evidence": {
+    "lookahead_development.log": "FOUND / preserved, 25047 bytes",
+    "recursive_development.log": "FOUND / preserved, 12658 bytes",
+    "status": "FOUND \u2014 content preserved in this pass; verdict lines not independently re-parsed into structured fields in this manifest (raw logs are preserved verbatim, which is stronger evidence than a re-derived summary)"
+  },
+  "durable_storage": {
+    "H1_ARTIFACT_RECOVERED": "YES",
+    "H1_ARTIFACT_DURABLY_PRESERVED": "YES",
+    "DURABLE_STORAGE_LOCATION": "~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/",
+    "location_selection_authority": "Owner fallback per 'TRADING-RESEARCH-STAGE0 \u2014 COMPRESSED FINAL CLOSURE' directive section 3 (2026-09-29)",
+    "why_this_location_was_selected": "Priority order per that directive: (1) existing authoritative project convention \u2014 none applies (see existing_location_review_performed below, unchanged from the prior review); (2) existing Owner-controlled non-executable evidence location \u2014 ~/Documents/TLOS-Owner-Input/ was inspected and exists, but is semantically an INPUT location (owner-authored planning/design docs fed into sessions), not an OUTPUT evidence-preservation location for this artifact class; it was judged not to clearly apply, so it was not reused. (3) the Owner's explicit fallback, ~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/, was therefore used. It is outside every git worktree, outside the executable project tree, outside any runtime strategy directory, Owner-controlled, persistent beyond this session, not a runtime dependency, not a new service/database/control plane/evidence platform.",
+    "raw_archive_and_extracted_files": "Both the original ZIP and the previously-extracted 16 raw files were copied unmodified (no repackaging, no normalization, no extraction-only substitution) from the session scratchpad to the durable location.",
+    "no_new_architecture_invented": true,
+    "durable_copy_hash_gate": {
+      "destination_zip_sha256": "2edb9c32a898d3ec3e409aa7b18d8765e16862fc68a3e3697f64c32d6a1ec501",
+      "matches_expected": true,
+      "source_vs_destination_byte_identity": "PROVEN \u2014 `cmp` reports byte-identical for the archive; independent per-file sha256 recomputed for all 16 extracted files at the destination and diffed against the source hash list \u2014 zero differences",
+      "gate_result": "PASS"
+    },
+    "existing_location_review_performed": [
+      "artifacts/ convention inspected (tlos-control/artifacts/l2-cohort-20260920T120000Z/*) \u2014 this holds SEALED FP-CONTROL LANE archives (tradesv3.sqlite, logs, evidence/) written by scripts/archive_fp_lane.py, keyed to an FP role/cohort; H1 is neither an FP lane nor cohort-scoped, so this convention does not clearly apply.",
+      "scripts/publish_evidence_digest.py + research/schema/evidence_digest_publication.schema.json inspected \u2014 Tier-2 digest publication is scoped by its own schema (`role` enum: FP-CONTROL-1/2/3, FP-CANDIDATE-A/B only) to FP lane archives, and is explicitly names-and-hashes-only, never content, by design. H1 is not an FP lane; this does not clearly apply either, and even if it did, it would not resolve raw-content storage since Tier 2 never stores content.",
+      "docs/cloud-0/C0.2_ARTIFACT_CLASSIFICATION.md inspected \u2014 its classification table shows some small text 'Reproducibility evidence' JSON files ARE tracked in git (e.g. baseline_v1_data_audit.json), which is a closer analogy in kind (small text, no binaries) than the Tier-2 pattern, but C0.2 documents a classification exercise already performed on specific named files; it does not state a general rule that would unambiguously cover these 16 new files without a new, equivalent classification decision being made for them.",
+      "~/Documents/TLOS-Owner-Input/ inspected as a candidate existing Owner-controlled location \u2014 exists, but is an input-documents location (bootstrap briefs, P3 blueprint, control-room design), not an evidence-preservation output location; not reused.",
+      "no other authoritative evidence-publication/storage documentation was found that names external research-CI artifacts as a class"
+    ],
+    "conclusion": "No existing project-defined or already-in-use Owner-controlled location clearly applied to this exact evidence class. Per the compressed-closure directive's explicit fallback and priority order, the artifact (original ZIP plus all 16 raw files) was durably preserved at ~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/, outside git and outside the executable project tree, with destination SHA256 and full per-file byte-identity independently proven against the source."
+  }
+}

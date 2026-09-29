@@ -232,6 +232,20 @@ S9C_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #31, merged. Two parents: 52e0d2bf (main before, S9C_MERGE) + ddefa015 (the branch).
+RUNTIME_RECON_0927_MERGE = "00d719ff6c6bf917b8f497793f300c733524d1e0"
+
+# Every path the 2026-09-27 runtime reconciliation touched → the requirement it
+# satisfies. These entries were BRANCH_SCOPE while it was in flight.
+RUNTIME_RECON_0927_SCOPE: dict[str, str] = {
+    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-27.md":
+        "runtime reconciliation — the two TRADING-STATE-RECONCILIATION-0 findings, "
+        "plus the §1.2.2 timer-arming timestamp correction",
+    "tests/test_p2_scope_audit.py":
+        "runtime reconciliation — S9C pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -242,6 +256,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S9A": (S9A_MERGE, S9A_SCOPE),
     "S9B": (S9B_MERGE, S9B_SCOPE),
     "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -251,11 +266,15 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-27.md":
-        "runtime reconciliation — the two TRADING-STATE-RECONCILIATION-0 findings, "
-        "plus the §1.2.2 timer-arming timestamp correction",
+    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-29.md":
+        "Stage-0 closure — the 2026-09-28T15:28Z restart (restart_counter 1->2) and "
+        "the incident records since the 2026-09-27 reconciliation",
+    "research/external/h1_evidence_preservation.json":
+        "Stage-0 closure — H1 evidence preservation manifest, durable storage record "
+        "and reproducibility classification",
     "tests/test_p2_scope_audit.py":
-        "runtime reconciliation — S9C pinned to its merge range; this branch's scope",
+        "Stage-0 closure — the 2026-09-27 runtime reconciliation (PR #31) pinned to "
+        "its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
