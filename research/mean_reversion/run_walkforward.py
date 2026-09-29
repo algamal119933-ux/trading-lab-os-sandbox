@@ -119,20 +119,20 @@ def run_backtest(image: str, timerange: str, label: str, artifacts_dir: Path) ->
                         "OperationalException")
     )
     if not ok:
-        return {"ok": False, "log_path": str(log_path.relative_to(artifacts_dir.parent)),
+        return {"ok": False, "log_path": str(log_path.relative_to(artifacts_dir)),
                 "error": f"exit={proc.returncode}, see log"}
 
     candidates = [p for p in list(BACKTEST_RESULTS.glob("*.zip")) + list(BACKTEST_RESULTS.glob("*.json"))
                   if not p.name.endswith(".meta.json") and p.name != ".last_result.json"]
     if not candidates:
-        return {"ok": False, "log_path": str(log_path.relative_to(artifacts_dir.parent)),
+        return {"ok": False, "log_path": str(log_path.relative_to(artifacts_dir)),
                 "error": "no backtest result produced"}
     result = max(candidates, key=lambda p: p.stat().st_mtime)
     dest = artifacts_dir / "backtest_results" / f"{label}{result.suffix}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(result.read_bytes())
-    return {"ok": True, "log_path": str(log_path.relative_to(artifacts_dir.parent)),
-            "result_path": str(dest.relative_to(artifacts_dir.parent))}
+    return {"ok": True, "log_path": str(log_path.relative_to(artifacts_dir)),
+            "result_path": str(dest.relative_to(artifacts_dir))}
 
 
 def summarize(result_path: Path, window_start: str, window_end: str, fee: float,
@@ -233,11 +233,25 @@ def main() -> int:
     (artifacts_dir / "walkforward_campaign.json").write_text(
         json.dumps(campaign, indent=2, default=str) + "\n", encoding="utf-8"
     )
-    print(json.dumps({"folds": [
+    summary = {"folds": [
         {"fold": f["fold"], "selected": f["selected_config_id"],
          "eval_ok": bool(f["eval_metrics"] and f["eval_metrics"].get("ok"))}
         for f in campaign["fold_results"]
-    ]}, indent=2))
+    ]}
+    print(json.dumps(summary, indent=2))
+
+    # A systemic bug (a path error, a permission/ownership regression, a
+    # broken invocation) must fail the job loudly, not exit 0 with every
+    # metric silently None -- exactly what happened once already in this
+    # lineage before this check existed.
+    train_ok = sum(1 for a in campaign["train_attempts"] if a["metrics"] and a["metrics"].get("ok"))
+    eval_ok = sum(1 for f in campaign["fold_results"] if f["eval_metrics"] and f["eval_metrics"].get("ok"))
+    if train_ok == 0 or eval_ok == 0:
+        print(f"::error::systemic failure: {train_ok}/{len(campaign['train_attempts'])} TRAIN "
+              f"attempts and {eval_ok}/{len(campaign['fold_results'])} EVAL runs produced usable "
+              "metrics. See walkforward_campaign.json for each attempt's own error.",
+              file=sys.stderr)
+        return 1
     return 0
 
 
