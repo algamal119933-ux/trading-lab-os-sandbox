@@ -416,6 +416,27 @@ H1_QUALIFICATION_SCOPE: dict[str, str] = {
 }
 
 
+# PR #38, merged. Two parents: 0862ea3c (main before, H1_QUALIFICATION_MERGE) +
+# the account-handoff-1 branch.
+ACCOUNT_HANDOFF_1_MERGE = "effa2e7645833743e43006b999ce08749dd708f2"
+
+# Every path CLAUDE-ACCOUNT-HANDOFF-1 touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+ACCOUNT_HANDOFF_1_SCOPE: dict[str, str] = {
+    "research/CLAUDE_ACCOUNT_HANDOFF_2026-09-29.md":
+        "CLAUDE-ACCOUNT-HANDOFF-1 — the canonical continuity document for a "
+        "Claude-account change: current state, exact file pointers, the "
+        "corrected continuation law (RESEARCH-CYCLE1-CLOSURE-1, not a fresh "
+        "Mean-Reversion run, since Cycle 1 already reached REJECTED), and "
+        "the operative closure-unit instructions carried forward for the "
+        "next account",
+    "tests/test_p2_scope_audit.py":
+        "H1-Paper-Readiness-Qualification-1 (PR #37) pinned to its merge "
+        "range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -433,6 +454,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
                                       RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
     "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
     "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
+    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -442,16 +464,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/CLAUDE_ACCOUNT_HANDOFF_2026-09-29.md":
-        "CLAUDE-ACCOUNT-HANDOFF-1 — the canonical continuity document for a "
-        "Claude-account change: current state, exact file pointers, the "
-        "corrected continuation law (RESEARCH-CYCLE1-CLOSURE-1, not a fresh "
-        "Mean-Reversion run, since Cycle 1 already reached REJECTED), and "
-        "the operative closure-unit instructions carried forward for the "
-        "next account",
+    "research/RESEARCH_CYCLE1_CLOSURE_1.md":
+        "RESEARCH-CYCLE1-CLOSURE-1 — closure/reporting only: H1 and "
+        "Mean-Reversion terminal states, Cycle-1 trial accounting, selection "
+        "debt, data/holdout truth, evidence status, paper-admission "
+        "eligibility, P2 firewall and remaining limitations; no new trial",
     "tests/test_p2_scope_audit.py":
-        "H1-Paper-Readiness-Qualification-1 (PR #37) pinned to its merge "
-        "range; this branch's scope",
+        "CLAUDE-ACCOUNT-HANDOFF-1 (PR #38) pinned to its merge range; this "
+        "branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
