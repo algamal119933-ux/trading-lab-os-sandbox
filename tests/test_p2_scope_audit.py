@@ -246,6 +246,27 @@ RUNTIME_RECON_0927_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #32, merged. Two parents: 00d719ff (main before, RUNTIME_RECON_0927_MERGE) +
+# 60f4d4e3 (the branch).
+STAGE0_CLOSURE_MERGE = "15ce01becce9e771af75e0af9433aba5b0a90c81"
+
+# Every path the Stage-0 closure (H1 evidence preservation + Restart #2
+# reconciliation + the RUNTIME_RECON_0927 scope rollover) touched → the
+# requirement it satisfies. These entries were BRANCH_SCOPE while it was in
+# flight.
+STAGE0_CLOSURE_SCOPE: dict[str, str] = {
+    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-29.md":
+        "Stage-0 closure — the 2026-09-28T15:28Z restart (restart_counter 1->2) and "
+        "the incident records since the 2026-09-27 reconciliation",
+    "research/external/h1_evidence_preservation.json":
+        "Stage-0 closure — H1 evidence preservation manifest, durable storage record "
+        "and reproducibility classification",
+    "tests/test_p2_scope_audit.py":
+        "Stage-0 closure — the 2026-09-27 runtime reconciliation (PR #31) pinned to "
+        "its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -257,6 +278,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S9B": (S9B_MERGE, S9B_SCOPE),
     "S9C": (S9C_MERGE, S9C_SCOPE),
     "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -266,14 +288,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/FP_CONTROL_3_RUNTIME_RECONCILIATION_2026-09-29.md":
-        "Stage-0 closure — the 2026-09-28T15:28Z restart (restart_counter 1->2) and "
-        "the incident records since the 2026-09-27 reconciliation",
-    "research/external/h1_evidence_preservation.json":
-        "Stage-0 closure — H1 evidence preservation manifest, durable storage record "
-        "and reproducibility classification",
+    "research/schema/trial_record.schema.json":
+        "Research Foundation Unit A — the shape of one research-selection "
+        "accounting record",
+    "research/trial_ledger.py":
+        "Research Foundation Unit A — enforced research-selection accounting: "
+        "preregistration must precede any terminal outcome, per trial_id",
+    "tests/test_trial_ledger.py":
+        "Research Foundation Unit A — the seven attempt-accounting properties "
+        "the ledger must hold",
     "tests/test_p2_scope_audit.py":
-        "Stage-0 closure — the 2026-09-27 runtime reconciliation (PR #31) pinned to "
+        "Research Foundation Unit A — the Stage-0 closure (PR #32) pinned to "
         "its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
