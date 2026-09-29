@@ -1,0 +1,75 @@
+# H1-PAPER-COHORT-PACKAGE-1 — the isolated forward-paper runtime for H1_EMACROSS.
+#
+# NOT STARTED BY THIS PACKAGE. Starting it requires a separate, explicit Owner
+# launch authorization naming this package's PACKAGE_MANIFEST.sha256 digest; see
+# PREREGISTRATION.md section 9. Nothing in this repository starts it.
+#
+# Standalone: this file is never layered on docker-compose.yml or
+# docker-compose.fp.yml. It has its own compose project, container, network,
+# port, database, logs and evidence lane, and it mounts nothing belonging to
+# FP-CONTROL-3 or to any P2 runtime checkout.
+#
+# The two host paths are launch-time bindings, not identity. Their container
+# paths are frozen; the host paths are recorded in the lane's first incident
+# record at T0 and checked by `h1_paper.py preflight` before any start:
+#   H1_PAPER_STRATEGY_DIR  output of pin_upstream.py --materialize (hash-verified
+#                          upstream EmaCross.py + EmaCross.json, GPL-3.0, with its
+#                          LICENSE beside it; never committed to git)
+#   H1_PAPER_LANE_DIR      the cohort's only writable path
+#
+# PAPER / DRY-RUN ONLY. No exchange credential is passed to any service.
+name: tlos-h1-paper-cohort-1
+
+services:
+  freqtrade:
+    # Pinned by immutable digest, not by tag: the same bytes as the
+    # freqtradeorg/freqtrade:2026.7 tag H1 was measured under.
+    image: freqtradeorg/freqtrade@sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643
+    container_name: tlos-h1-paper-cohort-1-freqtrade
+    restart: unless-stopped
+    command: >
+      trade
+      --config /freqtrade/h1config/config.json
+      --strategy EmaCross
+      --strategy-path /freqtrade/h1strategy
+      --userdir /freqtrade/lane/user_data
+      --db-url sqlite:////freqtrade/lane/tradesv3.sqlite
+      --logfile /freqtrade/lane/logs/freqtrade.log
+    environment:
+      FREQTRADE__BOT_NAME: h1-paper-cohort-1
+      FREQTRADE__API_SERVER__USERNAME: ${H1_PAPER_API_USER:?operator-local, never committed}
+      FREQTRADE__API_SERVER__PASSWORD: ${H1_PAPER_API_PASSWORD:?operator-local, never committed}
+      FREQTRADE__API_SERVER__JWT_SECRET_KEY: ${H1_PAPER_JWT_SECRET:?operator-local, never committed}
+      FREQTRADE__API_SERVER__WS_TOKEN: ${H1_PAPER_WS_TOKEN:?operator-local, never committed}
+    volumes:
+      - ./config.h1-paper.json:/freqtrade/h1config/config.json:ro
+      - ${H1_PAPER_STRATEGY_DIR:?materialized by pin_upstream.py at launch}:/freqtrade/h1strategy:ro
+      - ${H1_PAPER_LANE_DIR:?the cohort lane, outside every git worktree and every P2 path}:/freqtrade/lane
+    ports:
+      # Loopback only, and not any port FP-CONTROL-3 publishes
+      # (8080, 3000, 9090, 9108, 5000).
+      - "127.0.0.1:8181:8080"
+    networks:
+      - h1paper
+    # Resource law (PREREGISTRATION.md section 8): hard caps, and P2 wins every
+    # contention. cpu_shares 256 against Docker's default 1024 gives FP-CONTROL-3
+    # four times the CPU weight under load; oom_score_adj makes this container
+    # the kernel's first choice under memory pressure.
+    cpus: 1.0
+    cpu_shares: 256
+    mem_limit: 1g
+    memswap_limit: 1g
+    mem_reservation: 256m
+    pids_limit: 256
+    oom_score_adj: 500
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  h1paper:
+    name: tlos-h1-paper-cohort-1-net

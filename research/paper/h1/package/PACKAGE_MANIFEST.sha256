@@ -1,0 +1,8 @@
+# H1-PAPER-COHORT-PACKAGE-1 manifest: sha256 of every package file.
+# This file's own sha256 is the package digest a launch authorization names.
+17e377d130ea23854cec5c47bf56001f503855b95dd3195afdd87e998e824a7c  PREREGISTRATION.md
+2713bd8e96dc97bd1b822703e9a448cad7ece84c3fdec46ef99014af68e6f52b  cohort.json
+8c780507308386bc2981ad8d9258ce1ed86e2724444233f58285918be9fbe1db  config.h1-paper.json
+45f1dbd370e374de0867391dc25d8fcc99067bbf9b62324a1c1bc68238cf941b  docker-compose.h1-paper.yml
+243dbf9b55cac51142d2eaf14708372d1d470102c8975123e05d48d681bca519  h1_paper.py
+a1ec635542a983499a304a516e24ae1c33c516c373520db94252fb61e7e4ab7b  incident.schema.json
