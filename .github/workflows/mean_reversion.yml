@@ -200,17 +200,19 @@ jobs:
             2>&1 | tee artifacts/recursive_development.log
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
-      - name: Restore write permissions after the gate containers ran
+      - name: Restore ownership after the gate containers ran
         run: |
           set -euo pipefail
-          # The lookahead/recursive containers (running as a non-root
-          # in-container user) can leave freqtrade/user_data/strategies/
-          # (e.g. a __pycache__ they create on import) in a state the
-          # runner's own user can no longer write into, which broke the
-          # very first params-file write below with PermissionError before
-          # any backtest had run. No result was produced or seen; this is a
-          # pure infrastructure fix.
-          chmod -R a+rwX freqtrade/user_data artifacts
+          # The Freqtrade image's own entrypoint chowns the whole bind-mounted
+          # directory to its in-container user on every `docker run`, which is
+          # invisible to extbench.yml/null_control.yml (they only ever write
+          # into this tree once, before the first docker run) but breaks this
+          # driver, which must rewrite the params file between many
+          # invocations. chmod cannot fix this -- only the owner or root may
+          # change a file's mode, and ownership itself is what changed. sudo
+          # chown (GitHub-hosted runners carry passwordless sudo) reclaims it.
+          # No result was produced or seen before this step; pure infrastructure.
+          sudo chown -R "$(id -u):$(id -g)" freqtrade/user_data artifacts
 
       - name: Run the preregistered walk-forward campaign (2 folds x 4 configs + eval + cost-stress)
         timeout-minutes: 120

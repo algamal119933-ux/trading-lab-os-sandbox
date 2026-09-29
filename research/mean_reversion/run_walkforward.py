@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -68,17 +67,17 @@ def selection_metric(metrics: dict) -> float:
 
 
 def _ensure_writable(path: Path) -> None:
-    """The lookahead/recursive/backtest containers run as a non-root
-    in-container user and can leave the bind-mounted strategies directory
-    (e.g. a __pycache__ they create on import) in a state the host user can
-    no longer write into. Defensive belt-and-suspenders alongside the
-    workflow's own chmod step, re-applied before every write in this loop
-    rather than once, since any of the twelve intervening docker runs could
-    reintroduce it."""
-    try:
-        os.chmod(path, path.stat().st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-    except FileNotFoundError:
-        pass
+    """The Freqtrade image's own entrypoint chowns the whole bind-mounted
+    directory to its in-container user on every `docker run`, not merely
+    restricts its permission bits -- chmod cannot fix a chown, since only
+    the owner or root may change a file's mode. Every one of the twelve
+    backtest invocations in this campaign re-triggers it, so this reclaims
+    ownership via sudo (GitHub-hosted runners carry passwordless sudo)
+    before every write, not once at the start."""
+    if not path.exists():
+        return
+    subprocess.run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(path)],
+                    check=False)
 
 
 def write_params(cfg: dict) -> None:
@@ -109,6 +108,10 @@ def run_backtest(image: str, timerange: str, label: str, artifacts_dir: Path) ->
     ]
     with open(log_path, "w", encoding="utf-8") as fh:
         proc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT)
+    # The container that just ran re-chowned the mounted tree to its own
+    # in-container user on the way out; reclaim it before reading the
+    # result it wrote, not just before the next write.
+    _ensure_writable(BACKTEST_RESULTS)
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
     ok = proc.returncode == 0 and not any(
         marker in log_text
