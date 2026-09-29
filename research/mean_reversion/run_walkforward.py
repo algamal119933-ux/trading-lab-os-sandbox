@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -65,18 +67,36 @@ def selection_metric(metrics: dict) -> float:
     return metrics["total_return_pct"] / dd
 
 
+def _ensure_writable(path: Path) -> None:
+    """The lookahead/recursive/backtest containers run as a non-root
+    in-container user and can leave the bind-mounted strategies directory
+    (e.g. a __pycache__ they create on import) in a state the host user can
+    no longer write into. Defensive belt-and-suspenders alongside the
+    workflow's own chmod step, re-applied before every write in this loop
+    rather than once, since any of the twelve intervening docker runs could
+    reintroduce it."""
+    try:
+        os.chmod(path, path.stat().st_mode | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+    except FileNotFoundError:
+        pass
+
+
 def write_params(cfg: dict) -> None:
+    _ensure_writable(STRATEGY_DIR)
+    target = STRATEGY_DIR / f"{STRATEGY}.json"
+    if target.exists():
+        _ensure_writable(target)
     payload = {
         "strategy_name": STRATEGY,
         "params": {"buy": {"lookback_hours": cfg["lookback_hours"],
                             "z_threshold": cfg["z_threshold"]}},
     }
-    (STRATEGY_DIR / f"{STRATEGY}.json").write_text(json.dumps(payload, indent=2) + "\n",
-                                                     encoding="utf-8")
+    target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def run_backtest(image: str, timerange: str, label: str, artifacts_dir: Path) -> dict:
     """Run one backtest invocation; return {ok, log_path, result_zip, error}."""
+    _ensure_writable(BACKTEST_RESULTS)
     log_path = artifacts_dir / f"backtest_{label}.log"
     cmd = [
         "docker", "run", "--rm",

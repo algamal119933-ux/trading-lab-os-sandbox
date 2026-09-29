@@ -200,6 +200,18 @@ jobs:
             2>&1 | tee artifacts/recursive_development.log
           ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
 
+      - name: Restore write permissions after the gate containers ran
+        run: |
+          set -euo pipefail
+          # The lookahead/recursive containers (running as a non-root
+          # in-container user) can leave freqtrade/user_data/strategies/
+          # (e.g. a __pycache__ they create on import) in a state the
+          # runner's own user can no longer write into, which broke the
+          # very first params-file write below with PermissionError before
+          # any backtest had run. No result was produced or seen; this is a
+          # pure infrastructure fix.
+          chmod -R a+rwX freqtrade/user_data artifacts
+
       - name: Run the preregistered walk-forward campaign (2 folds x 4 configs + eval + cost-stress)
         timeout-minutes: 120
         run: |
