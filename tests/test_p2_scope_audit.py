@@ -358,6 +358,31 @@ RESEARCH_FOUNDATION_CLOSURE_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #36, merged. Two parents: 30064e86 (main before, RESEARCH_FOUNDATION_CLOSURE_1_MERGE) +
+# 44d14db0 (the branch).
+MEAN_REVERSION_CYCLE1_MERGE = "fb2c8fb6738bd40296bf705a82373fd8e86d2514"
+
+# Every path Mean-Reversion Cycle 1 touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+MEAN_REVERSION_CYCLE1_SCOPE: dict[str, str] = {
+    "research/mean_reversion/PREREGISTRATION.md":
+        "the frozen hypothesis, mechanism, parameter grid, walk-forward "
+        "design, falsification and survivor conditions",
+    "research/mean_reversion/MeanReversionZScore.py":
+        "the rolling z-score mean-reversion strategy",
+    "research/mean_reversion/run_walkforward.py":
+        "the 2-fold x 4-config walk-forward campaign driver",
+    ".github/workflows/mean_reversion.yml":
+        "runs the walk-forward campaign; workflow_dispatch only",
+    "research/records/trial_ledger.jsonl":
+        "TRIAL-MR-ZSCORE-WF-1 and its REJECTED outcome",
+    "tests/test_p2_scope_audit.py":
+        "RESEARCH-FOUNDATION-CLOSURE-1 (PR #35) pinned to its merge range; "
+        "this branch's scope",
+    "MANIFEST.txt": "repository integrity - regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -373,6 +398,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
     "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
                                       RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
+    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -382,23 +408,27 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/mean_reversion/PREREGISTRATION.md":
-        "MEAN-REVERSION-CYCLE1-DISCOVERY-1 — the frozen hypothesis, mechanism, "
-        "parameter grid, walk-forward design, cost assumptions, falsification "
-        "and survivor conditions",
-    "research/mean_reversion/MeanReversionZScore.py":
-        "the rolling z-score mean-reversion strategy",
-    "research/mean_reversion/run_walkforward.py":
-        "the 2-fold x 4-config walk-forward campaign driver, reusing the "
-        "existing docker-run-backtesting invocation and summarize_backtest.py",
-    ".github/workflows/mean_reversion.yml":
-        "runs the walk-forward campaign; workflow_dispatch only",
+    "research/h1_qualification/PREREGISTRATION.md":
+        "H1-PAPER-READINESS-QUALIFICATION-1 — frozen H1 identity, temporal-"
+        "stability/parameter-sensitivity/cost-stress designs and every "
+        "PASS/FAIL/INSUFFICIENT law",
+    "research/h1_qualification/run_qualification.py":
+        "the diagnostic campaign driver — 8 parameter neighbors, 4 temporal "
+        "slices, 1 cost-stress run, reusing pin_upstream.py's fetch mechanism",
+    "research/h1_qualification/__init__.py":
+        "makes research/h1_qualification importable for its own tests",
+    ".github/workflows/h1_qualification.yml":
+        "runs the qualification campaign; workflow_dispatch only",
+    "tests/test_h1_qualification_fee_propagation.py":
+        "proves the cost-stress fee-propagation fix and the params-JSON "
+        "space-nesting fix, both before any diagnostic trial executed",
     "research/records/trial_ledger.jsonl":
-        "the preregistered TRIAL-MR-ZSCORE-WF-1 and its REJECTED outcome, "
-        "with every TRAIN/EVAL/cost-stress attempt preserved",
+        "TRIAL-H1-QUAL-1 (ABORTED — a params-JSON nesting bug) and "
+        "TRIAL-H1-QUAL-2 (SURVIVED — ADVANCE_TO_PAPER_ADMISSION_REVIEW), "
+        "every diagnostic attempt preserved",
     "tests/test_p2_scope_audit.py":
-        "RESEARCH-FOUNDATION-CLOSURE-1 (PR #35) pinned to its merge range; "
-        "this branch's scope",
+        "Mean-Reversion Cycle 1 (PR #36) pinned to its merge range; this "
+        "branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
