@@ -1,16 +1,28 @@
-"""Deterministic block-shuffled null control (Research Foundation Unit B).
+"""Deterministic block-shuffled null control (Research Foundation Unit B,
+exit mechanism corrected under RESEARCH-FOUNDATION-CLOSURE-1 Gate 3).
 
-Enters long at a fixed, pre-generated set of candle timestamps: 76 entries,
+Enters and exits long at fixed, pre-generated candle timestamps: 76 entries,
 evenly spaced across the Dataset V2 Development window as a baseline
 schedule, split into 19 blocks of 4, with block ORDER permuted by a seeded
 Fisher-Yates shuffle (seed 20260930) and remapped onto the original block
-time-slots — preserving the local clustering/spacing structure a block
-shuffle is meant to preserve while destroying any link to calendar time or
-market condition. Exits exactly HOLD_HOURS after entry. No market data
-informs entry or exit timing; the schedule was generated and frozen before
-this strategy ever ran, from
-research/records/null_block_shuffled_schedule.json, whose sha256 is pinned
-in the trial's preregistration.
+time-slots, each exit precomputed as entry + HOLD_HOURS — from
+research/null_controls/null_block_shuffled_schedule.json, whose sha256 is
+pinned in the trial's preregistration.
+
+Attempt 1/2 (COMPRESSED RESEARCH FOUNDATION, TRIAL-NULL-BLOCKSHUF-1/2) used a
+`custom_exit` callback comparing `current_time - trade.open_date_utc` against
+HOLD_HOURS at runtime. That callback never returned an exit signal in
+backtesting: the one position it did open rode to the end of the backtest
+window and was closed only by the engine's own end-of-run force_exit,
+consuming the pair's single-position slot and silently blocking the other 75
+scheduled entries. The exact internal cause inside the callback was not
+confirmed (Freqtrade did not log an exception), so rather than debug a
+runtime datetime comparison further, this attempt removes it entirely: the
+exit candle for every entry is precomputed at schedule-generation time —
+exactly the same way the entry candles already were, which is the one
+mechanism already proven to work — and both signals are applied with the
+identical `.isin()` pattern in populate_entry_trend / populate_exit_trend.
+No runtime datetime arithmetic remains.
 
 Purpose: calibrate whether the measurement/accounting pipeline obviously
 promotes noise. This is not a claim that a shuffled schedule is ever a
@@ -23,7 +35,6 @@ strategy has no dependency on it.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -33,49 +44,52 @@ from freqtrade.strategy import IStrategy
 class NullControlBlockShuffled(IStrategy):
     INTERFACE_VERSION = 3
     timeframe = "1h"
-    # No indicators are computed; entry/exit are a precomputed schedule and a
-    # fixed hold duration, so no warm-up window is actually needed. 30 is a
-    # nominal, non-zero value only to satisfy Freqtrade's recursive-analysis
-    # tooling, which refuses startup_candle_count == 0 regardless of whether
-    # any indicator exists.
+    # No indicators are computed; entry/exit are both precomputed schedules,
+    # so no warm-up window is actually needed. 30 is a nominal, non-zero
+    # value only to satisfy Freqtrade's recursive-analysis tooling, which
+    # refuses startup_candle_count == 0 regardless of whether any indicator
+    # exists.
     startup_candle_count = 30
     process_only_new_candles = True
 
     minimal_roi = {"0": 100.0}
     stoploss = -0.99
     trailing_stop = False
-    use_exit_signal = False
+    use_exit_signal = True
     can_short = False
-
-    hold_hours = 260
 
     _schedule_path = Path(__file__).resolve().parent / "null_block_shuffled_schedule.json"
     _entries: set[str] | None = None
+    _exits: set[str] | None = None
 
     @classmethod
-    def _load_entries(cls) -> set[str]:
-        if cls._entries is None:
+    def _load_schedule(cls) -> tuple[set[str], set[str]]:
+        if cls._entries is None or cls._exits is None:
             data = json.loads(cls._schedule_path.read_text(encoding="utf-8"))
             assert data["method"] == "block_shuffled"
-            cls.hold_hours = data["hold_hours"]
             cls._entries = set(data["entries_utc"])
-        return cls._entries
+            cls._exits = set(data["exits_utc"])
+        return cls._entries, cls._exits
 
     def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
         return dataframe
 
     def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
-        entries = self._load_entries()
+        entries, _ = self._load_schedule()
+        dataframe["enter_long"] = 0
+        dataframe["enter_tag"] = ""
         stamps = dataframe["date"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        dataframe.loc[stamps.isin(entries), ["enter_long", "enter_tag"]] = (1, "null_block_shuffled")
+        mask = stamps.isin(entries)
+        dataframe.loc[mask, "enter_long"] = 1
+        dataframe.loc[mask, "enter_tag"] = "null_block_shuffled"
         return dataframe
 
     def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        _, exits = self._load_schedule()
         dataframe["exit_long"] = 0
+        dataframe["exit_tag"] = ""
+        stamps = dataframe["date"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        mask = stamps.isin(exits)
+        dataframe.loc[mask, "exit_long"] = 1
+        dataframe.loc[mask, "exit_tag"] = "null_control_scheduled_exit"
         return dataframe
-
-    def custom_exit(self, pair, trade, current_time, current_rate, current_profit, **kwargs):
-        self._load_entries()
-        if (current_time - trade.open_date_utc) >= timedelta(hours=self.hold_hours):
-            return "null_control_time_exit"
-        return None
