@@ -17,9 +17,6 @@ name: Mean reversion walk-forward (MEAN-REVERSION-CYCLE1-DISCOVERY-1)
 
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - "mean-reversion/run/**"
 
 permissions:
   contents: read
