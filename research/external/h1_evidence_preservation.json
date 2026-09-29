@@ -178,16 +178,25 @@
   },
   "durable_storage": {
     "H1_ARTIFACT_RECOVERED": "YES",
-    "H1_ARTIFACT_DURABLY_PRESERVED": "NO",
-    "DURABLE_STORAGE_LOCATION": "UNRESOLVED",
-    "raw_archive_and_extracted_files": "Downloaded and held OUTSIDE any git worktree, in this session's scratchpad, to remove the 2026-10-07 GitHub expiry risk immediately. This location is session/host-local, not durable, not backed up, and not multi-host \u2014 recovery into it must not be equated with durable preservation. Per scripts/publish_evidence_digest.py's own stated philosophy, this is a bounded, documented mitigation, not a backup. The recovered copy has not been deleted, transformed, or repackaged; its SHA256 was reconfirmed unchanged as of the Owner-review pass on 2026-09-29 (identical to github_reported_digest_sha256 above).",
+    "H1_ARTIFACT_DURABLY_PRESERVED": "YES",
+    "DURABLE_STORAGE_LOCATION": "~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/",
+    "location_selection_authority": "Owner fallback per 'TRADING-RESEARCH-STAGE0 \u2014 COMPRESSED FINAL CLOSURE' directive section 3 (2026-09-29)",
+    "why_this_location_was_selected": "Priority order per that directive: (1) existing authoritative project convention \u2014 none applies (see existing_location_review_performed below, unchanged from the prior review); (2) existing Owner-controlled non-executable evidence location \u2014 ~/Documents/TLOS-Owner-Input/ was inspected and exists, but is semantically an INPUT location (owner-authored planning/design docs fed into sessions), not an OUTPUT evidence-preservation location for this artifact class; it was judged not to clearly apply, so it was not reused. (3) the Owner's explicit fallback, ~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/, was therefore used. It is outside every git worktree, outside the executable project tree, outside any runtime strategy directory, Owner-controlled, persistent beyond this session, not a runtime dependency, not a new service/database/control plane/evidence platform.",
+    "raw_archive_and_extracted_files": "Both the original ZIP and the previously-extracted 16 raw files were copied unmodified (no repackaging, no normalization, no extraction-only substitution) from the session scratchpad to the durable location.",
     "no_new_architecture_invented": true,
+    "durable_copy_hash_gate": {
+      "destination_zip_sha256": "2edb9c32a898d3ec3e409aa7b18d8765e16862fc68a3e3697f64c32d6a1ec501",
+      "matches_expected": true,
+      "source_vs_destination_byte_identity": "PROVEN \u2014 `cmp` reports byte-identical for the archive; independent per-file sha256 recomputed for all 16 extracted files at the destination and diffed against the source hash list \u2014 zero differences",
+      "gate_result": "PASS"
+    },
     "existing_location_review_performed": [
       "artifacts/ convention inspected (tlos-control/artifacts/l2-cohort-20260920T120000Z/*) \u2014 this holds SEALED FP-CONTROL LANE archives (tradesv3.sqlite, logs, evidence/) written by scripts/archive_fp_lane.py, keyed to an FP role/cohort; H1 is neither an FP lane nor cohort-scoped, so this convention does not clearly apply.",
       "scripts/publish_evidence_digest.py + research/schema/evidence_digest_publication.schema.json inspected \u2014 Tier-2 digest publication is scoped by its own schema (`role` enum: FP-CONTROL-1/2/3, FP-CANDIDATE-A/B only) to FP lane archives, and is explicitly names-and-hashes-only, never content, by design. H1 is not an FP lane; this does not clearly apply either, and even if it did, it would not resolve raw-content storage since Tier 2 never stores content.",
       "docs/cloud-0/C0.2_ARTIFACT_CLASSIFICATION.md inspected \u2014 its classification table shows some small text 'Reproducibility evidence' JSON files ARE tracked in git (e.g. baseline_v1_data_audit.json), which is a closer analogy in kind (small text, no binaries) than the Tier-2 pattern, but C0.2 documents a classification exercise already performed on specific named files; it does not state a general rule that would unambiguously cover these 16 new files without a new, equivalent classification decision being made for them.",
+      "~/Documents/TLOS-Owner-Input/ inspected as a candidate existing Owner-controlled location \u2014 exists, but is an input-documents location (bootstrap briefs, P3 blueprint, control-room design), not an evidence-preservation output location; not reused.",
       "no other authoritative evidence-publication/storage documentation was found that names external research-CI artifacts as a class"
     ],
-    "conclusion": "No existing authoritative location clearly applies to this exact class of evidence (raw research-CI artifact content, as opposed to FP-lane archives or already-classified small text files). Per Stage-A closure directive section 3, no new storage location is invented here. DURABLE_STORAGE_LOCATION remains UNRESOLVED and H1_ARTIFACT_DURABLY_PRESERVED remains NO pending Owner decision."
+    "conclusion": "No existing project-defined or already-in-use Owner-controlled location clearly applied to this exact evidence class. Per the compressed-closure directive's explicit fallback and priority order, the artifact (original ZIP plus all 16 raw files) was durably preserved at ~/Documents/TLOS-Evidence/trading-research/H1/run-34126570635/, outside git and outside the executable project tree, with destination SHA256 and full per-file byte-identity independently proven against the source."
   }
 }
