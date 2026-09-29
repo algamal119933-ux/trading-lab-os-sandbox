@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/trial_record-1.0.0.json",
+  "title": "Research trial accounting record",
+  "description": "One row of the research-selection ledger (research/trial_ledger.py). Distinguishes FAMILY / LINEAGE / CANDIDATE / CONFIG / EXPERIMENT / RUN / TRIAL so that one winning config never erases the attempts that did not win. A PREREGISTERED record must exist, appended and hash-chained, before any terminal record for the same trial_id may be appended; research/trial_ledger.py enforces that ordering, this schema only enforces the shape of one record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "family_id",
+    "lineage_id",
+    "candidate_id",
+    "config_id",
+    "experiment_id",
+    "run_id",
+    "trial_id",
+    "state",
+    "purpose"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "family_id": { "type": "string", "minLength": 1 },
+    "lineage_id": { "type": "string", "minLength": 1 },
+    "candidate_id": { "type": "string", "minLength": 1 },
+    "config_id": { "type": "string", "minLength": 1 },
+    "experiment_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "trial_id": { "type": "string", "minLength": 1 },
+    "state": {
+      "type": "string",
+      "enum": ["PREREGISTERED", "COMPLETED", "FAILED", "ABORTED", "REJECTED", "SURVIVED"]
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why this trial exists, declared at preregistration and repeated verbatim on every later record for the same trial_id, so a reader never has to trust that the stated purpose was not rewritten after the outcome was known."
+    },
+    "config_hash": {
+      "type": ["string", "null"],
+      "pattern": "^([0-9a-f]{64})?$",
+      "description": "sha256 of the frozen config/parameter identity, where one exists."
+    },
+    "code_identity": {
+      "type": "object",
+      "description": "Frozen strategy/code identity where applicable.",
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "code_commit": { "type": "string", "minLength": 1 }
+      }
+    },
+    "dataset_identity": {
+      "type": "object",
+      "description": "Frozen dataset/timerange/universe identity where applicable.",
+      "additionalProperties": true
+    },
+    "deterministic_seed": {
+      "type": ["integer", "null"],
+      "description": "Fixed seed for any pseudo-random element of this trial (e.g. a null control), or null when none is used."
+    },
+    "outcome": {
+      "type": "object",
+      "description": "Present only on a terminal record (state != PREREGISTERED). Never present on a PREREGISTERED record — a preregistration that already carries an outcome is not a preregistration.",
+      "additionalProperties": true,
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 },
+        "measurement_validity": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "NOT_APPLICABLE"] }
+      },
+      "required": ["reason"]
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "PREREGISTERED" } } },
+      "then": { "not": { "required": ["outcome"] } }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": { "enum": ["COMPLETED", "FAILED", "ABORTED", "REJECTED", "SURVIVED"] }
+        }
+      },
+      "then": { "required": ["outcome"] }
+    }
+  ]
+}
