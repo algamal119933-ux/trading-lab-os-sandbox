@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tlos/h1-paper/incident.schema.json",
+  "title": "H1-PAPER-COHORT-1 incident payload",
+  "description": "Payload of one record in <lane>/evidence/paper_incident_ledger.jsonl. The envelope (seq, kind='incident', recorded_utc, prev_digest, digest) is research/fp/ledger.py CANONICAL_LEDGER_V1 and is not repeated here. Records are append-only; a mistake is corrected by an erratum, never an edit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cohort_id", "package_manifest_sha256", "incident_type", "restart_counter", "detail"],
+  "properties": {
+    "cohort_id": {"const": "H1-PAPER-COHORT-1"},
+    "package_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "incident_type": {
+      "enum": [
+        "COHORT_START",
+        "PROCESS_RESTART",
+        "MARKET_DATA_FAILURE",
+        "DNS_NETWORK_FAILURE",
+        "EXCHANGE_API_UNREACHABLE",
+        "ACTIVATION_GAP",
+        "RECONCILIATION",
+        "RESOURCE_PRESSURE",
+        "SAFETY_BREACH",
+        "OPERATOR_NOTE",
+        "COHORT_TERMINAL"
+      ]
+    },
+    "restart_counter": {"type": "integer", "minimum": 0, "description": "0 at COHORT_START; +1 on every PROCESS_RESTART; never reset for the life of the cohort"},
+    "started_utc": {"type": ["string", "null"]},
+    "ended_utc": {"type": ["string", "null"]},
+    "missed_candles_1h": {"type": ["integer", "null"], "minimum": 0},
+    "open_trade_state": {"type": ["string", "null"], "description": "for restarts/reconciliation: trade ids and states read from the cohort DB before and after"},
+    "host_bindings": {"type": ["object", "null"], "description": "COHORT_START only: H1_PAPER_LANE_DIR, H1_PAPER_STRATEGY_DIR, and the sha256 of each materialized strategy file"},
+    "terminal_state": {"type": ["object", "null"], "description": "COHORT_TERMINAL only: PROSPECTIVE_BEHAVIOR and OPERATIONAL_CAPABILITY classifications"},
+    "detail": {"type": "string", "minLength": 1}
+  }
+}

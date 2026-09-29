@@ -1,0 +1,99 @@
+{
+  "record_type": "H1_PAPER_COHORT_IDENTITY",
+  "package_id": "H1-PAPER-COHORT-PACKAGE-1",
+  "package_version": "1.0.0",
+  "authority": "Owner directive H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 (2026-09-29): package build authority only; no worker start, no T0, no P2 mutation",
+  "paper_cohort_id": "H1-PAPER-COHORT-1",
+  "candidate_id": "H1_EMACROSS",
+  "family_id": "BTSL_EMA_REGIME",
+  "lineage_id": "BTSL_EMA_REGIME/L1",
+  "admission": {
+    "decision": "ADMIT_TO_ISOLATED_PAPER",
+    "record": "research/paper/h1/H1_PAPER_ADMISSION_AND_LAUNCH_PACKAGE_1.md",
+    "basis_ledger_records": ["TRIAL-H1-CD1 seq 7 (COMPLETED)", "TRIAL-H1-QUAL-2 seq 19 (SURVIVED)"],
+    "means": "the frozen candidate justifies a frozen prospective paper experiment",
+    "does_not_mean": ["edge proven", "production-ready", "P3", "controlled live", "real money"]
+  },
+  "strategy": {
+    "class": "EmaCross",
+    "upstream_repo": "wiktorj137/btc-strategy-lab",
+    "upstream_commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+    "upstream_path": "user_data/strategies/EmaCross.py",
+    "sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+    "params_path": "user_data/strategies/EmaCross.json",
+    "params_sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee",
+    "params": {"ema_period": 600, "exit_threshold": 2.0},
+    "fixed_in_code": {"timeframe": "1h", "can_short": false, "stoploss": -0.15, "trailing_stop": true, "minimal_roi": {"0": 10}, "startup_candle_count": 1300, "process_only_new_candles": true},
+    "license": {"spdx": "GPL-3.0", "license_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"},
+    "materialization": "HASH_PINNED_EXTERNAL_SOURCE — research/external/pin_upstream.py --verify --materialize <dir>; never committed; bytes refused unless sha256 matches the pins in research/external/upstream_pins.json"
+  },
+  "config": {
+    "path": "research/paper/h1/package/config.h1-paper.json",
+    "derived_from": "freqtrade/user_data/config.paper.json.example — differs only in exchange.pair_whitelist (BTC/USDT only, as H1 was measured) and bot_name",
+    "sha256_recorded_in": "research/paper/h1/package/PACKAGE_MANIFEST.sha256"
+  },
+  "engine": {
+    "freqtrade_version": "2026.7",
+    "image_tag": "freqtradeorg/freqtrade:2026.7",
+    "image_digest": "sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643",
+    "digest_note": "Digest pinned for the paper runtime. H1's historical runs pinned the tag only; the local tag resolves to this digest, the same one FP-CONTROL-3 runs (read-only docker inspect, 2026-09-29)."
+  },
+  "market": {
+    "exchange": "binance",
+    "trading_mode": "spot",
+    "pairs": ["BTC/USDT"],
+    "timeframe": "1h",
+    "direction": "long-only",
+    "feature_source": "binance spot public OHLCV 1h, fetched live by Freqtrade's dry-run exchange client"
+  },
+  "sizing": {"dry_run_wallet": 100, "stake_amount": 10, "stake_currency": "USDT", "max_open_trades": 2, "effective_max_concurrent_positions": 1, "tradable_balance_ratio": 0.95},
+  "fee_model": {"per_side_ratio": 0.001, "slippage": "none modelled"},
+  "paper_mode": {
+    "dry_run": true,
+    "exchange_key": "",
+    "exchange_secret": "",
+    "force_entry_enable": false,
+    "withdrawal_capability": "none",
+    "live_order_route": "none",
+    "paper_fill_model_version": "FREQTRADE_2026.7_DRYRUN_ORDERBOOK_V1"
+  },
+  "t0": {
+    "t0_utc": null,
+    "semantics": "PAPER_T0 is set only when a future Owner-authorized worker actually starts under this exact package (manifest digest). It is the recorded_utc of the lane's first incident record of type COHORT_START. Nothing before T0 counts as prospective evidence.",
+    "activation_utc": null,
+    "activation_semantics": "the close time of the first 1h candle the running worker processes after T0; the observation window runs from ACTIVATION_UTC"
+  },
+  "runtime_identity": {
+    "compose_project": "tlos-h1-paper-cohort-1",
+    "container": "tlos-h1-paper-cohort-1-freqtrade",
+    "network": "tlos-h1-paper-cohort-1-net",
+    "bot_name": "h1-paper-cohort-1",
+    "api_port_host": "127.0.0.1:8181",
+    "container_paths": {
+      "config": "/freqtrade/h1config/config.json",
+      "strategy_dir": "/freqtrade/h1strategy",
+      "lane": "/freqtrade/lane",
+      "db": "/freqtrade/lane/tradesv3.sqlite",
+      "log": "/freqtrade/lane/logs/freqtrade.log",
+      "userdir": "/freqtrade/lane/user_data",
+      "evidence_dir": "/freqtrade/lane/evidence",
+      "incident_ledger": "/freqtrade/lane/evidence/paper_incident_ledger.jsonl"
+    },
+    "host_bindings": {
+      "H1_PAPER_LANE_DIR": "launch-time; recommended /home/hamza/tlos-paper/h1-paper-cohort-1; must be outside every git worktree and every P2 path; recorded in COHORT_START",
+      "H1_PAPER_STRATEGY_DIR": "launch-time; <materialize workspace>/btc_strategy_lab/user_data/strategies; recorded with file hashes in COHORT_START"
+    }
+  },
+  "resource_limits": {"cpus": 1.0, "cpu_shares": 256, "mem_limit": "1g", "memswap_limit": "1g", "pids_limit": 256, "oom_score_adj": 500, "docker_log": "10m x 5", "min_host_free_disk_gb_at_preflight": 20, "lane_disk_budget_gb": 2},
+  "contracts": {
+    "prospective_question": "research/paper/h1/package/PREREGISTRATION.md section 2",
+    "benchmark": "research/paper/h1/package/PREREGISTRATION.md section 4",
+    "terminal": "research/paper/h1/package/PREREGISTRATION.md section 5",
+    "freeze": "research/paper/h1/package/PREREGISTRATION.md section 6",
+    "incident_recovery": "research/paper/h1/package/PREREGISTRATION.md section 7 + incident.schema.json",
+    "placement_resources": "research/paper/h1/package/PREREGISTRATION.md section 8"
+  },
+  "forbidden_identity_reuse": ["FP-CONTROL-1", "FP-CONTROL-2", "FP-CONTROL-3", "fp-control-3", "trading-lab-paper", "trading_lab_os_final"],
+  "automatic_transitions": "none — no path to P3, controlled live, exchange credentials, real orders or real money",
+  "real_money_authorized": false
+}

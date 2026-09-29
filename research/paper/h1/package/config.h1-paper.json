@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schema.freqtrade.io/schema.json",
+  "max_open_trades": 2,
+  "stake_currency": "USDT",
+  "stake_amount": 10,
+  "tradable_balance_ratio": 0.95,
+  "fiat_display_currency": "USD",
+  "dry_run": true,
+  "dry_run_wallet": 100,
+  "fee": 0.001,
+  "cancel_open_orders_on_exit": true,
+  "trading_mode": "spot",
+  "unfilledtimeout": {
+    "entry": 10,
+    "exit": 10,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  "entry_pricing": {
+    "price_side": "other",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "exit_pricing": {
+    "price_side": "other",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {
+      "enableRateLimit": true
+    },
+    "ccxt_async_config": {},
+    "pair_whitelist": [
+      "BTC/USDT"
+    ],
+    "pair_blacklist": []
+  },
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    }
+  ],
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_id": ""
+  },
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "0.0.0.0",
+    "listen_port": 8080,
+    "verbosity": "error",
+    "enable_openapi": false,
+    "CORS_origins": [],
+    "username": "OVERWRITTEN_BY_ENV",
+    "password": "OVERWRITTEN_BY_ENV",
+    "jwt_secret_key": "OVERWRITTEN_BY_ENV_NOT_A_SECRET_USE_DOTENV",
+    "ws_token": "OVERWRITTEN_BY_ENV"
+  },
+  "bot_name": "h1-paper-cohort-1",
+  "initial_state": "running",
+  "force_entry_enable": false,
+  "internals": {
+    "process_throttle_secs": 5
+  }
+}

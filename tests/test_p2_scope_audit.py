@@ -437,6 +437,25 @@ ACCOUNT_HANDOFF_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #39, merged. Two parents: effa2e76 (main before, ACCOUNT_HANDOFF_1_MERGE) +
+# the research-cycle1-closure-1 branch.
+RESEARCH_CYCLE1_CLOSURE_1_MERGE = "2a7fc4ebeab1d7dca034c5e1687ae25be9a05895"
+
+# Every path RESEARCH-CYCLE1-CLOSURE-1 touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+RESEARCH_CYCLE1_CLOSURE_1_SCOPE: dict[str, str] = {
+    "research/RESEARCH_CYCLE1_CLOSURE_1.md":
+        "RESEARCH-CYCLE1-CLOSURE-1 — closure/reporting only: H1 and "
+        "Mean-Reversion terminal states, Cycle-1 trial accounting, selection "
+        "debt, data/holdout truth, evidence status, paper-admission "
+        "eligibility, P2 firewall and remaining limitations; no new trial",
+    "tests/test_p2_scope_audit.py":
+        "CLAUDE-ACCOUNT-HANDOFF-1 (PR #38) pinned to its merge range; this "
+        "branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -455,6 +474,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
     "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
     "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
+    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
+                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -464,13 +485,32 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/RESEARCH_CYCLE1_CLOSURE_1.md":
-        "RESEARCH-CYCLE1-CLOSURE-1 — closure/reporting only: H1 and "
-        "Mean-Reversion terminal states, Cycle-1 trial accounting, selection "
-        "debt, data/holdout truth, evidence status, paper-admission "
-        "eligibility, P2 firewall and remaining limitations; no new trial",
+    "research/paper/h1/H1_PAPER_ADMISSION_AND_LAUNCH_PACKAGE_1.md":
+        "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 — the unit report: PR #39 "
+        "closure, frozen identity, admission decision (ADMIT_TO_ISOLATED_PAPER), "
+        "durability, licensing, isolation, placement and launch readiness",
+    "research/paper/h1/package/PREREGISTRATION.md":
+        "H1-PAPER-COHORT-1 prospective question, benchmark contract, terminal, "
+        "freeze, incident/recovery and placement law, frozen before any T0",
+    "research/paper/h1/package/cohort.json":
+        "H1-PAPER-COHORT-1 frozen cohort identity; T0 null",
+    "research/paper/h1/package/config.h1-paper.json":
+        "the paper-only Freqtrade config: config.paper.json.example narrowed to "
+        "BTC/USDT with its own bot name",
+    "research/paper/h1/package/docker-compose.h1-paper.yml":
+        "the standalone, resource-capped, P2-isolated runtime definition; not started",
+    "research/paper/h1/package/incident.schema.json":
+        "incident payload schema for the cohort's hash-chained incident ledger",
+    "research/paper/h1/package/h1_paper.py":
+        "static verify, launch-time preflight (starts nothing) and incident append",
+    "research/paper/h1/package/PACKAGE_MANIFEST.sha256":
+        "binds every package byte; its sha256 is the digest a launch "
+        "authorization must name",
+    "tests/test_h1_paper_package.py":
+        "static package law: identity, paper safety, P2 isolation, no vendoring, "
+        "no T0, incident-ledger law",
     "tests/test_p2_scope_audit.py":
-        "CLAUDE-ACCOUNT-HANDOFF-1 (PR #38) pinned to its merge range; this "
+        "RESEARCH-CYCLE1-CLOSURE-1 (PR #39) pinned to its merge range; this "
         "branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
