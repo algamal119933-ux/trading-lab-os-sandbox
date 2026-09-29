@@ -65,11 +65,26 @@ def _ensure_writable(path: Path) -> None:
 
 
 def write_params(params: dict) -> None:
+    """EmaCross.py declares `ema_period` under space="buy" and
+    `exit_threshold` under space="sell" (confirmed by reading the actual
+    hash-verified upstream source: research/external/pin_upstream.py's own
+    materialised copy). Freqtrade's HyperStrategyMixin auto-load only
+    matches a parameter under its own declared space key; a flat, unnested
+    "params" dict silently matches nothing and every run falls back to the
+    class defaults (ema_period=800, exit_threshold=1.0) without any error --
+    exactly what happened in TRIAL-H1-QUAL-1's first, aborted attempt, where
+    every one of 9 differently-configured runs produced byte-identical
+    output."""
     _ensure_writable(STRATEGY_DIR)
     target = STRATEGY_DIR / f"{STRATEGY}.json"
     if target.exists():
         _ensure_writable(target)
-    target.write_text(json.dumps({"strategy_name": STRATEGY, "params": params}, indent=2) + "\n",
+    nested = {}
+    if "ema_period" in params:
+        nested.setdefault("buy", {})["ema_period"] = params["ema_period"]
+    if "exit_threshold" in params:
+        nested.setdefault("sell", {})["exit_threshold"] = params["exit_threshold"]
+    target.write_text(json.dumps({"strategy_name": STRATEGY, "params": nested}, indent=2) + "\n",
                        encoding="utf-8")
 
 

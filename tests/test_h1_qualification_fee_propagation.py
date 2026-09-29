@@ -67,3 +67,23 @@ def test_engine_fee_propagation_is_checked_from_the_run_s_own_log_not_assumed():
     assert "engine_fee_propagation_proven" in source
     main_source = inspect.getsource(rq.main)
     assert "engine_fee_propagation_proven" in main_source and "return 1" in main_source
+
+
+def test_write_params_nests_under_the_correct_hyperopt_spaces(tmp_path, monkeypatch):
+    """EmaCross.py declares ema_period under space="buy" and exit_threshold
+    under space="sell" (confirmed by reading the actual hash-verified
+    upstream source, sha256 387cf39f...). TRIAL-H1-QUAL-1's first attempt
+    wrote a flat, unnested params dict that silently matched nothing --
+    every one of 9 differently-configured runs produced byte-identical
+    output, all falling back to the class defaults. This proves the fix."""
+    strategy_dir = tmp_path / "strategies"
+    strategy_dir.mkdir()
+    monkeypatch.setattr(rq, "STRATEGY_DIR", strategy_dir)
+
+    rq.write_params({"ema_period": 500, "exit_threshold": 1.5})
+
+    written = json.loads((strategy_dir / "EmaCross.json").read_text(encoding="utf-8"))
+    assert written["params"]["buy"]["ema_period"] == 500
+    assert written["params"]["sell"]["exit_threshold"] == 1.5
+    assert "ema_period" not in written["params"].get("sell", {})
+    assert "exit_threshold" not in written["params"].get("buy", {})
