@@ -383,31 +383,14 @@ MEAN_REVERSION_CYCLE1_SCOPE: dict[str, str] = {
 }
 
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-    "S8": (S8_MERGE, S8_SCOPE),
-    "S9A": (S9A_MERGE, S9A_SCOPE),
-    "S9B": (S9B_MERGE, S9B_SCOPE),
-    "S9C": (S9C_MERGE, S9C_SCOPE),
-    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
-    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
-    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
-                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
-    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
-}
+# PR #37, merged. Two parents: 30064e86 (main before, RESEARCH_FOUNDATION_CLOSURE_1_MERGE) +
+# TRIAL-MR-ZSCORE-WF-1's merge was PR #36; PR #37's first parent is that merge:
+# fb2c8fb6 (main before, MEAN_REVERSION_CYCLE1_MERGE) + the h1-qualification branch.
+H1_QUALIFICATION_MERGE = "0862ea3c7dd26265ccab6c45c264fda2d23d1198"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
-
-BRANCH_SCOPE: dict[str, str] = {
+# Every path H1-Paper-Readiness-Qualification-1 touched -> the requirement it
+# satisfies. These entries were BRANCH_SCOPE while it was in flight.
+H1_QUALIFICATION_SCOPE: dict[str, str] = {
     "research/h1_qualification/PREREGISTRATION.md":
         "H1-PAPER-READINESS-QUALIFICATION-1 — frozen H1 identity, temporal-"
         "stability/parameter-sensitivity/cost-stress designs and every "
@@ -429,6 +412,46 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py":
         "Mean-Reversion Cycle 1 (PR #36) pinned to its merge range; this "
         "branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
+    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
+                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
+    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
+    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "research/CLAUDE_ACCOUNT_HANDOFF_2026-09-29.md":
+        "CLAUDE-ACCOUNT-HANDOFF-1 — the canonical continuity document for a "
+        "Claude-account change: current state, exact file pointers, the "
+        "corrected continuation law (RESEARCH-CYCLE1-CLOSURE-1, not a fresh "
+        "Mean-Reversion run, since Cycle 1 already reached REJECTED), and "
+        "the operative closure-unit instructions carried forward for the "
+        "next account",
+    "tests/test_p2_scope_audit.py":
+        "H1-Paper-Readiness-Qualification-1 (PR #37) pinned to its merge "
+        "range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
