@@ -17,9 +17,6 @@ on:
 permissions:
   contents: read
 
-  push:
-    branches:
-      - "h1-qualification/run/**"
 concurrency:
   group: h1-qualification-${{ github.ref }}
   cancel-in-progress: false
