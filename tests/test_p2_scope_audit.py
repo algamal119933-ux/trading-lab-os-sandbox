@@ -268,26 +268,13 @@ STAGE0_CLOSURE_SCOPE: dict[str, str] = {
 }
 
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-    "S8": (S8_MERGE, S8_SCOPE),
-    "S9A": (S9A_MERGE, S9A_SCOPE),
-    "S9B": (S9B_MERGE, S9B_SCOPE),
-    "S9C": (S9C_MERGE, S9C_SCOPE),
-    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
-    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
-}
+# PR #33, merged. Two parents: 15ce01be (main before, STAGE0_CLOSURE_MERGE) +
+# da1640e1 (the branch).
+RESEARCH_FOUNDATION_UNIT_A_MERGE = "72105b2eaacd63d06c5cf27196c9d11e5a027ddb"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
-
-BRANCH_SCOPE: dict[str, str] = {
+# Every path Unit A touched → the requirement it satisfies. These entries
+# were BRANCH_SCOPE while it was in flight.
+RESEARCH_FOUNDATION_UNIT_A_SCOPE: dict[str, str] = {
     "research/schema/trial_record.schema.json":
         "Research Foundation Unit A — the shape of one research-selection "
         "accounting record",
@@ -300,6 +287,52 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py":
         "Research Foundation Unit A — the Stage-0 closure (PR #32) pinned to "
         "its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "research/null_controls/generate_schedules.py":
+        "Research Foundation Unit B — deterministic, re-derivable generation of "
+        "the two null-control entry schedules",
+    "research/null_controls/NullControlMatchedFrequency.py":
+        "Research Foundation Unit B — null control: matched-frequency random entries",
+    "research/null_controls/NullControlBlockShuffled.py":
+        "Research Foundation Unit B — null control: block-shuffled entries",
+    "research/null_controls/null_matched_frequency_schedule.json":
+        "Research Foundation Unit B — the frozen matched-frequency schedule",
+    "research/null_controls/null_block_shuffled_schedule.json":
+        "Research Foundation Unit B — the frozen block-shuffled schedule",
+    ".github/workflows/null_control.yml":
+        "Research Foundation Unit B — runs a null-control strategy through the "
+        "same acquisition/lock-check/backtest/metrics steps extbench.yml uses, "
+        "with no upstream fetch or license gate (there is no external source)",
+    "research/records/trial_ledger.jsonl":
+        "Research Foundation Unit B — the preregistered H1 controlled-derivation "
+        "and null-control trials, and their outcomes once known",
+    "tests/test_p2_scope_audit.py":
+        "Research Foundation Unit B — Unit A (PR #33) pinned to its merge range; "
+        "this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
