@@ -60,8 +60,9 @@ def matched_frequency_schedule() -> dict:
         "method": "matched_frequency_random",
         "description": (
             f"{TARGET_N} uniformly random, non-overlapping candle-hour draws over the "
-            "Dataset V2 Development window, each held HOLD_HOURS. Deterministic given "
-            "the seed; no market data informs the draw."
+            "Dataset V2 Development window, each held HOLD_HOURS, with the matching exit "
+            "candle precomputed here (entry + HOLD_HOURS) rather than decided at runtime. "
+            "Deterministic given the seed; no market data informs the draw."
         ),
         "seed": SEED_MATCHED,
         "dev_window_start_utc": DEV_START.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -69,6 +70,7 @@ def matched_frequency_schedule() -> dict:
         "hold_hours": HOLD_HOURS,
         "target_n": TARGET_N,
         "entries_utc": [_stamp(i) for i in chosen],
+        "exits_utc": [_stamp(i + HOLD_HOURS) for i in chosen],
     }
 
 
@@ -98,8 +100,10 @@ def block_shuffled_schedule() -> dict:
             f"{BLOCK_SIZE}, with block ORDER permuted by a seeded Fisher-Yates shuffle and "
             "remapped onto the original block time-slots — preserving local clustering "
             "structure while destroying any link to calendar time. Each entry held "
-            "HOLD_HOURS. Deterministic given the seed; no market data informs the "
-            "schedule, and this is not a shuffle of any strategy's own signal."
+            "HOLD_HOURS, with the matching exit candle precomputed here (entry + "
+            "HOLD_HOURS) rather than decided at runtime. Deterministic given the seed; "
+            "no market data informs the schedule, and this is not a shuffle of any "
+            "strategy's own signal."
         ),
         "seed": SEED_BLOCK,
         "block_size": BLOCK_SIZE,
@@ -108,6 +112,7 @@ def block_shuffled_schedule() -> dict:
         "hold_hours": HOLD_HOURS,
         "target_n": TARGET_N,
         "entries_utc": [_stamp(i) for i in final],
+        "exits_utc": [_stamp(i + HOLD_HOURS) for i in final],
     }
 
 

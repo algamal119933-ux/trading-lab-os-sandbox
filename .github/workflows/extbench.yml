@@ -411,6 +411,24 @@ jobs:
           ) 2>&1 | tee artifacts/metrics_step.log
           exit "${PIPESTATUS[0]}"
 
+      # Research Foundation Gate 2 (RESEARCH-FOUNDATION-CLOSURE-1): the
+      # normalised metrics above are an aggregate; freqtrade/user_data/
+      # backtest_results/ holds the full per-trade result `--export trades`
+      # produced, and previously nothing copied it into the uploaded
+      # artifact, so it was silently discarded when the runner terminated.
+      # Prospective only — this does not retroactively recover any prior
+      # run's trade list, H1's included.
+      - name: Collect the full trade-level backtest result
+        if: always() && steps.lane.outputs.gates_only != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/backtest_results
+          if compgen -G "freqtrade/user_data/backtest_results/*" > /dev/null; then
+            cp -p freqtrade/user_data/backtest_results/* artifacts/backtest_results/
+          else
+            echo "no backtest_results files present to collect"
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
