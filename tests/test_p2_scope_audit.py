@@ -456,35 +456,13 @@ RESEARCH_CYCLE1_CLOSURE_1_SCOPE: dict[str, str] = {
 }
 
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-    "S8": (S8_MERGE, S8_SCOPE),
-    "S9A": (S9A_MERGE, S9A_SCOPE),
-    "S9B": (S9B_MERGE, S9B_SCOPE),
-    "S9C": (S9C_MERGE, S9C_SCOPE),
-    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
-    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
-    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
-                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
-    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
-    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
-    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
-    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
-                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
-}
+# PR #40, merged. Two parents: 2a7fc4eb (main before, RESEARCH_CYCLE1_CLOSURE_1_MERGE) +
+# 8df86051 (the h1-paper-admission-and-launch-package-1 branch).
+H1_PAPER_ADMISSION_1_MERGE = "3e5ef38b5eb8b72ee9b3541c50c02a87634db8f2"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
-
-BRANCH_SCOPE: dict[str, str] = {
+# Every path H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 touched -> the requirement it
+# satisfies. These entries were BRANCH_SCOPE while it was in flight.
+H1_PAPER_ADMISSION_1_SCOPE: dict[str, str] = {
     "research/paper/h1/H1_PAPER_ADMISSION_AND_LAUNCH_PACKAGE_1.md":
         "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 — the unit report: PR #39 "
         "closure, frozen identity, admission decision (ADMIT_TO_ISOLATED_PAPER), "
@@ -512,6 +490,44 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py":
         "RESEARCH-CYCLE1-CLOSURE-1 (PR #39) pinned to its merge range; this "
         "branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
+    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
+                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
+    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
+    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
+    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
+    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
+                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
+    "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "tests/test_p2_scope_audit.py":
+        "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 (PR #40) pinned to its merge "
+        "range; the master plan's single path admitted to the allowed set; "
+        "this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -629,7 +645,11 @@ MERGED_STAGES = sorted(MERGED_STAGE_SCOPES)
 # added there between Mq and the freeze would break the equivalence proof.
 ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/",
                     ".github/workflows/", ".github/gates/")
-ALLOWED_FILES = (".gitignore", "MANIFEST.txt", "CLAUDE.md")
+# The master planning SSOT is admitted by its exact path, not by a docs/governance/
+# prefix: one non-authorizing planning document is the whole of what that
+# directory is for, and a prefix would let anything else arrive beside it.
+ALLOWED_FILES = (".gitignore", "MANIFEST.txt", "CLAUDE.md",
+                 "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md")
 
 
 # -- the pinned layer: each closed stage against its own merge range --------
