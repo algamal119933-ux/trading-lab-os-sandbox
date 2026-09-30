@@ -197,6 +197,15 @@ records the ordered prerequisites to Paper Beta and the authority boundaries. It
 grants no execution authority and is not superseded by the P2 contract; P2 is
 items 3 through 5 of that order.
 
+## Master planning SSOT
+
+[`docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md`](docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md)
+(`TRADING-LAB-OS-MASTER-PLAN-1`, v1.1) is the planning SSOT for lanes, roadmap
+placement and monitoring. It is non-authorizing by itself: authority is
+field-specific, and the merged P2 contract, registries and this file outrank it
+for their fields. Where they conflict, the higher authority wins and the plan is
+`NEEDS_RECONCILIATION`.
+
 ---
 
 ## Locked OOS rule

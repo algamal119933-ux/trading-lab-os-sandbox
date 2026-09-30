@@ -524,6 +524,12 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
+    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
+        "TRADING-LAB-OS-MASTER-PLAN-1 v1.1 — the Owner-provided master planning "
+        "SSOT, installed byte-for-byte; non-authorizing by itself",
+    "CLAUDE.md":
+        "a pointer to the master planning SSOT and its field-specific, "
+        "non-authorizing standing",
     "tests/test_p2_scope_audit.py":
         "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 (PR #40) pinned to its merge "
         "range; the master plan's single path admitted to the allowed set; "
