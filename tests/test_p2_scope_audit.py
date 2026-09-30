@@ -525,8 +525,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 BRANCH_SCOPE: dict[str, str] = {
     "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
-        "TRADING-LAB-OS-MASTER-PLAN-1 v1.1 — the Owner-provided master planning "
-        "SSOT, installed byte-for-byte; non-authorizing by itself",
+        "TRADING-LAB-OS-MASTER-PLAN-1 v1.2 — the Owner-provided master planning "
+        "SSOT (v1.1 installed byte-for-byte, then the Owner's three v1.2 "
+        "reconciliation corrections); non-authorizing by itself",
     "CLAUDE.md":
         "a pointer to the master planning SSOT and its field-specific, "
         "non-authorizing standing",

@@ -3,8 +3,8 @@
 
 **Document ID:** `TRADING-LAB-OS-MASTER-PLAN-1`  
 **Status:** `APPROVED / MASTER PLANNING SSOT / NON-AUTHORIZING BY ITSELF`  
-**Version:** `1.1`  
-**Date:** `2026-09-29`  
+**Version:** `1.2`  
+**Date:** `2026-09-30`  
 **Scope:** Trading Lab OS — P2 → P3 → POST-BETA, including deferred research/AOS lanes  
 **Purpose:** Prevent scope drift, stage drift, authority drift, duplicated systems, premature execution, and loss of evidence.
 
@@ -1269,9 +1269,9 @@ Claude = sole writer/executor
         ↓
 deterministic + adversarial gates
         ↓
-Codex = fresh independent read-only verifier
+Independent verifier = defined by current merged execution authority
         ↓
-FAIL → Claude repair → re-run gates → fresh verifier
+FAIL → Claude repair → re-run gates → re-verification
         ↓
 PASS
         ↓
@@ -1290,6 +1290,14 @@ branch
 → OWNER MERGE [normal two-parent where governing contract requires]
 → re-ground on merged main
 → continue
+```
+
+Verifier authority rule:
+
+```text
+Independent verifier = defined by current merged execution authority.
+If current CLAUDE.md says Codex = NONE, Codex is not invoked.
+A later merged Owner-approved authority may enable a verifier.
 ```
 
 No direct push to main, no self-merge, no history rewriting, and no squash/rebase where the governing stage contract requires a normal merge.
@@ -1450,10 +1458,11 @@ P3_PLANNING_DURING_P2            = ALLOWED WHERE CURRENT AUTHORITY SAYS SO
 P3_EXECUTION                     = REQUIRES ENTRY LAW + EXPLICIT OWNER AUTHORITY
 
 PARALLEL_RESEARCH_PREP           = NOT AUTHORIZED BY THIS FILE
-LAST VERIFIED P2 RESEARCH STATE  = BLOCKED PENDING FRESH OWNER DIRECTIVE
-EXISTING_RESEARCH_PREP_PACKAGE   = PARKED / REFERENCE UNTIL CURRENT AUTHORITY ADMITS IT
-PARALLEL_CANDIDATE_EXECUTION     = NO
-PARALLEL_NEW_PAPER_BOTS          = NO
+CURRENT_RESEARCH_AUTHORITY       = VERIFY CURRENT MERGED CONTRACT / REGISTRY
+RESEARCH_PREPARATION_BY_PLAN     = NO
+RESEARCH_EXECUTION_BY_PLAN       = NO
+CANDIDATE_EXECUTION_BY_PLAN      = NO
+NEW_PAPER_WORKERS_BY_PLAN        = NO
 
 H1_EVIDENCE_PRESERVATION         = REQUIRED
 H1_REPRODUCTION_CLASSIFICATION   = REVERIFY; DISAGREEMENT EXISTS
@@ -1678,14 +1687,3 @@ SCOPE_DRIFT_POLICY                = FAIL CLOSED
 ```
 
 # END
-
-```text
-MASTER_PLAN_STATUS = GOVERNING
-CRITICAL_PATH = P2 → P3 → POST-BETA
-PARALLEL_PREP = SUBJECT TO CURRENT MERGED AUTHORITY
-CANONICAL_P2_MUTATION = NO
-MONITORING = CROSS-CUTTING
-CONTROL_ROOM_AUTHORITY = NO
-REAL_MONEY_AUTHORIZED = NO
-SCOPE_DRIFT_POLICY = FAIL CLOSED
-```
