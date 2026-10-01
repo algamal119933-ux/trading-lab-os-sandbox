@@ -1,0 +1,3 @@
+# Cycle-2 hash-pinned research requirements (audited: research/cycle2/TRIALGATE_AUDIT_1.md).
+# Install with: pip install --require-hashes --no-deps -r research/requirements-cycle2.txt (trialgate has no runtime dependencies).
+trialgate==0.5.0 --hash=sha256:30c4ac41342b0477a4ed7954ef7de1a4ab53af435c5498f5ce3d59b8d7b8db1d --hash=sha256:22e2933ce685cc75e093a9df75beb9b8b54728d1013b2e81d2af8b0379f1f710

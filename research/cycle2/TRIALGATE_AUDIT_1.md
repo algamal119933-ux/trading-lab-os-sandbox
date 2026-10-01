@@ -185,3 +185,22 @@ A companion test proves the scan catches a forbidden import. **REGISTRY_HOLDOUT_
 - No trial ID and no ledger append.
 - No engine backtest, docker, freqtrade or market data, locally or in CI.
 - The driver's engine-propagation proof from a real run log belongs to §7.2's first CI run.
+
+## Addendum — Unit 7.1a (disclosures 1 and 2 closed)
+
+Appended by CYCLE-2 UNIT 7.1a (tooling-only, non-executing). The text above is unchanged.
+
+- **New file.** `research/requirements-cycle2.txt` carries the audited line, byte-for-byte as pinned in
+  §A5 (`trialgate==0.5.0` with both sha256 hashes), and nothing else besides a two-line comment header.
+- **Disclosure 2 closed.** `research/requirements.txt` is again exactly `mlflow==3.15.2`, byte-identical
+  to its content at 4bbb1df, so it is no longer in pip hash-checking mode. mlflow is not hash-pinned.
+- **Disclosure 1 closed (Owner-approved ci.yml change).** The `static` job gains one step directly after
+  "Install pinned dev dependencies":
+  `pip install --require-hashes --no-deps -r research/requirements-cycle2.txt`, and its "Test suite"
+  step sets `TLOS_REQUIRE_TRIALGATE: "1"`. Under that variable a trialgate-dependent test whose import
+  fails is a failure, not a skip; without it (local runs) the skip behaviour is unchanged.
+- **Counts observed (Python 3.12.14, CI-equivalent install).** tests/test_cycle2_multiple_testing.py:
+  65 passed, 0 skipped (26 of them trialgate-dependent). Without trialgate and with the variable set:
+  26 failed, 39 passed; without the variable: 26 skipped, 39 passed. The CI run's own counts are
+  recorded on the unit's pull request.
+- No trial, no backtest, no ledger append; no threshold, tolerance or reference value changed.
