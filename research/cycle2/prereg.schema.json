@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-lab-os/schema/cycle2_prereg-1.0.0.json",
+  "title": "OFFLINE-RESEARCH-CYCLE-2 driver preregistration input",
+  "description": "The only input research/cycle2/driver.py reads its strategy, grid, folds, lanes and fee levels from (OPENING-1 §6.1/§6.2). Every grid is an explicit enumeration of frozen configurations: there is no range, sweep, step, distribution or Hyperopt syntax anywhere in this schema, and additionalProperties is false at every level so none can be smuggled in. Windows lie inside the Development window 2021-01-01..2024-12-31 (OPENING-1 §2.4); the Validation window is never a driver input. Thresholds are required here and have no defaults anywhere. This schema is not a preregistration: the canonical preregistration is the trial ledger record, which must carry this file's sha256 before the driver will execute.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "cycle_id", "family_id", "lineage_id", "candidate_id",
+    "experiment_id", "run_id", "trial_id", "trial_class", "lineage_kind",
+    "funnel_step", "strategy", "engine_image", "wallet", "selection_metric",
+    "grid", "folds", "lanes", "fee_levels", "multiple_testing",
+    "selection_debt_statement"
+  ],
+  "properties": {
+    "schema_version": {"const": "cycle2-prereg-1.0.0"},
+    "cycle_id": {"const": "OFFLINE-RESEARCH-CYCLE-2"},
+    "family_id": {"$ref": "#/$defs/id"},
+    "lineage_id": {"$ref": "#/$defs/id"},
+    "candidate_id": {"$ref": "#/$defs/id"},
+    "experiment_id": {
+      "type": "string",
+      "pattern": "^EXP-CYCLE2-(SCI|CAL)-[A-Z0-9][A-Z0-9_-]*$",
+      "description": "SCI = scientific trial ID (cap 12), CAL = calibration/tooling trial ID (cap 6). The driver counts Cycle-2 budget from ledger records carrying this prefix."
+    },
+    "run_id": {"$ref": "#/$defs/id"},
+    "trial_id": {"type": "string", "pattern": "^TRIAL-[A-Z0-9][A-Z0-9_-]*$"},
+    "trial_class": {"enum": ["scientific", "calibration"]},
+    "lineage_kind": {"enum": ["TREND", "MEAN_REVERSION", "NULL_CALIBRATION"]},
+    "owner_mr_approval_ref": {
+      "type": "string", "minLength": 1,
+      "description": "Required for a MEAN_REVERSION lineage: the Owner record approving the named mechanism (OPENING-1 §2.2). Its MR budget is 0 without one."
+    },
+    "funnel_step": {
+      "enum": ["DEVELOPMENT_WALK_FORWARD", "PARAMETER_ROBUSTNESS", "COST_FRICTION_STRESS", "NULL_RECALIBRATION"]
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "sha256"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "file": {"type": "string", "pattern": "^(research|freqtrade/user_data/strategies)/[A-Za-z0-9_/]+\\.py$"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "engine_image": {"type": "string", "pattern": "^freqtradeorg/freqtrade:[0-9]{4}\\.[0-9]+(@sha256:[0-9a-f]{64})?$"},
+    "wallet": {"type": "number", "exclusiveMinimum": 0},
+    "selection_metric": {
+      "enum": ["return_over_drawdown"],
+      "description": "Cycle-1's frozen TRAIN selection metric (total_return_pct / max_drawdown_pct), reused unchanged."
+    },
+    "grid": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["config_id", "params", "regime_gated"],
+        "properties": {
+          "config_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "description": "Nested by Freqtrade parameter space, exactly as the strategy declares it: a flat dict silently matches nothing (TRIAL-H1-QUAL-1).",
+            "properties": {
+              "buy": {"$ref": "#/$defs/space"},
+              "sell": {"$ref": "#/$defs/space"},
+              "protection": {"$ref": "#/$defs/space"}
+            }
+          },
+          "regime_gated": {"type": "boolean"}
+        }
+      }
+    },
+    "folds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fold", "train", "eval"],
+        "properties": {
+          "fold": {"type": "integer", "minimum": 1},
+          "train": {"$ref": "#/$defs/window"},
+          "eval": {"$ref": "#/$defs/window"}
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["walk_forward", "robustness"]}
+    },
+    "robustness_window": {"$ref": "#/$defs/window"},
+    "fee_levels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "stress"],
+      "description": "Per-side fee fractions passed to the ENGINE (--fee) and to the summariser alike. A symmetric fee proxy: slippage, latency and partial fills are NOT_SUPPORTED.",
+      "properties": {
+        "base": {"$ref": "#/$defs/fee"},
+        "stress": {"type": "array", "maxItems": 4, "uniqueItems": true, "items": {"$ref": "#/$defs/fee"}}
+      }
+    },
+    "multiple_testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dsr_threshold", "pbo_threshold", "pbo_block_count", "periods_per_year", "effective_trials"],
+      "properties": {
+        "dsr_threshold": {"$ref": "#/$defs/probability"},
+        "pbo_threshold": {"$ref": "#/$defs/probability"},
+        "pbo_block_count": {"type": "integer", "minimum": 2, "multipleOf": 2},
+        "periods_per_year": {"type": "integer", "minimum": 1},
+        "effective_trials": {"type": "integer", "minimum": 1}
+      }
+    },
+    "selection_debt_statement": {"type": "string", "minLength": 20}
+  },
+  "allOf": [
+    {"if": {"properties": {"lanes": {"contains": {"const": "robustness"}}}},
+     "then": {"required": ["robustness_window"]}},
+    {"if": {"properties": {"lineage_kind": {"const": "MEAN_REVERSION"}}},
+     "then": {"required": ["owner_mr_approval_ref"]}}
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_/.-]*$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "date": {"type": "string", "pattern": "^20(2[1-4])(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])$"},
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {"start": {"$ref": "#/$defs/date"}, "end": {"$ref": "#/$defs/date"}}
+    },
+    "fee": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.05},
+    "probability": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1},
+    "scalar": {
+      "oneOf": [
+        {"type": "number"},
+        {"type": "boolean"},
+        {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$"}
+      ]
+    },
+    "space": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {"$ref": "#/$defs/scalar"}
+    }
+  }
+}
