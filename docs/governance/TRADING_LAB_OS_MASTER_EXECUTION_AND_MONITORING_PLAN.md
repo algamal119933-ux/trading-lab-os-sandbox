@@ -270,7 +270,7 @@ research preparation stays isolated and non-authoritative
 candidate execution requires a separate authority gate
 ```
 
-**Authority rule:** this master plan does not itself authorize new research during an active P2. At the last verified reconciliation, the merged P2 governance blocked parallel candidate research, backtests, new research dependencies, and new paper workers pending a fresh Owner directive.
+**Authority rule:** this master plan does not itself authorize new research during an active P2. Current research authority is field-specific and lives in merged research records, not in this plan: `research/OFFLINE_RESEARCH_AUTHORITY_1.md` (the boundary frame, which opened Cycle 1, now closed) and `research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md` (Cycle 2, within its own scope, caps and order of work). Anything those records do not open stays blocked.
 
 Existing research-preparation artifacts may be preserved as a parked/reference package. Any new preparation, merge, dependency installation, backtest, candidate execution, or paper admission must first pass the current merged authority.
 
@@ -1368,6 +1368,25 @@ THIS FILE MUST BE RECONCILED
 ```
 
 Do not use this file to block a valid higher-authority transaction, and do not use a chat message to bypass the required transaction.
+
+## 22.1 Change record
+
+```text
+CHANGE_ID        = MP1-CR-001
+DATE             = 2026-10-01
+OWNER_DECISION   = Owner approval of OFFLINE-RESEARCH-CYCLE-2-OPENING-1 (2026-10-01)
+REASON           = §3 Lane B described research authority as of a reconciliation that predates
+                   OFFLINE-RESEARCH-AUTHORITY-1 (merged PR #35, 2026-09-29); the sentence was stale
+                   for the research-execution-authority field
+AFFECTED_SECTION = §3 LANE B, "Authority rule" paragraph, second sentence
+OLD_RULE         = merged P2 governance blocked parallel candidate research, backtests, new research
+                   dependencies and new paper workers pending a fresh Owner directive
+NEW_RULE         = research authority is held by the merged research records
+                   (OFFLINE_RESEARCH_AUTHORITY_1.md; OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md);
+                   anything they do not open stays blocked; this plan still authorizes nothing
+EVIDENCE         = research/OFFLINE_RESEARCH_AUTHORITY_1.md; research/RESEARCH_CYCLE1_CLOSURE_1.md;
+                   research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md
+```
 
 ---
 

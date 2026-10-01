@@ -494,6 +494,28 @@ H1_PAPER_ADMISSION_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #41, merged. Two parents: 3e5ef38b (main before, H1_PAPER_ADMISSION_1_MERGE) +
+# 0e9d39c6 (the p2-master-plan-installation branch).
+MASTER_PLAN_1_MERGE = "d7e3fb26cca6a42dc2dc554bf18ec6c9a9cd2ba2"
+
+# Every path TRADING-LAB-OS-MASTER-PLAN-1 installation touched -> the requirement
+# it satisfies. These entries were BRANCH_SCOPE while it was in flight.
+MASTER_PLAN_1_SCOPE: dict[str, str] = {
+    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
+        "TRADING-LAB-OS-MASTER-PLAN-1 v1.2 — the Owner-provided master planning "
+        "SSOT (v1.1 installed byte-for-byte, then the Owner's three v1.2 "
+        "reconciliation corrections); non-authorizing by itself",
+    "CLAUDE.md":
+        "a pointer to the master planning SSOT and its field-specific, "
+        "non-authorizing standing",
+    "tests/test_p2_scope_audit.py":
+        "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 (PR #40) pinned to its merge "
+        "range; the master plan's single path admitted to the allowed set; "
+        "this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -515,6 +537,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
                                   RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
     "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
+    "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -524,17 +547,15 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
+    "research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md":
+        "OFFLINE-RESEARCH-CYCLE-2-OPENING-1 — the Owner-approved Cycle-2 "
+        "opening record (governance-only, non-executing)",
     "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
-        "TRADING-LAB-OS-MASTER-PLAN-1 v1.2 — the Owner-provided master planning "
-        "SSOT (v1.1 installed byte-for-byte, then the Owner's three v1.2 "
-        "reconciliation corrections); non-authorizing by itself",
-    "CLAUDE.md":
-        "a pointer to the master planning SSOT and its field-specific, "
-        "non-authorizing standing",
+        "Lane-B research-authority sentence corrected; §22.1 change record "
+        "MP1-CR-001",
     "tests/test_p2_scope_audit.py":
-        "H1-PAPER-ADMISSION-AND-LAUNCH-PACKAGE-1 (PR #40) pinned to its merge "
-        "range; the master plan's single path admitted to the allowed set; "
-        "this branch's scope",
+        "TRADING-LAB-OS-MASTER-PLAN-1 installation (PR #41) pinned to its merge "
+        "range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
