@@ -516,6 +516,26 @@ MASTER_PLAN_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #42, merged. Two parents: d7e3fb26 (main before, MASTER_PLAN_1_MERGE) +
+# d7a95419 (the research-cycle2-opening branch).
+CYCLE2_OPENING_1_MERGE = "4bbb1df6e866d657b9e486ca683c30fef4133035"
+
+# Every path OFFLINE-RESEARCH-CYCLE-2-OPENING-1 touched -> the requirement it
+# satisfies. These entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_OPENING_1_SCOPE: dict[str, str] = {
+    "research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md":
+        "OFFLINE-RESEARCH-CYCLE-2-OPENING-1 — the Owner-approved Cycle-2 "
+        "opening record (governance-only, non-executing)",
+    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
+        "Lane-B research-authority sentence corrected; §22.1 change record "
+        "MP1-CR-001",
+    "tests/test_p2_scope_audit.py":
+        "TRADING-LAB-OS-MASTER-PLAN-1 installation (PR #41) pinned to its merge "
+        "range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -538,6 +558,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
                                   RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
     "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
     "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
+    "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -547,15 +568,34 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md":
-        "OFFLINE-RESEARCH-CYCLE-2-OPENING-1 — the Owner-approved Cycle-2 "
-        "opening record (governance-only, non-executing)",
-    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
-        "Lane-B research-authority sentence corrected; §22.1 change record "
-        "MP1-CR-001",
+    "research/cycle2/__init__.py":
+        "CYCLE-2 UNIT 7.1 — package marker for the OPENING-1 §6 minimum tooling",
+    "research/cycle2/TRIALGATE_AUDIT_1.md":
+        "CYCLE-2 UNIT 7.1 A1–A6 — trialgate==0.5.0 audit record and verdict",
+    "research/cycle2/multiple_testing.py":
+        "CYCLE-2 UNIT 7.1 B / OPENING-1 §6.3 — thin wrapper over "
+        "trialgate.validation with the NOT_EVALUABLE law",
+    "research/cycle2/driver.py":
+        "CYCLE-2 UNIT 7.1 C / OPENING-1 §6.1 + §6.2 — strategy-agnostic "
+        "WF/robustness driver, engine-propagated fee proxy, hard-cap guard",
+    "research/cycle2/prereg.schema.json":
+        "CYCLE-2 UNIT 7.1 C — schema of the driver's preregistration input "
+        "(explicit enumeration only)",
+    "research/cycle2/regime_session.py":
+        "CYCLE-2 UNIT 7.1 D / OPENING-1 §6.4 — diagnostic-only regime/session "
+        "script, trailing labels",
+    "tests/test_cycle2_multiple_testing.py":
+        "CYCLE-2 UNIT 7.1 A2–A4, A6, B — trialgate audit and wrapper tests",
+    "tests/test_cycle2_driver.py":
+        "CYCLE-2 UNIT 7.1 C — driver tests with subprocess mocked (nothing executes)",
+    "tests/test_cycle2_regime_session.py":
+        "CYCLE-2 UNIT 7.1 D — no-lookahead and diagnostic-only tests",
+    "research/requirements.txt":
+        "CYCLE-2 UNIT 7.1 A5 — audit verdict ADOPT: trialgate==0.5.0 pinned with "
+        "both audited hashes",
     "tests/test_p2_scope_audit.py":
-        "TRADING-LAB-OS-MASTER-PLAN-1 installation (PR #41) pinned to its merge "
-        "range; this branch's scope",
+        "OFFLINE-RESEARCH-CYCLE-2-OPENING-1 (PR #42) pinned to its merge range; "
+        "this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
