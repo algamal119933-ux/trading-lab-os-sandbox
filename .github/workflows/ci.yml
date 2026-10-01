@@ -41,6 +41,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Install audited Cycle-2 research pin (trialgate, hash-checked)
+        run: pip install --require-hashes --no-deps -r research/requirements-cycle2.txt
+
       - name: Python compile check
         run: python -m compileall -q scripts research monitoring freqtrade tests
 
@@ -322,6 +325,8 @@ jobs:
           echo "SCOPE_AUDIT = RAN (baseline resolved, no skips)"
 
       - name: Test suite
+        env:
+          TLOS_REQUIRE_TRIALGATE: "1"
         run: python -m pytest
 
       - uses: actions/upload-artifact@v4

@@ -14,17 +14,20 @@ research/cycle2/TRIALGATE_AUDIT_1.md before these tests were run:
 Every threshold below is a TEST FIXTURE that exercises a branch. None of them is
 a research threshold; those come only from a preregistration.
 
-Tests that need trialgate itself skip where it is not installed (the CI image
-installs requirements-dev.txt only); the wrapper's own precondition branches
-and the static scans run everywhere.
+Tests that need trialgate itself skip where it is not installed, unless
+TLOS_REQUIRE_TRIALGATE=1 (set by CI, which installs research/requirements-cycle2.txt):
+then they fail instead, so a lost install cannot pass as a skip. The wrapper's own
+precondition branches and the static scans run everywhere.
 """
 
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import inspect
 import math
+import os
 import random
 import statistics
 import subprocess
@@ -45,10 +48,24 @@ try:
     from trialgate import validation as tg_validation
 
     HAVE_TRIALGATE = True
-except ImportError:  # pragma: no cover - exercised in the CI image
+except ImportError:  # pragma: no cover - CI installs it and requires it
     HAVE_TRIALGATE = False
 
-needs_trialgate = pytest.mark.skipif(not HAVE_TRIALGATE, reason="trialgate==0.5.0 not installed here")
+REQUIRE_TRIALGATE = os.environ.get("TLOS_REQUIRE_TRIALGATE") == "1"
+
+
+def needs_trialgate(test):
+    """Skip without trialgate locally; fail without it where it is required."""
+    if HAVE_TRIALGATE:
+        return test
+    if not REQUIRE_TRIALGATE:
+        return pytest.mark.skip(reason="trialgate==0.5.0 not installed here")(test)
+
+    @functools.wraps(test)
+    def refuse(*_args, **_kwargs):
+        pytest.fail("TLOS_REQUIRE_TRIALGATE=1 but trialgate==0.5.0 is not importable")
+
+    return refuse
 
 # Tolerances, as recorded in TRIALGATE_AUDIT_1.md §A2 before running.
 PAPER_TOL = 5e-5        # the paper prints 4 decimals
@@ -290,13 +307,31 @@ def test_installed_trialgate_is_the_pinned_version_with_no_runtime_dependencies(
 
 
 def test_research_requirements_pin_trialgate_with_both_audited_hashes():
-    lines = [ln for ln in (REPO_ROOT / "research" / "requirements.txt").read_text().splitlines()
-             if ln.startswith("trialgate")]
+    lines = [ln for ln in (REPO_ROOT / "research" / "requirements-cycle2.txt").read_text().splitlines()
+             if ln.strip() and not ln.startswith("#")]
     assert lines == [
         "trialgate==0.5.0"
         " --hash=sha256:30c4ac41342b0477a4ed7954ef7de1a4ab53af435c5498f5ce3d59b8d7b8db1d"
         " --hash=sha256:22e2933ce685cc75e093a9df75beb9b8b54728d1013b2e81d2af8b0379f1f710"
     ]
+    # The unhashed file stays out of hash-checking mode (audit §A5, disclosure 2).
+    plain = (REPO_ROOT / "research" / "requirements.txt").read_text()
+    assert "trialgate" not in plain
+    assert "--hash" not in plain
+
+
+def test_ci_static_job_installs_the_hash_checked_pin_and_requires_trialgate():
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    job = workflow["jobs"]["static"]
+    names = [step.get("name") for step in job["steps"]]
+    install = job["steps"][names.index("Install pinned dev dependencies") + 1]
+    assert install["run"].split() == ["pip", "install", "--require-hashes", "--no-deps",
+                                      "-r", "research/requirements-cycle2.txt"]
+    tests = job["steps"][names.index("Test suite")]
+    env = {**job.get("env", {}), **tests.get("env", {})}
+    assert env.get("TLOS_REQUIRE_TRIALGATE") == "1"
 
 
 def test_calling_without_thresholds_raises():
