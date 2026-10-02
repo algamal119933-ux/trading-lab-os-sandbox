@@ -5,7 +5,7 @@ Master Plan §12 NULL / NEGATIVE CONTROL LAW; research/cycle2/TRIALGATE_AUDIT_1.
 research/mean_reversion/PREREGISTRATION.md "Falsification conditions (frozen)" and "Survivor conditions"
 (the Cycle-1 frozen law, reused unchanged). Owner, 2026-10-01: "Prepare 7.2"; funnel law = RECOMMENDED.
 **Classification:** governance record. It executes nothing.
-**Status:** FROZEN. Every Cycle-2 preregistration binds this file by path and sha256
+**Status:** FROZEN on merge (revised once before freeze; see "Pre-freeze revision" below). Every Cycle-2 preregistration binds this file by path and sha256
 (`funnel_law` in research/cycle2/prereg.schema.json). Changing any word or value below requires a new
 Owner record and a new law file; this one is never edited.
 
@@ -21,12 +21,15 @@ research/cycle2/config_n.py.
 
 ```text
 Applies to every Cycle-2 trial (calibration and scientific). Per preregistration, per lineage.
-L1 WALK_FORWARD (Cycle-1 frozen law, unchanged):
-   selected config's EVAL return < 0 in ALL folds              → REJECTED
-   any EVAL fold trade_count < 10 → that fold INSUFFICIENT; all folds INSUFFICIENT → INCONCLUSIVE
-   otherwise WALK_FORWARD = PASS only if aggregate EVAL return (sum over folds) > 0, else FAIL → REJECTED
-L2 COST_STRESS: any stress fee level flips the sign of aggregate EVAL return → COST_STRESS = FAIL
-   (weighed under the survivor law: a FAIL here blocks SURVIVED)
+L1 WALK_FORWARD becomes benchmark-relative:
+   per EVAL fold: excess_f = strategy EVAL return − exposure-matched passive return on the SAME window,
+   pair universe, fee, wallet, stake and max_open_trades, computed by
+   freqtrade/user_data/baseline_benchmarks.py (its max-exposure-matched line, unchanged code).
+   excess_f < 0 in ALL folds                         → REJECTED
+   any EVAL fold trade_count < 10 → fold INSUFFICIENT; all folds INSUFFICIENT → INCONCLUSIVE
+   WALK_FORWARD = PASS only if Σ excess_f > 0 over sufficient folds; else FAIL → REJECTED
+L2 COST_STRESS: a stress fee level makes Σ excess_f ≤ 0 (benchmark recomputed at the same stress fee)
+   → COST_STRESS = FAIL.
 L3 MULTIPLE_TESTING (trialgate validation via research/cycle2/multiple_testing.py only):
    DSR ≥ 0.95 with N = family_configuration_N (below); PBO ≤ 0.05 with pbo_block_count from the prereg.
    NOT_EVALUABLE (e.g. PBO with a single configuration) is never PASS and blocks SURVIVED.
@@ -62,9 +65,12 @@ SURVIVED ⇔ every applicable gate PASS (DATA_TRUTH, LOOKAHEAD, RECURSIVE where 
    WALK_FORWARD, PARAMETER_ROBUSTNESS, COST_STRESS, MULTIPLE_TESTING) and SAMPLE_EVIDENCE = SUFFICIENT.
    Any gate FAIL → REJECTED. Anything else unresolved → INCONCLUSIVE. Never rounded up.
 NULL CALIBRATION VERDICT (lineage_kind NULL_CALIBRATION only):
-   null REJECTED → CALIBRATION = PASS
-   null SURVIVED → CALIBRATION = FAIL → Cycle 2 STOP
-   null INCONCLUSIVE → CALIBRATION = NOT_PROVEN → Cycle 2 STOP (fail-closed; UNPROVEN blocks as FAIL)
+   null REJECTED by L1, L2 or L3 AND every integrity gate (DATA_TRUTH, LOOKAHEAD, RECURSIVE where
+   applicable, LEDGER_CHAIN) = PASS                  → CALIBRATION = PASS (record calibration.rejected_by)
+   any integrity gate ≠ PASS                         → run INVALID → CALIBRATION = NOT_PROVEN → STOP
+   null SURVIVED                                     → CALIBRATION = FAIL → STOP
+   null INCONCLUSIVE                                 → CALIBRATION = NOT_PROVEN → STOP
+   Ledger mapping for an INVALID null: COMPLETED with outcome.funnel_result = INVALID_RUN.
 Thresholds above are the only ones; no defaults anywhere; changing any requires a new Owner record.
 ```
 
@@ -73,6 +79,7 @@ Thresholds above are the only ones; no defaults anywhere; changing any requires 
 | part | enforced by |
 |---|---|
 | L1–L4, SURVIVED, calibration verdict, ledger mapping | research/cycle2/funnel.py (derived, non-authoritative output; never writes the ledger) |
+| L1/L2 exposure-matched passive line | freqtrade/user_data/baseline_benchmarks.py, unchanged, run per EVAL fold and fee level by .github/workflows/cycle2_research.yml |
 | N LAW | research/cycle2/config_n.py (closure-record sha256 pin; ledger read-only) |
 | NULL SEQUENCING LAW (execution side) | research/cycle2/driver.py refuses a real run before any engine call |
 | thresholds | each preregistration's `multiple_testing` block; no code default exists |
@@ -84,3 +91,13 @@ TRIALGATE_AUDIT_1.md stated that `effective_trials` must be "at least `ledger_fa
 trial IDs). The N LAW above is the Owner's later, specific rule for Cycle 2: N counts distinct configuration
 identities, and the trial-ID count is not N. The audit record is not edited; this law governs where they
 differ.
+
+## Pre-freeze revision (disclosure)
+
+This law was revised before freeze, after the Owner saw year-slices of the CYCLE-1 null trade lists
+(2023/2024 EVAL years, both positive in absolute terms). No Cycle-2 run existed. The revision is
+structural (absolute return is not exposure-adjusted; integrity failures cannot certify the funnel),
+applies identically to every later Trend/MR trial, and no threshold value was changed. Known bias:
+the max-exposure-matched benchmark is held for the whole window, so a strategy with lower realised
+time-in-market is disadvantaged in rising windows and advantaged in falling ones; both EVAL years here
+rose. This is disclosed, not corrected.

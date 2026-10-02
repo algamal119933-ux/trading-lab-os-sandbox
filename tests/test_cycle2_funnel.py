@@ -168,10 +168,42 @@ class World:
             out[arg] = p
         return out
 
-    def evaluate(self, prereg_path: Path, summary: Path, **override) -> dict:
+    def benchmarks(self, prereg: dict, returns: dict | None = None, **mutate) -> Path:
+        """Benchmark files in baseline_benchmarks.py's own output shape.
+
+        returns maps (fold, fee) -> exposure_matched_return (a fraction); default 0.0.
+        mutate overrides one field everywhere (to prove a mismatch is refused).
+        """
+        d = self.tmp / "benchmarks"
+        d.mkdir(exist_ok=True)
+        fees = [prereg["fee_levels"]["base"], *prereg["fee_levels"]["stress"]]
+        for f in prereg["folds"]:
+            s, e = f["eval"]["start"], f["eval"]["end"]
+            for fee in fees:
+                ret = (returns or {}).get((f["fold"], fee), 0.0)
+                report = {"fee_per_side": fee, "requested_period": f"fold{f['fold']}_eval",
+                          "windows_source": "artifacts/cycle2_eval_windows.json",
+                          "result": {"period": f"fold{f['fold']}_eval",
+                                     "window_start": f"{s[:4]}-{s[4:6]}-{s[6:]}T00:00:00Z",
+                                     "window_end": f"{e[:4]}-{e[4:6]}-{e[6:]}T23:00:00Z",
+                                     "universe": list(prereg["pair_universe"]),
+                                     "max_exposure_matched_methodology": "fixture",
+                                     "max_exposure_invested_fraction": 0.2,
+                                     "exposure_matched_wallet_start": float(prereg["wallet"]),
+                                     "exposure_matched_wallet_end": float(prereg["wallet"]) * (1 + ret),
+                                     "exposure_matched_return": ret}}
+                for k, v in mutate.items():
+                    (report if k in report else report["result"])[k] = v
+                (d / f"fold{f['fold']}_fee{fee:g}.json").write_text(json.dumps(report), encoding="utf-8")
+        return d
+
+    def evaluate(self, prereg_path: Path, summary: Path, *, bench: dict | None = None,
+                 benchmark_dir: Path | None = None, **override) -> dict:
         prereg = json.loads(prereg_path.read_text())
-        return funnel.evaluate(summary, prereg_path, self.ledger, **self.logs(prereg["strategy"]["name"],
-                                                                                **override))
+        if benchmark_dir is None:
+            benchmark_dir = self.benchmarks(prereg, bench)
+        return funnel.evaluate(summary, prereg_path, self.ledger, benchmark_dir=benchmark_dir,
+                               **self.logs(prereg["strategy"]["name"], **override))
 
 
 def null_prereg() -> dict:
@@ -212,7 +244,8 @@ def test_a_null_negative_in_all_folds_is_rejected_and_calibration_passes(world):
     assert r["funnel_result"] == "REJECTED"
     assert r["terminal_proposal"]["ledger_state"] == "REJECTED"
     assert r["calibration"]["verdict"] == "PASS" and r["cycle2_stop"] is False
-    assert r["calibration"]["rejected_by"] == ["WALK_FORWARD"]
+    assert r["calibration"]["rejected_by"] == ["COST_STRESS", "WALK_FORWARD"]
+    assert r["calibration"]["integrity_not_pass"] == []
 
 
 def test_a_positive_null_is_inconclusive_not_proven_and_stops_cycle2(world):
@@ -234,6 +267,7 @@ def test_a_surviving_null_fails_calibration_and_stops_cycle2(world, monkeypatch)
     r = world.evaluate(path, summary)
     assert r["funnel_result"] == "SURVIVED"
     assert r["terminal_proposal"]["ledger_state"] == "SURVIVED"
+    assert r["calibration"]["integrity_not_pass"] == []
     assert r["calibration"]["verdict"] == "FAIL" and r["cycle2_stop"] is True
 
 
@@ -241,7 +275,7 @@ def test_mixed_folds_with_a_non_positive_aggregate_fail_walk_forward(world):
     path, summary = run_null(world, {EVAL1: 1.0, EVAL2: -1.5})
     r = world.evaluate(path, summary)
     assert r["gates"]["WALK_FORWARD"]["state"] == "FAIL"
-    assert r["gates"]["WALK_FORWARD"]["aggregate_return_pct"] == pytest.approx(-0.5)
+    assert r["gates"]["WALK_FORWARD"]["aggregate_excess_pct"] == pytest.approx(-0.5)
     assert r["funnel_result"] == "REJECTED"
 
 
@@ -290,11 +324,12 @@ def test_a_failed_eval_run_is_not_evaluable_never_pass(world, monkeypatch):
 # -- L2 COST_STRESS --------------------------------------------------------------------------
 
 
-def test_a_stress_fee_that_flips_the_aggregate_sign_fails_cost_stress(world):
+def test_a_stress_fee_that_makes_the_excess_sum_non_positive_fails_cost_stress(world):
     path, summary = run_null(world, {EVAL1: 0.5, EVAL2: 0.3}, stress_shift=-1.0)
     r = world.evaluate(path, summary)
     cs = r["gates"]["COST_STRESS"]
-    assert cs["state"] == "FAIL" and cs["levels"][0]["flips_sign"] is True
+    assert r["gates"]["WALK_FORWARD"]["state"] == "PASS"
+    assert cs["state"] == "FAIL" and cs["levels"][0]["non_positive"] is True
     assert r["funnel_result"] == "REJECTED"
 
 
@@ -401,8 +436,12 @@ def test_insufficient_sample_is_never_rounded_up(sample):
 
 
 def test_the_ledger_and_calibration_mappings_are_the_law():
-    assert funnel.LEDGER_STATE == {"REJECTED": "REJECTED", "SURVIVED": "SURVIVED", "INCONCLUSIVE": "COMPLETED"}
-    assert funnel.CALIBRATION == {"REJECTED": "PASS", "SURVIVED": "FAIL", "INCONCLUSIVE": "NOT_PROVEN"}
+    assert funnel.LEDGER_STATE == {"REJECTED": "REJECTED", "SURVIVED": "SURVIVED", "INCONCLUSIVE": "COMPLETED",
+                                   "INVALID_RUN": "COMPLETED"}
+    assert funnel.CALIBRATION == {"REJECTED": "PASS", "SURVIVED": "FAIL", "INCONCLUSIVE": "NOT_PROVEN",
+                                  "INVALID_RUN": "NOT_PROVEN"}
+    assert funnel.INTEGRITY_GATES == ("DATA_TRUTH", "LOOKAHEAD", "RECURSIVE", "LEDGER_CHAIN")
+    assert funnel.PERFORMANCE_GATES == ("WALK_FORWARD", "COST_STRESS", "MULTIPLE_TESTING")
     assert funnel.MIN_EVAL_TRADES == 10
 
 
@@ -442,7 +481,8 @@ def test_an_unbound_preregistration_fails_the_ledger_chain(world):
     other = tmp_ledger = world.tmp / "other.jsonl"
     lines = CANONICAL_LEDGER.read_text(encoding="utf-8").splitlines(keepends=True)[:CYCLE1_RECORDS]
     tmp_ledger.write_text("".join(lines), encoding="utf-8")
-    r = funnel.evaluate(summary, path, other, **world.logs(p["strategy"]["name"]))
+    r = funnel.evaluate(summary, path, other, benchmark_dir=world.benchmarks(p),
+                        **world.logs(p["strategy"]["name"]))
     assert r["gates"]["LEDGER_CHAIN"]["state"] == "FAIL"
     assert r["ledger"]["binding"] == "NOT_BOUND"
 
@@ -498,6 +538,7 @@ def test_the_evaluation_is_deterministic_and_never_writes_the_ledger(world, tmp_
     assert world.ledger.read_bytes() == before
     out1, out2 = tmp_path / "o1.json", tmp_path / "o2.json"
     logs = world.logs("NullControlMatchedFrequency")
+    logs["benchmark_dir"] = world.benchmarks(null_prereg())
     for out in (out1, out2):
         argv = ["--run-summary", str(summary), "--prereg", str(path), "--ledger", str(world.ledger),
                 "--out", str(out)] + [x for k, v in logs.items() for x in (f"--{k.replace('_', '-')}", str(v))]
@@ -534,8 +575,140 @@ def test_the_cli_is_deterministic_across_two_processes(world):
     for i in range(2):
         out = world.tmp / f"cli{i}.json"
         proc = _RUN([sys.executable, "-c", code, str(world.root), "--run-summary", str(summary),
-                               "--prereg", str(path), "--ledger", str(world.ledger), "--out", str(out)],
+                               "--prereg", str(path), "--ledger", str(world.ledger), "--out", str(out),
+                               "--benchmark-dir", str(world.benchmarks(null_prereg()))],
                               capture_output=True, text=True, cwd=REPO_ROOT)
         assert proc.returncode == 0, proc.stderr
         outs.append(out.read_bytes())
     assert outs[0] == outs[1]
+
+
+# -- PRE-FREEZE REVISION: benchmark-relative L1/L2 and the integrity rule -------------------------
+
+BASE, STRESS = 0.001, 0.002
+
+
+def test_a_positive_absolute_null_below_the_passive_line_is_rejected(world):
+    # roughly the Cycle-1 null year-slices: positive in absolute terms, under a bull-market passive line
+    path, summary = run_null(world, {EVAL1: 7.8, EVAL2: 1.2}, stress_shift=-0.4)
+    bench = {(1, BASE): 0.31, (1, STRESS): 0.309, (2, BASE): 0.24, (2, STRESS): 0.239}
+    r = world.evaluate(path, summary, bench=bench)
+    wf = r["gates"]["WALK_FORWARD"]
+    assert [f["total_return_pct"] > 0 for f in wf["folds"]] == [True, True]
+    assert [f["excess_pct"] for f in wf["folds"]] == [pytest.approx(7.8 - 31.0), pytest.approx(1.2 - 24.0)]
+    assert wf["state"] == "FAIL" and "ALL folds" in wf["reason"]
+    assert r["funnel_result"] == "REJECTED" and r["terminal_proposal"]["ledger_state"] == "REJECTED"
+    assert r["calibration"]["verdict"] == "PASS" and r["cycle2_stop"] is False
+    assert "WALK_FORWARD" in r["calibration"]["rejected_by"]
+
+
+def test_excess_above_the_passive_line_passes_walk_forward(world):
+    path, summary = run_null(world, {EVAL1: 7.8, EVAL2: 1.2}, stress_shift=-0.1)
+    r = world.evaluate(path, summary, bench={(1, BASE): 0.05, (1, STRESS): 0.05, (2, BASE): 0.0, (2, STRESS): 0.0})
+    assert r["gates"]["WALK_FORWARD"]["state"] == "PASS"
+    assert r["gates"]["WALK_FORWARD"]["aggregate_excess_pct"] == pytest.approx(7.8 - 5.0 + 1.2)
+    assert r["gates"]["COST_STRESS"]["state"] == "PASS"
+    assert r["funnel_result"] == "INCONCLUSIVE"  # L3 is NOT_EVALUABLE for a single-config null
+
+
+def test_one_negative_fold_with_a_non_positive_excess_sum_fails(world):
+    path, summary = run_null(world, {EVAL1: 3.0, EVAL2: 1.0})
+    r = world.evaluate(path, summary, bench={(1, BASE): 0.01, (2, BASE): 0.05})
+    assert [f["excess_pct"] > 0 for f in r["gates"]["WALK_FORWARD"]["folds"]] == [True, False]
+    assert r["gates"]["WALK_FORWARD"]["state"] == "FAIL"
+    assert r["funnel_result"] == "REJECTED"
+
+
+def test_the_excess_sum_counts_sufficient_folds_only(world, monkeypatch):
+    # fold 1 is INSUFFICIENT with a large negative excess; fold 2 alone decides the sum
+    path, summary = run_null(world, {EVAL1: -5.0, EVAL2: 2.0}, trades={EVAL1: 9, EVAL2: 20}, stress_shift=-0.1)
+    monkeypatch.setattr(funnel, "multiple_testing_gate", lambda *a, **k: funnel._gate("PASS", "forced"))
+    r = world.evaluate(path, summary)
+    wf = r["gates"]["WALK_FORWARD"]
+    assert wf["sufficient_folds"] == [2]
+    assert wf["aggregate_excess_pct"] == pytest.approx(2.0)
+    assert wf["state"] == "PASS"
+    assert r["gates"]["COST_STRESS"]["levels"][0]["folds"] == [2]
+    assert r["sample_evidence"] == "INSUFFICIENT" and r["funnel_result"] == "INCONCLUSIVE"
+
+
+def test_cost_stress_recomputes_the_benchmark_at_the_stress_fee(world):
+    path, summary = run_null(world, {EVAL1: 3.0, EVAL2: 1.0}, stress_shift=-0.1)
+    # identical strategy figures; only the stress-fee passive line differs
+    ok = world.evaluate(path, summary, bench={(1, STRESS): 0.0, (2, STRESS): 0.0})
+    assert ok["gates"]["COST_STRESS"]["state"] == "PASS"
+    bad = world.evaluate(path, summary, bench={(1, STRESS): 0.02, (2, STRESS): 0.02})
+    cs = bad["gates"]["COST_STRESS"]
+    assert cs["state"] == "FAIL" and cs["levels"][0]["aggregate_excess_pct"] == pytest.approx(3.8 - 4.0)
+    assert bad["gates"]["WALK_FORWARD"]["state"] == "PASS"
+    assert bad["funnel_result"] == "REJECTED"
+
+
+def test_a_missing_benchmark_is_not_evaluable_never_pass(world, tmp_path):
+    path, summary = run_null(world, {EVAL1: 3.0, EVAL2: 1.0})
+    empty = tmp_path / "no_benchmarks"
+    empty.mkdir()
+    r = world.evaluate(path, summary, benchmark_dir=empty)
+    assert r["gates"]["WALK_FORWARD"]["state"] == "NOT_EVALUABLE"
+    assert r["gates"]["COST_STRESS"]["state"] == "NOT_EVALUABLE"
+    assert r["funnel_result"] == "INCONCLUSIVE" and r["calibration"]["verdict"] == "NOT_PROVEN"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("fee_per_side", 0.002), ("requested_period", "development"), ("window_start", "2023-01-02T00:00:00Z"),
+    ("window_end", "2023-12-31T23:59:59Z"), ("universe", ["BTC/USDT", "ETH/USDT"]),
+    ("exposure_matched_wallet_start", 1000.0), ("exposure_matched_return", None),
+])
+def test_a_benchmark_that_does_not_match_the_preregistration_is_not_used(world, field, value):
+    path, summary = run_null(world, {EVAL1: -2.0, EVAL2: -0.5})
+    bad = world.benchmarks(null_prereg(), **{field: value})
+    r = world.evaluate(path, summary, benchmark_dir=bad)
+    assert r["gates"]["WALK_FORWARD"]["state"] == "NOT_EVALUABLE"
+    assert r["funnel_result"] != "REJECTED" and r["calibration"]["verdict"] == "NOT_PROVEN"
+
+
+@pytest.mark.parametrize("override,gate", [
+    ({"lock": "DATASET_LOCK_GATE = FAIL\n"}, "DATA_TRUTH"),
+    ({"warm": None}, "DATA_TRUTH"),
+    ({"look": "┃ filename ┃ strategy ┃ has_bias ┃ total_signals ┃\n"
+              "│ NullControlMatchedFrequency.py │ NullControlMatchedFrequency │ Yes │ 20 │\n"}, "LOOKAHEAD"),
+    ({"look": None}, "LOOKAHEAD"),
+    ({"rec": None}, "RECURSIVE"),
+])
+def test_an_integrity_failure_never_certifies_a_rejected_null(world, override, gate):
+    path, summary = run_null(world, {EVAL1: -2.0, EVAL2: -0.5})  # performance FAIL as well
+    r = world.evaluate(path, summary, **override)
+    assert r["gates"]["WALK_FORWARD"]["state"] == "FAIL"
+    assert gate in r["calibration"]["integrity_not_pass"]
+    assert r["calibration"]["law_result_before_integrity_rule"] == "REJECTED"
+    assert r["funnel_result"] == "INVALID_RUN"
+    assert r["terminal_proposal"]["ledger_state"] == "COMPLETED"
+    assert r["terminal_proposal"]["outcome"]["funnel_result"] == "INVALID_RUN"
+    assert r["calibration"]["verdict"] == "NOT_PROVEN" and r["cycle2_stop"] is True
+    assert "WALK_FORWARD" in r["calibration"]["rejected_by"]
+
+
+def test_a_ledger_chain_failure_never_certifies_a_rejected_null(world):
+    p = null_prereg()
+    path = world.bind(p)
+    summary = world.run(path, scenario_by_eval({EVAL1: -2.0, EVAL2: -0.5}))
+    unbound = world.tmp / "unbound.jsonl"
+    lines = CANONICAL_LEDGER.read_text(encoding="utf-8").splitlines(keepends=True)[:CYCLE1_RECORDS]
+    unbound.write_text("".join(lines), encoding="utf-8")
+    r = funnel.evaluate(summary, path, unbound, benchmark_dir=world.benchmarks(p),
+                        **world.logs(p["strategy"]["name"]))
+    assert r["calibration"]["integrity_not_pass"] == ["LEDGER_CHAIN"]
+    assert r["funnel_result"] == "INVALID_RUN" and r["calibration"]["verdict"] == "NOT_PROVEN"
+
+
+def test_an_integrity_failure_on_a_positive_null_is_invalid_too(world):
+    path, summary = run_null(world, {EVAL1: 3.0, EVAL2: 1.0})
+    r = world.evaluate(path, summary, rec=None)
+    assert r["funnel_result"] == "INVALID_RUN" and r["calibration"]["verdict"] == "NOT_PROVEN"
+
+
+def test_the_benchmark_fields_read_are_the_ones_baseline_benchmarks_writes():
+    source = (REPO_ROOT / "freqtrade" / "user_data" / "baseline_benchmarks.py").read_text()
+    for key in ("fee_per_side", "requested_period", "window_start", "window_end", "universe",
+                "exposure_matched_wallet_start", "exposure_matched_return", "max_exposure_matched_methodology"):
+        assert f'"{key}"' in source, key

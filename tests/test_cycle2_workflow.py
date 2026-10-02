@@ -111,3 +111,54 @@ def test_every_artifact_is_uploaded_always(steps):
 def test_the_input_reaches_scripts_only_through_the_environment(steps):
     for s in steps:
         assert "${{ inputs." not in s.get("run", "")
+
+
+# -- PRE-FREEZE REVISION: the exposure-matched passive benchmark -----------------------------------
+
+BENCH = "freqtrade/user_data/baseline_benchmarks.py"
+
+
+def _bench_steps(steps: list[dict]) -> list[dict]:
+    return [s for s in steps if BENCH in s.get("run", "")]
+
+
+def test_one_benchmark_step_per_eval_fold_and_fee_level(steps):
+    bench = _bench_steps(steps)
+    assert len(bench) == 4
+    pairs = sorted((s["run"].split("--period ")[1].split()[0], s["env"]["FEE"].split(".")[-1].strip(" }"))
+                   for s in bench)
+    assert pairs == [("fold1_eval", "fee_base"), ("fold1_eval", "fee_stress"),
+                     ("fold2_eval", "fee_base"), ("fold2_eval", "fee_stress")]
+
+
+def test_the_benchmark_runs_after_the_driver_and_before_the_funnel(steps):
+    driver = _index(steps, "research/cycle2/driver.py")
+    funnel = _index(steps, "research/cycle2/funnel.py")
+    for s in _bench_steps(steps):
+        assert driver < steps.index(s) < funnel
+    derive = _index(steps, "artifacts/cycle2_eval_windows.json\").write_text")
+    assert driver < derive < min(steps.index(s) for s in _bench_steps(steps))
+    assert "--benchmark-dir artifacts/benchmarks" in steps[funnel]["run"]
+
+
+def test_the_benchmark_uses_the_same_window_fee_universe_wallet_and_sizing(steps):
+    derive = steps[_index(steps, "artifacts/cycle2_eval_windows.json\").write_text")]
+    run = derive["run"]
+    # windows come from the preregistered folds, matching the summariser's window (00:00 .. 23:00)
+    assert 'prereg["folds"]' in run and "23:00:00" in run and "00:00:00" in run
+    assert 'prereg["fee_levels"]["base"]' in run and 'prereg["fee_levels"]["stress"][0]' in run
+    assert 'prereg["pair_universe"]' in run and 'prereg["wallet"]' in run
+    assert 'config["stake_amount"]' in run and 'config["max_open_trades"]' in run
+    assert "config.research.json" in run
+    for s in _bench_steps(steps):
+        r = s["run"]
+        assert "--lock artifacts/cycle2_eval_windows.json" in r
+        for flag, var in (("--fee", "$FEE"), ("--wallet", "$WALLET"), ("--stake", "$STAKE"),
+                          ("--max-open-trades", "$MOT"), ("--universe", "$UNIVERSE")):
+            assert f'{flag} "{var}"' in r
+        assert '--out "artifacts/benchmarks/' in r
+        assert all(v.startswith("${{ steps.bench.outputs.") for v in s["env"].values())
+
+
+def test_the_benchmark_code_itself_is_not_changed_by_the_workflow(text):
+    assert "sed -i" not in text and "> freqtrade/user_data/baseline_benchmarks.py" not in text
