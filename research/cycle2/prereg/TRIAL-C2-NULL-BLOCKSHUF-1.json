@@ -46,7 +46,7 @@
   ],
   "funnel_law": {
     "record": "research/cycle2/FUNNEL_LAW_1.md",
-    "sha256": "8ef233745f112d66f2e5dfb3b1350a9f632a5f743cfb1f4165cfae974de7eea4"
+    "sha256": "5ad00f5ad79a192aac9454e5eb8a90f3ce787fc332e3467fdd9ecf969800468a"
   },
   "funnel_step": "NULL_RECALIBRATION",
   "grid": [
