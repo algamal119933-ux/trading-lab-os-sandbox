@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_LEDGER = REPO_ROOT / "research" / "records" / "trial_ledger.jsonl"
 STRATEGY_FILE = "research/mean_reversion/MeanReversionZScore.py"
 IMAGE = "freqtradeorg/freqtrade:2026.7"
+LAW_RECORD = "research/cycle2/FUNNEL_LAW_1.md"
 
 
 def _sha(path: Path) -> str:
@@ -71,6 +72,7 @@ def base_prereg() -> dict:
         "multiple_testing": {"dsr_threshold": 0.5, "pbo_threshold": 0.5, "pbo_block_count": 8,
                              "periods_per_year": 365, "effective_trials": 3},
         "selection_debt_statement": "fixture: cumulative family N plus upstream selection debt stated here",
+        "funnel_law": {"record": LAW_RECORD, "sha256": _sha(REPO_ROOT / LAW_RECORD)},
     }
 
 
@@ -573,3 +575,241 @@ def test_importing_the_driver_executes_nothing(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append(a))
     importlib.reload(driver)
     assert calls == []
+
+
+# -- UNIT 7.2 PART A: the null fixtures and the null sequencing law ----------------------------
+
+PREREG_DIR = REPO_ROOT / "research" / "cycle2" / "prereg"
+NULL1 = PREREG_DIR / "TRIAL-C2-NULL-MATCHFREQ-1.json"
+NULL2 = PREREG_DIR / "TRIAL-C2-NULL-BLOCKSHUF-1.json"
+NULLS = (NULL1, NULL2)
+
+
+class NullEngine:
+    """subprocess.run stand-in for a parameter-free null: every run yields fixed metrics."""
+
+    def __init__(self, user_data: Path):
+        self.user_data, self.calls, self.n = user_data, [], 0
+
+    def __call__(self, cmd, stdout=None, stderr=None, capture_output=False, text=False, check=False, **_):
+        cmd = list(cmd)
+        self.calls.append(cmd)
+        if cmd[0] == "sudo":
+            return subprocess.CompletedProcess(cmd, 0)
+        if cmd[0] == "docker":
+            fee = float(cmd[cmd.index("--fee") + 1])
+            stdout.write(f"freqtrade - INFO - Using fee {fee * 100:.4f}% from config.\n")
+            self.n += 1
+            out = self.user_data / "backtest_results" / f"backtest-result-{self.n:04d}.json"
+            out.write_text(json.dumps({"n": self.n}), encoding="utf-8")
+            os.utime(out, (1_000_000 + self.n, 1_000_000 + self.n))
+            return subprocess.CompletedProcess(cmd, 0)
+        if cmd[1].endswith("summarize_backtest.py"):
+            Path(cmd[cmd.index("--out") + 1]).write_text(
+                json.dumps({"total_return_pct": -1.0, "max_drawdown_pct": 2.0, "trade_count": 12}), encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+    def docker_calls(self):
+        return [c for c in self.calls if c[0] == "docker"]
+
+
+@pytest.fixture
+def null_engine(tmp_path, monkeypatch):
+    user_data = tmp_path / "user_data"
+    (user_data / "strategies").mkdir(parents=True)
+    (user_data / "backtest_results").mkdir(parents=True)
+    (user_data / "config.research.json").write_text(
+        json.dumps({"exchange": {"name": "binance", "pair_whitelist": ["BTC/USDT", "ETH/USDT"]}}), encoding="utf-8")
+    monkeypatch.setattr(driver, "USER_DATA", user_data)
+    monkeypatch.setattr(driver, "STRATEGY_DIR", user_data / "strategies")
+    monkeypatch.setattr(driver, "BACKTEST_RESULTS", user_data / "backtest_results")
+    fake = NullEngine(user_data)
+    monkeypatch.setattr(driver.subprocess, "run", fake)
+    return fake
+
+
+def null_payload(path: Path, state: str = "PREREGISTERED", **outcome) -> dict:
+    p = json.loads(path.read_text())
+    payload = {
+        "schema_version": "1.0.0", "family_id": p["family_id"], "lineage_id": p["lineage_id"],
+        "candidate_id": p["candidate_id"], "config_id": f"{p['candidate_id']}/CFG1",
+        "experiment_id": p["experiment_id"], "run_id": p["run_id"], "trial_id": p["trial_id"], "state": state,
+        "purpose": "unit-test fixture ledger; not a research trial",
+        "dataset_identity": {"prereg_file": path.relative_to(REPO_ROOT).as_posix(), "prereg_sha256": _sha(path),
+                             "lineage_kind": p["lineage_kind"]},
+    }
+    if state != "PREREGISTERED":
+        payload["outcome"] = {"reason": "fixture", **outcome}
+    return payload
+
+
+def both_bound(tmp_path: Path, *extra: dict) -> Path:
+    return make_ledger(tmp_path, null_payload(NULL1), null_payload(NULL2), *extra)
+
+
+def real(path: Path, ledger: Path, tmp_path: Path) -> list[str]:
+    return ["--prereg", str(path), "--ledger", str(ledger), "--artifacts-dir", str(tmp_path / "art")]
+
+
+@pytest.mark.parametrize("path", NULLS)
+def test_each_null_preregistration_validates_and_plans_six_fee_carrying_invocations(path, tmp_path, engine,
+                                                                                    capsys):
+    prereg = driver.load_prereg(path)
+    assert prereg["lineage_kind"] == "NULL_CALIBRATION" and prereg["trial_class"] == "calibration"
+    assert [c["params"] for c in prereg["grid"]] == [{}]
+    assert driver.main(["--prereg", str(path), "--ledger", str(both_bound(tmp_path)), "--dry-run"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["ledger"]["binding"] == "BOUND"
+    assert len(out["plan"]) == 6
+    assert all(s["argv"].count("--fee") == 1 for s in out["plan"])
+    assert sorted(float(s["argv"][-1]) for s in out["plan"]) == [0.001] * 4 + [0.002] * 2
+    b = out["budget"]
+    assert b["consumed_before"]["engine_invocations"] == 0
+    assert b["consumed_after"]["engine_invocations"] == 12  # 6 reserved for the other open null + 6 planned
+    assert b["consumed_after"]["calibration_trial_ids"] == 2
+    assert b["consumed_after"]["scientific_trial_ids"] == 0 and b["consumed_after"]["scientific_configurations"] == 0
+    assert engine.calls == []
+
+
+@pytest.mark.parametrize("path", NULLS)
+def test_each_null_preregistration_is_bound_in_the_canonical_ledger(path, engine, capsys):
+    before = CANONICAL_LEDGER.read_bytes()
+    assert driver.main(["--prereg", str(path), "--dry-run"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["ledger"]["binding"] == "BOUND"
+    assert out["budget"]["consumed_after"]["engine_invocations"] == 12
+    assert out["budget"]["consumed_after"]["calibration_trial_ids"] == 2
+    assert CANONICAL_LEDGER.read_bytes() == before
+
+
+def test_the_null_preregistrations_bind_the_frozen_law_and_unchanged_fixtures():
+    for path in NULLS:
+        p = json.loads(path.read_text())
+        assert p["funnel_law"] == {"record": LAW_RECORD, "sha256": _sha(REPO_ROOT / LAW_RECORD)}
+        for f in p["fixture_files"]:
+            assert f["sha256"] == _sha(REPO_ROOT / f["path"])
+        assert p["pair_universe"] == ["BTC/USDT"]
+        assert p["multiple_testing"] == {"dsr_threshold": 0.95, "pbo_threshold": 0.05, "pbo_block_count": 8,
+                                         "periods_per_year": 8760, "effective_trials": 2}
+    assert "requires_prior_terminal" not in json.loads(NULL1.read_text())
+    assert json.loads(NULL2.read_text())["requires_prior_terminal"] == {"trial_id": "TRIAL-C2-NULL-MATCHFREQ-1",
+                                                                         "state": "REJECTED"}
+
+
+def test_a_fixture_whose_sha256_does_not_match_is_refused(tmp_path, engine, capsys):
+    p = json.loads(NULL1.read_text())
+    p["fixture_files"][1]["sha256"] = "0" * 64
+    path = write_prereg(tmp_path, p)
+    assert driver.main(["--prereg", str(path), "--ledger", str(make_ledger(tmp_path)), "--dry-run"]) == 2
+    assert "fixture file research/null_controls/null_matched_frequency_schedule.json" in capsys.readouterr().err
+
+
+def test_empty_params_are_allowed_only_for_null_calibration(tmp_path):
+    p = base_prereg()
+    p["grid"] = [{"config_id": "A", "params": {}, "regime_gated": False}]
+    with pytest.raises(driver.DriverRefusal, match="prereg.schema.json"):
+        driver.load_prereg(write_prereg(tmp_path, p))
+    p.update({"trial_class": "calibration", "experiment_id": "EXP-CYCLE2-CAL-FIXTURE",
+              "lineage_kind": "NULL_CALIBRATION", "funnel_step": "NULL_RECALIBRATION"})
+    assert driver.load_prereg(write_prereg(tmp_path, p))["grid"][0]["params"] == {}
+
+
+def test_requires_prior_terminal_accepts_only_rejected(tmp_path):
+    p = json.loads(NULL2.read_text())
+    p["requires_prior_terminal"]["state"] = "COMPLETED"
+    with pytest.raises(driver.DriverRefusal, match="prereg.schema.json"):
+        driver.load_prereg(write_prereg(tmp_path, p))
+
+
+def test_a_null_real_run_installs_its_fixtures_byte_unchanged_and_writes_no_params(tmp_path, null_engine):
+    assert driver.main(real(NULL1, both_bound(tmp_path), tmp_path)) == 0
+    assert len(null_engine.docker_calls()) == 6
+    for f in json.loads(NULL1.read_text())["fixture_files"]:
+        src = REPO_ROOT / f["path"]
+        assert (driver.STRATEGY_DIR / src.name).read_bytes() == src.read_bytes()
+    assert not (driver.STRATEGY_DIR / "NullControlMatchedFrequency.json").exists()
+    config = json.loads((driver.USER_DATA / "config.research.json").read_text())
+    assert config["exchange"]["pair_whitelist"] == ["BTC/USDT"]
+    assert all(c[c.index("--fee") + 1] in ("0.001", "0.002") for c in null_engine.docker_calls())
+
+
+def test_null_one_runs_while_null_two_is_open_and_sequencing_blocked(tmp_path, null_engine):
+    ledger = both_bound(tmp_path)
+    assert driver.main(real(NULL1, ledger, tmp_path)) == 0
+    summary = json.loads((tmp_path / "art" / "cycle2_run_summary.json").read_text())
+    assert summary["budget"]["reserved_open_trials"] == {"TRIAL-C2-NULL-BLOCKSHUF-1": 6}
+    assert summary["budget"]["consumed_after"]["engine_invocations"] == 12
+
+
+def test_null_two_is_refused_without_a_null_one_terminal(tmp_path, null_engine, capsys):
+    ledger = both_bound(tmp_path)
+    assert driver.main(real(NULL2, ledger, tmp_path)) == 2
+    assert "TRIAL-C2-NULL-MATCHFREQ-1" in capsys.readouterr().err
+    assert null_engine.calls == []
+    seq = driver.sequencing(driver.load_prereg(NULL2), ledger)
+    assert seq["status"] == "BLOCKED"
+    assert seq["reasons"] == ["requires_prior_terminal: the ledger holds no terminal record for "
+                              "TRIAL-C2-NULL-MATCHFREQ-1"]
+
+
+@pytest.mark.parametrize("state,outcome", [
+    ("SURVIVED", {"funnel_result": "SURVIVED"}),
+    ("COMPLETED", {"funnel_result": "INCONCLUSIVE"}),
+    ("ABORTED", {}),
+])
+def test_null_two_is_refused_unless_null_one_was_rejected(tmp_path, null_engine, capsys, state, outcome):
+    ledger = both_bound(tmp_path, null_payload(NULL1, state, engine_invocations=6, **outcome))
+    assert driver.main(real(NULL2, ledger, tmp_path)) == 2
+    err = capsys.readouterr().err
+    assert f"is {state}, not REJECTED" in err and "Cycle-2 STOP" in err
+    assert null_engine.calls == []
+
+
+def test_null_two_runs_only_once_null_one_is_rejected(tmp_path, null_engine):
+    ledger = both_bound(tmp_path, null_payload(NULL1, "REJECTED", engine_invocations=6, funnel_result="REJECTED"))
+    assert driver.main(real(NULL2, ledger, tmp_path)) == 0
+    assert len(null_engine.docker_calls()) == 6
+    summary = json.loads((tmp_path / "art" / "cycle2_run_summary.json").read_text())
+    assert summary["budget"]["consumed_after"]["engine_invocations"] == 12
+
+
+@pytest.mark.parametrize("state", ["SURVIVED", "COMPLETED", "ABORTED", "FAILED"])
+def test_any_non_rejected_null_terminal_blocks_every_later_cycle2_run(tmp_path, engine, capsys, state):
+    prereg = base_prereg()
+    path = write_prereg(tmp_path, prereg)
+    ledger = make_ledger(tmp_path, null_payload(NULL1), null_payload(NULL1, state, engine_invocations=6),
+                         ledger_payload(prereg, "PREREGISTERED", prereg_sha=_sha(path)))
+    assert driver.main(["--prereg", str(path), "--ledger", str(ledger), "--artifacts-dir",
+                        str(tmp_path / "a")]) == 2
+    assert "Cycle-2 STOP" in capsys.readouterr().err
+    assert engine.calls == []
+
+
+def test_a_rejected_null_does_not_block_a_later_cycle2_run(tmp_path, engine):
+    prereg = base_prereg()
+    path = write_prereg(tmp_path, prereg)
+    ledger = make_ledger(tmp_path, null_payload(NULL1), null_payload(NULL1, "REJECTED", engine_invocations=6),
+                         ledger_payload(prereg, "PREREGISTERED", prereg_sha=_sha(path)))
+    assert driver.main(["--prereg", str(path), "--ledger", str(ledger), "--artifacts-dir",
+                        str(tmp_path / "a")]) == 0
+
+
+def test_an_open_trial_that_could_have_run_still_refuses_a_real_run(tmp_path, engine, capsys):
+    prereg = base_prereg()
+    path = write_prereg(tmp_path, prereg)
+    ledger = make_ledger(tmp_path, null_payload(NULL1),
+                         ledger_payload(prereg, "PREREGISTERED", prereg_sha=_sha(path)))
+    assert driver.main(["--prereg", str(path), "--ledger", str(ledger), "--artifacts-dir",
+                        str(tmp_path / "a")]) == 2
+    assert "TRIAL-C2-NULL-MATCHFREQ-1 is preregistered but not closed" in capsys.readouterr().err
+    assert engine.calls == []
+    # the dry run reserves it instead, at its full plan
+    assert driver.main(["--prereg", str(path), "--ledger", str(ledger), "--dry-run"]) == 0
+
+
+def test_a_dry_run_reports_sequencing_without_executing(tmp_path, engine, capsys):
+    assert driver.main(["--prereg", str(NULL2), "--ledger", str(both_bound(tmp_path)), "--dry-run"]) == 0
+    seq = json.loads(capsys.readouterr().out)["sequencing"]
+    assert seq["status"] == "BLOCKED"
+    assert engine.calls == []

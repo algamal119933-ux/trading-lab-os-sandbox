@@ -575,6 +575,32 @@ CYCLE2_UNIT_7_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #44, merged. Two parents: 6ba84c3c (main before, CYCLE2_UNIT_7_1_MERGE) +
+# c43c139b (the research-cycle2-unit-7-1a branch).
+CYCLE2_UNIT_7_1A_MERGE = "9bae31961437356f963ac723f299446db2b5e267"
+
+# Every path CYCLE-2 UNIT 7.1a touched -> the requirement it satisfies. These
+# entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_UNIT_7_1A_SCOPE: dict[str, str] = {
+    "research/requirements-cycle2.txt":
+        "CYCLE-2 UNIT 7.1a — audit §A5 disclosures 1+2: the hash-pinned trialgate "
+        "line moved to its own file, installed with --require-hashes --no-deps",
+    "research/requirements.txt":
+        "CYCLE-2 UNIT 7.1a — audit §A5 disclosure 2: restored to mlflow only "
+        "(byte-identical to 4bbb1df), out of hash-checking mode",
+    ".github/workflows/ci.yml":
+        "CYCLE-2 UNIT 7.1a — audit §A5 disclosure 1 (Owner-approved): the static "
+        "job installs the hash-checked pin and sets TLOS_REQUIRE_TRIALGATE=1",
+    "tests/test_cycle2_multiple_testing.py":
+        "CYCLE-2 UNIT 7.1a — pin test reads requirements-cycle2.txt; trialgate "
+        "tests fail closed under TLOS_REQUIRE_TRIALGATE=1; ci.yml install asserted",
+    "research/cycle2/TRIALGATE_AUDIT_1.md":
+        "CYCLE-2 UNIT 7.1a — append-only addendum: disclosures 1 and 2 closed",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.1 (PR #43) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -599,6 +625,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
     "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
     "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
+    "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -608,22 +635,45 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/requirements-cycle2.txt":
-        "CYCLE-2 UNIT 7.1a — audit §A5 disclosures 1+2: the hash-pinned trialgate "
-        "line moved to its own file, installed with --require-hashes --no-deps",
-    "research/requirements.txt":
-        "CYCLE-2 UNIT 7.1a — audit §A5 disclosure 2: restored to mlflow only "
-        "(byte-identical to 4bbb1df), out of hash-checking mode",
-    ".github/workflows/ci.yml":
-        "CYCLE-2 UNIT 7.1a — audit §A5 disclosure 1 (Owner-approved): the static "
-        "job installs the hash-checked pin and sets TLOS_REQUIRE_TRIALGATE=1",
+    "research/cycle2/FUNNEL_LAW_1.md":
+        "CYCLE-2 UNIT 7.2 PART A — the frozen Cycle-2 funnel law (Owner card: "
+        "RECOMMENDED), applicable to every Cycle-2 trial",
+    "research/cycle2/config_n.py":
+        "CYCLE-2 UNIT 7.2 PART A — N LAW: family_configuration_N from the pinned "
+        "Cycle-1 closure table + ledger-bound Cycle-2 grids (never trial IDs)",
+    "research/cycle2/funnel.py":
+        "CYCLE-2 UNIT 7.2 PART A — pure, deterministic funnel-law evaluator; "
+        "derived non-authoritative output; never writes the ledger",
+    "research/cycle2/prereg.schema.json":
+        "CYCLE-2 UNIT 7.2 PART A — funnel_law binding; optional fixture_files, "
+        "pair_universe, requires_prior_terminal; params {} only for NULL_CALIBRATION",
+    "research/cycle2/driver.py":
+        "CYCLE-2 UNIT 7.2 PART A — null fixtures (sha256-checked copy, no params "
+        "file, pair universe) and the null sequencing refusals",
+    "research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json":
+        "CYCLE-2 UNIT 7.2 PART A — preregistration of null #1 (calibration ID 1/6)",
+    "research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json":
+        "CYCLE-2 UNIT 7.2 PART A — preregistration of null #2 (calibration ID 2/6), "
+        "requires null #1 REJECTED",
+    ".github/workflows/cycle2_research.yml":
+        "CYCLE-2 UNIT 7.2 PART A — manual-dispatch-only, contents:read workflow "
+        "that runs one preregistered Cycle-2 trial off-host",
+    "research/records/trial_ledger.jsonl":
+        "CYCLE-2 UNIT 7.2 PART A — exactly 2 appended PREREGISTERED records "
+        "(TRIAL-C2-NULL-MATCHFREQ-1, TRIAL-C2-NULL-BLOCKSHUF-1)",
+    "tests/test_cycle2_funnel.py":
+        "CYCLE-2 UNIT 7.2 PART A — every funnel-law branch, determinism, read-only ledger",
+    "tests/test_cycle2_config_n.py":
+        "CYCLE-2 UNIT 7.2 PART A — N LAW tests (identity, not trial IDs; fail-closed)",
+    "tests/test_cycle2_driver.py":
+        "CYCLE-2 UNIT 7.2 PART A — null fixture path and null sequencing tests",
+    "tests/test_cycle2_workflow.py":
+        "CYCLE-2 UNIT 7.2 PART A — static checks of the dispatch-only workflow",
     "tests/test_cycle2_multiple_testing.py":
-        "CYCLE-2 UNIT 7.1a — pin test reads requirements-cycle2.txt; trialgate "
-        "tests fail closed under TLOS_REQUIRE_TRIALGATE=1; ci.yml install asserted",
-    "research/cycle2/TRIALGATE_AUDIT_1.md":
-        "CYCLE-2 UNIT 7.1a — append-only addendum: disclosures 1 and 2 closed",
+        "CYCLE-2 UNIT 7.2 PART A — the canonical ledger's observed null-family "
+        "trial-ID count follows the 2 appends (6 → 8); no threshold or reference changed",
     "tests/test_p2_scope_audit.py":
-        "CYCLE-2 UNIT 7.1 (PR #43) pinned to its merge range; this branch's scope",
+        "CYCLE-2 UNIT 7.1a (PR #44) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

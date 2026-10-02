@@ -24,6 +24,15 @@ preregistration and terminal records stay the operator's own ledger appends.
 Every run writes a deterministic JSON summary (§11): derived, non-authoritative,
 rebuildable from the artifacts it names. `--dry-run` prints the plan and the
 budget and executes nothing.
+
+Null calibration (§7.2, UNIT 7.2 PART A): a NULL_CALIBRATION preregistration
+names its fixture files (strategy + schedule) by sha256; they are checked before
+anything else and copied unchanged into the strategy directory. Its single
+configuration has params {} and gets no params file. Its pair universe is passed
+to the research config. NULL SEQUENCING LAW (research/cycle2/FUNNEL_LAW_1.md):
+a real run is refused, before any engine call, while the ledger lacks a
+preregistration's `requires_prior_terminal`, or once any Cycle-2 null has a
+terminal record that is not REJECTED.
 """
 
 from __future__ import annotations
@@ -65,6 +74,9 @@ CONFIG_SUBLIMITS = {"TREND": 12, "MEAN_REVERSION": 8}
 REGIME_GATED_SUBLIMIT = 4
 
 DEVELOPMENT_START, DEVELOPMENT_END = "20210101", "20241231"
+
+NULL_FAMILY = "PIPELINE_NULL_CALIBRATION"
+NULL_KIND = "NULL_CALIBRATION"
 
 
 class DriverRefusal(RuntimeError):
@@ -177,19 +189,28 @@ def _ledger(path: Path):
     return TrialLedger(path), TERMINAL_STATES
 
 
-def ledger_budget(prereg: dict, prereg_sha256: str, ledger_path: Path) -> dict:
-    """What Cycle 2 has already consumed, per the ledger, and this trial's binding.
+def _bound_prereg(payload: dict) -> dict | None:
+    """The preregistration file a ledger PREREGISTERED record binds, if it resolves exactly."""
+    ident = payload.get("dataset_identity") or {}
+    rel, sha = ident.get("prereg_file"), ident.get("prereg_sha256")
+    if not rel or not sha:
+        return None
+    path = REPO_ROOT / rel
+    if not path.is_file() or sha256_file(path) != sha:
+        return None
+    try:
+        other = load_prereg(path)
+    except DriverRefusal:
+        return None
+    return other if other["trial_id"] == payload.get("trial_id") else None
 
-    Fail-closed: a ledger that does not verify, another Cycle-2 trial still open,
-    or a closed Cycle-2 trial whose terminal outcome does not state its
-    consumption (outcome.engine_invocations, and outcome.config_ids for a
-    scientific trial) is a refusal, never a zero.
-    """
-    ledger, terminal_states = _ledger(ledger_path)
-    problems = ledger.verify()
-    if problems:
-        raise DriverRefusal(f"trial ledger does not verify: {problems}")
 
+def _is_null(payload: dict) -> bool:
+    return (payload.get("family_id") == NULL_FAMILY
+            or (payload.get("dataset_identity") or {}).get("lineage_kind") == NULL_KIND)
+
+
+def _cycle2_trials(ledger) -> dict[str, dict]:
     trials: dict[str, dict] = {}
     for record in ledger:
         p = record.payload
@@ -200,10 +221,60 @@ def ledger_budget(prereg: dict, prereg_sha256: str, ledger_path: Path) -> dict:
                                               "lineage_id": p["lineage_id"]})
         if p["state"] == "PREREGISTERED":
             t["prereg"] = p
-        elif p["state"] in terminal_states:
+        else:
             t["terminal"] = p
+    return trials
+
+
+def sequencing(prereg: dict, ledger_path: Path) -> dict:
+    """NULL SEQUENCING LAW, execution side (research/cycle2/FUNNEL_LAW_1.md).
+
+    BLOCKED when (i) the preregistration's requires_prior_terminal is not held by
+    the ledger, or (ii) any Cycle-2 null calibration trial has a terminal record
+    that is not REJECTED — that is a Cycle-2 STOP, and it blocks every Cycle-2 run.
+    """
+    ledger, _ = _ledger(ledger_path)
+    trials = _cycle2_trials(ledger)
+    reasons = []
+    req = prereg.get("requires_prior_terminal")
+    if req:
+        term = (trials.get(req["trial_id"]) or {}).get("terminal")
+        if term is None:
+            reasons.append(f"requires_prior_terminal: the ledger holds no terminal record for {req['trial_id']}")
+        elif term["state"] != req["state"]:
+            reasons.append(f"requires_prior_terminal: {req['trial_id']} is {term['state']}, not {req['state']}")
+    for trial_id, t in sorted(trials.items()):
+        term = t["terminal"]
+        if term is not None and _is_null(t["prereg"] or term) and term["state"] != "REJECTED":
+            reasons.append(f"Cycle-2 STOP: null calibration {trial_id} terminal is {term['state']}, not REJECTED")
+    return {"status": "BLOCKED" if reasons else "CLEAR", "reasons": reasons}
+
+
+def ledger_budget(prereg: dict, prereg_sha256: str, ledger_path: Path, real_run: bool = False) -> dict:
+    """What Cycle 2 has already consumed, per the ledger, and this trial's binding.
+
+    Fail-closed: a ledger that does not verify, another Cycle-2 trial still open,
+    or a closed Cycle-2 trial whose terminal outcome does not state its
+    consumption (outcome.engine_invocations, and outcome.config_ids for a
+    scientific trial) is a refusal, never a zero.
+
+    One exception keeps the null sequencing law runnable (UNIT 7.2 PART A): an
+    open Cycle-2 trial whose bound preregistration file resolves exactly is
+    RESERVED at its full planned consumption instead of refused — in a dry run,
+    and in a real run only while that trial is itself sequencing-BLOCKED (so this
+    driver cannot have executed it). An open trial that does not resolve, or that
+    could have run, is still a refusal.
+    """
+    ledger, _ = _ledger(ledger_path)
+    problems = ledger.verify()
+    if problems:
+        raise DriverRefusal(f"trial ledger does not verify: {problems}")
+
+    trials = _cycle2_trials(ledger)
 
     me = prereg["trial_id"]
+    reserved: dict[str, int] = {}
+    reserved_keys: set[str] = set()
     consumed = {"engine_invocations": 0, "scientific_trial_ids": 0, "calibration_trial_ids": 0}
     config_keys: set[str] = set()
     lineage_configs: dict[str, set[str]] = {}
@@ -213,8 +284,16 @@ def ledger_budget(prereg: dict, prereg_sha256: str, ledger_path: Path) -> dict:
         if trial_id == me:
             continue
         if t["terminal"] is None:
-            raise DriverRefusal(f"Cycle-2 trial {trial_id} is preregistered but not closed; its "
-                                "consumption is unknown, so no budget can be computed")
+            other = _bound_prereg(t["prereg"]) if t["prereg"] else None
+            if other is None or (real_run and sequencing(other, ledger_path)["status"] != "BLOCKED"):
+                raise DriverRefusal(f"Cycle-2 trial {trial_id} is preregistered but not closed; its "
+                                    "consumption is unknown, so no budget can be computed")
+            reserved[trial_id] = len(build_plan(other))
+            if scientific:
+                keys = {f"{t['lineage_id']}::{c['config_id']}" for c in other["grid"]}
+                reserved_keys |= keys
+                lineage_configs.setdefault(t["lineage_id"], set()).update(keys)
+            continue
         outcome = t["terminal"].get("outcome") or {}
         invocations = outcome.get("engine_invocations")
         if isinstance(invocations, bool) or not isinstance(invocations, int) or invocations < 0:
@@ -250,13 +329,15 @@ def ledger_budget(prereg: dict, prereg_sha256: str, ledger_path: Path) -> dict:
                  else "calibration_trial_ids"] += 1
 
     return {"consumed": consumed, "config_keys": config_keys, "lineage_configs": lineage_configs,
+            "reserved": reserved, "reserved_keys": reserved_keys,
             "binding": binding, "ledger_verify": "PASS", "ledger_records": len(ledger.records())}
 
 
 def budget(prereg: dict, plan: list[dict], ledger_state: dict) -> dict:
     planned_invocations = len(plan)
     consumed = dict(ledger_state["consumed"])
-    config_keys = set(ledger_state["config_keys"])
+    reserved = dict(ledger_state.get("reserved", {}))
+    config_keys = set(ledger_state["config_keys"]) | set(ledger_state.get("reserved_keys", set()))
     lineage = prereg["lineage_id"]
     lineage_keys = set(ledger_state["lineage_configs"].get(lineage, set()))
     if prereg["trial_class"] == "scientific":
@@ -264,7 +345,7 @@ def budget(prereg: dict, plan: list[dict], ledger_state: dict) -> dict:
         config_keys |= mine
         lineage_keys |= mine
     after = {
-        "engine_invocations": consumed["engine_invocations"] + planned_invocations,
+        "engine_invocations": consumed["engine_invocations"] + sum(reserved.values()) + planned_invocations,
         "scientific_configurations": len(config_keys),
         "scientific_trial_ids": consumed["scientific_trial_ids"],
         "calibration_trial_ids": consumed["calibration_trial_ids"],
@@ -283,6 +364,7 @@ def budget(prereg: dict, plan: list[dict], ledger_state: dict) -> dict:
                             "scientific_configurations": len(ledger_state["config_keys"]),
                             "scientific_trial_ids": consumed["scientific_trial_ids"],
                             "calibration_trial_ids": consumed["calibration_trial_ids"]},
+        "reserved_open_trials": reserved,
         "planned_invocations": planned_invocations,
         "consumed_after": after,
         "remaining_after": {k: CAPS[k] - after[k] for k in CAPS},
@@ -309,6 +391,35 @@ def write_params(strategy: str, params: dict) -> None:
         _ensure_writable(target)
     target.write_text(json.dumps({"strategy_name": strategy, "params": params}, indent=2, sort_keys=True)
                       + "\n", encoding="utf-8")
+
+
+def install_fixtures(prereg: dict) -> list[str]:
+    """Copy the sha256-checked fixture files, byte-unchanged, into the strategy directory."""
+    _ensure_writable(STRATEGY_DIR)
+    STRATEGY_DIR.mkdir(parents=True, exist_ok=True)
+    installed = []
+    for src in check_fixture_files(prereg):
+        target = STRATEGY_DIR / src.name
+        if target.exists():
+            _ensure_writable(target)
+        target.write_bytes(src.read_bytes())
+        installed.append(target.name)
+    return installed
+
+
+def apply_pair_universe(prereg: dict) -> list[str] | None:
+    """Set the research config's pair whitelist to the preregistered universe (only that key)."""
+    universe = prereg.get("pair_universe")
+    if universe is None:
+        return None
+    config = USER_DATA / "config.research.json"
+    if not config.is_file():
+        raise DriverRefusal(f"{config} is missing; the preregistered pair_universe cannot be applied")
+    _ensure_writable(config)
+    data = json.loads(config.read_text(encoding="utf-8"))
+    data.setdefault("exchange", {})["pair_whitelist"] = list(universe)
+    config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return list(universe)
 
 
 def backtest_argv(image: str, strategy: str, window: dict, fee: float) -> list[str]:
@@ -442,15 +553,31 @@ def write_json(path: Path, payload: dict) -> None:
 # -- orchestration ---------------------------------------------------------------
 
 
-def prepare(prereg_path: Path, ledger_path: Path) -> tuple[dict, str, list[dict], dict, dict]:
+def check_fixture_files(prereg: dict) -> list[Path]:
+    """Every preregistered fixture file exists and matches its sha256; refuse otherwise."""
+    paths = []
+    for f in prereg.get("fixture_files", []):
+        path = REPO_ROOT / f["path"]
+        if not path.is_file() or sha256_file(path) != f["sha256"]:
+            raise DriverRefusal(f"fixture file {f['path']} is missing or does not match its preregistered sha256")
+        paths.append(path)
+    names = [p.name for p in paths]
+    if len(set(names)) != len(names):
+        raise DriverRefusal("two fixture files share a file name in the strategy directory")
+    return paths
+
+
+def prepare(prereg_path: Path, ledger_path: Path,
+            real_run: bool = False) -> tuple[dict, str, list[dict], dict, dict]:
     prereg = load_prereg(prereg_path)
     prereg_sha = sha256_file(prereg_path)
     strategy_file = REPO_ROOT / prereg["strategy"]["file"]
     if not strategy_file.is_file() or sha256_file(strategy_file) != prereg["strategy"]["sha256"]:
         raise DriverRefusal(f"strategy file {prereg['strategy']['file']} is missing or does not match "
                             "its preregistered sha256")
+    check_fixture_files(prereg)
     plan = build_plan(prereg)
-    ledger_state = ledger_budget(prereg, prereg_sha, ledger_path)
+    ledger_state = ledger_budget(prereg, prereg_sha, ledger_path, real_run=real_run)
     budget_state = budget(prereg, plan, ledger_state)
     if budget_state["refusals"]:
         raise DriverRefusal("hard cap would be exceeded: " + "; ".join(budget_state["refusals"]))
@@ -478,7 +605,8 @@ def execute(prereg: dict, prereg_sha: str, plan: list[dict], ledger_state: dict,
             config_id = selected[fold]
         else:
             config_id = step["config_id"]
-        write_params(strategy, grid[config_id]["params"])
+        if grid[config_id]["params"]:
+            write_params(strategy, grid[config_id]["params"])
         run = run_backtest(image, strategy, step["window"], step["fee"], step["label"], artifacts_dir)
         metrics = (summarize(artifacts_dir / run["result_path"], step["window"], step["fee"], wallet,
                              artifacts_dir, step["label"]) if run["ok"] else None)
@@ -502,6 +630,8 @@ def execute(prereg: dict, prereg_sha: str, plan: list[dict], ledger_state: dict,
         "fee_model": FEE_MODEL, "friction": dict(FRICTION),
         "fee_levels": prereg["fee_levels"],
         "selected_config_by_fold": {str(k): v for k, v in sorted(selected.items())},
+        "fixture_files": prereg.get("fixture_files", []),
+        "pair_universe": prereg.get("pair_universe"),
         "budget": budget_state,
         "ledger": {"verify": ledger_state["ledger_verify"], "binding": ledger_state["binding"],
                    "records": ledger_state["ledger_records"]},
@@ -525,10 +655,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        prereg, prereg_sha, plan, ledger_state, budget_state = prepare(args.prereg, args.ledger)
+        prereg, prereg_sha, plan, ledger_state, budget_state = prepare(args.prereg, args.ledger,
+                                                                      real_run=not args.dry_run)
         if not args.dry_run and ledger_state["binding"] != "BOUND":
             raise DriverRefusal(f"{prereg['trial_id']} is not preregistered in the ledger with this "
                                 "file's sha256; preregister before any outcome exists")
+        seq = sequencing(prereg, args.ledger)
+        if not args.dry_run and seq["status"] != "CLEAR":
+            raise DriverRefusal("null sequencing law: " + "; ".join(seq["reasons"]))
+        if not args.dry_run and args.artifacts_dir is not None:
+            install_fixtures(prereg)
+            apply_pair_universe(prereg)
     except DriverRefusal as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -538,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
             "mode": "DRY_RUN", "executes": False, "cycle_id": CYCLE_ID, "trial_id": prereg["trial_id"],
             "prereg_sha256": prereg_sha, "fee_model": FEE_MODEL, "friction": FRICTION,
             "ledger": {"verify": ledger_state["ledger_verify"], "binding": ledger_state["binding"]},
+            "sequencing": seq,
             "budget": budget_state,
             "plan": [{**s, "timerange": timerange(s["window"]),
                       "argv": backtest_argv(prereg["engine_image"], prereg["strategy"]["name"],

@@ -1,0 +1,86 @@
+{
+  "candidate_id": "NULL_MATCHED_FREQUENCY",
+  "cycle_id": "OFFLINE-RESEARCH-CYCLE-2",
+  "engine_image": "freqtradeorg/freqtrade:2026.7",
+  "experiment_id": "EXP-CYCLE2-CAL-NULL-MATCHFREQ",
+  "family_id": "PIPELINE_NULL_CALIBRATION",
+  "fee_levels": {
+    "base": 0.001,
+    "stress": [
+      0.002
+    ]
+  },
+  "fixture_files": [
+    {
+      "path": "research/null_controls/NullControlMatchedFrequency.py",
+      "sha256": "e4140750e5d68d4cee7f58c85f1116ea5ba84c810ccbfd784e8298f689386db2"
+    },
+    {
+      "path": "research/null_controls/null_matched_frequency_schedule.json",
+      "sha256": "35c25a56b47e2370842ba1ba39b0acbf4cc0b23adb35830cfb1ed206b1ab2518"
+    }
+  ],
+  "folds": [
+    {
+      "eval": {
+        "end": "20231231",
+        "start": "20230101"
+      },
+      "fold": 1,
+      "train": {
+        "end": "20221231",
+        "start": "20210101"
+      }
+    },
+    {
+      "eval": {
+        "end": "20241231",
+        "start": "20240101"
+      },
+      "fold": 2,
+      "train": {
+        "end": "20231231",
+        "start": "20210101"
+      }
+    }
+  ],
+  "funnel_law": {
+    "record": "research/cycle2/FUNNEL_LAW_1.md",
+    "sha256": "5ad00f5ad79a192aac9454e5eb8a90f3ce787fc332e3467fdd9ecf969800468a"
+  },
+  "funnel_step": "NULL_RECALIBRATION",
+  "grid": [
+    {
+      "config_id": "CFG1",
+      "params": {},
+      "regime_gated": false
+    }
+  ],
+  "lanes": [
+    "walk_forward"
+  ],
+  "lineage_id": "PIPELINE_NULL_CALIBRATION/L2",
+  "lineage_kind": "NULL_CALIBRATION",
+  "multiple_testing": {
+    "dsr_threshold": 0.95,
+    "effective_trials": 2,
+    "pbo_block_count": 8,
+    "pbo_threshold": 0.05,
+    "periods_per_year": 8760
+  },
+  "pair_universe": [
+    "BTC/USDT"
+  ],
+  "run_id": "RUN-C2-NULL-MATCHFREQ-1",
+  "schema_version": "cycle2-prereg-1.0.0",
+  "selection_debt_statement": "Calibration control, not a candidate: no upstream selection debt of its own. N = family_configuration_N of PIPELINE_NULL_CALIBRATION under the N LAW (research/cycle2/config_n.py): 2 distinct null designs (Cycle 1 tested both; Cycle 2 reuses the same byte-identical fixtures), not the family's trial-ID count. Any DSR/PBO figure is reported beside research/external/candidate_registry.json multiple_testing_accounting, verbatim. With one configuration, PBO is NOT_EVALUABLE: this trial does not validate PBO.",
+  "selection_metric": "return_over_drawdown",
+  "strategy": {
+    "file": "research/null_controls/NullControlMatchedFrequency.py",
+    "name": "NullControlMatchedFrequency",
+    "sha256": "e4140750e5d68d4cee7f58c85f1116ea5ba84c810ccbfd784e8298f689386db2"
+  },
+  "trial_class": "calibration",
+  "trial_id": "TRIAL-C2-NULL-MATCHFREQ-1",
+  "wallet": 100
+}

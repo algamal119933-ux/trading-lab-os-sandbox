@@ -1,0 +1,395 @@
+name: Cycle-2 research trial (preregistered, manual dispatch only)
+
+# OFFLINE-RESEARCH-CYCLE-2 (research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md),
+# CYCLE-2 UNIT 7.2 PART A. Runs ONE preregistered Cycle-2 trial off-host:
+# research/cycle2/driver.py executes the preregistration's plan, then
+# research/cycle2/funnel.py evaluates it under the frozen funnel law
+# (research/cycle2/FUNNEL_LAW_1.md). The pre-engine steps are copied from
+# null_control.yml, not refactored out of it.
+#
+# workflow_dispatch only: no push, schedule or pull_request trigger. One
+# preregistration per dispatch, chosen from an explicit list; no matrix, no
+# loop. The driver refuses a trial the ledger has not bound, a trial the null
+# sequencing law blocks, and any plan past the OPENING-1 §3 caps. This
+# workflow never commits, pushes, writes the trial ledger or uses a secret:
+# the terminal ledger record stays the operator's own append. No order is
+# ever placed; dry_run stays true and the paper guard runs over every config.
+on:
+  workflow_dispatch:
+    inputs:
+      prereg:
+        description: "Preregistration to run (one trial per dispatch)"
+        type: choice
+        required: true
+        options:
+          - research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json
+          - research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cycle2-research
+  cancel-in-progress: false
+
+env:
+  IMAGE: freqtradeorg/freqtrade:2026.7
+  DATA_DIR: freqtrade/user_data/data/binance
+  CACHE_DIR: dataset-cache/binance
+  OVERLAY_DIR: overlay-data/binance
+  STRATEGY_DIR: freqtrade/user_data/strategies
+  DEV_TIMERANGE: "20210101-20241231"
+  FIRST_SCORED_UTC: "2021-01-01T00:00:00Z"
+
+jobs:
+  trial:
+    name: Cycle-2 trial
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install "pandas==2.2.3" "pyarrow==18.1.0"
+          pip install --require-hashes --no-deps -r research/requirements-cycle2.txt
+
+      - name: Resolve the preregistration
+        id: lane
+        run: |
+          set -euo pipefail
+          case "$PREREG" in
+            research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json|research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json) ;;
+            *) echo "::error::unregistered preregistration: $PREREG"; exit 1 ;;
+          esac
+          STRATEGY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["strategy"]["name"])' "$PREREG")"
+          echo "prereg=$PREREG" >> "$GITHUB_OUTPUT"
+          echo "strategy=$STRATEGY" >> "$GITHUB_OUTPUT"
+          echo "PREREG=$PREREG STRATEGY=$STRATEGY"
+        env:
+          PREREG: ${{ inputs.prereg }}
+
+      - name: Recompute the schedule and diff against the committed one
+        run: |
+          set -euo pipefail
+          python3 research/null_controls/generate_schedules.py --check
+
+      - name: Materialise the strategy and its frozen fixtures (sha256-checked)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts "$STRATEGY_DIR"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil
+          prereg = json.loads(pathlib.Path(os.environ["PREREG"]).read_text())
+          for f in prereg.get("fixture_files", []):
+              src = pathlib.Path(f["path"])
+              if hashlib.sha256(src.read_bytes()).hexdigest() != f["sha256"]:
+                  raise SystemExit(f"::error::fixture {src} does not match its preregistered sha256")
+              shutil.copyfile(src, pathlib.Path(os.environ["STRATEGY_DIR"]) / src.name)
+              print("materialised", src, f["sha256"])
+          PY
+          cat "$STRATEGY_DIR/$STRATEGY.py"
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: 'Gate: safety compatibility (read the source before running)'
+        run: |
+          set -euo pipefail
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example \
+            2>&1 | tee artifacts/paper_guard_with_candidate.log
+
+      - name: 'Pin identity: preregistration, strategy + fixture hashes, engine version'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          def sha(p): return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+          prereg_path = os.environ["PREREG"]
+          prereg = json.loads(pathlib.Path(prereg_path).read_text())
+          identity = {
+              "trial_id": prereg["trial_id"],
+              "trial_class": prereg["trial_class"],
+              "prereg": {"file": prereg_path, "sha256": sha(prereg_path)},
+              "funnel_law": prereg["funnel_law"],
+              "strategy_source": {"file": prereg["strategy"]["file"], "sha256": sha(prereg["strategy"]["file"])},
+              "fixture_files": [{"file": f["path"], "sha256": sha(f["path"])} for f in prereg.get("fixture_files", [])],
+              "config": {"file": "freqtrade/user_data/config.research.json"},
+              "engine_version": os.environ["IMAGE"],
+              "data_contract": "research/datasets/dataset_v2.lock.json (normalized lane)",
+              "warmup_overlay": "research/datasets/warmup_overlay.lock.json",
+              "code_commit": os.environ["GITHUB_SHA"],
+          }
+          pathlib.Path("artifacts/reproduction_identity.json").write_text(json.dumps(identity, indent=2) + "\n")
+          print(json.dumps(identity, indent=2))
+          PY
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+
+      - name: Create and guard the research config
+        run: |
+          set -euo pipefail
+          cp freqtrade/user_data/config.paper.json.example freqtrade/user_data/config.json
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.json
+          python3 - <<'PY'
+          import copy, json, os, pathlib
+          def merge(base, overlay):
+              out = copy.deepcopy(base)
+              for k, v in overlay.items():
+                  if k.startswith("_"):
+                      continue
+                  out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+              return out
+          base = json.loads(pathlib.Path("freqtrade/user_data/config.paper.json.example").read_text())
+          overlay = json.loads(pathlib.Path("freqtrade/user_data/config.binance-data-mirror.json.example").read_text())
+          merged = merge(base, overlay)
+          prereg = json.loads(pathlib.Path(os.environ["PREREG"]).read_text())
+          merged["exchange"]["pair_whitelist"] = list(prereg["pair_universe"])
+          pathlib.Path("freqtrade/user_data/config.research.json").write_text(json.dumps(merged, indent=2) + "\n")
+          print("exchange.name =", merged["exchange"].get("name"),
+                "| whitelist =", merged["exchange"]["pair_whitelist"])
+          PY
+          python3 scripts/paper_guard.py --config freqtrade/user_data/config.research.json
+          mkdir -p "$DATA_DIR" "$OVERLAY_DIR" artifacts freqtrade/user_data/backtest_results freqtrade/user_data/logs
+          chmod -R a+rwX freqtrade/user_data artifacts
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+
+      - name: Restore the market-data cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            dataset-cache
+            overlay-data
+          key: extbench-data-v1-${{ hashFiles('research/datasets/dataset_v2.lock.json') }}
+          restore-keys: extbench-data-v1-
+
+      - name: Acquire Dataset V2 and the warm-up overlay from the public archive
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          mkdir -p "$CACHE_DIR"
+          if [ ! -f "$CACHE_DIR/BTC_USDT-1h.feather" ] || [ ! -f "$CACHE_DIR/ETH_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --symbol ETHUSDT --timeframe 1h --timeframe 5m \
+              --start 2020-12-01 --end 2026-08-31 \
+              --out-dir "$CACHE_DIR" --manifest artifacts/acquisition_dataset_v2.json
+          else
+            echo "Dataset V2 restored from cache"
+          fi
+          rm -rf "$DATA_DIR"
+          mkdir -p "$DATA_DIR"
+          cp "$CACHE_DIR"/*.feather "$DATA_DIR"/
+          chmod -R a+rwX freqtrade/user_data
+          if [ ! -f "$OVERLAY_DIR/BTC_USDT-1h.feather" ]; then
+            python3 scripts/fetch_binance_public_data.py \
+              --symbol BTCUSDT --timeframe 1h \
+              --start 2020-10-01 --end 2020-11-30 \
+              --out-dir "$OVERLAY_DIR" --manifest artifacts/acquisition_overlay.json
+          else
+            echo "overlay restored from cache"
+          fi
+
+      - name: 'Gate: data integrity against the frozen lock'
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_data.py \
+            --data-dir "$DATA_DIR" \
+            --pair BTC/USDT --pair ETH/USDT --timeframe 1h --timeframe 5m \
+            --lock research/datasets/dataset_v2.lock.json --gate lock \
+            2>&1 | tee artifacts/v4_dataset_lock_check.log
+
+      - name: 'Gate: join the warm-up overlay under its canonical-identity gate'
+        run: |
+          set -euo pipefail
+          python3 scripts/join_warmup_overlay.py \
+            --data-dir "$DATA_DIR" --overlay-dir "$OVERLAY_DIR" \
+            --lock research/datasets/dataset_v2.lock.json \
+            --pair BTC/USDT --timeframe 1h \
+            --first-scored-utc "$FIRST_SCORED_UTC" \
+            --required-candles 1300 \
+            --out artifacts/v7_warmup_join.json \
+            2>&1 | tee artifacts/v7_warmup_join.log
+
+      - name: Pull the pinned Freqtrade image
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then echo "pulled on attempt $attempt"; exit 0; fi
+            echo "pull attempt $attempt failed; Docker Hub may be rate limiting"; sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts"; exit 1
+
+      - name: 'Gate: lookahead analysis'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" lookahead-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" \
+            2>&1 | tee artifacts/lookahead_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/lookahead_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: 'Gate: recursive analysis'
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/freqtrade/user_data:/freqtrade/user_data" "$IMAGE" recursive-analysis \
+            --config /freqtrade/user_data/config.research.json \
+            --strategy "$STRATEGY" --strategy-path /freqtrade/user_data/strategies \
+            --timerange "$DEV_TIMERANGE" -p BTC/USDT \
+            2>&1 | tee artifacts/recursive_development.log
+          ! grep -qE 'CRITICAL - Invalid configuration|Configuration error' artifacts/recursive_development.log
+        env:
+          STRATEGY: ${{ steps.lane.outputs.strategy }}
+
+      - name: Run the preregistered trial (driver; refuses unless ledger-bound and sequencing-clear)
+        timeout-minutes: 90
+        run: |
+          set -euo pipefail
+          python3 research/cycle2/driver.py --prereg "$PREREG" --artifacts-dir artifacts/cycle2 \
+            2>&1 | tee artifacts/driver.log
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+
+      - name: Derive the EVAL windows and sizing for the exposure-matched passive benchmark
+        id: bench
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/benchmarks
+          python3 - <<'PY'
+          import json, os, pathlib
+          prereg = json.loads(pathlib.Path(os.environ["PREREG"]).read_text())
+          config = json.loads(pathlib.Path("freqtrade/user_data/config.research.json").read_text())
+          folds = sorted(prereg["folds"], key=lambda f: f["fold"])
+          # The benchmark steps below are one per fold and fee level, written out:
+          # refuse a preregistration whose shape they would not cover.
+          if [f["fold"] for f in folds] != [1, 2] or len(prereg["fee_levels"]["stress"]) != 1:
+              raise SystemExit("::error::benchmark steps cover exactly folds 1-2 and one stress fee level")
+          def iso(d, end):
+              return f"{d[:4]}-{d[4:6]}-{d[6:]}T{'23:00:00' if end else '00:00:00'}Z"
+          windows = {"protocol_windows": {f"fold{f['fold']}_eval": {
+              "start_utc": iso(f["eval"]["start"], False), "end_utc": iso(f["eval"]["end"], True)} for f in folds}}
+          pathlib.Path("artifacts/cycle2_eval_windows.json").write_text(json.dumps(windows, indent=2) + "\n")
+          universe = {("BTC/USDT",): "btc", ("BTC/USDT", "ETH/USDT"): "btc-eth"}[tuple(prereg["pair_universe"])]
+          base, stress = prereg["fee_levels"]["base"], prereg["fee_levels"]["stress"][0]
+          out = {"universe": universe, "wallet": prereg["wallet"], "stake": config["stake_amount"],
+                 "max_open_trades": config["max_open_trades"], "fee_base": repr(float(base)),
+                 "fee_stress": repr(float(stress)), "tag_base": f"{base:g}", "tag_stress": f"{stress:g}"}
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              for k, v in out.items():
+                  fh.write(f"{k}={v}\n")
+          print(json.dumps({**windows, **out}, indent=2))
+          PY
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+
+      - name: 'Passive control: fold 1 EVAL, base fee (exposure-matched, BTC/ETH per prereg)'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock artifacts/cycle2_eval_windows.json \
+            --period fold1_eval \
+            --universe "$UNIVERSE" \
+            --fee "$FEE" --wallet "$WALLET" --stake "$STAKE" --max-open-trades "$MOT" \
+            --out "artifacts/benchmarks/fold1_fee$TAG.json" \
+            2>&1 | tee "artifacts/benchmarks/fold1_fee$TAG.log"
+        env:
+          UNIVERSE: ${{ steps.bench.outputs.universe }}
+          WALLET: ${{ steps.bench.outputs.wallet }}
+          STAKE: ${{ steps.bench.outputs.stake }}
+          MOT: ${{ steps.bench.outputs.max_open_trades }}
+          FEE: ${{ steps.bench.outputs.fee_base }}
+          TAG: ${{ steps.bench.outputs.tag_base }}
+
+      - name: 'Passive control: fold 1 EVAL, stress fee (exposure-matched, BTC/ETH per prereg)'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock artifacts/cycle2_eval_windows.json \
+            --period fold1_eval \
+            --universe "$UNIVERSE" \
+            --fee "$FEE" --wallet "$WALLET" --stake "$STAKE" --max-open-trades "$MOT" \
+            --out "artifacts/benchmarks/fold1_fee$TAG.json" \
+            2>&1 | tee "artifacts/benchmarks/fold1_fee$TAG.log"
+        env:
+          UNIVERSE: ${{ steps.bench.outputs.universe }}
+          WALLET: ${{ steps.bench.outputs.wallet }}
+          STAKE: ${{ steps.bench.outputs.stake }}
+          MOT: ${{ steps.bench.outputs.max_open_trades }}
+          FEE: ${{ steps.bench.outputs.fee_stress }}
+          TAG: ${{ steps.bench.outputs.tag_stress }}
+
+      - name: 'Passive control: fold 2 EVAL, base fee (exposure-matched, BTC/ETH per prereg)'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock artifacts/cycle2_eval_windows.json \
+            --period fold2_eval \
+            --universe "$UNIVERSE" \
+            --fee "$FEE" --wallet "$WALLET" --stake "$STAKE" --max-open-trades "$MOT" \
+            --out "artifacts/benchmarks/fold2_fee$TAG.json" \
+            2>&1 | tee "artifacts/benchmarks/fold2_fee$TAG.log"
+        env:
+          UNIVERSE: ${{ steps.bench.outputs.universe }}
+          WALLET: ${{ steps.bench.outputs.wallet }}
+          STAKE: ${{ steps.bench.outputs.stake }}
+          MOT: ${{ steps.bench.outputs.max_open_trades }}
+          FEE: ${{ steps.bench.outputs.fee_base }}
+          TAG: ${{ steps.bench.outputs.tag_base }}
+
+      - name: 'Passive control: fold 2 EVAL, stress fee (exposure-matched, BTC/ETH per prereg)'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock artifacts/cycle2_eval_windows.json \
+            --period fold2_eval \
+            --universe "$UNIVERSE" \
+            --fee "$FEE" --wallet "$WALLET" --stake "$STAKE" --max-open-trades "$MOT" \
+            --out "artifacts/benchmarks/fold2_fee$TAG.json" \
+            2>&1 | tee "artifacts/benchmarks/fold2_fee$TAG.log"
+        env:
+          UNIVERSE: ${{ steps.bench.outputs.universe }}
+          WALLET: ${{ steps.bench.outputs.wallet }}
+          STAKE: ${{ steps.bench.outputs.stake }}
+          MOT: ${{ steps.bench.outputs.max_open_trades }}
+          FEE: ${{ steps.bench.outputs.fee_stress }}
+          TAG: ${{ steps.bench.outputs.tag_stress }}
+
+      - name: Evaluate under the frozen funnel law (derived, non-authoritative)
+        run: |
+          set -euo pipefail
+          python3 research/cycle2/funnel.py \
+            --run-summary artifacts/cycle2/cycle2_run_summary.json \
+            --prereg "$PREREG" \
+            --data-lock-log artifacts/v4_dataset_lock_check.log \
+            --warmup-log artifacts/v7_warmup_join.log \
+            --lookahead-log artifacts/lookahead_development.log \
+            --recursive-log artifacts/recursive_development.log \
+            --benchmark-dir artifacts/benchmarks \
+            --out artifacts/funnel_result.json \
+            2>&1 | tee artifacts/funnel.log
+        env:
+          PREREG: ${{ steps.lane.outputs.prereg }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cycle2-${{ steps.lane.outputs.strategy }}
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 30
