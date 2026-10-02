@@ -10,7 +10,7 @@
     "experiment_id", "run_id", "trial_id", "trial_class", "lineage_kind",
     "funnel_step", "strategy", "engine_image", "wallet", "selection_metric",
     "grid", "folds", "lanes", "fee_levels", "multiple_testing",
-    "selection_debt_statement"
+    "selection_debt_statement", "funnel_law"
   ],
   "properties": {
     "schema_version": {"const": "cycle2-prereg-1.0.0"},
@@ -63,8 +63,7 @@
           "params": {
             "type": "object",
             "additionalProperties": false,
-            "minProperties": 1,
-            "description": "Nested by Freqtrade parameter space, exactly as the strategy declares it: a flat dict silently matches nothing (TRIAL-H1-QUAL-1).",
+            "description": "Nested by Freqtrade parameter space, exactly as the strategy declares it: a flat dict silently matches nothing (TRIAL-H1-QUAL-1). At least one space is required unless lineage_kind is NULL_CALIBRATION, whose fixtures have no parameters and take {} (see allOf).",
             "properties": {
               "buy": {"$ref": "#/$defs/space"},
               "sell": {"$ref": "#/$defs/space"},
@@ -119,13 +118,57 @@
         "effective_trials": {"type": "integer", "minimum": 1}
       }
     },
-    "selection_debt_statement": {"type": "string", "minLength": 20}
+    "selection_debt_statement": {"type": "string", "minLength": 20},
+    "funnel_law": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record", "sha256"],
+      "description": "The frozen funnel law this trial is judged under, bound by path and sha256 (research/cycle2/FUNNEL_LAW_1.md). research/cycle2/funnel.py refuses a mismatch.",
+      "properties": {
+        "record": {"type": "string", "pattern": "^research/cycle2/[A-Z0-9_]+\\.md$"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "fixture_files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "Files copied byte-unchanged into the strategy directory after a sha256 check (the null-control strategy and its frozen schedule). The driver refuses a mismatch.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^research/[A-Za-z0-9_/]+\\.(py|json)$"},
+          "sha256": {"$ref": "#/$defs/sha256"}
+        }
+      }
+    },
+    "pair_universe": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Pairs written to the research config's pair whitelist. Dataset V2 pairs only.",
+      "items": {"enum": ["BTC/USDT", "ETH/USDT"]}
+    },
+    "requires_prior_terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trial_id", "state"],
+      "description": "NULL SEQUENCING LAW: this trial may execute only once the ledger holds the named trial's terminal record in this state.",
+      "properties": {
+        "trial_id": {"type": "string", "pattern": "^TRIAL-[A-Z0-9][A-Z0-9_-]*$"},
+        "state": {"enum": ["REJECTED"]}
+      }
+    }
   },
   "allOf": [
     {"if": {"properties": {"lanes": {"contains": {"const": "robustness"}}}},
      "then": {"required": ["robustness_window"]}},
     {"if": {"properties": {"lineage_kind": {"const": "MEAN_REVERSION"}}},
-     "then": {"required": ["owner_mr_approval_ref"]}}
+     "then": {"required": ["owner_mr_approval_ref"]}},
+    {"if": {"not": {"properties": {"lineage_kind": {"const": "NULL_CALIBRATION"}}}},
+     "then": {"properties": {"grid": {"items": {"properties": {"params": {"minProperties": 1}}}}}}}
   ],
   "$defs": {
     "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_/.-]*$"},
