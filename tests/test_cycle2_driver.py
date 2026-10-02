@@ -349,10 +349,15 @@ def test_a_dry_run_prints_the_plan_executes_nothing_and_exits_zero(tmp_path, eng
 
 def test_a_dry_run_against_the_canonical_ledger_reads_it_and_leaves_it_untouched(tmp_path, engine, capsys):
     before = CANONICAL_LEDGER.read_bytes()
+    # What the ledger itself says Cycle 2 has consumed: the sum over its Cycle-2 terminal records.
+    recorded = sum(r.payload["outcome"]["engine_invocations"]
+                   for r in TrialLedger(CANONICAL_LEDGER).records()
+                   if str(r.payload.get("experiment_id", "")).startswith(driver.EXPERIMENT_PREFIX)
+                   and r.payload["state"] != "PREREGISTERED")
     path = write_prereg(tmp_path, base_prereg())
     assert driver.main(["--prereg", str(path), "--dry-run"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["budget"]["consumed_before"]["engine_invocations"] == 0  # no Cycle-2 trial exists yet
+    assert out["budget"]["consumed_before"]["engine_invocations"] == recorded
     assert CANONICAL_LEDGER.read_bytes() == before
     assert engine.calls == []
 
@@ -675,11 +680,23 @@ def test_each_null_preregistration_validates_and_plans_six_fee_carrying_invocati
 @pytest.mark.parametrize("path", NULLS)
 def test_each_null_preregistration_is_bound_in_the_canonical_ledger(path, engine, capsys):
     before = CANONICAL_LEDGER.read_bytes()
-    assert driver.main(["--prereg", str(path), "--dry-run"]) == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["ledger"]["binding"] == "BOUND"
-    assert out["budget"]["consumed_after"]["engine_invocations"] == 12
-    assert out["budget"]["consumed_after"]["calibration_trial_ids"] == 2
+    trial_id = json.loads(path.read_text())["trial_id"]
+    cycle2 = [r.payload for r in TrialLedger(CANONICAL_LEDGER).records()
+              if str(r.payload.get("experiment_id", "")).startswith(driver.EXPERIMENT_PREFIX)]
+    terminal = {p["trial_id"]: p for p in cycle2 if p["state"] != "PREREGISTERED"}
+    if trial_id in terminal:
+        # A closed trial is never re-run, not even as a dry run.
+        assert driver.main(["--prereg", str(path), "--dry-run"]) == 2
+        assert "never re-run" in capsys.readouterr().err
+    else:
+        assert driver.main(["--prereg", str(path), "--dry-run"]) == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["ledger"]["binding"] == "BOUND"
+        # recorded consumption + 6 for every still-open Cycle-2 null (this one's plan included)
+        recorded = sum(p["outcome"]["engine_invocations"] for p in terminal.values())
+        open_trials = {p["trial_id"] for p in cycle2 if p["state"] == "PREREGISTERED"} - set(terminal)
+        assert out["budget"]["consumed_after"]["engine_invocations"] == recorded + 6 * len(open_trials)
+        assert out["budget"]["consumed_after"]["calibration_trial_ids"] == 2
     assert CANONICAL_LEDGER.read_bytes() == before
 
 

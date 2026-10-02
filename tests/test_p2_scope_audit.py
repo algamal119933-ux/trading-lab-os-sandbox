@@ -601,40 +601,13 @@ CYCLE2_UNIT_7_1A_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-    "S8": (S8_MERGE, S8_SCOPE),
-    "S9A": (S9A_MERGE, S9A_SCOPE),
-    "S9B": (S9B_MERGE, S9B_SCOPE),
-    "S9C": (S9C_MERGE, S9C_SCOPE),
-    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
-    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
-    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
-                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
-    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
-    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
-    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
-    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
-                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
-    "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
-    "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
-    "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
-    "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
-    "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
-}
+# PR #45, merged. Two parents: 9bae3196 (main before, CYCLE2_UNIT_7_1A_MERGE) +
+# c60168e9 (the research-cycle2-unit-7-2a branch).
+CYCLE2_UNIT_7_2A_MERGE = "31c26b6be55ad009bc0c81fec607f3ff20a34273"
 
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
-
-BRANCH_SCOPE: dict[str, str] = {
+# Every path CYCLE-2 UNIT 7.2 PART A touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_UNIT_7_2A_SCOPE: dict[str, str] = {
     "research/cycle2/FUNNEL_LAW_1.md":
         "CYCLE-2 UNIT 7.2 PART A — the frozen Cycle-2 funnel law (Owner card: "
         "RECOMMENDED), applicable to every Cycle-2 trial",
@@ -674,6 +647,57 @@ BRANCH_SCOPE: dict[str, str] = {
         "trial-ID count follows the 2 appends (6 → 8); no threshold or reference changed",
     "tests/test_p2_scope_audit.py":
         "CYCLE-2 UNIT 7.1a (PR #44) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
+    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
+                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
+    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
+    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
+    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
+    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
+                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
+    "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
+    "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
+    "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
+    "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
+    "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
+    "CYCLE2_UNIT_7_2A": (CYCLE2_UNIT_7_2A_MERGE, CYCLE2_UNIT_7_2A_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+
+BRANCH_SCOPE: dict[str, str] = {
+    "research/records/trial_ledger.jsonl":
+        "CYCLE-2 UNIT 7.2 PART B1 — exactly 1 appended terminal record "
+        "(TRIAL-C2-NULL-MATCHFREQ-1, REJECTED, run 37032878568)",
+    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_RESULT.md":
+        "CYCLE-2 UNIT 7.2 PART B1 — durable result record of run 37032878568 "
+        "(the GitHub artifact expires after 30 days)",
+    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_funnel_result.json":
+        "CYCLE-2 UNIT 7.2 PART B1 — byte copy of the run's derived funnel_result.json",
+    "tests/test_cycle2_driver.py":
+        "CYCLE-2 UNIT 7.2 PART B1 — tests updated for the recorded MATCHFREQ terminal state",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.2 PART A (PR #45) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
