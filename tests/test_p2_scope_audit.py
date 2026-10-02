@@ -669,6 +669,9 @@ BRANCH_SCOPE: dict[str, str] = {
         "CYCLE-2 UNIT 7.2 PART A — null fixture path and null sequencing tests",
     "tests/test_cycle2_workflow.py":
         "CYCLE-2 UNIT 7.2 PART A — static checks of the dispatch-only workflow",
+    "tests/test_cycle2_multiple_testing.py":
+        "CYCLE-2 UNIT 7.2 PART A — the canonical ledger's observed null-family "
+        "trial-ID count follows the 2 appends (6 → 8); no threshold or reference changed",
     "tests/test_p2_scope_audit.py":
         "CYCLE-2 UNIT 7.1a (PR #44) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
