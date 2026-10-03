@@ -151,6 +151,16 @@
       "description": "Pairs written to the research config's pair whitelist. Dataset V2 pairs only.",
       "items": {"enum": ["BTC/USDT", "ETH/USDT"]}
     },
+    "parameter_robustness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["criterion", "min_positive_configs"],
+      "description": "FUNNEL_LAW_1 L4 PARAMETER_ROBUSTNESS, 'per the trial's preregistration' (CYCLE-2 UNIT 7.3). GRID_EXCESS_OVER_EXPOSURE_MATCHED: every grid configuration runs over robustness_window at the base fee (the robustness lane); excess_c = its total_return_pct minus the exposure-matched passive return over the same window, pair universe, fee, wallet, stake and max_open_trades (baseline_benchmarks.py, unchanged). A configuration is positive only when excess_c > 0 and its trade_count >= 10. PASS iff at least min_positive_configs configurations are positive AND every TRAIN-selected configuration is positive; otherwise FAIL; a missing or unusable input is NOT_EVALUABLE. Without this block L4 stays NOT_EVALUABLE for a non-null lineage.",
+      "properties": {
+        "criterion": {"const": "GRID_EXCESS_OVER_EXPOSURE_MATCHED"},
+        "min_positive_configs": {"type": "integer", "minimum": 1, "maximum": 24}
+      }
+    },
     "requires_prior_terminal": {
       "type": "object",
       "additionalProperties": false,
@@ -165,6 +175,8 @@
   "allOf": [
     {"if": {"properties": {"lanes": {"contains": {"const": "robustness"}}}},
      "then": {"required": ["robustness_window"]}},
+    {"if": {"required": ["parameter_robustness"]},
+     "then": {"required": ["robustness_window"], "properties": {"lanes": {"contains": {"const": "robustness"}}}}},
     {"if": {"properties": {"lineage_kind": {"const": "MEAN_REVERSION"}}},
      "then": {"required": ["owner_mr_approval_ref"]}},
     {"if": {"not": {"properties": {"lineage_kind": {"const": "NULL_CALIBRATION"}}}},

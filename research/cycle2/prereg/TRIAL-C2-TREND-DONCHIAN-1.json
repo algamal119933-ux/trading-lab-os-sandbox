@@ -1,0 +1,159 @@
+{
+  "candidate_id": "TREND_DONCHIAN_BREAKOUT",
+  "cycle_id": "OFFLINE-RESEARCH-CYCLE-2",
+  "engine_image": "freqtradeorg/freqtrade:2026.7",
+  "experiment_id": "EXP-CYCLE2-SCI-TREND-DONCHIAN",
+  "family_id": "BTSL_EMA_REGIME",
+  "fee_levels": {
+    "base": 0.001,
+    "stress": [
+      0.002
+    ]
+  },
+  "fixture_files": [
+    {
+      "path": "research/trend_breakout/DonchianBreakoutV1.py",
+      "sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+    }
+  ],
+  "folds": [
+    {
+      "eval": {
+        "end": "20231231",
+        "start": "20230101"
+      },
+      "fold": 1,
+      "train": {
+        "end": "20221231",
+        "start": "20210101"
+      }
+    },
+    {
+      "eval": {
+        "end": "20241231",
+        "start": "20240101"
+      },
+      "fold": 2,
+      "train": {
+        "end": "20231231",
+        "start": "20210101"
+      }
+    }
+  ],
+  "funnel_law": {
+    "record": "research/cycle2/FUNNEL_LAW_1.md",
+    "sha256": "5ad00f5ad79a192aac9454e5eb8a90f3ce787fc332e3467fdd9ecf969800468a"
+  },
+  "funnel_step": "DEVELOPMENT_WALK_FORWARD",
+  "grid": [
+    {
+      "config_id": "E168_X72",
+      "params": {
+        "buy": {
+          "entry_period": 168
+        },
+        "sell": {
+          "exit_period": 72
+        }
+      },
+      "regime_gated": false
+    },
+    {
+      "config_id": "E168_X168",
+      "params": {
+        "buy": {
+          "entry_period": 168
+        },
+        "sell": {
+          "exit_period": 168
+        }
+      },
+      "regime_gated": false
+    },
+    {
+      "config_id": "E336_X72",
+      "params": {
+        "buy": {
+          "entry_period": 336
+        },
+        "sell": {
+          "exit_period": 72
+        }
+      },
+      "regime_gated": false
+    },
+    {
+      "config_id": "E336_X168",
+      "params": {
+        "buy": {
+          "entry_period": 336
+        },
+        "sell": {
+          "exit_period": 168
+        }
+      },
+      "regime_gated": false
+    },
+    {
+      "config_id": "E480_X72",
+      "params": {
+        "buy": {
+          "entry_period": 480
+        },
+        "sell": {
+          "exit_period": 72
+        }
+      },
+      "regime_gated": false
+    },
+    {
+      "config_id": "E480_X168",
+      "params": {
+        "buy": {
+          "entry_period": 480
+        },
+        "sell": {
+          "exit_period": 168
+        }
+      },
+      "regime_gated": false
+    }
+  ],
+  "lanes": [
+    "walk_forward",
+    "robustness"
+  ],
+  "lineage_id": "BTSL_EMA_REGIME/L2",
+  "lineage_kind": "TREND",
+  "multiple_testing": {
+    "dsr_threshold": 0.95,
+    "effective_trials": 15,
+    "pbo_block_count": 8,
+    "pbo_threshold": 0.05,
+    "periods_per_year": 8760
+  },
+  "pair_universe": [
+    "BTC/USDT",
+    "ETH/USDT"
+  ],
+  "parameter_robustness": {
+    "criterion": "GRID_EXCESS_OVER_EXPOSURE_MATCHED",
+    "min_positive_configs": 4
+  },
+  "robustness_window": {
+    "end": "20241231",
+    "start": "20210101"
+  },
+  "run_id": "RUN-C2-TREND-DONCHIAN-1",
+  "schema_version": "cycle2-prereg-1.0.0",
+  "selection_debt_statement": "Trend family (OPENING-1 \u00a72.1: inherits the trend family's Cycle-1 count and the H1 upstream selection debt). N = family_configuration_N of BTSL_EMA_REGIME under the N LAW (research/cycle2/config_n.py): Cycle-1 H1's 9 configurations (1 frozen centre + 8 sensitivity neighbours) plus this trial's 6 = 15, not a trial-ID count. The H1 upstream debt (a 42-strategy benchmark winner, a 21-point public sweep, an undocumented midpoint choice) is disclosed verbatim from research/external/candidate_registry.json multiple_testing_accounting beside every DSR/PBO figure; it cannot be observed, so it is not folded into N. This lineage's own selection context (three canonical breakout designs considered, none executed) is in research/trend_breakout/PREREGISTRATION.md.",
+  "selection_metric": "return_over_drawdown",
+  "strategy": {
+    "file": "research/trend_breakout/DonchianBreakoutV1.py",
+    "name": "DonchianBreakoutV1",
+    "sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+  },
+  "trial_class": "scientific",
+  "trial_id": "TRIAL-C2-TREND-DONCHIAN-1",
+  "wallet": 100
+}

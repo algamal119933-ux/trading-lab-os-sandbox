@@ -712,3 +712,124 @@ def test_the_benchmark_fields_read_are_the_ones_baseline_benchmarks_writes():
     for key in ("fee_per_side", "requested_period", "window_start", "window_end", "universe",
                 "exposure_matched_wallet_start", "exposure_matched_return", "max_exposure_matched_methodology"):
         assert f'"{key}"' in source, key
+
+
+# -- CYCLE-2 UNIT 7.3: L4 PARAMETER_ROBUSTNESS from the preregistration's own criterion -------------
+
+ROBUST = "20210101-20241231"
+
+
+def robust_prereg(min_positive: int = 2) -> dict:
+    p = scientific_prereg()
+    p["lanes"] = ["walk_forward", "robustness"]
+    p["robustness_window"] = {"start": "20210101", "end": "20241231"}
+    p["parameter_robustness"] = {"criterion": "GRID_EXCESS_OVER_EXPOSURE_MATCHED",
+                                 "min_positive_configs": min_positive}
+    return p
+
+
+def robust_scenario(per_config: dict[int, tuple[float, int]]):
+    """Robustness-window (return_pct, trades) per grid param x; EVAL and TRAIN as scenario_by_eval."""
+    inner = scenario_by_eval({EVAL1: 3.0, EVAL2: 1.0})
+
+    def scenario(window, fee, params):
+        if window == ROBUST:
+            return per_config[params["buy"]["x"]]
+        return inner(window, fee, params)
+    return scenario
+
+
+def robustness_benchmark(world, prereg: dict, ret: float = 0.05, **mutate) -> Path:
+    d = world.benchmarks(prereg)
+    base = prereg["fee_levels"]["base"]
+    report = {"fee_per_side": base, "requested_period": "robustness",
+              "windows_source": "artifacts/cycle2_eval_windows.json",
+              "result": {"period": "robustness", "window_start": "2021-01-01T00:00:00Z",
+                         "window_end": "2024-12-31T23:00:00Z", "universe": list(prereg["pair_universe"]),
+                         "max_exposure_matched_methodology": "fixture", "max_exposure_invested_fraction": 0.2,
+                         "exposure_matched_wallet_start": float(prereg["wallet"]),
+                         "exposure_matched_wallet_end": float(prereg["wallet"]) * (1 + ret),
+                         "exposure_matched_return": ret}}
+    for k, v in mutate.items():
+        (report if k in report else report["result"])[k] = v
+    (d / f"robustness_fee{base:g}.json").write_text(json.dumps(report), encoding="utf-8")
+    return d
+
+
+def run_robust(world, monkeypatch, per_config, *, min_positive=2, bench_ret=0.05, bench=True, **mutate):
+    monkeypatch.setattr(funnel, "multiple_testing_gate", lambda *a, **k: funnel._gate("PASS", "stubbed: L4 only"))
+    p = robust_prereg(min_positive)
+    path = world.bind(p)
+    summary = world.run(path, robust_scenario(per_config))
+    bdir = robustness_benchmark(world, p, bench_ret, **mutate) if bench else world.benchmarks(p)
+    r = world.evaluate(path, summary, benchmark_dir=bdir)
+    return r, r["gates"]["PARAMETER_ROBUSTNESS"]
+
+
+def test_l4_passes_when_enough_configs_and_every_selected_config_beat_the_passive_line(world, monkeypatch):
+    r, g = run_robust(world, monkeypatch, {0: (9.0, 30), 1: (6.0, 30), 2: (1.0, 30)})
+    assert g["state"] == "PASS"
+    assert g["selected_configs"] == ["C0"] and g["positive_configs"] == 2
+    assert [c["excess_pct"] for c in g["configs"]] == [pytest.approx(4.0), pytest.approx(1.0),
+                                                       pytest.approx(-4.0)]
+    assert g["benchmark"]["exposure_matched_return_pct"] == pytest.approx(5.0)
+
+
+def test_l4_fails_when_too_few_configs_beat_the_passive_line(world, monkeypatch):
+    r, g = run_robust(world, monkeypatch, {0: (9.0, 30), 1: (4.0, 30), 2: (1.0, 30)})
+    assert g["state"] == "FAIL" and "< 2" in g["reason"]
+    assert r["funnel_result"] == "REJECTED"
+
+
+def test_l4_fails_when_a_train_selected_config_is_not_positive(world, monkeypatch):
+    r, g = run_robust(world, monkeypatch, {0: (2.0, 30), 1: (9.0, 30), 2: (8.0, 30)})
+    assert g["selected_configs"] == ["C0"]
+    assert g["state"] == "FAIL" and "TRAIN-selected" in g["reason"]
+
+
+def test_l4_a_config_with_fewer_than_ten_trades_is_never_positive(world, monkeypatch):
+    r, g = run_robust(world, monkeypatch, {0: (9.0, 30), 1: (9.0, 9), 2: (1.0, 30)})
+    assert [c["positive"] for c in g["configs"]] == [True, False, False]
+    assert g["state"] == "FAIL"
+
+
+def test_l4_without_a_robustness_benchmark_is_not_evaluable(world, monkeypatch):
+    r, g = run_robust(world, monkeypatch, {0: (9.0, 30), 1: (6.0, 30), 2: (7.0, 30)}, bench=False)
+    assert g["state"] == "NOT_EVALUABLE" and "robustness_fee0.001.json is missing" in g["reason"]
+    assert r["funnel_result"] == "INCONCLUSIVE"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("requested_period", "fold1_eval"), ("window_start", "2021-01-02T00:00:00Z"), ("fee_per_side", 0.002),
+    ("universe", ["ETH/USDT"]), ("exposure_matched_return", None),
+])
+def test_l4_a_mismatched_robustness_benchmark_is_not_used(world, monkeypatch, field, value):
+    r, g = run_robust(world, monkeypatch, {0: (9.0, 30), 1: (6.0, 30), 2: (7.0, 30)}, **{field: value})
+    assert g["state"] == "NOT_EVALUABLE"
+    assert r["funnel_result"] != "SURVIVED"
+
+
+def test_l4_never_changes_the_null_verdicts(world):
+    path, summary = run_null(world, {EVAL1: -2.0, EVAL2: -0.5})
+    g = world.evaluate(path, summary)["gates"]["PARAMETER_ROBUSTNESS"]
+    assert g == {"state": "NOT_APPLICABLE", "reason": "lineage_kind NULL_CALIBRATION has no parameters"}
+
+
+def test_l4_needs_the_robustness_lane_and_a_reachable_minimum(tmp_path):
+    p = robust_prereg()
+    p["lanes"] = ["walk_forward"]
+    p.pop("robustness_window")
+    path = tmp_path / "l4.json"
+    path.write_text(json.dumps(p))
+    with pytest.raises(driver.DriverRefusal, match="prereg.schema.json"):
+        driver.load_prereg(path)
+    p = robust_prereg(min_positive=4)  # grid has 3
+    path.write_text(json.dumps(p))
+    with pytest.raises(driver.DriverRefusal, match="exceeds the grid size 3"):
+        driver.load_prereg(path)
+    p = null_prereg()
+    p.update(lanes=["walk_forward", "robustness"], robustness_window={"start": "20210101", "end": "20241231"},
+             parameter_robustness={"criterion": "GRID_EXCESS_OVER_EXPOSURE_MATCHED", "min_positive_configs": 1})
+    path.write_text(json.dumps(p))
+    with pytest.raises(driver.DriverRefusal, match="NULL_CALIBRATION"):
+        driver.load_prereg(path)

@@ -44,6 +44,16 @@ trial alike; no threshold is set by any of them):
 * PBO matrix: those same per-configuration hourly series as columns. One
   configuration gives a one-column matrix, which the wrapper returns
   NOT_EVALUABLE.
+* L4 PARAMETER_ROBUSTNESS (CYCLE-2 UNIT 7.3), only when the preregistration
+  carries a `parameter_robustness` block (its criterion is the preregistration's,
+  as L4 says; nothing here sets a threshold): each grid configuration's
+  base-fee robustness-lane run gives excess_c = total_return_pct − 100 ×
+  exposure_matched_return of `<benchmark-dir>/robustness_fee<base>.json`
+  (period `robustness`, matched on window, fee, universe and wallet like L1). A
+  configuration is positive only when excess_c > 0 and its trade_count >= 10.
+  PASS iff at least min_positive_configs are positive and every TRAIN-selected
+  configuration is positive; else FAIL. A missing run, metric or benchmark is
+  NOT_EVALUABLE. Without the block it stays NOT_EVALUABLE (never PASS).
 * DATA_TRUTH = PASS only when the lock log says "DATASET_LOCK_GATE = PASS" and
   the warm-up log says "WARMUP_OVERLAY_JOIN = PASS"; LOOKAHEAD from the engine's
   own has_bias cell for the strategy (No → PASS, Yes → FAIL); RECURSIVE = PASS
@@ -196,19 +206,22 @@ def load_benchmark(prereg: dict, benchmark_dir: Path | None, fold: dict, fee: fl
     """The fold's exposure-matched passive return at ``fee``, or None and why it is unusable."""
     if benchmark_dir is None:
         return None, "no benchmark directory supplied"
-    path = benchmark_file(benchmark_dir, fold["fold"], fee)
+    return _load_window_benchmark(prereg, benchmark_file(benchmark_dir, fold["fold"], fee),
+                                  f"fold{fold['fold']}_eval", fold["eval"], fee)
+
+
+def _load_window_benchmark(prereg: dict, path: Path, period: str, window: dict,
+                           fee: float) -> tuple[dict | None, str]:
     if not path.is_file():
         return None, f"{path.name} is missing"
     try:
         report = json.loads(path.read_text(encoding="utf-8"))
         result = report["result"]
         expected = {
-            "requested_period": f"fold{fold['fold']}_eval",
+            "requested_period": period,
             "fee_per_side": fee,
-            "window_start": f"{fold['eval']['start'][:4]}-{fold['eval']['start'][4:6]}-{fold['eval']['start'][6:]}"
-                            "T00:00:00Z",
-            "window_end": f"{fold['eval']['end'][:4]}-{fold['eval']['end'][4:6]}-{fold['eval']['end'][6:]}"
-                          "T23:00:00Z",
+            "window_start": f"{window['start'][:4]}-{window['start'][4:6]}-{window['start'][6:]}T00:00:00Z",
+            "window_end": f"{window['end'][:4]}-{window['end'][4:6]}-{window['end'][6:]}T23:00:00Z",
             "universe": prereg.get("pair_universe"),
             "exposure_matched_wallet_start": float(prereg["wallet"]),
         }
@@ -272,6 +285,62 @@ def walk_forward(prereg: dict, invocations: list[dict], artifacts_dir: Path,
     if aggregate > 0:
         return _gate(PASS, "Σ excess over sufficient folds > 0", **common)
     return _gate(FAIL, "Σ excess over sufficient folds <= 0 → REJECTED", **common)
+
+
+# -- L4 PARAMETER_ROBUSTNESS (the preregistration's own criterion) -------------------------------
+
+
+def robustness_benchmark_file(benchmark_dir: Path, fee: float) -> Path:
+    return benchmark_dir / f"robustness_fee{fee:g}.json"
+
+
+def parameter_robustness(prereg: dict, invocations: list[dict], artifacts_dir: Path,
+                         selected_by_fold: dict, benchmark_dir: Path | None = None) -> dict:
+    if prereg["lineage_kind"] == "NULL_CALIBRATION":
+        return _gate(NOT_APPLICABLE, "lineage_kind NULL_CALIBRATION has no parameters")
+    spec = prereg.get("parameter_robustness")
+    if spec is None:
+        return _gate(NOT_EVALUABLE, "required for this lineage; no robustness criterion is machine-specified by "
+                                    "the preregistration, so it cannot be evaluated here (never PASS)")
+    base = prereg["fee_levels"]["base"]
+    need = spec["min_positive_configs"]
+    common = {"criterion": spec["criterion"], "min_positive_configs": need, "configs": [],
+              "positive_configs": None, "selected_configs": sorted(set(selected_by_fold.values()))}
+    if benchmark_dir is None:
+        return _gate(NOT_EVALUABLE, "no benchmark directory supplied", **common)
+    bench, why = _load_window_benchmark(prereg, robustness_benchmark_file(benchmark_dir, base), "robustness",
+                                        prereg["robustness_window"], base)
+    if bench is None:
+        return _gate(NOT_EVALUABLE, f"robustness benchmark unusable ({why})", **common)
+    common["benchmark"] = bench
+    problems = []
+    for cfg in prereg["grid"]:
+        m = _metrics(_find(invocations, phase="robustness", config_id=cfg["config_id"], fee=base), artifacts_dir)
+        ret = m.get("total_return_pct") if m else None
+        trades = m.get("trade_count") if m else None
+        usable = _finite(ret) and isinstance(trades, int) and not isinstance(trades, bool)
+        if not usable:
+            problems.append(f"config {cfg['config_id']}: no usable robustness metrics")
+        excess = ret - bench["exposure_matched_return_pct"] if usable else None
+        common["configs"].append({
+            "config_id": cfg["config_id"], "total_return_pct": ret if usable else None,
+            "trade_count": trades if usable else None, "excess_pct": excess,
+            "positive": (excess > 0 and trades >= MIN_EVAL_TRADES) if usable else None})
+    if problems:
+        return _gate(NOT_EVALUABLE, "; ".join(problems), **common)
+    if not common["selected_configs"]:
+        return _gate(NOT_EVALUABLE, "the run summary names no TRAIN-selected configuration", **common)
+    positive = {c["config_id"] for c in common["configs"] if c["positive"]}
+    common["positive_configs"] = len(positive)
+    weak = [c for c in common["selected_configs"] if c not in positive]
+    if len(positive) < need:
+        return _gate(FAIL, f"{len(positive)} of {len(prereg['grid'])} configurations positive over the "
+                           f"exposure-matched passive < {need}", **common)
+    if weak:
+        return _gate(FAIL, f"TRAIN-selected configuration(s) {weak} not positive over the exposure-matched "
+                           "passive", **common)
+    return _gate(PASS, f"{len(positive)} of {len(prereg['grid'])} configurations positive (>= {need}) and every "
+                       "TRAIN-selected configuration positive", **common)
 
 
 # -- L2 COST_STRESS (benchmark-relative) ---------------------------------------------------------
@@ -545,10 +614,9 @@ def evaluate(run_summary_path: Path, prereg_path: Path, ledger_path: Path = DEFA
         "RECURSIVE": recursive(recursive_log),
         "LEDGER_CHAIN": chain,
         "WALK_FORWARD": wf,
-        "PARAMETER_ROBUSTNESS": (
-            _gate(NOT_APPLICABLE, "lineage_kind NULL_CALIBRATION has no parameters") if null else
-            _gate(NOT_EVALUABLE, "required for this lineage; no robustness criterion is machine-specified by "
-                                 "the preregistration, so it cannot be evaluated here (never PASS)")),
+        "PARAMETER_ROBUSTNESS": parameter_robustness(prereg, invocations, artifacts_dir,
+                                                     summary.get("selected_config_by_fold") or {},
+                                                     benchmark_dir),
         "COST_STRESS": cost_stress(prereg, invocations, artifacts_dir, wf, benchmark_dir),
         "MULTIPLE_TESTING": multiple_testing_gate(prereg, invocations, artifacts_dir, n_result,
                                                   float(prereg["wallet"])),
