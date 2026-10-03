@@ -1,0 +1,262 @@
+{
+  "authority": "DERIVED_NON_AUTHORITATIVE",
+  "budget": {
+    "caps": {
+      "calibration_trial_ids": 6,
+      "engine_invocations": 120,
+      "scientific_configurations": 24,
+      "scientific_trial_ids": 12
+    },
+    "consumed_after": {
+      "calibration_trial_ids": 2,
+      "engine_invocations": 12,
+      "scientific_configurations": 0,
+      "scientific_trial_ids": 0
+    },
+    "consumed_before": {
+      "calibration_trial_ids": 2,
+      "engine_invocations": 6,
+      "scientific_configurations": 0,
+      "scientific_trial_ids": 0
+    },
+    "planned_invocations": 6,
+    "refusals": [],
+    "remaining_after": {
+      "calibration_trial_ids": 4,
+      "engine_invocations": 108,
+      "scientific_configurations": 24,
+      "scientific_trial_ids": 12
+    },
+    "reserved_open_trials": {}
+  },
+  "calibration": {
+    "cycle2_stop": false,
+    "integrity_not_pass": [],
+    "law_result_before_integrity_rule": "REJECTED",
+    "rejected_by": [
+      "COST_STRESS",
+      "WALK_FORWARD"
+    ],
+    "rule": "null REJECTED by L1/L2/L3 with every integrity gate PASS \u2192 PASS; any integrity gate \u2260 PASS \u2192 INVALID_RUN \u2192 NOT_PROVEN \u2192 STOP; SURVIVED \u2192 FAIL \u2192 STOP; INCONCLUSIVE \u2192 NOT_PROVEN \u2192 STOP",
+    "verdict": "PASS"
+  },
+  "candidate_id": "NULL_BLOCK_SHUFFLED",
+  "config_ids": [
+    "CFG1"
+  ],
+  "cycle2_stop": false,
+  "cycle_id": "OFFLINE-RESEARCH-CYCLE-2",
+  "evaluator": "research/cycle2/funnel.py",
+  "experiment_id": "EXP-CYCLE2-CAL-NULL-BLOCKSHUF",
+  "family_id": "PIPELINE_NULL_CALIBRATION",
+  "funnel_law": {
+    "record": "research/cycle2/FUNNEL_LAW_1.md",
+    "sha256": "5ad00f5ad79a192aac9454e5eb8a90f3ce787fc332e3467fdd9ecf969800468a"
+  },
+  "funnel_result": "REJECTED",
+  "funnel_step": "NULL_RECALIBRATION",
+  "gates": {
+    "COST_STRESS": {
+      "base_aggregate_excess_pct": -48.40739647196837,
+      "levels": [
+        {
+          "aggregate_excess_pct": -48.945877803736465,
+          "fee": 0.002,
+          "folds": [
+            1,
+            2
+          ],
+          "non_positive": true,
+          "notes": []
+        }
+      ],
+      "reason": "a stress fee level makes \u03a3 excess <= 0",
+      "state": "FAIL"
+    },
+    "DATA_TRUTH": {
+      "reason": "DATASET_LOCK_GATE = PASS and WARMUP_OVERLAY_JOIN = PASS",
+      "state": "PASS"
+    },
+    "LEDGER_CHAIN": {
+      "ledger": {
+        "binding": "BOUND",
+        "records": 23,
+        "terminal_present": false,
+        "verify": "PASS"
+      },
+      "reason": "ledger verifies and the preregistration is BOUND",
+      "state": "PASS"
+    },
+    "LOOKAHEAD": {
+      "reason": "lookahead-analysis has_bias = No",
+      "state": "PASS"
+    },
+    "MULTIPLE_TESTING": {
+      "dsr": {
+        "effective_trials": 2,
+        "observations": 17544,
+        "reason": "cross-trial Sharpe variance is not estimable (fewer than 2 trial Sharpes, or all equal) while effective_trials=2",
+        "status": "NOT_EVALUABLE",
+        "threshold": 0.95,
+        "value": null
+      },
+      "family_configuration_N": 2,
+      "n_derivation": {
+        "closure_record": {
+          "path": "research/RESEARCH_CYCLE1_CLOSURE_1.md",
+          "sha256": "de16406d49e6620b1207360e6ad498b642c820fea081eacc3cb08999333432d4"
+        },
+        "cycle1": {
+          "closure_text": "Null controls \u2014 2 schedule designs",
+          "configurations": 2,
+          "identities": [
+            "aec8187558f615a4a2c97677c40f3699172ea87e38fe7d2111884c6dd8d15018",
+            "e03d34b671265302fc217fe4000993fcb5f812f49e67eb65f986857061843d90"
+          ],
+          "identities_resolved": true
+        },
+        "cycle2": [
+          {
+            "configurations": [
+              {
+                "config_id": "CFG1",
+                "identity": "e03d34b671265302fc217fe4000993fcb5f812f49e67eb65f986857061843d90",
+                "strategy_sha256": "e4140750e5d68d4cee7f58c85f1116ea5ba84c810ccbfd784e8298f689386db2"
+              }
+            ],
+            "source": "ledger",
+            "trial_id": "TRIAL-C2-NULL-MATCHFREQ-1"
+          },
+          {
+            "configurations": [
+              {
+                "config_id": "CFG1",
+                "identity": "aec8187558f615a4a2c97677c40f3699172ea87e38fe7d2111884c6dd8d15018",
+                "strategy_sha256": "6d016b207e55359d42b9132445ad292f101dcaa034e86cb4fd5106f93c0a1bbc"
+              }
+            ],
+            "source": "ledger",
+            "trial_id": "TRIAL-C2-NULL-BLOCKSHUF-1"
+          }
+        ],
+        "cycle2_distinct_identities": [
+          "aec8187558f615a4a2c97677c40f3699172ea87e38fe7d2111884c6dd8d15018",
+          "e03d34b671265302fc217fe4000993fcb5f812f49e67eb65f986857061843d90"
+        ],
+        "trial_id_count_not_n": 8,
+        "unresolved": []
+      },
+      "n_status": "EVALUATED",
+      "notes": [],
+      "pbo": {
+        "effective_trials": 1,
+        "observations": 26280,
+        "reason": "too few configurations for CSCV: 1 < 2",
+        "status": "NOT_EVALUABLE",
+        "threshold": 0.05,
+        "value": null
+      },
+      "pbo_disclosure": "PBO is NOT_EVALUABLE with a single configuration. This trial does not validate PBO; PBO's first real exercise is a multi-configuration trial.",
+      "preregistered_effective_trials": 2,
+      "reason": "a multiple-testing statistic is NOT_EVALUABLE (never PASS)",
+      "selection_debt": {
+        "source": "research/external/candidate_registry.json \u2192 multiple_testing_accounting",
+        "verbatim": {
+          "LOCAL_TRIAL_COUNT": {
+            "basis": "H1_EMACROSS and H2_EMACROSSFUNDING - the frozen configurations this lab selects and tests",
+            "excluded": "evaluation lanes and robustness analyses; re-evaluating one frozen configuration is not an additional trial",
+            "value": 2
+          },
+          "TOTAL_SELECTION_PROVENANCE": {
+            "hard_rule": "Do NOT claim DSR or PBO certification from LOCAL_TRIAL_COUNT alone. Any deflated-Sharpe or PBO figure must state which trial count it used and acknowledge the upstream selection debt it cannot observe.",
+            "rule": "A low LOCAL_TRIAL_COUNT does not make the family lightly-tested. The configurations we run arrive pre-selected from a 42-way benchmark plus a 21-point sweep plus an undocumented midpoint choice, and that history is not reset by our re-evaluating them.",
+            "status": "PARTIALLY_DOCUMENTED"
+          },
+          "UPSTREAM_SELECTION_DEBT": {
+            "basis": [
+              "EmaCross was selected as the winner of a 42-strategy benchmark (33 lost money outright)",
+              "the funding rule was then added to that already-selected winner - upstream names both selection steps itself",
+              "the public grid sweeps 3 ema_period x 7 funding_max_pct = 21 combinations",
+              "the published funding_max_pct=55 is not in that grid, so at least one further selection step is undocumented",
+              "upstream discarded a prior strategy at PBO 1.00 before arriving at this one"
+            ],
+            "value": "substantial and only partly quantified"
+          },
+          "authority": "final pre-execution addendum, section 1"
+        }
+      },
+      "selection_debt_statement": "Calibration control, not a candidate: no upstream selection debt of its own. N = family_configuration_N of PIPELINE_NULL_CALIBRATION under the N LAW (research/cycle2/config_n.py): 2 distinct null designs (Cycle 1 tested both; Cycle 2 reuses the same byte-identical fixtures), not the family's trial-ID count. Any DSR/PBO figure is reported beside research/external/candidate_registry.json multiple_testing_accounting, verbatim. With one configuration, PBO is NOT_EVALUABLE: this trial does not validate PBO.",
+      "state": "NOT_EVALUABLE"
+    },
+    "PARAMETER_ROBUSTNESS": {
+      "reason": "lineage_kind NULL_CALIBRATION has no parameters",
+      "state": "NOT_APPLICABLE"
+    },
+    "RECURSIVE": {
+      "reason": "no recursive variance and no indicator lookahead bias",
+      "state": "PASS"
+    },
+    "WALK_FORWARD": {
+      "aggregate_excess_pct": -48.40739647196837,
+      "folds": [
+        {
+          "benchmark": {
+            "exposure_matched_return_pct": 31.05855727740481,
+            "file": "fold1_fee0.001.json",
+            "methodology": "20.00 of a 100.00 wallet invested for the whole window (20.00 each across 1 leg(s)), 80.00 held in cash; invested fraction 0.2000 = max_open_trades(2) x stake(10.0) capped at the wallet",
+            "sha256": "9a80360677e184e4c83357bd2ebe14c216d3e2d28e721ac8a18701024dbbc438"
+          },
+          "config_id": "CFG1",
+          "excess_pct": -26.835434517404806,
+          "fold": 1,
+          "sample": "SUFFICIENT",
+          "total_return_pct": 4.223122760000001,
+          "trade_count": 19
+        },
+        {
+          "benchmark": {
+            "exposure_matched_return_pct": 23.97336592456356,
+            "file": "fold2_fee0.001.json",
+            "methodology": "20.00 of a 100.00 wallet invested for the whole window (20.00 each across 1 leg(s)), 80.00 held in cash; invested fraction 0.2000 = max_open_trades(2) x stake(10.0) capped at the wallet",
+            "sha256": "d082ec2435dd20f53f0a0c927b2c9fb1f321cf7ef8772d78a0901d1ff7fa0b37"
+          },
+          "config_id": "CFG1",
+          "excess_pct": -21.57196195456356,
+          "fold": 2,
+          "sample": "SUFFICIENT",
+          "total_return_pct": 2.4014039700000005,
+          "trade_count": 18
+        }
+      ],
+      "reason": "excess over the exposure-matched passive < 0 in ALL folds \u2192 REJECTED",
+      "sample_evidence": "SUFFICIENT",
+      "state": "FAIL",
+      "sufficient_folds": [
+        1,
+        2
+      ]
+    }
+  },
+  "ledger": {
+    "binding": "BOUND",
+    "records": 23,
+    "terminal_present": false,
+    "verify": "PASS"
+  },
+  "lineage_id": "PIPELINE_NULL_CALIBRATION/L2",
+  "lineage_kind": "NULL_CALIBRATION",
+  "note": "Derived and non-authoritative. This evaluator never writes the ledger; the terminal record is the operator's own append.",
+  "prereg_sha256": "9f8ceca4b0c750c6a1391b78e682d6a7e131b65e8766b75862721bcf4030f30f",
+  "run_id": "RUN-C2-NULL-BLOCKSHUF-1",
+  "sample_evidence": "SUFFICIENT",
+  "terminal_proposal": {
+    "ledger_state": "REJECTED",
+    "outcome": {
+      "engine_invocations": 6,
+      "funnel_result": "REJECTED"
+    },
+    "proposal_only": true
+  },
+  "trial_class": "calibration",
+  "trial_id": "TRIAL-C2-NULL-BLOCKSHUF-1"
+}

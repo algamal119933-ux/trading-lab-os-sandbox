@@ -651,6 +651,29 @@ CYCLE2_UNIT_7_2A_SCOPE: dict[str, str] = {
 }
 
 
+# PR #46, merged. Two parents: 31c26b6b (main before, CYCLE2_UNIT_7_2A_MERGE) +
+# 533c138d (the research-cycle2-unit-7-2b1 branch).
+CYCLE2_UNIT_7_2B1_MERGE = "8654156db8bcbc8c38c1606b31d0121ac1035c1e"
+
+# Every path CYCLE-2 UNIT 7.2 PART B1 touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_UNIT_7_2B1_SCOPE: dict[str, str] = {
+    "research/records/trial_ledger.jsonl":
+        "CYCLE-2 UNIT 7.2 PART B1 — exactly 1 appended terminal record "
+        "(TRIAL-C2-NULL-MATCHFREQ-1, REJECTED, run 37032878568)",
+    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_RESULT.md":
+        "CYCLE-2 UNIT 7.2 PART B1 — durable result record of run 37032878568 "
+        "(the GitHub artifact expires after 30 days)",
+    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_funnel_result.json":
+        "CYCLE-2 UNIT 7.2 PART B1 — byte copy of the run's derived funnel_result.json",
+    "tests/test_cycle2_driver.py":
+        "CYCLE-2 UNIT 7.2 PART B1 — tests updated for the recorded MATCHFREQ terminal state",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.2 PART A (PR #45) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -677,6 +700,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
     "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
     "CYCLE2_UNIT_7_2A": (CYCLE2_UNIT_7_2A_MERGE, CYCLE2_UNIT_7_2A_SCOPE),
+    "CYCLE2_UNIT_7_2B1": (CYCLE2_UNIT_7_2B1_MERGE, CYCLE2_UNIT_7_2B1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -687,17 +711,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 BRANCH_SCOPE: dict[str, str] = {
     "research/records/trial_ledger.jsonl":
-        "CYCLE-2 UNIT 7.2 PART B1 — exactly 1 appended terminal record "
-        "(TRIAL-C2-NULL-MATCHFREQ-1, REJECTED, run 37032878568)",
-    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_RESULT.md":
-        "CYCLE-2 UNIT 7.2 PART B1 — durable result record of run 37032878568 "
+        "CYCLE-2 UNIT 7.2 PART B2 — exactly 1 appended terminal record "
+        "(TRIAL-C2-NULL-BLOCKSHUF-1, REJECTED, run 37038822799)",
+    "research/cycle2/records/TRIAL-C2-NULL-BLOCKSHUF-1_RESULT.md":
+        "CYCLE-2 UNIT 7.2 PART B2 — durable result record of run 37038822799 "
         "(the GitHub artifact expires after 30 days)",
-    "research/cycle2/records/TRIAL-C2-NULL-MATCHFREQ-1_funnel_result.json":
-        "CYCLE-2 UNIT 7.2 PART B1 — byte copy of the run's derived funnel_result.json",
-    "tests/test_cycle2_driver.py":
-        "CYCLE-2 UNIT 7.2 PART B1 — tests updated for the recorded MATCHFREQ terminal state",
+    "research/cycle2/records/TRIAL-C2-NULL-BLOCKSHUF-1_funnel_result.json":
+        "CYCLE-2 UNIT 7.2 PART B2 — byte copy of the run's derived funnel_result.json",
+    "research/cycle2/records/UNIT_7_2_NULL_RECALIBRATION_RESULT.md":
+        "CYCLE-2 UNIT 7.2 PART B2 — the 7.2 null-recalibration result (OPENING-1 §7.2, Master Plan §12)",
     "tests/test_p2_scope_audit.py":
-        "CYCLE-2 UNIT 7.2 PART A (PR #45) pinned to its merge range; this branch's scope",
+        "CYCLE-2 UNIT 7.2 PART B1 (PR #46) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
