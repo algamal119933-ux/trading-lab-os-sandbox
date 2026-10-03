@@ -13,7 +13,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "cycle2_research.yml"
 PREREGS = ["research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json",
-           "research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json"]
+           "research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json",
+           "research/cycle2/prereg/TRIAL-C2-TREND-DONCHIAN-1.json"]
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +47,7 @@ def test_the_only_trigger_is_manual_dispatch(wf):
         assert forbidden not in on
 
 
-def test_the_input_is_a_choice_of_exactly_the_two_preregistrations(wf):
+def test_the_input_is_a_choice_of_exactly_the_preregistered_trials(wf):
     inputs = wf.get("on", wf.get(True))["workflow_dispatch"]["inputs"]
     assert list(inputs) == ["prereg"]
     assert inputs["prereg"]["type"] == "choice" and inputs["prereg"]["required"] is True
@@ -82,7 +83,7 @@ def test_one_preregistration_per_dispatch(wf, steps, text):
     assert _index(steps, "research/cycle2/driver.py --prereg \"$PREREG\"") >= 0
     runs = "\n".join(s.get("run", "") for s in steps)
     assert runs.count("research/cycle2/driver.py") == 1
-    # the two trial IDs appear together only in the allowlist of the resolve step
+    # the preregistered trial IDs appear together only in the allowlist of the resolve step
     both = [s for s in steps if all(p in s.get("run", "") for p in PREREGS)]
     assert len(both) == 1 and "case \"$PREREG\" in" in both[0]["run"]
     assert "for " not in both[0]["run"]
@@ -123,12 +124,25 @@ def _bench_steps(steps: list[dict]) -> list[dict]:
 
 
 def test_one_benchmark_step_per_eval_fold_and_fee_level(steps):
-    bench = _bench_steps(steps)
+    bench = [s for s in _bench_steps(steps) if "--period robustness" not in s["run"]]
     assert len(bench) == 4
     pairs = sorted((s["run"].split("--period ")[1].split()[0], s["env"]["FEE"].split(".")[-1].strip(" }"))
                    for s in bench)
     assert pairs == [("fold1_eval", "fee_base"), ("fold1_eval", "fee_stress"),
                      ("fold2_eval", "fee_base"), ("fold2_eval", "fee_stress")]
+    for s in bench:
+        assert "if" not in s
+
+
+def test_l4_robustness_benchmark_runs_only_with_a_preregistered_criterion(steps):
+    """UNIT 7.3: one base-fee passive line over the robustness window, gated on parameter_robustness."""
+    (step,) = [s for s in _bench_steps(steps) if "--period robustness" in s["run"]]
+    assert step["if"] == "steps.bench.outputs.has_robustness == 'true'"
+    assert step["env"]["FEE"] == "${{ steps.bench.outputs.fee_base }}"
+    assert '--out "artifacts/benchmarks/robustness_fee$TAG.json"' in step["run"]
+    derive = steps[_index(steps, "artifacts/cycle2_eval_windows.json\").write_text")]["run"]
+    assert 'has_robustness = "parameter_robustness" in prereg' in derive
+    assert 'prereg["robustness_window"]' in derive and '["robustness"]' in derive
 
 
 def test_the_benchmark_runs_after_the_driver_and_before_the_funnel(steps):

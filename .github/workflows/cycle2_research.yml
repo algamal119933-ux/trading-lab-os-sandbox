@@ -1,7 +1,8 @@
 name: Cycle-2 research trial (preregistered, manual dispatch only)
 
 # OFFLINE-RESEARCH-CYCLE-2 (research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md),
-# CYCLE-2 UNIT 7.2 PART A. Runs ONE preregistered Cycle-2 trial off-host:
+# CYCLE-2 UNIT 7.2 PART A; UNIT 7.3 added the Trend preregistration and the L4
+# robustness-window passive line. Runs ONE preregistered Cycle-2 trial off-host:
 # research/cycle2/driver.py executes the preregistration's plan, then
 # research/cycle2/funnel.py evaluates it under the frozen funnel law
 # (research/cycle2/FUNNEL_LAW_1.md). The pre-engine steps are copied from
@@ -24,6 +25,7 @@ on:
         options:
           - research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json
           - research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json
+          - research/cycle2/prereg/TRIAL-C2-TREND-DONCHIAN-1.json
 
 permissions:
   contents: read
@@ -65,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$PREREG" in
-            research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json|research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json) ;;
+            research/cycle2/prereg/TRIAL-C2-NULL-MATCHFREQ-1.json|research/cycle2/prereg/TRIAL-C2-NULL-BLOCKSHUF-1.json|research/cycle2/prereg/TRIAL-C2-TREND-DONCHIAN-1.json) ;;
             *) echo "::error::unregistered preregistration: $PREREG"; exit 1 ;;
           esac
           STRATEGY="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["strategy"]["name"])' "$PREREG")"
@@ -280,12 +282,20 @@ jobs:
               return f"{d[:4]}-{d[4:6]}-{d[6:]}T{'23:00:00' if end else '00:00:00'}Z"
           windows = {"protocol_windows": {f"fold{f['fold']}_eval": {
               "start_utc": iso(f["eval"]["start"], False), "end_utc": iso(f["eval"]["end"], True)} for f in folds}}
+          # L4 (UNIT 7.3): the robustness window gets its own base-fee passive line when the
+          # preregistration carries a parameter_robustness criterion.
+          has_robustness = "parameter_robustness" in prereg
+          if has_robustness:
+              w = prereg["robustness_window"]
+              windows["protocol_windows"]["robustness"] = {"start_utc": iso(w["start"], False),
+                                                           "end_utc": iso(w["end"], True)}
           pathlib.Path("artifacts/cycle2_eval_windows.json").write_text(json.dumps(windows, indent=2) + "\n")
           universe = {("BTC/USDT",): "btc", ("BTC/USDT", "ETH/USDT"): "btc-eth"}[tuple(prereg["pair_universe"])]
           base, stress = prereg["fee_levels"]["base"], prereg["fee_levels"]["stress"][0]
           out = {"universe": universe, "wallet": prereg["wallet"], "stake": config["stake_amount"],
                  "max_open_trades": config["max_open_trades"], "fee_base": repr(float(base)),
-                 "fee_stress": repr(float(stress)), "tag_base": f"{base:g}", "tag_stress": f"{stress:g}"}
+                 "fee_stress": repr(float(stress)), "tag_base": f"{base:g}", "tag_stress": f"{stress:g}",
+                 "has_robustness": "true" if has_robustness else "false"}
           with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
               for k, v in out.items():
                   fh.write(f"{k}={v}\n")
@@ -369,6 +379,26 @@ jobs:
           MOT: ${{ steps.bench.outputs.max_open_trades }}
           FEE: ${{ steps.bench.outputs.fee_stress }}
           TAG: ${{ steps.bench.outputs.tag_stress }}
+
+      - name: 'Passive control: robustness window, base fee (L4; only with a parameter_robustness criterion)'
+        if: steps.bench.outputs.has_robustness == 'true'
+        run: |
+          set -euo pipefail
+          python3 freqtrade/user_data/baseline_benchmarks.py \
+            --data-dir "$DATA_DIR" \
+            --lock artifacts/cycle2_eval_windows.json \
+            --period robustness \
+            --universe "$UNIVERSE" \
+            --fee "$FEE" --wallet "$WALLET" --stake "$STAKE" --max-open-trades "$MOT" \
+            --out "artifacts/benchmarks/robustness_fee$TAG.json" \
+            2>&1 | tee "artifacts/benchmarks/robustness_fee$TAG.log"
+        env:
+          UNIVERSE: ${{ steps.bench.outputs.universe }}
+          WALLET: ${{ steps.bench.outputs.wallet }}
+          STAKE: ${{ steps.bench.outputs.stake }}
+          MOT: ${{ steps.bench.outputs.max_open_trades }}
+          FEE: ${{ steps.bench.outputs.fee_base }}
+          TAG: ${{ steps.bench.outputs.tag_base }}
 
       - name: Evaluate under the frozen funnel law (derived, non-authoritative)
         run: |

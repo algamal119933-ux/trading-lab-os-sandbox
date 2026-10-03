@@ -489,7 +489,9 @@ def test_pbo_dropped_rows_are_disclosed_not_padded():
 
 def test_family_trial_count_reads_the_canonical_ledger_without_writing_it():
     before = hashlib.sha256(LEDGER.read_bytes()).hexdigest()
-    assert mt.ledger_family_trial_count("BTSL_EMA_REGIME") == 3
+    # 3 Cycle-1 H1 trial IDs + the Cycle-2 Trend preregistration (UNIT 7.3). A trial-ID
+    # count, not family_configuration_N (which is 15: research/cycle2/config_n.py).
+    assert mt.ledger_family_trial_count("BTSL_EMA_REGIME") == 4
     # 6 Cycle-1 null trial IDs + the 2 Cycle-2 null preregistrations (UNIT 7.2A).
     # A trial-ID count, not family_configuration_N (which is 2: research/cycle2/config_n.py).
     assert mt.ledger_family_trial_count("PIPELINE_NULL_CALIBRATION") == 8

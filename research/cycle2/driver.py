@@ -130,6 +130,13 @@ def check_semantics(prereg: dict) -> None:
             raise DriverRefusal(f"fold {f['fold']}: eval does not start after train ends")
     if prereg["fee_levels"]["base"] in prereg["fee_levels"]["stress"]:
         raise DriverRefusal("a stress fee level equals the base fee")
+    robustness = prereg.get("parameter_robustness")
+    if robustness is not None:
+        if prereg["lineage_kind"] == NULL_KIND:
+            raise DriverRefusal("a NULL_CALIBRATION lineage has no parameters; parameter_robustness is not applicable")
+        if robustness["min_positive_configs"] > len(prereg["grid"]):
+            raise DriverRefusal(f"parameter_robustness.min_positive_configs {robustness['min_positive_configs']} "
+                                f"exceeds the grid size {len(prereg['grid'])}")
 
 
 # -- plan --------------------------------------------------------------------
