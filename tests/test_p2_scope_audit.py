@@ -697,6 +697,41 @@ CYCLE2_UNIT_7_2B2_SCOPE: dict[str, str] = {
 }
 
 
+# PR #48, merged. Two parents: 45c1e583 (main before, CYCLE2_UNIT_7_2B2_MERGE) +
+# 22d7c562 (the research-cycle2-unit-7-3a branch).
+CYCLE2_UNIT_7_3A_MERGE = "efe6e77187992fb06f9ddadd470b20d04e583eca"
+
+# Every path CYCLE-2 UNIT 7.3 PART A touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_UNIT_7_3A_SCOPE: dict[str, str] = {
+    "research/trend_breakout/DonchianBreakoutV1.py":
+        "CYCLE-2 UNIT 7.3 — the Trend/Breakout lineage strategy (OPENING-1 §2.1; no moving average)",
+    "research/trend_breakout/PREREGISTRATION.md":
+        "CYCLE-2 UNIT 7.3 — the lineage's human preregistration (signal, independence from H1, grid, outcomes)",
+    "research/cycle2/prereg/TRIAL-C2-TREND-DONCHIAN-1.json":
+        "CYCLE-2 UNIT 7.3 — the machine-readable preregistration the driver and funnel read",
+    "research/cycle2/prereg.schema.json":
+        "CYCLE-2 UNIT 7.3 — optional parameter_robustness block (FUNNEL_LAW_1 L4 'per the trial's preregistration')",
+    "research/cycle2/driver.py":
+        "CYCLE-2 UNIT 7.3 — refuse an unreachable or null-lineage parameter_robustness block",
+    "research/cycle2/funnel.py":
+        "CYCLE-2 UNIT 7.3 — L4 evaluated from the preregistered criterion; null verdicts unchanged",
+    ".github/workflows/cycle2_research.yml":
+        "CYCLE-2 UNIT 7.3 — the Trend prereg in the dispatch allowlist; the L4 robustness-window passive line",
+    "research/records/trial_ledger.jsonl":
+        "CYCLE-2 UNIT 7.3 — exactly 1 appended PREREGISTERED record (TRIAL-C2-TREND-DONCHIAN-1)",
+    "tests/test_cycle2_funnel.py": "CYCLE-2 UNIT 7.3 — L4 evaluator tests",
+    "tests/test_cycle2_workflow.py": "CYCLE-2 UNIT 7.3 — allowlist and robustness benchmark step checks",
+    "tests/test_cycle2_trend_prereg.py": "CYCLE-2 UNIT 7.3 — the Trend preregistration, read only",
+    "tests/test_cycle2_multiple_testing.py":
+        "CYCLE-2 UNIT 7.3 — the canonical ledger's observed trend-family trial-ID count follows the "
+        "1 append (3 → 4); no threshold or reference changed",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.2 PART B2 (PR #47) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -725,6 +760,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_2A": (CYCLE2_UNIT_7_2A_MERGE, CYCLE2_UNIT_7_2A_SCOPE),
     "CYCLE2_UNIT_7_2B1": (CYCLE2_UNIT_7_2B1_MERGE, CYCLE2_UNIT_7_2B1_SCOPE),
     "CYCLE2_UNIT_7_2B2": (CYCLE2_UNIT_7_2B2_MERGE, CYCLE2_UNIT_7_2B2_SCOPE),
+    "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -734,30 +770,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/trend_breakout/DonchianBreakoutV1.py":
-        "CYCLE-2 UNIT 7.3 — the Trend/Breakout lineage strategy (OPENING-1 §2.1; no moving average)",
-    "research/trend_breakout/PREREGISTRATION.md":
-        "CYCLE-2 UNIT 7.3 — the lineage's human preregistration (signal, independence from H1, grid, outcomes)",
-    "research/cycle2/prereg/TRIAL-C2-TREND-DONCHIAN-1.json":
-        "CYCLE-2 UNIT 7.3 — the machine-readable preregistration the driver and funnel read",
-    "research/cycle2/prereg.schema.json":
-        "CYCLE-2 UNIT 7.3 — optional parameter_robustness block (FUNNEL_LAW_1 L4 'per the trial's preregistration')",
-    "research/cycle2/driver.py":
-        "CYCLE-2 UNIT 7.3 — refuse an unreachable or null-lineage parameter_robustness block",
-    "research/cycle2/funnel.py":
-        "CYCLE-2 UNIT 7.3 — L4 evaluated from the preregistered criterion; null verdicts unchanged",
-    ".github/workflows/cycle2_research.yml":
-        "CYCLE-2 UNIT 7.3 — the Trend prereg in the dispatch allowlist; the L4 robustness-window passive line",
     "research/records/trial_ledger.jsonl":
-        "CYCLE-2 UNIT 7.3 — exactly 1 appended PREREGISTERED record (TRIAL-C2-TREND-DONCHIAN-1)",
-    "tests/test_cycle2_funnel.py": "CYCLE-2 UNIT 7.3 — L4 evaluator tests",
-    "tests/test_cycle2_workflow.py": "CYCLE-2 UNIT 7.3 — allowlist and robustness benchmark step checks",
-    "tests/test_cycle2_trend_prereg.py": "CYCLE-2 UNIT 7.3 — the Trend preregistration, read only",
-    "tests/test_cycle2_multiple_testing.py":
-        "CYCLE-2 UNIT 7.3 — the canonical ledger's observed trend-family trial-ID count follows the "
-        "1 append (3 → 4); no threshold or reference changed",
+        "CYCLE-2 UNIT 7.3 RECORD — exactly 1 appended terminal record "
+        "(TRIAL-C2-TREND-DONCHIAN-1, REJECTED, run 37155789386)",
+    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_RESULT.md":
+        "CYCLE-2 UNIT 7.3 RECORD — durable result record of run 37155789386 "
+        "(the GitHub artifact expires after 30 days)",
+    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_funnel_result.json":
+        "CYCLE-2 UNIT 7.3 RECORD — byte copy of the run's derived funnel_result.json",
     "tests/test_p2_scope_audit.py":
-        "CYCLE-2 UNIT 7.2 PART B2 (PR #47) pinned to its merge range; this branch's scope",
+        "CYCLE-2 UNIT 7.3 PART A (PR #48) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

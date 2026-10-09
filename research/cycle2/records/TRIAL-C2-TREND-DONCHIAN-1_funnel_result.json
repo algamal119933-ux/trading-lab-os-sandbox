@@ -1,0 +1,336 @@
+{
+  "authority": "DERIVED_NON_AUTHORITATIVE",
+  "budget": {
+    "caps": {
+      "calibration_trial_ids": 6,
+      "engine_invocations": 120,
+      "scientific_configurations": 24,
+      "scientific_trial_ids": 12
+    },
+    "consumed_after": {
+      "calibration_trial_ids": 2,
+      "engine_invocations": 34,
+      "scientific_configurations": 6,
+      "scientific_trial_ids": 1
+    },
+    "consumed_before": {
+      "calibration_trial_ids": 2,
+      "engine_invocations": 12,
+      "scientific_configurations": 0,
+      "scientific_trial_ids": 1
+    },
+    "planned_invocations": 22,
+    "refusals": [],
+    "remaining_after": {
+      "calibration_trial_ids": 4,
+      "engine_invocations": 86,
+      "scientific_configurations": 18,
+      "scientific_trial_ids": 11
+    },
+    "reserved_open_trials": {}
+  },
+  "calibration": null,
+  "candidate_id": "TREND_DONCHIAN_BREAKOUT",
+  "config_ids": [
+    "E168_X72",
+    "E168_X168",
+    "E336_X72",
+    "E336_X168",
+    "E480_X72",
+    "E480_X168"
+  ],
+  "cycle2_stop": false,
+  "cycle_id": "OFFLINE-RESEARCH-CYCLE-2",
+  "evaluator": "research/cycle2/funnel.py",
+  "experiment_id": "EXP-CYCLE2-SCI-TREND-DONCHIAN",
+  "family_id": "BTSL_EMA_REGIME",
+  "funnel_law": {
+    "record": "research/cycle2/FUNNEL_LAW_1.md",
+    "sha256": "5ad00f5ad79a192aac9454e5eb8a90f3ce787fc332e3467fdd9ecf969800468a"
+  },
+  "funnel_result": "REJECTED",
+  "funnel_step": "DEVELOPMENT_WALK_FORWARD",
+  "gates": {
+    "COST_STRESS": {
+      "base_aggregate_excess_pct": -24.54363856551065,
+      "levels": [
+        {
+          "aggregate_excess_pct": -25.20156837473487,
+          "fee": 0.002,
+          "folds": [
+            1,
+            2
+          ],
+          "non_positive": true,
+          "notes": []
+        }
+      ],
+      "reason": "a stress fee level makes \u03a3 excess <= 0",
+      "state": "FAIL"
+    },
+    "DATA_TRUTH": {
+      "reason": "DATASET_LOCK_GATE = PASS and WARMUP_OVERLAY_JOIN = PASS",
+      "state": "PASS"
+    },
+    "LEDGER_CHAIN": {
+      "ledger": {
+        "binding": "BOUND",
+        "records": 25,
+        "terminal_present": false,
+        "verify": "PASS"
+      },
+      "reason": "ledger verifies and the preregistration is BOUND",
+      "state": "PASS"
+    },
+    "LOOKAHEAD": {
+      "reason": "lookahead-analysis has_bias = No",
+      "state": "PASS"
+    },
+    "MULTIPLE_TESTING": {
+      "dsr": {
+        "effective_trials": 15,
+        "observations": 17544,
+        "reason": "DSR >= threshold",
+        "status": "PASS",
+        "threshold": 0.95,
+        "value": 0.9551601423331788
+      },
+      "family_configuration_N": 15,
+      "n_derivation": {
+        "closure_record": {
+          "path": "research/RESEARCH_CYCLE1_CLOSURE_1.md",
+          "sha256": "de16406d49e6620b1207360e6ad498b642c820fea081eacc3cb08999333432d4"
+        },
+        "cycle1": {
+          "closure_text": "H1 \u2014 1 frozen centre + 8 sensitivity neighbours = 9",
+          "configurations": 9,
+          "identities": [],
+          "identities_resolved": false
+        },
+        "cycle2": [
+          {
+            "configurations": [
+              {
+                "config_id": "E168_X72",
+                "identity": "efbeb0db828fb6046c5ec31d3d4ae23d5e7e520d938b51149ec23452e33738c9",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              },
+              {
+                "config_id": "E168_X168",
+                "identity": "9e3ae774ccadfe585fc55c5dd4ebcb5d835d3326cdf7b086de6c592cac5fac43",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              },
+              {
+                "config_id": "E336_X72",
+                "identity": "320a3c5d78f85b750649a666fff9db38cb722e055690e8308980251301145e82",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              },
+              {
+                "config_id": "E336_X168",
+                "identity": "936d8fced29ec520ddb6adc62ac181a449c73df36631ecaa5f409c65d42ee4cc",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              },
+              {
+                "config_id": "E480_X72",
+                "identity": "114a1e958c510fc5c0e643e4337c3c9c4bd15f9532e5f413d6d6170d4e5c78e9",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              },
+              {
+                "config_id": "E480_X168",
+                "identity": "64b3d36dc7635b42c68fd04484651bbd080b65376075f53b3f0e73b7741a23e3",
+                "strategy_sha256": "375dd3dbf65f472fd640bae970abf492fdc7808d757bb2ea1c114bf8ac0bf1cc"
+              }
+            ],
+            "source": "ledger",
+            "trial_id": "TRIAL-C2-TREND-DONCHIAN-1"
+          }
+        ],
+        "cycle2_distinct_identities": [
+          "114a1e958c510fc5c0e643e4337c3c9c4bd15f9532e5f413d6d6170d4e5c78e9",
+          "320a3c5d78f85b750649a666fff9db38cb722e055690e8308980251301145e82",
+          "64b3d36dc7635b42c68fd04484651bbd080b65376075f53b3f0e73b7741a23e3",
+          "936d8fced29ec520ddb6adc62ac181a449c73df36631ecaa5f409c65d42ee4cc",
+          "9e3ae774ccadfe585fc55c5dd4ebcb5d835d3326cdf7b086de6c592cac5fac43",
+          "efbeb0db828fb6046c5ec31d3d4ae23d5e7e520d938b51149ec23452e33738c9"
+        ],
+        "trial_id_count_not_n": 4,
+        "unresolved": []
+      },
+      "n_status": "EVALUATED",
+      "notes": [],
+      "pbo": {
+        "effective_trials": 6,
+        "observations": 26280,
+        "reason": "PBO > threshold",
+        "status": "FAIL",
+        "threshold": 0.05,
+        "value": 0.6142857142857143
+      },
+      "pbo_disclosure": "PBO evaluated over the preregistered grid's last-fold TRAIN series.",
+      "preregistered_effective_trials": 15,
+      "reason": "a multiple-testing statistic FAILED its preregistered threshold",
+      "selection_debt": {
+        "source": "research/external/candidate_registry.json \u2192 multiple_testing_accounting",
+        "verbatim": {
+          "LOCAL_TRIAL_COUNT": {
+            "basis": "H1_EMACROSS and H2_EMACROSSFUNDING - the frozen configurations this lab selects and tests",
+            "excluded": "evaluation lanes and robustness analyses; re-evaluating one frozen configuration is not an additional trial",
+            "value": 2
+          },
+          "TOTAL_SELECTION_PROVENANCE": {
+            "hard_rule": "Do NOT claim DSR or PBO certification from LOCAL_TRIAL_COUNT alone. Any deflated-Sharpe or PBO figure must state which trial count it used and acknowledge the upstream selection debt it cannot observe.",
+            "rule": "A low LOCAL_TRIAL_COUNT does not make the family lightly-tested. The configurations we run arrive pre-selected from a 42-way benchmark plus a 21-point sweep plus an undocumented midpoint choice, and that history is not reset by our re-evaluating them.",
+            "status": "PARTIALLY_DOCUMENTED"
+          },
+          "UPSTREAM_SELECTION_DEBT": {
+            "basis": [
+              "EmaCross was selected as the winner of a 42-strategy benchmark (33 lost money outright)",
+              "the funding rule was then added to that already-selected winner - upstream names both selection steps itself",
+              "the public grid sweeps 3 ema_period x 7 funding_max_pct = 21 combinations",
+              "the published funding_max_pct=55 is not in that grid, so at least one further selection step is undocumented",
+              "upstream discarded a prior strategy at PBO 1.00 before arriving at this one"
+            ],
+            "value": "substantial and only partly quantified"
+          },
+          "authority": "final pre-execution addendum, section 1"
+        }
+      },
+      "selection_debt_statement": "Trend family (OPENING-1 \u00a72.1: inherits the trend family's Cycle-1 count and the H1 upstream selection debt). N = family_configuration_N of BTSL_EMA_REGIME under the N LAW (research/cycle2/config_n.py): Cycle-1 H1's 9 configurations (1 frozen centre + 8 sensitivity neighbours) plus this trial's 6 = 15, not a trial-ID count. The H1 upstream debt (a 42-strategy benchmark winner, a 21-point public sweep, an undocumented midpoint choice) is disclosed verbatim from research/external/candidate_registry.json multiple_testing_accounting beside every DSR/PBO figure; it cannot be observed, so it is not folded into N. This lineage's own selection context (three canonical breakout designs considered, none executed) is in research/trend_breakout/PREREGISTRATION.md.",
+      "state": "FAIL"
+    },
+    "PARAMETER_ROBUSTNESS": {
+      "benchmark": {
+        "exposure_matched_return_pct": 57.587104198685154,
+        "file": "robustness_fee0.001.json",
+        "methodology": "20.00 of a 100.00 wallet invested for the whole window (10.00 each across 2 leg(s)), 80.00 held in cash; invested fraction 0.2000 = max_open_trades(2) x stake(10.0) capped at the wallet",
+        "sha256": "abe3b78b44d7300a2303ca9756e0729ea2176f65f7a001cef9ced09467ca5f61"
+      },
+      "configs": [
+        {
+          "config_id": "E168_X72",
+          "excess_pct": -31.598810538685154,
+          "positive": false,
+          "total_return_pct": 25.98829366,
+          "trade_count": 156
+        },
+        {
+          "config_id": "E168_X168",
+          "excess_pct": -22.85149231868516,
+          "positive": false,
+          "total_return_pct": 34.73561187999999,
+          "trade_count": 104
+        },
+        {
+          "config_id": "E336_X72",
+          "excess_pct": -34.66611791868515,
+          "positive": false,
+          "total_return_pct": 22.92098628,
+          "trade_count": 112
+        },
+        {
+          "config_id": "E336_X168",
+          "excess_pct": -28.672465708685152,
+          "positive": false,
+          "total_return_pct": 28.91463849,
+          "trade_count": 78
+        },
+        {
+          "config_id": "E480_X72",
+          "excess_pct": -36.97585021868515,
+          "positive": false,
+          "total_return_pct": 20.61125398,
+          "trade_count": 96
+        },
+        {
+          "config_id": "E480_X168",
+          "excess_pct": -28.635881208685152,
+          "positive": false,
+          "total_return_pct": 28.95122299,
+          "trade_count": 64
+        }
+      ],
+      "criterion": "GRID_EXCESS_OVER_EXPOSURE_MATCHED",
+      "min_positive_configs": 4,
+      "positive_configs": 0,
+      "reason": "0 of 6 configurations positive over the exposure-matched passive < 4",
+      "selected_configs": [
+        "E336_X168"
+      ],
+      "state": "FAIL"
+    },
+    "RECURSIVE": {
+      "reason": "no recursive variance and no indicator lookahead bias",
+      "state": "PASS"
+    },
+    "WALK_FORWARD": {
+      "aggregate_excess_pct": -24.54363856551065,
+      "folds": [
+        {
+          "benchmark": {
+            "exposure_matched_return_pct": 24.60077695013623,
+            "file": "fold1_fee0.001.json",
+            "methodology": "20.00 of a 100.00 wallet invested for the whole window (10.00 each across 2 leg(s)), 80.00 held in cash; invested fraction 0.2000 = max_open_trades(2) x stake(10.0) capped at the wallet",
+            "sha256": "d27fa719e04203a20ce38f3888cca5ce9160f79c85588477138c3206cbc64585"
+          },
+          "config_id": "E336_X168",
+          "excess_pct": -16.61077710013623,
+          "fold": 1,
+          "sample": "SUFFICIENT",
+          "total_return_pct": 7.98999985,
+          "trade_count": 19
+        },
+        {
+          "benchmark": {
+            "exposure_matched_return_pct": 16.49808904537442,
+            "file": "fold2_fee0.001.json",
+            "methodology": "20.00 of a 100.00 wallet invested for the whole window (10.00 each across 2 leg(s)), 80.00 held in cash; invested fraction 0.2000 = max_open_trades(2) x stake(10.0) capped at the wallet",
+            "sha256": "b5a0a50871f97a9fa52f537f1c40803bdb1e5c159a698baf4f7e472a5f4242ee"
+          },
+          "config_id": "E336_X168",
+          "excess_pct": -7.9328614653744225,
+          "fold": 2,
+          "sample": "SUFFICIENT",
+          "total_return_pct": 8.565227579999998,
+          "trade_count": 22
+        }
+      ],
+      "reason": "excess over the exposure-matched passive < 0 in ALL folds \u2192 REJECTED",
+      "sample_evidence": "SUFFICIENT",
+      "state": "FAIL",
+      "sufficient_folds": [
+        1,
+        2
+      ]
+    }
+  },
+  "ledger": {
+    "binding": "BOUND",
+    "records": 25,
+    "terminal_present": false,
+    "verify": "PASS"
+  },
+  "lineage_id": "BTSL_EMA_REGIME/L2",
+  "lineage_kind": "TREND",
+  "note": "Derived and non-authoritative. This evaluator never writes the ledger; the terminal record is the operator's own append.",
+  "prereg_sha256": "98f5b6c9d9b39c0779adf23bd497760fdfaa316a332fd10b0046b0ed98a07d80",
+  "run_id": "RUN-C2-TREND-DONCHIAN-1",
+  "sample_evidence": "SUFFICIENT",
+  "terminal_proposal": {
+    "ledger_state": "REJECTED",
+    "outcome": {
+      "config_ids": [
+        "E168_X72",
+        "E168_X168",
+        "E336_X72",
+        "E336_X168",
+        "E480_X72",
+        "E480_X168"
+      ],
+      "engine_invocations": 22,
+      "funnel_result": "REJECTED"
+    },
+    "proposal_only": true
+  },
+  "trial_class": "scientific",
+  "trial_id": "TRIAL-C2-TREND-DONCHIAN-1"
+}
