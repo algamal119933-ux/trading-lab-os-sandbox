@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "verification/intake/intake.schema.json",
+  "title": "Freqtrade Strategy Verification intake",
+  "description": "What a customer submits. There is deliberately no field for a name, e-mail, contact, exchange key, secret or credential: those never enter this repository. A case is known only by an opaque case_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["intake_version", "case_id", "strategy", "config", "engine", "market", "claim", "rights"],
+  "properties": {
+    "intake_version": {"const": 1},
+    "case_id": {"type": "string", "pattern": "^C-[0-9]{3,6}$"},
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "strategy_class", "strategy_sha256", "params_sha256"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {"enum": ["public_repo", "archive"]},
+            "url": {"type": "string"},
+            "commit": {"type": "string"},
+            "archive_sha256": {"type": "string"}
+          }
+        },
+        "strategy_class": {"type": "string"},
+        "strategy_sha256": {"type": ["string", "null"]},
+        "params_sha256": {"type": ["string", "null"], "description": "sha256 of the params JSON Freqtrade auto-loads, or null when the customer states no params file exists (params_file_absent = true)"},
+        "params_file_absent": {"type": "boolean"}
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "trading_mode", "can_short", "leverage", "dry_run"],
+      "properties": {
+        "sha256": {"type": ["string", "null"], "description": "sha256 of the config with every key and secret removed"},
+        "exchange": {"type": "string"},
+        "trading_mode": {"type": "string"},
+        "margin_mode": {"type": "string"},
+        "can_short": {"type": "boolean"},
+        "leverage": {"type": "number"},
+        "dry_run": {"type": "boolean"}
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freqtrade_version"],
+      "properties": {"freqtrade_version": {"type": ["string", "null"]}}
+    },
+    "market": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pairs", "timeframe", "timerange"],
+      "properties": {
+        "pairs": {"type": "array", "items": {"type": "string"}},
+        "timeframe": {"type": ["string", "null"]},
+        "timerange": {"type": ["string", "null"]}
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stated"],
+      "properties": {
+        "stated": {"type": "boolean"},
+        "text": {"type": "string"},
+        "source": {"type": "string"}
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["licence_spdx", "submitter_holds_rights"],
+      "properties": {
+        "licence_spdx": {"type": ["string", "null"]},
+        "submitter_holds_rights": {"type": "boolean"}
+      }
+    }
+  }
+}

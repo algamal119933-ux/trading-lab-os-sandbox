@@ -1,0 +1,22 @@
+{
+  "intake_version": 1,
+  "case_id": "C-000",
+  "strategy": {
+    "source": {"kind": "public_repo", "url": "https://github.com/wiktorj137/btc-strategy-lab", "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5"},
+    "strategy_class": "EmaCross",
+    "strategy_sha256": "387cf39f58d266bb63d06865a0784bc2e08676edf54f4610c7d7709bb2a95f24",
+    "params_sha256": "9209a90e5092216af166fd10b9e7415690ab16af0fb3010c7e94e162c027e3ee"
+  },
+  "config": {
+    "sha256": "a20cfbf8c9efa36b06f336ef772e8be905e9c236b6f7bed38a4a0a810879ecda",
+    "exchange": "binance",
+    "trading_mode": "spot",
+    "can_short": false,
+    "leverage": 1,
+    "dry_run": true
+  },
+  "engine": {"freqtrade_version": "2026.7"},
+  "market": {"pairs": ["BTC/USDT"], "timeframe": "1h", "timerange": "20210101-20250101"},
+  "claim": {"stated": true, "text": "EmaCross alone: total return 1353%, max drawdown -49.4%", "source": "upstream README at the pinned commit"},
+  "rights": {"licence_spdx": "GPL-3.0", "submitter_holds_rights": false}
+}
