@@ -732,6 +732,27 @@ CYCLE2_UNIT_7_3A_SCOPE: dict[str, str] = {
 }
 
 
+# PR #49, merged. Two parents: efe6e771 (main before, CYCLE2_UNIT_7_3A_MERGE) +
+# e302d1d7 (the research-cycle2-unit-7-3r branch).
+CYCLE2_UNIT_7_3R_MERGE = "21cf0a6cc260ecf8644f4f6bcc0ca22f7a82c62d"
+
+# Every path CYCLE-2 UNIT 7.3 RECORD touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CYCLE2_UNIT_7_3R_SCOPE: dict[str, str] = {
+    "research/records/trial_ledger.jsonl":
+        "CYCLE-2 UNIT 7.3 RECORD — exactly 1 appended terminal record "
+        "(TRIAL-C2-TREND-DONCHIAN-1, REJECTED, run 37155789386)",
+    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_RESULT.md":
+        "CYCLE-2 UNIT 7.3 RECORD — durable result record of run 37155789386 "
+        "(the GitHub artifact expires after 30 days)",
+    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_funnel_result.json":
+        "CYCLE-2 UNIT 7.3 RECORD — byte copy of the run's derived funnel_result.json",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.3 PART A (PR #48) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -761,6 +782,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_2B1": (CYCLE2_UNIT_7_2B1_MERGE, CYCLE2_UNIT_7_2B1_SCOPE),
     "CYCLE2_UNIT_7_2B2": (CYCLE2_UNIT_7_2B2_MERGE, CYCLE2_UNIT_7_2B2_SCOPE),
     "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
+    "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -770,16 +792,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/records/trial_ledger.jsonl":
-        "CYCLE-2 UNIT 7.3 RECORD — exactly 1 appended terminal record "
-        "(TRIAL-C2-TREND-DONCHIAN-1, REJECTED, run 37155789386)",
-    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_RESULT.md":
-        "CYCLE-2 UNIT 7.3 RECORD — durable result record of run 37155789386 "
-        "(the GitHub artifact expires after 30 days)",
-    "research/cycle2/records/TRIAL-C2-TREND-DONCHIAN-1_funnel_result.json":
-        "CYCLE-2 UNIT 7.3 RECORD — byte copy of the run's derived funnel_result.json",
+    "research/RESEARCH_CYCLE2_CLOSURE_1.md":
+        "CYCLE-2 UNIT 7.5 — closure/reporting only (OPENING-1 §7.5/§9); no trial",
     "tests/test_p2_scope_audit.py":
-        "CYCLE-2 UNIT 7.3 PART A (PR #48) pinned to its merge range; this branch's scope",
+        "CYCLE-2 UNIT 7.3 RECORD (PR #49) pinned to its merge range; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
