@@ -199,3 +199,14 @@ def test_an_unchanged_ledger_passes_from_git(tmp_path):
     head = _commit(repo, "routine")
     assert ml.ledger_checks(repo, base, head) == (True, True)
     assert ml.new_dependencies(repo, base, head, ["verification/x.md"]) == []
+
+
+def test_a_base_without_the_law_fails_closed(capsys):
+    """The bootstrap PR: its base has no protected list, so nothing can be auto."""
+    pre_cea = "4c14d259b42060240158b2abee8105a55d2e4dd2"
+    probe = subprocess.run(["git", "-C", str(REPO_ROOT), "cat-file", "-e", pre_cea])
+    if probe.returncode != 0:
+        pytest.skip("the pre-CEA-1 commit is not in this clone's history")
+    assert ml.main(["--repo", str(REPO_ROOT), "--base", pre_cea, "--head", "HEAD",
+                    "--branch", "claude/auth-1"]) == 1
+    assert "BASE_POLICY_ABSENT" in capsys.readouterr().out

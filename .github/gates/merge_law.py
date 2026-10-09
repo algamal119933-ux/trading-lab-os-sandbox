@@ -220,7 +220,12 @@ def main(argv: list[str] | None = None) -> int:
 
     repo = Path(args.repo).resolve()
     branch = args.branch or cp.git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
-    policy = policy_at(repo, args.base)
+    try:
+        policy = policy_at(repo, args.base)
+    except FileNotFoundError as exc:
+        # No law on the base (the bootstrap PR that installs it): fail closed.
+        print(f"MERGE_LAW_VERDICT = OWNER_MERGE_REQUIRED\n  - BASE_POLICY_ABSENT: {exc}")
+        return 1
     pr = pull_request_at(repo, args.base, args.head, branch, args.author, args.main,
                          args.merge_method, args.unresolved_threads)
     result = evaluate(policy, pr)
