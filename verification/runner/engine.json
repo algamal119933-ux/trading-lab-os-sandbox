@@ -1,0 +1,9 @@
+{
+  "image": "freqtradeorg/freqtrade",
+  "tag": "2026.7",
+  "index_digest": "sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643",
+  "linux_amd64_digest": "sha256:742730fbe2f6f1bb69d36357c933df1ab62f5a6102bfd3f71a0bf58b8d61f009",
+  "pinned_utc": "2026-10-09T21:50:00Z",
+  "source": "docker buildx imagetools inspect freqtradeorg/freqtrade:2026.7",
+  "note": "The tag is the engine every recorded result in this repository used. The runner pulls by digest only, so a re-pushed tag can never change what runs."
+}
