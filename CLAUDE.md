@@ -190,6 +190,8 @@ branch → PR → CI → OWNER MERGE → re-ground → resume the SAME stage
 fail-closed: UNPROVEN blocks exactly as FAIL does, and no override flag exists
 ```
 
+Continuous execution: [`docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md`](docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md) (CEA-1).
+
 ## Standing prerequisite order and boundaries
 
 [`docs/NEXT_EXECUTION_PREREQUISITES_2026-09-14.md`](docs/NEXT_EXECUTION_PREREQUISITES_2026-09-14.md)
@@ -255,8 +257,10 @@ Branch names are stage-scoped, e.g. `claude/p2-governance`,
 
 Make small coherent commits.
 
-Never push to `main`. Never auto-merge. Never squash or rebase a PR: merges are
-normal two-parent merges the Owner performs.
+Never push to `main`. Never auto-merge, except as
+`docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md` permits once every activation
+condition in its §5 holds; until then every merge is the Owner's. Never squash or
+rebase a PR: merges are normal two-parent merges.
 
 Do not rewrite published history.
 

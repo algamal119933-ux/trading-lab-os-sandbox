@@ -1,0 +1,78 @@
+# PROTECTED_VERIFICATION_PATHS — docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §3
+#
+# One glob per line. `*` matches within one path segment, `**` matches across
+# segments. A PR touching any of these is OWNER_MERGE_REQUIRED, judged by the
+# copy of this file on the PR's BASE. A line ending in "# future" may match no
+# tracked file yet; every other line must match at least one
+# (tests/test_protected_paths.py).
+
+# -- governance / authority -------------------------------------------------
+CLAUDE.md
+docs/governance/**
+docs/p2/**
+research/OFFLINE_RESEARCH_*.md
+research/RESEARCH_CYCLE*_CLOSURE_*.md
+research/cycle2/FUNNEL_LAW_*.md
+research/cycle2/TRIALGATE_AUDIT_*.md
+charters/**
+
+# -- merge / CI enforcement (the gate, this list, AUTONOMY_STATE, ACTIVATION) -
+.github/**
+
+# -- test harness: can silently disable tests -------------------------------
+pytest.ini
+tests/conftest.py
+requirements-dev.txt
+requirements-research.txt
+research/requirements*.txt
+
+# -- repository integrity ---------------------------------------------------
+scripts/verify_repo.py
+tests/test_repo_hygiene.py
+tests/test_p2_scope_audit.py
+
+# -- safety guards ----------------------------------------------------------
+scripts/paper_guard.py
+tests/test_paper_guard.py
+scripts/mode_guard.py  # future
+tests/test_mode_guard.py  # future
+
+# -- authority parsers / P2 law ---------------------------------------------
+research/fp/registry_law.py
+research/fp/semantic_identity.py
+research/fp/capability.py
+research/fp/admission.py
+research/fp/preflight.py
+research/fp/reconcile.py
+scripts/validate_activation.py
+scripts/check_freeze_candidate.py
+scripts/freeze_t0.py
+tests/test_p2_*.py
+tests/test_fp_admission.py
+tests/test_fp_preflight.py
+
+# -- acceptance schemas -----------------------------------------------------
+research/schema/*.json
+research/cycle2/prereg.schema.json
+
+# -- scientific judge: funnel, N, thresholds, ledger, driver caps -------------
+research/cycle2/funnel.py
+research/cycle2/multiple_testing.py
+research/cycle2/config_n.py
+research/cycle2/driver.py
+research/trial_ledger.py
+tests/test_cycle2_funnel.py
+tests/test_cycle2_multiple_testing.py
+tests/test_cycle2_config_n.py
+tests/test_trial_ledger.py
+tests/test_null_control_schedules.py
+
+# -- data authority ---------------------------------------------------------
+research/datasets/*.lock.json
+
+# -- CEA-1 gate tests -------------------------------------------------------
+tests/test_merge_law.py
+tests/test_resolve_next_unit.py
+tests/test_charters.py
+tests/test_research_program_schema.py
+tests/test_protected_paths.py

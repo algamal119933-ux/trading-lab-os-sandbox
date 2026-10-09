@@ -1388,6 +1388,25 @@ EVIDENCE         = research/OFFLINE_RESEARCH_AUTHORITY_1.md; research/RESEARCH_C
                    research/OFFLINE_RESEARCH_CYCLE_2_OPENING_1.md
 ```
 
+```text
+CHANGE_ID        = MP1-CR-002
+DATE             = 2026-10-09
+OWNER_DECISION   = Owner direction 2026-10-09 (AUTH-1: Continuous Engineering + Commercial Charter),
+                   effective on the Owner's merge of docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md
+REASON           = §21 makes every merge an Owner merge; the accepted continuous-execution operating model
+                   lets routine charter work merge through the platform once enforcement exists
+AFFECTED_SECTION = §21, the "OWNER MERGE" step of the governed Git discipline and the rule
+                   "Owner required for true authority gates"
+OLD_RULE         = every PR → mandatory CI → OWNER MERGE
+NEW_RULE         = a routine charter PR may be merged by the platform only under CEA-1 §4 and only once every
+                   CEA-1 §5 activation condition holds (platform enforcement, executor identity, proven
+                   executor, P2 closed, AUTONOMY_STATE ACTIVE). Protected paths, authority acts and CLOSE
+                   records without a protected generator stay Owner merges. Until activation nothing changes:
+                   every merge is the Owner's. This plan still authorizes nothing.
+EVIDENCE         = docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md; .github/gates/merge_law.py;
+                   .github/gates/protected_paths.txt; .github/gates/ACTIVATION.json (all flags false)
+```
+
 ---
 
 # 23. ABSOLUTE PROHIBITIONS
