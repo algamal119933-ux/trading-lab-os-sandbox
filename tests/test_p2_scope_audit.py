@@ -768,6 +768,44 @@ RESEARCH_CYCLE2_CLOSURE_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #51, merged. Two parents: 4c14d259 (main before, RESEARCH_CYCLE2_CLOSURE_1) +
+# eff705e7 (the claude/auth-1-continuous-execution branch).
+AUTH_1_MERGE = "3eba2b858b652cf8f18c50da9f64929e452ba5d6"
+
+# Every path AUTH-1 (CEA-1) touched -> the requirement it satisfies. These entries
+# were BRANCH_SCOPE while it was in flight.
+AUTH_1_SCOPE: dict[str, str] = {
+    "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md":
+        "AUTH-1 (CEA-1) D1 — the continuous-execution law",
+    ".github/gates/protected_paths.txt": "AUTH-1 (CEA-1) D2 — PROTECTED_VERIFICATION_PATHS",
+    ".github/gates/AUTONOMY_STATE.json": "AUTH-1 (CEA-1) D3 — kill state, layer 1",
+    ".github/gates/ACTIVATION.json": "AUTH-1 (CEA-1) D3 — auto-merge activation flags, all false",
+    ".github/gates/cea_policy.py": "AUTH-1 (CEA-1) D4-D7 — shared policy reading at a git revision",
+    ".github/gates/merge_law.py": "AUTH-1 (CEA-1) D4 — the base-policy merge law",
+    ".github/workflows/merge-law.yml": "AUTH-1 (CEA-1) D4 — merge-law check on pull_request_target, base policy",
+    ".github/gates/resolve_next_unit.py": "AUTH-1 (CEA-1) D5 — the deterministic next-unit resolver (dry run)",
+    "charters/charter.schema.json": "AUTH-1 (CEA-1) D6 — program charter schema",
+    "charters/ticket.schema.json": "AUTH-1 (CEA-1) D6/D8 — evidence ticket schema (no customer-data fields)",
+    ".github/gates/check_charters.py": "AUTH-1 (CEA-1) D6 — charter and ticket validator",
+    "charters/research_program.schema.json": "AUTH-1 (CEA-1) D7 — AUTH-2 structure, no program instance",
+    ".github/gates/check_research_program.py": "AUTH-1 (CEA-1) D7 — research program validator and self-test",
+    "charters/COMMERCIAL-VERIFICATION-LANE-1.json": "AUTH-1 (CEA-1) D8 — first Program Charter (machine-readable)",
+    "charters/COMMERCIAL-VERIFICATION-LANE-1.md": "AUTH-1 (CEA-1) D8 — first Program Charter (record)",
+    "CLAUDE.md": "AUTH-1 (CEA-1) D9 — 'Never auto-merge' qualified by CEA-1 §5; pointer to CEA-1",
+    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
+        "AUTH-1 (CEA-1) D10 — §22.1 change record MP1-CR-002 (§21)",
+    "tests/test_merge_law.py": "AUTH-1 (CEA-1) D11 — merge-law refusals",
+    "tests/test_resolve_next_unit.py": "AUTH-1 (CEA-1) D11 — resolver determinism, lease, serialization, kill",
+    "tests/test_charters.py": "AUTH-1 (CEA-1) D11 — charter and ticket law",
+    "tests/test_research_program_schema.py": "AUTH-1 (CEA-1) D11 — AUTH-2 structure refusals; no program exists",
+    "tests/test_protected_paths.py": "AUTH-1 (CEA-1) D11 — the protected list is real and self-protecting",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-1 (CEA-1) D12 — PR #50 pinned; charters/ and verification/ admitted; the CEA-1 law file admitted "
+        "by exact path; auto/<charter>/<unit> branches audited against their charter's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -799,6 +837,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
     "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
     "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
+    "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -808,33 +847,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md":
-        "AUTH-1 (CEA-1) D1 — the continuous-execution law",
-    ".github/gates/protected_paths.txt": "AUTH-1 (CEA-1) D2 — PROTECTED_VERIFICATION_PATHS",
-    ".github/gates/AUTONOMY_STATE.json": "AUTH-1 (CEA-1) D3 — kill state, layer 1",
-    ".github/gates/ACTIVATION.json": "AUTH-1 (CEA-1) D3 — auto-merge activation flags, all false",
-    ".github/gates/cea_policy.py": "AUTH-1 (CEA-1) D4-D7 — shared policy reading at a git revision",
-    ".github/gates/merge_law.py": "AUTH-1 (CEA-1) D4 — the base-policy merge law",
-    ".github/workflows/merge-law.yml": "AUTH-1 (CEA-1) D4 — merge-law check on pull_request_target, base policy",
-    ".github/gates/resolve_next_unit.py": "AUTH-1 (CEA-1) D5 — the deterministic next-unit resolver (dry run)",
-    "charters/charter.schema.json": "AUTH-1 (CEA-1) D6 — program charter schema",
-    "charters/ticket.schema.json": "AUTH-1 (CEA-1) D6/D8 — evidence ticket schema (no customer-data fields)",
-    ".github/gates/check_charters.py": "AUTH-1 (CEA-1) D6 — charter and ticket validator",
-    "charters/research_program.schema.json": "AUTH-1 (CEA-1) D7 — AUTH-2 structure, no program instance",
-    ".github/gates/check_research_program.py": "AUTH-1 (CEA-1) D7 — research program validator and self-test",
-    "charters/COMMERCIAL-VERIFICATION-LANE-1.json": "AUTH-1 (CEA-1) D8 — first Program Charter (machine-readable)",
-    "charters/COMMERCIAL-VERIFICATION-LANE-1.md": "AUTH-1 (CEA-1) D8 — first Program Charter (record)",
-    "CLAUDE.md": "AUTH-1 (CEA-1) D9 — 'Never auto-merge' qualified by CEA-1 §5; pointer to CEA-1",
-    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
-        "AUTH-1 (CEA-1) D10 — §22.1 change record MP1-CR-002 (§21)",
-    "tests/test_merge_law.py": "AUTH-1 (CEA-1) D11 — merge-law refusals",
-    "tests/test_resolve_next_unit.py": "AUTH-1 (CEA-1) D11 — resolver determinism, lease, serialization, kill",
-    "tests/test_charters.py": "AUTH-1 (CEA-1) D11 — charter and ticket law",
-    "tests/test_research_program_schema.py": "AUTH-1 (CEA-1) D11 — AUTH-2 structure refusals; no program exists",
-    "tests/test_protected_paths.py": "AUTH-1 (CEA-1) D11 — the protected list is real and self-protecting",
-    "tests/test_p2_scope_audit.py":
-        "AUTH-1 (CEA-1) D12 — PR #50 pinned; charters/ and verification/ admitted; the CEA-1 law file admitted "
-        "by exact path; auto/<charter>/<unit> branches audited against their charter's scope",
+    "tests/test_merge_law.py":
+        "CEA-1 test fix — the merge-law probe tolerates an existing verification/ (CI red on every CV unit)",
+    "tests/test_p2_scope_audit.py": "AUTH-1 (PR #51) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
