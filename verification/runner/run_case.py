@@ -154,7 +154,7 @@ def docker_command(case_dir: Path, case: dict, data_dir: Path, out_dir: Path) ->
         "-v", f"{data_dir.resolve()}:/data:ro",
         "-v", f"{(HERE / 'entrypoint.sh').resolve()}:/runner/entrypoint.sh:ro",
         "-v", f"{(out_dir / 'results').resolve()}:/out:rw",
-        "--entrypoint", "/bin/sh",
+        "--entrypoint", "/bin/bash",
         IMAGE, "/runner/entrypoint.sh",
         "--config", "/case/config.json",
         "--strategy", case["strategy_class"], "--strategy-path", "/case/strategy",

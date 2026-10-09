@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Runs inside the isolated container (--network none). Freqtrade must load the
 # exchange's market list before it backtests; with no network it reads the case's
 # pinned exchangeInfo snapshot from a static file server on the container's own
 # loopback. The engine itself is unmodified.
-set -eu
+set -euo pipefail
 CASE_DIR="${CASE_DIR:-/case}"
 STUB_DIR="${STUB_DIR:-/tmp/markets-stub}"
 STUB_PORT="${STUB_PORT:-18080}"
