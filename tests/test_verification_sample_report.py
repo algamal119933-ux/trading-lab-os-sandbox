@@ -60,7 +60,8 @@ def test_no_upstream_source_is_vendored_into_the_lane():
     import hashlib
 
     pins = json.loads((REPO_ROOT / CASE["inputs"]["pins"]["path"]).read_text(encoding="utf-8"))
-    upstream = {f["sha256"] for src in pins["sources"].values() for f in src["files"]}
+    upstream = {f["sha256"] for src in pins["sources"].values() for f in src["files"] if f.get("sha256")}
+    assert len(upstream) > 10
     sample = REPO_ROOT / "verification" / "sample"
     assert not [p for p in sample.rglob("*.py")], "the sample holds no code"
     for path in (p for p in (REPO_ROOT / "verification").rglob("*") if p.is_file()):
