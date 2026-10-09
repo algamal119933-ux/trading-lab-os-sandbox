@@ -194,11 +194,12 @@ def test_an_unchanged_ledger_passes_from_git(tmp_path):
     repo = _repo(tmp_path)
     base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True,
                           check=True).stdout.strip()
-    (repo / "verification").mkdir()
-    (repo / "verification" / "x.md").write_text("x\n", encoding="utf-8")
+    # verification/ exists once the commercial lane has merged anything; the probe must not assume otherwise.
+    (repo / "verification").mkdir(exist_ok=True)
+    (repo / "verification" / "_merge_law_probe.md").write_text("x\n", encoding="utf-8")
     head = _commit(repo, "routine")
     assert ml.ledger_checks(repo, base, head) == (True, True)
-    assert ml.new_dependencies(repo, base, head, ["verification/x.md"]) == []
+    assert ml.new_dependencies(repo, base, head, ["verification/_merge_law_probe.md"]) == []
 
 
 def test_a_base_without_the_law_fails_closed(capsys):
