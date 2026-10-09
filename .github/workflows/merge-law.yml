@@ -1,0 +1,74 @@
+name: Merge law
+
+# docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §4.
+#
+# pull_request_target, on purpose: this workflow, the gate it runs and the
+# policy it reads all come from the BASE branch, so a PR cannot change the law
+# that judges it. The PR head is fetched as data only (paths, ledger bytes,
+# dependency files). Nothing from the head is imported or executed here; the
+# head's own tests run in ci.yml under pull_request.
+#
+# While auto-merge is INACTIVE (CEA-1 §5) this job fails on every PR by design:
+# its verdict "not auto-mergeable" is true. That failure is not part of the
+# CI-green requirement for an Owner merge.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: merge-law-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  merge-law:
+    name: Merge law (base policy)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out BASE (policy and gate)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch the PR head as data
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+
+      - name: Count unresolved review threads
+        id: threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          n=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$PR_NUMBER" -f query='
+            query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
+              pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved}}}}}' \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)] | length')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate the merge law from BASE
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          THREADS: ${{ steps.threads.outputs.count }}
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse HEAD)"
+          python3 .github/gates/merge_law.py --base "$base" --head refs/remotes/pr/head \
+            --main "$base" --branch "$HEAD_REF" --author "$AUTHOR" \
+            --unresolved-threads "$THREADS"

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "charters/charter.schema.json",
+  "title": "CEA-1 Program Charter",
+  "description": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §1-§2, §13. A charter opens exactly the units it lists, inside exactly the paths it lists. Its scope may never reach a protected path (.github/gates/check_charters.py).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "status", "lane", "priority", "title", "record", "scope", "deps", "units",
+               "value_gates", "stop_law", "owner_only"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9-]*$"},
+    "version": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["ACTIVE", "SUSPENDED", "CLOSED"]},
+    "lane": {"enum": ["COMMERCIAL", "ENGINEERING"]},
+    "priority": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 1},
+    "record": {"type": "string", "pattern": "^charters/[A-Za-z0-9._-]+\\.md$"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths"],
+      "properties": {
+        "paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "deps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowlist"],
+      "properties": {
+        "allowlist": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "merge_class", "prerequisites", "acceptance"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*$"},
+          "title": {"type": "string", "minLength": 1},
+          "merge_class": {"enum": ["AUTO", "OWNER"]},
+          "prerequisites": {"type": "array", "items": {"$ref": "#/$defs/prerequisite"}},
+          "acceptance": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "value_gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage", "allows", "exit_gate"],
+        "properties": {
+          "stage": {"type": "string"},
+          "allows": {"type": "string"},
+          "exit_gate": {"type": "string"}
+        }
+      }
+    },
+    "stop_law": {"type": "object"},
+    "owner_only": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "prerequisite": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "path"],
+          "properties": {"kind": {"const": "file_exists"}, "path": {"type": "string"}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "unit"],
+          "properties": {"kind": {"const": "unit_done"}, "unit": {"type": "string"}}
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "ticket_kind", "count"],
+          "properties": {
+            "kind": {"const": "evidence_ticket"},
+            "ticket_kind": {"enum": ["paid", "manual_minutes", "failing_case", "existing_interface_blocker"]},
+            "count": {"type": "integer", "minimum": 1}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["kind", "of"],
+          "properties": {
+            "kind": {"const": "any_of"},
+            "of": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/prerequisite"}}
+          }
+        }
+      ]
+    }
+  }
+}

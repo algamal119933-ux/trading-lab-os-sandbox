@@ -753,6 +753,21 @@ CYCLE2_UNIT_7_3R_SCOPE: dict[str, str] = {
 }
 
 
+# PR #50, merged. Two parents: 21cf0a6c (main before, CYCLE2_UNIT_7_3R_MERGE) +
+# 85804168 (the research-cycle2-closure-1 branch).
+RESEARCH_CYCLE2_CLOSURE_1_MERGE = "4c14d259b42060240158b2abee8105a55d2e4dd2"
+
+# Every path CYCLE-2 UNIT 7.5 (RESEARCH-CYCLE2-CLOSURE-1) touched -> the requirement
+# it satisfies. These entries were BRANCH_SCOPE while it was in flight.
+RESEARCH_CYCLE2_CLOSURE_1_SCOPE: dict[str, str] = {
+    "research/RESEARCH_CYCLE2_CLOSURE_1.md":
+        "CYCLE-2 UNIT 7.5 — closure/reporting only (OPENING-1 §7.5/§9); no trial",
+    "tests/test_p2_scope_audit.py":
+        "CYCLE-2 UNIT 7.3 RECORD (PR #49) pinned to its merge range; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -783,6 +798,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_2B2": (CYCLE2_UNIT_7_2B2_MERGE, CYCLE2_UNIT_7_2B2_SCOPE),
     "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
     "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
+    "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -792,10 +808,33 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "research/RESEARCH_CYCLE2_CLOSURE_1.md":
-        "CYCLE-2 UNIT 7.5 — closure/reporting only (OPENING-1 §7.5/§9); no trial",
+    "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md":
+        "AUTH-1 (CEA-1) D1 — the continuous-execution law",
+    ".github/gates/protected_paths.txt": "AUTH-1 (CEA-1) D2 — PROTECTED_VERIFICATION_PATHS",
+    ".github/gates/AUTONOMY_STATE.json": "AUTH-1 (CEA-1) D3 — kill state, layer 1",
+    ".github/gates/ACTIVATION.json": "AUTH-1 (CEA-1) D3 — auto-merge activation flags, all false",
+    ".github/gates/cea_policy.py": "AUTH-1 (CEA-1) D4-D7 — shared policy reading at a git revision",
+    ".github/gates/merge_law.py": "AUTH-1 (CEA-1) D4 — the base-policy merge law",
+    ".github/workflows/merge-law.yml": "AUTH-1 (CEA-1) D4 — merge-law check on pull_request_target, base policy",
+    ".github/gates/resolve_next_unit.py": "AUTH-1 (CEA-1) D5 — the deterministic next-unit resolver (dry run)",
+    "charters/charter.schema.json": "AUTH-1 (CEA-1) D6 — program charter schema",
+    "charters/ticket.schema.json": "AUTH-1 (CEA-1) D6/D8 — evidence ticket schema (no customer-data fields)",
+    ".github/gates/check_charters.py": "AUTH-1 (CEA-1) D6 — charter and ticket validator",
+    "charters/research_program.schema.json": "AUTH-1 (CEA-1) D7 — AUTH-2 structure, no program instance",
+    ".github/gates/check_research_program.py": "AUTH-1 (CEA-1) D7 — research program validator and self-test",
+    "charters/COMMERCIAL-VERIFICATION-LANE-1.json": "AUTH-1 (CEA-1) D8 — first Program Charter (machine-readable)",
+    "charters/COMMERCIAL-VERIFICATION-LANE-1.md": "AUTH-1 (CEA-1) D8 — first Program Charter (record)",
+    "CLAUDE.md": "AUTH-1 (CEA-1) D9 — 'Never auto-merge' qualified by CEA-1 §5; pointer to CEA-1",
+    "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md":
+        "AUTH-1 (CEA-1) D10 — §22.1 change record MP1-CR-002 (§21)",
+    "tests/test_merge_law.py": "AUTH-1 (CEA-1) D11 — merge-law refusals",
+    "tests/test_resolve_next_unit.py": "AUTH-1 (CEA-1) D11 — resolver determinism, lease, serialization, kill",
+    "tests/test_charters.py": "AUTH-1 (CEA-1) D11 — charter and ticket law",
+    "tests/test_research_program_schema.py": "AUTH-1 (CEA-1) D11 — AUTH-2 structure refusals; no program exists",
+    "tests/test_protected_paths.py": "AUTH-1 (CEA-1) D11 — the protected list is real and self-protecting",
     "tests/test_p2_scope_audit.py":
-        "CYCLE-2 UNIT 7.3 RECORD (PR #49) pinned to its merge range; this branch's scope",
+        "AUTH-1 (CEA-1) D12 — PR #50 pinned; charters/ and verification/ admitted; the CEA-1 law file admitted "
+        "by exact path; auto/<charter>/<unit> branches audited against their charter's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -911,13 +950,17 @@ MERGED_STAGES = sorted(MERGED_STAGE_SCOPES)
 # ".github/gates/" is where a CI gate lives when it must stay OUTSIDE
 # RUNTIME_TREE — contract section 5 puts scripts/*.py inside it, and a gate
 # added there between Mq and the freeze would break the equivalence proof.
+# "charters/" and "verification/" arrive with CEA-1 (AUTH-1): the program charters
+# and the first charter's product directory. Both are outside RUNTIME_TREE.
 ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/",
-                    ".github/workflows/", ".github/gates/")
+                    ".github/workflows/", ".github/gates/", "charters/", "verification/")
 # The master planning SSOT is admitted by its exact path, not by a docs/governance/
 # prefix: one non-authorizing planning document is the whole of what that
 # directory is for, and a prefix would let anything else arrive beside it.
+# The continuous-execution law is admitted the same way, by its exact path.
 ALLOWED_FILES = (".gitignore", "MANIFEST.txt", "CLAUDE.md",
-                 "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md")
+                 "docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md",
+                 "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md")
 
 
 # -- the pinned layer: each closed stage against its own merge range --------
@@ -1051,7 +1094,46 @@ def branch_scope() -> dict[str, str]:
     files section 6 names, and nothing else — which is a narrower rule than this
     map, not a wider one.
     """
-    return FREEZE_CANDIDATE_SCOPE if branch_is_a_freeze_candidate() else BRANCH_SCOPE
+    if branch_is_a_freeze_candidate():
+        return FREEZE_CANDIDATE_SCOPE
+    charter_scope = charter_branch_scope()
+    return BRANCH_SCOPE if charter_scope is None else charter_scope
+
+
+def current_branch() -> str:
+    """The PR head branch in CI (detached checkout), else the checked-out branch."""
+    import os
+
+    return os.environ.get("GITHUB_HEAD_REF") or _git("rev-parse", "--abbrev-ref", "HEAD").strip()
+
+
+def charter_branch_scope() -> dict[str, str] | None:
+    """CEA-1 §16: an auto/<charter>/<unit> branch is audited against its charter.
+
+    A charter PR must never edit this protected file, so its scope cannot come
+    from BRANCH_SCOPE. It comes from the charter's scope.paths read at the MERGE
+    BASE, never from the branch: a charter widened on the branch itself would
+    otherwise justify its own diff. Each changed path matching the charter (or
+    MANIFEST.txt) gets a reason; a path matching nothing gets none and fails
+    test_every_changed_file_on_this_branch_is_in_scope. Every live negative
+    below still applies. None when this is not a charter branch.
+    """
+    import cea_policy
+
+    match = cea_policy.CHARTER_BRANCH.match(current_branch())
+    if match is None or BASE_REF is None:
+        return None
+    charter = cea_policy.charters_at(Path("."), merge_base()).get(match["charter"])
+    if charter is None:
+        return {}
+    globs = charter["scope"]["paths"]
+    scope: dict[str, str] = {}
+    for path in changed_paths():
+        if path in cea_policy.ALWAYS_ALLOWED:
+            scope[path] = "repository integrity — regenerated after staging"
+        elif any(cea_policy.glob_match(g, path) for g in globs):
+            scope[path] = f"{charter['id']} {match['unit']} — inside the charter scope"
+    return scope
 
 
 @needs_baseline

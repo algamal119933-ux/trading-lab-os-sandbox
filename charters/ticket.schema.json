@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "charters/ticket.schema.json",
+  "title": "CEA-1 evidence ticket",
+  "description": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §13. Proof that a unit is worth building. Lives at charters/tickets/<CHARTER>/<id>.json. It never carries a customer's name, contact, code or data: additionalProperties is false, so there is no field to put them in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "charter", "kind", "date", "summary"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*$"},
+    "charter": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9-]*$"},
+    "kind": {"enum": ["paid", "manual_minutes", "failing_case", "existing_interface_blocker"]},
+    "case_id": {"type": "string", "pattern": "^[A-Za-z0-9-]+$"},
+    "minutes": {"type": "integer", "minimum": 0},
+    "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 500},
+    "unit": {"type": "string"}
+  }
+}

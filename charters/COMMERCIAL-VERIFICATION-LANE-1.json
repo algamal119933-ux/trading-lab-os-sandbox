@@ -1,0 +1,129 @@
+{
+  "id": "COMMERCIAL-VERIFICATION-LANE-1",
+  "version": 1,
+  "status": "ACTIVE",
+  "lane": "COMMERCIAL",
+  "priority": 1,
+  "title": "Freqtrade Strategy Verification",
+  "record": "charters/COMMERCIAL-VERIFICATION-LANE-1.md",
+  "scope": {
+    "paths": [
+      "verification/**",
+      "tests/test_verification_*.py"
+    ]
+  },
+  "deps": {
+    "allowlist": []
+  },
+  "units": [
+    {
+      "id": "CV-01",
+      "title": "Sample report on a licence-clean public Freqtrade strategy",
+      "merge_class": "AUTO",
+      "prerequisites": [
+        {"kind": "file_exists", "path": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md"}
+      ],
+      "acceptance": [
+        "one sample verification report under verification/sample/, generated from committed inputs",
+        "the strategy's licence permits redistribution of the report; licence and source pinned by commit",
+        "no customer code or data",
+        "tests/test_verification_*.py cover the report's reproducibility; full suite 0 failed"
+      ]
+    },
+    {
+      "id": "CV-02",
+      "title": "Minimum intake / triage",
+      "merge_class": "AUTO",
+      "prerequisites": [
+        {"kind": "file_exists", "path": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md"}
+      ],
+      "acceptance": [
+        "intake form, intake checklist and triage rubric under verification/intake/",
+        "the form collects no secret, exchange key or credential and says so",
+        "no database, no web service"
+      ]
+    },
+    {
+      "id": "CV-03",
+      "title": "Minimum isolated runner",
+      "merge_class": "AUTO",
+      "prerequisites": [
+        {"kind": "file_exists", "path": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md"}
+      ],
+      "acceptance": [
+        "sandboxed execution of a customer or public strategy",
+        "no network for untrusted strategy code",
+        "pinned engine / container image",
+        "no customer code or data committed",
+        "uses existing repository capabilities and interfaces AS-IS",
+        "does NOT modify research/cycle2/**"
+      ]
+    },
+    {
+      "id": "CV-03P",
+      "title": "Protected driver/funnel generalisation",
+      "merge_class": "OWNER",
+      "prerequisites": [
+        {"kind": "file_exists", "path": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md"},
+        {"kind": "any_of", "of": [
+          {"kind": "evidence_ticket", "ticket_kind": "existing_interface_blocker", "count": 1},
+          {"kind": "evidence_ticket", "ticket_kind": "manual_minutes", "count": 2}
+        ]}
+      ],
+      "acceptance": [
+        "touches research/cycle2/** (protected): OWNER_MERGE_REQUIRED",
+        "NOT a prerequisite for CV-03 and never opened automatically pre-paid",
+        "opened only on an EXISTING_INTERFACE_BLOCKER demonstrated by the minimum runner, or PAID_CASE_MANUAL_WORK showing repeated work the generalisation removes",
+        "every existing Cycle-2 test passes unchanged; no funnel threshold or law changes"
+      ],
+      "notes": "Do not generalise the scientific engine merely because it may eventually be useful."
+    },
+    {
+      "id": "CV-1x",
+      "title": "Automate a step with recorded manual minutes in a paid case",
+      "merge_class": "AUTO",
+      "prerequisites": [
+        {"kind": "evidence_ticket", "ticket_kind": "paid", "count": 1},
+        {"kind": "evidence_ticket", "ticket_kind": "manual_minutes", "count": 1}
+      ],
+      "acceptance": [
+        "automates only the step named in a manual_minutes ticket",
+        "inside verification/** only"
+      ]
+    },
+    {
+      "id": "CV-MVP",
+      "title": "One-command verification case",
+      "merge_class": "AUTO",
+      "prerequisites": [
+        {"kind": "evidence_ticket", "ticket_kind": "paid", "count": 3}
+      ],
+      "acceptance": [
+        "one command runs a full case end to end on the isolated runner",
+        "built only if recorded demand supports it"
+      ]
+    }
+  ],
+  "value_gates": [
+    {"stage": "PRE-PAID", "allows": "CV-01 sample report, CV-02 intake, CV-03 minimum isolated runner", "exit_gate": ">= 1 paid ticket"},
+    {"stage": "AFTER FIRST PAID", "allows": "CV-1x: automate only steps with recorded manual minutes in a paid case", "exit_gate": ">= 3 paid tickets"},
+    {"stage": "AFTER 3-5 PAID", "allows": "CV-MVP if recorded demand supports it", "exit_gate": "none"}
+  ],
+  "stop_law": {
+    "market_test_window_days": 14,
+    "market_test_min_logged_contacts": 25,
+    "window_starts": "the Owner's first logged outreach",
+    "zero_paid_outcome": "STOP commercial building; a pivot needs a charter amendment merged by the Owner",
+    "owner_may_edit_before_merge": true
+  },
+  "owner_only": [
+    "price",
+    "payment account",
+    "client / legal terms",
+    "branding",
+    "outreach identity and outreach itself",
+    "spend above cap",
+    "scope expansion",
+    "CV-03P merge"
+  ]
+}
