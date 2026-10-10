@@ -1,0 +1,19 @@
+{
+  "rubric_version": 1,
+  "precedence": ["OUT_OF_SCOPE", "NEEDS_INFO", "ACCEPT"],
+  "reasons": {
+    "SECRET_IN_SUBMISSION": {"outcome": "OUT_OF_SCOPE", "message": "The submission contains something that looks like a key, secret or credential. Delete it, rotate it, and resubmit without it. We never need one."},
+    "LIVE_TRADING_REQUESTED": {"outcome": "OUT_OF_SCOPE", "message": "Verification runs in dry-run only. Set dry_run to true."},
+    "FUTURES_OR_MARGIN": {"outcome": "OUT_OF_SCOPE", "message": "Only spot strategies are verified. Futures and margin are out of scope."},
+    "SHORTS": {"outcome": "OUT_OF_SCOPE", "message": "Only long-only strategies are verified. can_short must be false."},
+    "LEVERAGE": {"outcome": "OUT_OF_SCOPE", "message": "Leverage is out of scope. leverage must be 1."},
+    "NO_RIGHTS": {"outcome": "OUT_OF_SCOPE", "message": "We need a recognised licence or your statement that you hold the rights to the strategy."},
+    "SCHEMA_INVALID": {"outcome": "NEEDS_INFO", "message": "The intake does not match the form. Fill in exactly the fields the form asks for, and nothing else."},
+    "SOURCE_UNPINNED": {"outcome": "NEEDS_INFO", "message": "Pin the source: a full 40-character commit for a public repository, or the archive's sha256."},
+    "IDENTITY_INCOMPLETE": {"outcome": "NEEDS_INFO", "message": "A run is identified by strategy, parameters, config, engine version and market window. One of them is missing."},
+    "CLAIM_WITHOUT_SOURCE": {"outcome": "NEEDS_INFO", "message": "Say where the performance claim comes from (README, post, backtest file), so the claim is fixed before any result exists."}
+  },
+  "notes": {
+    "NO_CLAIM": "No performance claim was stated. The report will verify behaviour and fair comparison only."
+  }
+}

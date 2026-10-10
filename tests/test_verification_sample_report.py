@@ -57,10 +57,15 @@ def test_the_strategy_licence_and_source_are_pinned_by_commit():
 
 
 def test_no_upstream_source_is_vendored_into_the_lane():
+    import hashlib
+
+    pins = json.loads((REPO_ROOT / CASE["inputs"]["pins"]["path"]).read_text(encoding="utf-8"))
+    upstream = {f["sha256"] for src in pins["sources"].values() for f in src["files"] if f.get("sha256")}
+    assert len(upstream) > 10
+    sample = REPO_ROOT / "verification" / "sample"
+    assert not [p for p in sample.rglob("*.py")], "the sample holds no code"
     for path in (p for p in (REPO_ROOT / "verification").rglob("*") if p.is_file()):
-        assert path.suffix in {".py", ".md", ".json"}, path
-        if path.suffix == ".py":
-            assert path.name == "report.py", path
+        assert hashlib.sha256(path.read_bytes()).hexdigest() not in upstream, path
 
 
 def test_the_report_states_its_limits():
