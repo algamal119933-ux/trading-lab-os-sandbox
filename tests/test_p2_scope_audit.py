@@ -806,6 +806,20 @@ AUTH_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #54, merged. Two parents: 3eba2b85 (main before, AUTH_1) + 5f447a82 (the
+# claude/cea-1-test-fix branch).
+CEA_1_TEST_FIX_MERGE = "7360096c93a0fb77fbf115da1943f8dec0af6fb0"
+
+# Every path the CEA-1 test fix touched -> the requirement it satisfies. These
+# entries were BRANCH_SCOPE while it was in flight.
+CEA_1_TEST_FIX_SCOPE: dict[str, str] = {
+    "tests/test_merge_law.py":
+        "CEA-1 test fix — the merge-law probe tolerates an existing verification/ (CI red on every CV unit)",
+    "tests/test_p2_scope_audit.py": "AUTH-1 (PR #51) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -838,6 +852,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
     "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
     "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
+    "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -847,9 +862,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    "tests/test_merge_law.py":
-        "CEA-1 test fix — the merge-law probe tolerates an existing verification/ (CI red on every CV unit)",
-    "tests/test_p2_scope_audit.py": "AUTH-1 (PR #51) pinned to its merge; this branch's scope",
+    ".github/workflows/merge-law.yml":
+        "CEA-1 merge-law fix — authenticate the PR-head fetch (private repo; the job never reached its verdict)",
+    "tests/test_p2_scope_audit.py": "CEA-1 test fix (PR #54) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

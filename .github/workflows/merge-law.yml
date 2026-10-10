@@ -40,12 +40,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The base checkout keeps no credentials, and this repository is private,
+      # so the fetch authenticates for this one command only; nothing is written
+      # to the git config.
       - name: Fetch the PR head as data
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
 
       - name: Count unresolved review threads
         id: threads
