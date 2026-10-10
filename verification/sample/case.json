@@ -1,0 +1,21 @@
+{
+  "case_id": "SAMPLE-001",
+  "kind": "PUBLIC_SAMPLE",
+  "title": "EmaCross (wiktorj137/btc-strategy-lab)",
+  "note": "A sample of the Freqtrade Strategy Verification deliverable, built only from evidence already committed to this repository. No backtest was run to produce it and no customer code or data is involved. Every number in the report is read from the inputs below at generation time; the generator refuses to run if any input's sha256 differs from the value pinned here.",
+  "source_key": "btc_strategy_lab",
+  "strategy_file": "user_data/strategies/EmaCross.py",
+  "params_file": "user_data/strategies/EmaCross.json",
+  "scorecard_candidate_id": "H1_EMACROSS",
+  "gates_recorded_pass": ["V1_REPRODUCTION_IDENTITY", "V2_LOAD_AND_CONFIG", "V3_SAFETY_COMPATIBILITY", "V3B_EXECUTION_RIGHTS", "V4_DATA_INTEGRITY", "V5_LOOKAHEAD", "V7_WINDOW_PARITY"],
+  "gates_source": "research/external/qualification_scorecard.csv, row H1_EMACROSS, notes column: 'Gates: V1 V2 V3 V3B V4 V5 V7a all PASS' (V7a is the warm-up-parity part of V7)",
+  "inputs": {
+    "pins": {"path": "research/external/upstream_pins.json", "sha256": "45ab540041b6b3625e10cab240e115c151fa6bbea059ed9d37f777381d9999b0"},
+    "claims": {"path": "research/external/claims_snapshot.json", "sha256": "f48c3cecbd9d84bcc4f1d0e6641602f6193756a3a50d44eb9e224f205576c97f"},
+    "result": {"path": "research/external/sprint_closure.json", "sha256": "7a7648bab6cfe7cdfa740b010966b95a1e644800606d6f0a3e67a1fc485c99b3"},
+    "evidence": {"path": "research/external/h1_evidence_preservation.json", "sha256": "50bfb443276e1264a447b271491e6283f1dac3e254978a20e5b1f67ce67b1f35"},
+    "gates": {"path": "research/external/qualification_gates.json", "sha256": "f89e74dd988dc16a1586dd525343a371687fb9a646e04fc91351cf6c91077642"},
+    "scorecard": {"path": "research/external/qualification_scorecard.csv", "sha256": "da0d5c7bc676e932af0616b3c062371ab9d8e350a9041d214e7dc245c2e5aca4"},
+    "dataset": {"path": "research/datasets/dataset_v2.lock.json", "sha256": "12ff522400f14e5ce1d5e1d2ace72f12bb55b9271abc873f4d5812f7758d3826"}
+  }
+}
