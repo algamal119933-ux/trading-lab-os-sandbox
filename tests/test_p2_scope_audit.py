@@ -849,56 +849,18 @@ CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE: dict[str, str] = {
 }
 
 
-MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
-    "S2": (S2_MERGE, S2_SCOPE),
-    "S3": (S3_MERGE, S3_SCOPE),
-    "S4": (S4_MERGE, S4_SCOPE),
-    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
-    "S8": (S8_MERGE, S8_SCOPE),
-    "S9A": (S9A_MERGE, S9A_SCOPE),
-    "S9B": (S9B_MERGE, S9B_SCOPE),
-    "S9C": (S9C_MERGE, S9C_SCOPE),
-    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
-    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
-    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
-    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
-                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
-    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
-    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
-    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
-    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
-                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
-    "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
-    "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
-    "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
-    "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
-    "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
-    "CYCLE2_UNIT_7_2A": (CYCLE2_UNIT_7_2A_MERGE, CYCLE2_UNIT_7_2A_SCOPE),
-    "CYCLE2_UNIT_7_2B1": (CYCLE2_UNIT_7_2B1_MERGE, CYCLE2_UNIT_7_2B1_SCOPE),
-    "CYCLE2_UNIT_7_2B2": (CYCLE2_UNIT_7_2B2_MERGE, CYCLE2_UNIT_7_2B2_SCOPE),
-    "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
-    "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
-    "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
-    "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
-    "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
-    "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
-    "CEA_1_MERGE_LAW_LEDGER_IMPORT": (CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE, CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE),
-}
-
-# The stage in flight. Every path this branch touches → the requirement it
-# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
-# against the merge commit, where it stops depending on which branch is checked
-# out and starts being a permanent record.
-
+# PR #57, merged. Two parents: 0106ffbb (main before, CEA_1_MERGE_LAW_LEDGER_IMPORT) +
+# 50fdb496 (the claude/auth-2-discovery-qualification-1 branch).
+AUTH_2_MERGE = "70e047ecc3a13e051cfdcc2d284e70c95e3fc55a"
 
 # AUTH-2-DISCOVERY-QUALIFICATION-1: the Owner-approved frozen package materialised as one
 # merge set (research/auth2/FUNNEL_LAW_2.md). Research lane only: nothing under P2, FP or
-# the commercial lane, no strategy or risk semantics, no Dataset V1/V2 change.
+# the commercial lane, no strategy or risk semantics, no Dataset V1/V2 change. These
+# entries were BRANCH_SCOPE while it was in flight.
 _AUTH2 = "AUTH-2 (frozen package)"
 _AUTH2_NODES = ["D0", "CAL-A1", "CAL-A2", "CAL-A3", "PC-A1", "PC-A2", "PC-A3", "N-A1", "N-A2", "N-A3",
                 "A1", "A2", "A3", "HOLM", "SC-A1", "SC-A2", "SC-A3"]
-BRANCH_SCOPE: dict[str, str] = {
+AUTH_2_SCOPE: dict[str, str] = {
     # -- records the package lists (§FINAL_AUTH2_SPEC "Records the package needs") ------
     "research/auth2/FUNNEL_LAW_2.md": f"{_AUTH2} record 1 — the gate sections verbatim",
     "charters/research_program.schema.json": f"{_AUTH2} record 2 — schema v2, minimal extension [OD-7]",
@@ -942,6 +904,67 @@ BRANCH_SCOPE: dict[str, str] = {
     **{f"tests/test_auth2_{t}.py": f"{_AUTH2} — verification before the PR"
        for t in ("replay", "stats", "gates", "calibration", "dispatch_guard", "dag", "records", "engine")},
     "tests/fixtures/auth2_engine_marks.json": f"{_AUTH2} — recorded engine marks for the replay parity fixture",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
+    "S2": (S2_MERGE, S2_SCOPE),
+    "S3": (S3_MERGE, S3_SCOPE),
+    "S4": (S4_MERGE, S4_SCOPE),
+    "RECOVERY": (RECOVERY_MERGE, RECOVERY_SCOPE),
+    "S8": (S8_MERGE, S8_SCOPE),
+    "S9A": (S9A_MERGE, S9A_SCOPE),
+    "S9B": (S9B_MERGE, S9B_SCOPE),
+    "S9C": (S9C_MERGE, S9C_SCOPE),
+    "RUNTIME_RECON_0927": (RUNTIME_RECON_0927_MERGE, RUNTIME_RECON_0927_SCOPE),
+    "STAGE0_CLOSURE": (STAGE0_CLOSURE_MERGE, STAGE0_CLOSURE_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_A": (RESEARCH_FOUNDATION_UNIT_A_MERGE, RESEARCH_FOUNDATION_UNIT_A_SCOPE),
+    "RESEARCH_FOUNDATION_UNIT_B": (RESEARCH_FOUNDATION_UNIT_B_MERGE, RESEARCH_FOUNDATION_UNIT_B_SCOPE),
+    "RESEARCH_FOUNDATION_CLOSURE_1": (RESEARCH_FOUNDATION_CLOSURE_1_MERGE,
+                                      RESEARCH_FOUNDATION_CLOSURE_1_SCOPE),
+    "MEAN_REVERSION_CYCLE1": (MEAN_REVERSION_CYCLE1_MERGE, MEAN_REVERSION_CYCLE1_SCOPE),
+    "H1_QUALIFICATION": (H1_QUALIFICATION_MERGE, H1_QUALIFICATION_SCOPE),
+    "ACCOUNT_HANDOFF_1": (ACCOUNT_HANDOFF_1_MERGE, ACCOUNT_HANDOFF_1_SCOPE),
+    "RESEARCH_CYCLE1_CLOSURE_1": (RESEARCH_CYCLE1_CLOSURE_1_MERGE,
+                                  RESEARCH_CYCLE1_CLOSURE_1_SCOPE),
+    "H1_PAPER_ADMISSION_1": (H1_PAPER_ADMISSION_1_MERGE, H1_PAPER_ADMISSION_1_SCOPE),
+    "MASTER_PLAN_1": (MASTER_PLAN_1_MERGE, MASTER_PLAN_1_SCOPE),
+    "CYCLE2_OPENING_1": (CYCLE2_OPENING_1_MERGE, CYCLE2_OPENING_1_SCOPE),
+    "CYCLE2_UNIT_7_1": (CYCLE2_UNIT_7_1_MERGE, CYCLE2_UNIT_7_1_SCOPE),
+    "CYCLE2_UNIT_7_1A": (CYCLE2_UNIT_7_1A_MERGE, CYCLE2_UNIT_7_1A_SCOPE),
+    "CYCLE2_UNIT_7_2A": (CYCLE2_UNIT_7_2A_MERGE, CYCLE2_UNIT_7_2A_SCOPE),
+    "CYCLE2_UNIT_7_2B1": (CYCLE2_UNIT_7_2B1_MERGE, CYCLE2_UNIT_7_2B1_SCOPE),
+    "CYCLE2_UNIT_7_2B2": (CYCLE2_UNIT_7_2B2_MERGE, CYCLE2_UNIT_7_2B2_SCOPE),
+    "CYCLE2_UNIT_7_3A": (CYCLE2_UNIT_7_3A_MERGE, CYCLE2_UNIT_7_3A_SCOPE),
+    "CYCLE2_UNIT_7_3R": (CYCLE2_UNIT_7_3R_MERGE, CYCLE2_UNIT_7_3R_SCOPE),
+    "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
+    "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
+    "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
+    "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
+    "CEA_1_MERGE_LAW_LEDGER_IMPORT": (CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE, CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE),
+    "AUTH_2": (AUTH_2_MERGE, AUTH_2_SCOPE),
+}
+
+# The stage in flight. Every path this branch touches → the requirement it
+# satisfies. When the stage merges, its entry moves into MERGED_STAGE_SCOPES
+# against the merge commit, where it stops depending on which branch is checked
+# out and starts being a permanent record.
+
+# AUTH-2 operator gate (Owner decision card: "Check in Actions"). The executor's session
+# cannot read account billing or download run artifacts, so the pre-dispatch guard runs in
+# Actions and every record the executor needs is published as a job annotation. Nothing
+# under research/auth2/ changes: its code is pinned by sha256 in every preregistration.
+_OPGATE = "AUTH-2 operator gate (guard in Actions)"
+BRANCH_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py":
+        f"{_OPGATE} — dispatch_guard.decide unchanged plus guard/closure jobs; check-dispatch; readouts",
+    ".github/workflows/auth2-guard.yml": f"{_OPGATE} — the pre-dispatch guard job, record published",
+    ".github/workflows/auth2-closure.yml": f"{_OPGATE} — the closure record computed where the artifacts are",
+    ".github/workflows/auth2.yml": f"{_OPGATE} — in-job guard through the operator; result summary published",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_OPGATE} — the dispatch procedure as operated",
+    "tests/test_auth2_operator.py": f"{_OPGATE} — refusals, freshness, byte-exact channel, workflows",
+    "tests/test_p2_scope_audit.py": "AUTH-2 (PR #57) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1313,9 +1336,9 @@ def test_no_risk_semantic_change():
     )
 
 
-# AUTH-2 adds Dataset V3 (record 4 of the Owner-approved package). Additive only: these
-# paths may be created on this branch, and every dataset file main already has stays
-# byte-identical.
+# AUTH-2 added Dataset V3 (record 4 of the Owner-approved package, PR #57). Additive only:
+# a V3 path may be created where main does not have it yet, and every dataset file main
+# already has (V3 included, now that it is merged) stays byte-identical.
 DATASET_ADDITIONS = ("research/datasets/dataset_v3.lock.json", "research/datasets/dataset_v3/")
 
 
@@ -1323,11 +1346,12 @@ DATASET_ADDITIONS = ("research/datasets/dataset_v3.lock.json", "research/dataset
 def test_no_dataset_content_or_authority_change():
     base = merge_base()
     for path in _git("ls-tree", "-r", "--name-only", "HEAD", "research/datasets/").split():
-        if path.startswith(DATASET_ADDITIONS):
-            assert blob_at(base, path) is None, f"{path} existed on main; Dataset V3 may only be added"
+        if blob_at(base, path) is None:
+            assert path.startswith(DATASET_ADDITIONS), f"{path}: only Dataset V3 may be added"
             continue
         assert blob_at(base, path) == blob_at("HEAD", path), path
-    assert not any(p.startswith("research/datasets/") and not p.startswith(DATASET_ADDITIONS)
+    assert not any(p.startswith("research/datasets/") and
+                   (not p.startswith(DATASET_ADDITIONS) or blob_at(base, p) is not None)
                    for p in changed_paths())
 
 
