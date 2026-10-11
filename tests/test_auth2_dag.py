@@ -271,3 +271,26 @@ def test_run_plans_equal_the_compute_plan():
             assert len({r["name"] for r in plan}) == len(plan)
     assert [r["name"] for r in RN.run_plan("SC-A2", "A2")] == ["primary@sec"]
     assert RN.NODES["PC-A2"]["parts"] == 2 and RN.NODES["N-A2"]["parts"] == 2
+
+
+@pytest.mark.parametrize("fam", ["A1", "A3"])
+def test_null_nodes_check_causality_on_the_family_generators(fam):
+    # N-Ax: C1 LOOKAHEAD / RECURSIVE judge the family's own generators on the node's data; the
+    # law defines the A1 and A3 nulls over the whole window, so a truncated window changes them
+    # by construction (that is no price lookahead) and they are reported as not checked
+    from auth2 import signals as S
+    from auth2 import synthetic as SY
+    from auth2.engine_selftest import _ms
+
+    w = SY.generate(fam, seed=4242, edge=0.0, start_ms=_ms(2018), end_ms=_ms(2021))
+    win = (_ms(2019, 6), _ms(2021))
+    r = RN.causality(fam, w.market, win, ("null", F.N_FIXTURE_SEED))
+    assert r["status"] == "PASS" and "null_fixtures" in r
+    assert sorted(r["by_generator"]) == sorted(["primary", "bench", *F.PERTURBATIONS[fam]])
+
+    if fam == "A3":  # (an A1 null cannot even be drawn on a cut shorter than its 2 x 90-day margins)
+        def null_gen(mm, s, e):
+            b = F.bundle(fam, mm, s, e, ["primary"], 0, ("null", F.N_FIXTURE_SEED))
+            return b.exec_times, b.weights[:, 0, :]
+        assert S.lookahead_check(null_gen, w.market, win[0], win[1])["status"] == "FAIL"
+    assert "null_fixtures" not in RN.causality(fam, w.market, win, None)

@@ -49,7 +49,7 @@
   "research/auth2/make_preregs.py": "30f22da8f8d712a41c068d8e3e757ef987f608e1a487d3cfb093191a063415d6",
   "research/auth2/market_io.py": "27fc3495a2d81ae83b8ed879708757fcc05c960c67568505705b163427343a7c",
   "research/auth2/replay.py": "e9ddededbe5132b0dd4670d772bc6ee1ef0568b9c53bdffcd8b24cf5e7342a01",
-  "research/auth2/run_node.py": "78907f0226f4fa02f40255ea2d73f01e5f4a2565f16b4691d839344d04e6fd56",
+  "research/auth2/run_node.py": "9f37fc5b8f216fcccae317322f794559e5002ef16c8938ebe0503636ce553b89",
   "research/auth2/signals.py": "b86dbd3a1349ff79d22d78bf25913ffc1222654eb5e9b09245c43dd1477eccd7",
   "research/auth2/stats.py": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020",
   "research/auth2/synthetic.py": "a2adbd58e81c9b2179ce6f3d80ac4d0326a2a183b31fb1c0724199b4ddef5dea",

@@ -174,6 +174,13 @@ worlds are unchanged.
 
 * C4 null distributions use seeds 1–1000. The N-Ax fixture is null seed 0; its "perturbations" are null seeds
   1001–1005 (A3: 1001–1003).
+* C1 LOOKAHEAD and RECURSIVE in N-Ax run on the family's own generators (primary, perturbations, matched
+  benchmark) on the node's real data, the procedure the null traverses. The null fixtures are not put through
+  them: the law defines each null over the whole window (A1 shifts by an offset in [90 days, T − 90 days]; A3
+  places the primary's episode count and durations at random times), so truncating the window changes a null by
+  construction although its placement reads no price. Checking them would make every N-A1 and N-A3 an
+  INVALID_RUN. A pre-registration end-to-end smoke test on synthetic data found this; the node record says which
+  generators were checked.
 * The matched-benchmark engine runs (base, ×2, latency, A2 U8, secondary) execute once, in N-Ax, and are reused in
   Ax and SC-Ax only if the re-generated schedule's sha256 equals the N run's (identical configuration). Otherwise
   the node refuses.

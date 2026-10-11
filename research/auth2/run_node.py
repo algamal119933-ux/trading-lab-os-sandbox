@@ -367,17 +367,30 @@ def engine_fees(wd: Path) -> set[float]:
 
 
 def causality(fam: str, m: S.Market, win: tuple[int, int], override) -> dict:
-    """C1 LOOKAHEAD and RECURSIVE on every generator the node judges."""
+    """C1 LOOKAHEAD and RECURSIVE on every generator the node judges.
+
+    In N-Ax (``override`` = a null fixture) the checks run on the family's own
+    generators, the ones the null traverses the procedure for and Ax will run on
+    the same data. The null fixtures themselves are not checked: the law defines
+    each null over the whole window (A1 shifts by an offset in [90 days, T - 90
+    days]; A3 places the primary's episode count and durations at random times),
+    so a truncated window changes them by definition, while their placement reads
+    no price.
+    """
     names = ["primary", "bench", *F.PERTURBATIONS[fam]]
     out = {}
     for n in names:
         def gen(mm, s, e, n=n):
-            b = F.bundle(fam, mm, s, e, [n], 0, override)
+            b = F.bundle(fam, mm, s, e, [n], 0, None)
             return b.exec_times, b.weights[:, 0, :]
         out[n] = {"lookahead": S.lookahead_check(gen, m, win[0], win[1]),
                   "recursive": S.recursive_check(gen, m, win[0], win[1], warmup_days=400)}
     ok = all(v["lookahead"]["status"] == "PASS" and v["recursive"]["status"] == "PASS" for v in out.values())
-    return {"status": "PASS" if ok else "FAIL", "by_generator": out}
+    rec = {"status": "PASS" if ok else "FAIL", "by_generator": out}
+    if override is not None:
+        rec["null_fixtures"] = ("not checked: each null is defined over the whole window by the law and reads no "
+                                "price (FUNNEL_LAW_2.md CALIBRATION_DAG, Planted edges and nulls)")
+    return rec
 
 
 # -- node kinds ----------------------------------------------------------------------------
