@@ -834,6 +834,21 @@ CEA_1_MERGE_LAW_FETCH_SCOPE: dict[str, str] = {
 }
 
 
+# PR #58, merged. Two parents: 390bf4bf (main before) + a59880bc (the
+# claude/cea-1-merge-law-ledger-import branch).
+CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE = "0106ffbbf2599d28c7b3355bf5702873eaf02a66"
+
+# Every path the CEA-1 merge-law ledger-import fix touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE: dict[str, str] = {
+    ".github/gates/merge_law.py":
+        "CEA-1 merge-law fix — import the BASE fp package with the BASE ledger code (the job crashed on any append)",
+    "tests/test_merge_law.py": "CEA-1 merge-law fix — an appended record verifies in a fresh process",
+    "tests/test_p2_scope_audit.py": "PR #56 pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -868,6 +883,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
     "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
     "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
+    "CEA_1_MERGE_LAW_LEDGER_IMPORT": (CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE, CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -922,7 +938,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_protected_paths.py": f"{_AUTH2} — AUTH-2 judges are protected",
     "tests/test_research_program_schema.py": f"{_AUTH2} — exactly the AUTH-2 program exists; v2 edges",
     "tests/test_resolve_next_unit.py": f"{_AUTH2} — the research lane now has a program",
-    "tests/test_p2_scope_audit.py": f"{_AUTH2} — PR #56 pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": f"{_AUTH2} — PRs #56 and #58 pinned to their merges; this branch's scope",
     **{f"tests/test_auth2_{t}.py": f"{_AUTH2} — verification before the PR"
        for t in ("replay", "stats", "gates", "calibration", "dispatch_guard", "dag", "records", "engine")},
     "tests/fixtures/auth2_engine_marks.json": f"{_AUTH2} — recorded engine marks for the replay parity fixture",
