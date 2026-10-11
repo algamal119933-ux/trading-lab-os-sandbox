@@ -1,0 +1,268 @@
+{
+ "a3_start_utc": "2021-02-01T00:00:00Z",
+ "code_revisions": [
+  {
+   "change": "END_AT_CLOSE: a window whose end mark has no opening bar (the data ends exactly there) is valued at the last bar's close; such a window used to raise, so no earlier result can change",
+   "file": "replay.py",
+   "from_sha256": "ebcfbca8014799cd02201a44706658c0467cdf8a25a92001dc254526b671e11e",
+   "reverified": "calibration.true_delta recomputed at each recorded edge with the revised code: A1, A2 and A3 bit-identical to the recorded true_delta",
+   "to_sha256": "e9ddededbe5132b0dd4670d772bc6ee1ef0568b9c53bdffcd8b24cf5e7342a01"
+  },
+  {
+   "change": "bar prices use the C library's scalar exp instead of numpy's vectorised exp, whose last bit depends on whether the CPU has AVX-512; worlds are now identical on both kinds of CPU",
+   "file": "synthetic.py",
+   "from_sha256": "a2adbd58e81c9b2179ce6f3d80ac4d0326a2a183b31fb1c0724199b4ddef5dea",
+   "reverified": "calibration.edge_for_delta re-run in full for A1, A2 and A3 on the revised generator: the same 14-step bisection gives the same edges; true_delta moved only in the last digits (A1 unchanged, A2 +2.2e-16, A3 -6.7e-16)",
+   "to_sha256": "58ec67ef20ab2e64de77d5a74adc3f6dc08063a1a8ac622072a4070f44ca7aea"
+  }
+ ],
+ "code_sha256": {
+  "calibration.py": "956e9eaaeb6a243b27d9b4971354d04fdf4ac88aeb9397b747463b3aa5a83f7b",
+  "families.py": "6fe8d9057b78c6bdccd37095c3d572649c275541b26c6340f2c40b3130b4ee6d",
+  "gates.py": "23c8aa41cc28b8ab2ade101a5d2169cb4869e6d5fb6edf3e048115783ab4868f",
+  "replay.py": "e9ddededbe5132b0dd4670d772bc6ee1ef0568b9c53bdffcd8b24cf5e7342a01",
+  "signals.py": "b86dbd3a1349ff79d22d78bf25913ffc1222654eb5e9b09245c43dd1477eccd7",
+  "stats.py": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020",
+  "synthetic.py": "58ec67ef20ab2e64de77d5a74adc3f6dc08063a1a8ac622072a4070f44ca7aea"
+ },
+ "families": {
+  "A1": {
+   "delta": 0.4,
+   "edge": 0.0013592529296875,
+   "first_seed": 500000,
+   "status": "OK",
+   "trace": [
+    [
+     0.0,
+     -0.21208032600707552
+    ],
+    [
+     0.004,
+     1.9544294678213219
+    ],
+    [
+     0.002,
+     0.7246626163463256
+    ],
+    [
+     0.001,
+     0.23035690694690986
+    ],
+    [
+     0.0015,
+     0.46110970807053897
+    ],
+    [
+     0.00125,
+     0.3442816935883336
+    ],
+    [
+     0.001375,
+     0.41104833571832955
+    ],
+    [
+     0.0013124999999999999,
+     0.3772593014312899
+    ],
+    [
+     0.00134375,
+     0.39147263770103985
+    ],
+    [
+     0.001359375,
+     0.4002054310113657
+    ],
+    [
+     0.0013515625,
+     0.3948175189942605
+    ],
+    [
+     0.00135546875,
+     0.39788019073527664
+    ],
+    [
+     0.001357421875,
+     0.39989115151893156
+    ],
+    [
+     0.0013583984375,
+     0.3999548488681061
+    ],
+    [
+     0.00135888671875,
+     0.3999329593035911
+    ],
+    [
+     0.001359130859375,
+     0.3999514928917143
+    ],
+    [
+     0.0013592529296875,
+     0.40017227587838555
+    ]
+   ],
+   "true_delta": 0.40017227587838555,
+   "years": 200
+  },
+  "A2": {
+   "delta": 0.4,
+   "edge": 0.0025921630859375,
+   "first_seed": 500000,
+   "status": "OK",
+   "trace": [
+    [
+     0.0,
+     -0.013593595215266097
+    ],
+    [
+     0.004,
+     0.6167207000345349
+    ],
+    [
+     0.002,
+     0.32096527156701404
+    ],
+    [
+     0.003,
+     0.4623903372462692
+    ],
+    [
+     0.0025,
+     0.38208519796810103
+    ],
+    [
+     0.00275,
+     0.41839320308748706
+    ],
+    [
+     0.0026249999999999997,
+     0.4053377023096085
+    ],
+    [
+     0.0025624999999999997,
+     0.39219957097190195
+    ],
+    [
+     0.0025937499999999997,
+     0.40143798416785015
+    ],
+    [
+     0.0025781249999999997,
+     0.3962935445425477
+    ],
+    [
+     0.0025859374999999997,
+     0.39788898414866525
+    ],
+    [
+     0.0025898437499999997,
+     0.39914376342793734
+    ],
+    [
+     0.002591796875,
+     0.39927284912534367
+    ],
+    [
+     0.0025927734375,
+     0.40070695264397416
+    ],
+    [
+     0.0025922851562499996,
+     0.40032510966580914
+    ],
+    [
+     0.0025920410156249998,
+     0.3997923601400879
+    ],
+    [
+     0.0025921630859375,
+     0.39996687015583077
+    ]
+   ],
+   "true_delta": 0.39996687015583077,
+   "years": 200
+  },
+  "A3": {
+   "delta": 0.3,
+   "edge": 0.287127685546875,
+   "first_seed": 500000,
+   "status": "OK",
+   "trace": [
+    [
+     0.0,
+     -0.0012597609754121664
+    ],
+    [
+     0.6,
+     0.561756781083421
+    ],
+    [
+     0.3,
+     0.3131052997389985
+    ],
+    [
+     0.15,
+     0.17263072791945955
+    ],
+    [
+     0.22499999999999998,
+     0.24638972548833182
+    ],
+    [
+     0.26249999999999996,
+     0.2762950507154003
+    ],
+    [
+     0.28125,
+     0.29287736957833777
+    ],
+    [
+     0.290625,
+     0.3026162529441421
+    ],
+    [
+     0.2859375,
+     0.29849301322962196
+    ],
+    [
+     0.28828125000000004,
+     0.30017150756594346
+    ],
+    [
+     0.287109375,
+     0.2998301753075596
+    ],
+    [
+     0.2876953125,
+     0.30020184531257055
+    ],
+    [
+     0.28740234375,
+     0.3001983957130656
+    ],
+    [
+     0.287255859375,
+     0.3001978391195814
+    ],
+    [
+     0.2871826171875,
+     0.30018932228463946
+    ],
+    [
+     0.28714599609375,
+     0.300194947750964
+    ],
+    [
+     0.287127685546875,
+     0.30019923177249996
+    ]
+   ],
+   "true_delta": 0.30019923177249996,
+   "years": 200
+  }
+ },
+ "market_data_read": false,
+ "method": "calibration.edge_for_delta: 14-step bisection on the edge strength until the true dSR (calibration.true_delta: SR(primary) - SR(matched benchmark) at base cost, pooled over 200 x 365 scored days of consecutive independent frozen-generator worlds from seed first_seed) is within 0.005 of the Owner's delta; trace = [edge, true dSR] per step",
+ "record": "AUTH-2 planted-edge calibration (FUNNEL_LAW_2.md \u00a7CALIBRATION_DAG; IMPLEMENTATION_NOTES.md \u00a7Calibration)",
+ "synthetic_only": true
+}

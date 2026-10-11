@@ -43,6 +43,12 @@ def test_every_present_glob_matches_a_tracked_file(glob):
     "tests/test_p2_scope_audit.py", "docs/p2/P2_CONTRACT.md",
     "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md", "charters/COMMERCIAL-VERIFICATION-LANE-1.json",
     "research/datasets/dataset_v2.lock.json", "scripts/paper_guard.py",
+    "research/auth2/FUNNEL_LAW_2.md", "research/auth2/replay.py", "research/auth2/gates.py",
+    "research/auth2/stats.py", "research/auth2/run_node.py", "research/auth2/dispatch_guard.py",
+    "research/auth2/engine/run_backtest.py", "research/auth2/prereg/A1.json",
+    "research/auth2/calibration_edges.json", "research/datasets/dataset_v3.lock.json",
+    "research/datasets/dataset_v3/membership_u12.json", "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json",
+    ".github/workflows/auth2.yml", "research/RESEARCH_CYCLE2_CLOSURE_1_ERRATA_1.md",
 ])
 def test_every_judge_is_protected(path):
     assert cp.is_protected(path, GLOBS), path

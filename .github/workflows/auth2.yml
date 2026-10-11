@@ -1,0 +1,142 @@
+name: AUTH-2 node (preregistered, manual dispatch only)
+
+# AUTH-2-DISCOVERY-QUALIFICATION-1 (charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json,
+# research/auth2/FUNNEL_LAW_2.md). Runs ONE node (or one half of a split node) of the frozen
+# DAG per dispatch. research/auth2/run_node.py refuses a node the program, the trial ledger or
+# the DAG does not allow; research/auth2/dispatch_guard.py refuses first unless the billing
+# allowance is readable and every cap holds (one job at a time, never a re-run of a
+# succeeded node, at most one technical retry, 4,000 attributed minutes, 240 invocations,
+# the monthly CI reserve).
+#
+# workflow_dispatch only: no push, schedule or pull_request trigger, no matrix, no loop.
+# Results pass between nodes as artifacts (predecessor run ids are an input). This workflow
+# never commits, pushes, writes the trial ledger or places an order: dry_run stays true,
+# spot only, keyless; terminal ledger records and the closure are the operator's own later
+# appends. The one secret it reads, AUTH2_BILLING_TOKEN, may only read the account's Actions
+# billing; without it the guard cannot read the allowance and the job stops (fail-closed).
+on:
+  workflow_dispatch:
+    inputs:
+      node:
+        description: "DAG node"
+        type: choice
+        required: true
+        options: [D0, CAL-A1, CAL-A2, CAL-A3, PC-A1, PC-A2, PC-A3, N-A1, N-A2, N-A3, A1, A2, A3, HOLM,
+                  SC-A1, SC-A2, SC-A3]
+      part:
+        description: "Part of a split node (PC-A2 and N-A2 have 2; every other node 1)"
+        type: choice
+        required: true
+        default: "1"
+        options: ["1", "2"]
+      predecessor_runs:
+        description: "Space-separated run ids whose auth2-* artifacts this node reads (none for D0)"
+        type: string
+        required: false
+        default: ""
+
+run-name: AUTH2 ${{ inputs.node }} part ${{ inputs.part }}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: auth2-program
+  cancel-in-progress: false
+
+env:
+  IMAGE: freqtradeorg/freqtrade:2026.7
+  CACHE_DIR: dataset-cache/v3
+  PYTHONPATH: research
+
+jobs:
+  node:
+    name: AUTH-2 ${{ inputs.node }} part ${{ inputs.part }}
+    runs-on: ubuntu-24.04
+    # FUNNEL_LAW_2.md §COMPUTE_CAP_PROOF; equal to research/auth2/run_node.py NODES (tested).
+    timeout-minutes: ${{ fromJSON('{"D0":150,"CAL-A1":60,"PC-A1":150,"N-A1":150,"A1":120,"SC-A1":30,"CAL-A2":60,"PC-A2":180,"N-A2":180,"A2":240,"SC-A2":45,"CAL-A3":60,"PC-A3":60,"N-A3":60,"A3":45,"SC-A3":15,"HOLM":15}')[inputs.node] }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dependencies (arch and its closure hash-pinned)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
+          pip check
+
+      - name: 'Gate: dispatch guard (billing readable, serial, caps, never re-run)'
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python research/auth2/dispatch_guard.py --node "$NODE" --part "$PART" \
+            --repo-slug "$GITHUB_REPOSITORY" --in-job --out out/guard.json
+        env:
+          NODE: ${{ inputs.node }}
+          PART: ${{ inputs.part }}
+          GH_TOKEN: ${{ github.token }}
+          AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
+
+      - name: 'Gate: paper safety'
+        run: python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example
+
+      - name: Download predecessor results
+        run: |
+          set -euo pipefail
+          mkdir -p predecessors
+          for id in $PREDECESSORS; do
+            case "$id" in (*[!0-9]*|'') echo "::error::not a run id: $id"; exit 1 ;; esac
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'auth2-*' --dir "predecessors/$id"
+          done
+          find predecessors -name '*.result.json' -print
+        env:
+          PREDECESSORS: ${{ inputs.predecessor_runs }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Restore the Dataset V3 archive cache
+        if: inputs.node != 'HOLM' && !startsWith(inputs.node, 'CAL-') && !startsWith(inputs.node, 'PC-')
+        uses: actions/cache@v4
+        with:
+          path: dataset-cache/v3
+          key: auth2-v3-archive-${{ hashFiles('research/datasets/dataset_v3.lock.json') }}
+          restore-keys: auth2-v3-archive-
+
+      - name: Pull the pinned Freqtrade image
+        if: inputs.node != 'D0' && inputs.node != 'HOLM' && !startsWith(inputs.node, 'CAL-')
+        timeout-minutes: 12
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if timeout 220 docker pull "$IMAGE"; then echo "pulled on attempt $attempt"; exit 0; fi
+            echo "pull attempt $attempt failed; Docker Hub may be rate limiting"; sleep $((attempt * 20))
+          done
+          echo "::error::could not pull $IMAGE after 3 attempts"; exit 1
+
+      - name: Run the node (refuses unless the program, ledger and DAG allow it)
+        run: |
+          set -euo pipefail
+          python -m auth2.run_node --node "$NODE" --part "$PART" --repo . --out out \
+            --predecessors predecessors --cache-dir "$CACHE_DIR" --engine docker 2>&1 | tee out/node.log
+        env:
+          NODE: ${{ inputs.node }}
+          PART: ${{ inputs.part }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2-${{ inputs.node }}-p${{ inputs.part }}
+          path: |
+            out/*.json
+            out/node.log
+            out/work/**/engine.log
+            out/work/**/schedule.json
+            out/work/**/config.json
+            out/work/**/markets.json
+            out/work/**/backtest_results/*.zip
+          if-no-files-found: warn
+          retention-days: 90

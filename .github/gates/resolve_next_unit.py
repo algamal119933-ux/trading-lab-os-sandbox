@@ -106,9 +106,15 @@ def resolve(repo: Path, github: dict, rev: str | None = None) -> dict:
     programs = cp.programs_at(repo, rev)
     research = {"lane": "RESEARCH", "status": "NO_PROGRAM" if not programs else "PROGRAMS_PRESENT",
                 "programs": sorted(programs), "blockers": []}
-    if programs:
-        research["blockers"].append({"class": "ENGINEERING", "scope": "RESEARCH",
-                                     "authority_ref": "DAG resolution is implemented with the first AUTH-2 program"})
+    for pid in sorted(programs):
+        # A program's node results live in its workflow-run artifacts, not on main, so this
+        # resolver never selects or starts a research node: the next node comes from the
+        # program's own runner, and every dispatch passes its billing and cap guard first.
+        research["blockers"].append({"class": "EXTERNAL", "scope": f"RESEARCH:{pid}",
+                                     "authority_ref": "next node: research/auth2/run_node.py --next over the "
+                                                      "program's run artifacts; dispatch only after "
+                                                      "research/auth2/dispatch_guard.py says DISPATCH "
+                                                      "(research/auth2/FUNNEL_LAW_2.md §DAG_OPERATIONS)"})
     lanes.append(research)
 
     blockers = []

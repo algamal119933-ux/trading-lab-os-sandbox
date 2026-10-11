@@ -1,0 +1,77 @@
+{
+ "A1_U6": {
+  "all_windows": {
+   "data_limited": false,
+   "member_days": 16435,
+   "missing_fraction": 0.0,
+   "rule": "DATA_LIMITED iff member-days without price data > 1.0% of all member-days",
+   "without_price": 0
+  },
+  "scored_2019_2024": {
+   "after_trustworthy_delisting": 0,
+   "member_days": 12787,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 12787,
+   "without_price": 0
+  },
+  "secondary_2025_2026_08": {
+   "after_trustworthy_delisting": 0,
+   "member_days": 3648,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 3648,
+   "without_price": 0
+  }
+ },
+ "A2_U12": {
+  "all_windows": {
+   "data_limited": false,
+   "member_days": 33600,
+   "missing_fraction": 0.0,
+   "rule": "DATA_LIMITED iff member-days without price data > 1.0% of all member-days",
+   "without_price": 0
+  },
+  "scored_2019_2024": {
+   "after_trustworthy_delisting": 22,
+   "member_days": 26304,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 26282,
+   "without_price": 0
+  },
+  "secondary_2025_2026_08": {
+   "after_trustworthy_delisting": 0,
+   "member_days": 7296,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 7296,
+   "without_price": 0
+  }
+ },
+ "A2_U8": {
+  "all_windows": {
+   "data_limited": false,
+   "member_days": 22400,
+   "missing_fraction": 0.0,
+   "rule": "DATA_LIMITED iff member-days without price data > 1.0% of all member-days",
+   "without_price": 0
+  },
+  "scored_2019_2024": {
+   "after_trustworthy_delisting": 22,
+   "member_days": 17536,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 17514,
+   "without_price": 0
+  },
+  "secondary_2025_2026_08": {
+   "after_trustworthy_delisting": 0,
+   "member_days": 4864,
+   "missing_by_symbol": {},
+   "missing_fraction": 0.0,
+   "with_price": 4864,
+   "without_price": 0
+  }
+ }
+}

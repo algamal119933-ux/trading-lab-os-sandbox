@@ -11,6 +11,10 @@ fixes the shape; this adds what a schema cannot see:
     matches the file;
   · the DAG is a DAG: edges name real nodes, no cycle, depth and node count
     inside the declared maxima, and the first node is a null calibration;
+  · schema v2 (AUTH-2, OD-7): the first node is the data lock instead, every
+    SCIENTIFIC node descends from a NULL_CALIBRATION node of its own family, a
+    SECONDARY_CONFIRM node carries its family's scientific trial ID, and the
+    trial-ID caps count distinct trial IDs;
   · commit order: the program file was committed before any ledger record of
     any of its nodes (a node recorded first was designed after a result).
 
@@ -112,7 +116,10 @@ def check_program(repo: Path, program: dict, rel: str, validator, ledger_first: 
     for n in nodes:
         if _sha256(repo / n["prereg_path"]) != n["prereg_sha256"]:
             problems.append(f"{rel}: node {n['id']} preregistration sha256 is not the one listed")
-    if nodes[0]["kind"] != "NULL_CALIBRATION":
+    v2 = program.get("schema_version") == 2
+    if v2:
+        problems += _v2_problems(rel, nodes, program["dag"]["edges"])
+    elif nodes[0]["kind"] != "NULL_CALIBRATION":
         problems.append(f"{rel}: the first node must be a null calibration")
     for e in program["dag"]["edges"]:
         if e["from"] not in ids or e["to"] not in ids:
@@ -125,14 +132,46 @@ def check_program(repo: Path, program: dict, rel: str, validator, ledger_first: 
             problems.append(f"{rel}: depth {depth} exceeds max_depth {program['dag']['max_depth']}")
     if len(nodes) > program["dag"]["max_nodes"]:
         problems.append(f"{rel}: {len(nodes)} nodes exceed max_nodes {program['dag']['max_nodes']}")
-    sci = sum(1 for n in nodes if n["kind"] == "SCIENTIFIC")
-    cal = len(nodes) - sci
+    if v2:
+        sci = len({n["trial_id"] for n in nodes if n["kind"] in ("SCIENTIFIC", "SECONDARY_CONFIRM")})
+        cal = len({n["trial_id"] for n in nodes if n["kind"] not in ("SCIENTIFIC", "SECONDARY_CONFIRM")})
+    else:
+        sci = sum(1 for n in nodes if n["kind"] == "SCIENTIFIC")
+        cal = len(nodes) - sci
     if sci > program["caps"]["scientific_trial_ids"] or cal > program["caps"]["calibration_trial_ids"]:
         problems.append(f"{rel}: the DAG needs more trial IDs than its caps allow")
     for n in nodes:
         first = ledger_first.get(n["trial_id"])
         if first is not None and (committed_at is None or first < committed_at):
             problems.append(f"{rel}: node {n['id']} ({n['trial_id']}) has a ledger record older than the program")
+    return problems
+
+
+def _v2_problems(rel: str, nodes: list[dict], edges: list[dict]) -> list[str]:
+    problems = []
+    ids = {n["id"]: n for n in nodes}
+    if nodes[0]["kind"] != "DATA_LOCK":
+        problems.append(f"{rel}: the first node of a v2 program must be the data lock")
+    parents: dict[str, set[str]] = {n: set() for n in ids}
+    for e in edges:
+        if e["to"] in parents and e["from"] in ids:
+            parents[e["to"]].add(e["from"])
+
+    def ancestors(n: str, seen: set[str]) -> set[str]:
+        for p in parents[n] - seen:
+            seen.add(p)
+            ancestors(p, seen)
+        return seen
+
+    sci_trial = {n["family"]: n["trial_id"] for n in nodes if n["kind"] == "SCIENTIFIC"}
+    for n in nodes:
+        if n["kind"] == "SCIENTIFIC" and not any(
+                ids[a]["kind"] == "NULL_CALIBRATION" and ids[a]["family"] == n["family"]
+                for a in ancestors(n["id"], set())):
+            problems.append(f"{rel}: scientific node {n['id']} does not descend from a null calibration "
+                            f"of family {n['family']}")
+        if n["kind"] == "SECONDARY_CONFIRM" and sci_trial.get(n["family"]) != n["trial_id"]:
+            problems.append(f"{rel}: secondary node {n['id']} does not carry its family's scientific trial ID")
     return problems
 
 
@@ -192,6 +231,33 @@ def synthetic_program(repo: Path) -> dict:
     }
 
 
+def synthetic_program_v2(repo: Path) -> dict:
+    """A valid schema-v2 program (data lock first, per-family null ancestry) over existing files."""
+    p = synthetic_program(repo)
+    lock = "research/datasets/dataset_v2.lock.json"
+    null, sci = p["dag"]["nodes"][0]["prereg_path"], p["dag"]["nodes"][1]["prereg_path"]
+    p["schema_version"] = 2
+    p["caps"].update(attributed_linux_minutes=100, paid_actions_overage_usd=0, llm_agent_tokens=0,
+                     calibration_trial_ids=2)
+    p["dag"] = {
+        "nodes": [
+            {"id": "D0", "trial_id": "SELF-TEST-D0", "kind": "DATA_LOCK", "family": None,
+             "prereg_path": lock, "prereg_sha256": _sha256(repo / lock)},
+            {"id": "N0", "trial_id": "SELF-TEST-NULL", "kind": "NULL_CALIBRATION", "family": "SELF_TEST_FAMILY",
+             "prereg_path": null, "prereg_sha256": _sha256(repo / null)},
+            {"id": "N1", "trial_id": "SELF-TEST-SCI", "kind": "SCIENTIFIC", "family": "SELF_TEST_FAMILY",
+             "prereg_path": sci, "prereg_sha256": _sha256(repo / sci)},
+            {"id": "S1", "trial_id": "SELF-TEST-SCI", "kind": "SECONDARY_CONFIRM", "family": "SELF_TEST_FAMILY",
+             "prereg_path": sci, "prereg_sha256": _sha256(repo / sci)},
+        ],
+        "edges": [{"from": "D0", "on": "PASS", "to": "N0"}, {"from": "N0", "on": "REJECTED", "to": "N1"},
+                  {"from": "N1", "on": "PRE_HOLM_PASS", "to": "S1"}],
+        "max_depth": 4,
+        "max_nodes": 4,
+    }
+    return p
+
+
 def self_test(repo: Path) -> list[str]:
     """Each refusal must fire on its own mutation; the valid program must pass."""
     import jsonschema
@@ -219,6 +285,33 @@ def self_test(repo: Path) -> list[str]:
     expect("ledger record older than the program", lambda p: None,
            ledger={"SELF-TEST-SCI": datetime(2000, 1, 1, tzinfo=timezone.utc)})
     expect("DAG needs more trial IDs than the caps", lambda p: p["caps"].update(scientific_trial_ids=0))
+    expect("v1 program using a v2 node kind", lambda p: p["dag"]["nodes"][1].update(kind="POSITIVE_CONTROL"))
+    expect("v1 program using a v2 edge state", lambda p: p["dag"]["edges"][0].update(on="PASS"))
+
+    v2 = synthetic_program_v2(repo)
+    if check_program(repo, v2, "self-test-v2", validator, {}, now):
+        failures.append("the valid synthetic v2 program was refused")
+
+    def expect_v2(name: str, mutate) -> None:
+        p = copy.deepcopy(v2)
+        mutate(p)
+        if not check_program(repo, p, "self-test-v2", validator, {}, now):
+            failures.append(f"refusal did not fire: v2 {name}")
+
+    def no_null_ancestor(p: dict) -> None:
+        p["dag"]["edges"][1] = {"from": "D0", "on": "PASS", "to": "N1"}
+
+    expect_v2("first node not the data lock", lambda p: p["dag"]["nodes"].insert(0, p["dag"]["nodes"].pop(1)))
+    expect_v2("scientific node without a null of its family above it", no_null_ancestor)
+    expect_v2("null of another family", lambda p: p["dag"]["nodes"][1].update(family="OTHER"))
+    expect_v2("secondary node with another trial ID", lambda p: p["dag"]["nodes"][3].update(trial_id="X"))
+    expect_v2("node without a family", lambda p: p["dag"]["nodes"][2].pop("family"))
+    expect_v2("missing attributed-minutes cap", lambda p: p["caps"].pop("attributed_linux_minutes"))
+    expect_v2("paid overage not USD 0", lambda p: p["caps"].update(paid_actions_overage_usd=5))
+    expect_v2("agent tokens not 0", lambda p: p["caps"].update(llm_agent_tokens=1))
+    expect_v2("hyperopt not 0", lambda p: p["caps"].update(hyperopt=1))
+    expect_v2("edge on a non-terminal state", lambda p: p["dag"]["edges"][0].update(on="LOOKS_PROMISING"))
+    expect_v2("calibration trial IDs over the cap", lambda p: p["caps"].update(calibration_trial_ids=1))
     return failures
 
 
