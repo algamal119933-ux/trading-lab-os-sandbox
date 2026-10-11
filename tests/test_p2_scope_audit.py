@@ -820,6 +820,20 @@ CEA_1_TEST_FIX_SCOPE: dict[str, str] = {
 }
 
 
+# PR #56, merged. Two parents: d1fe2b4f (main before) + 8c66a04f (the
+# claude/cea-1-merge-law-fetch branch).
+CEA_1_MERGE_LAW_FETCH_MERGE = "390bf4bf66ae92f49ff8a9490b59e142ed592724"
+
+# Every path the CEA-1 merge-law fetch fix touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CEA_1_MERGE_LAW_FETCH_SCOPE: dict[str, str] = {
+    ".github/workflows/merge-law.yml":
+        "CEA-1 merge-law fix — authenticate the PR-head fetch (private repo; the job never reached its verdict)",
+    "tests/test_p2_scope_audit.py": "CEA-1 test fix (PR #54) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -853,6 +867,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
     "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
     "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
+    "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -862,9 +877,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 
 
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/workflows/merge-law.yml":
-        "CEA-1 merge-law fix — authenticate the PR-head fetch (private repo; the job never reached its verdict)",
-    "tests/test_p2_scope_audit.py": "CEA-1 test fix (PR #54) pinned to its merge; this branch's scope",
+    ".github/gates/merge_law.py":
+        "CEA-1 merge-law fix — import the BASE fp package with the BASE ledger code (the job crashed on any append)",
+    "tests/test_merge_law.py": "CEA-1 merge-law fix — an appended record verifies in a fresh process",
+    "tests/test_p2_scope_audit.py": "PR #56 pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
