@@ -1,0 +1,624 @@
+{
+ "funding": {
+  "BTCUSDT": {
+   "archive_files": 80,
+   "archive_sha256": "bd9b4f76cc2f7eaf59dc76b5fe6da2dca7e5a2daf925d8bc1e21a11117bc4385",
+   "content_sha256": "0ccac09ebd88004a164fda2d1ea19cf218c1e12376bf53d4ec04a176ca1c63e1",
+   "first_utc": "2020-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T16:00:00Z",
+   "rows": 7305
+  },
+  "ETHUSDT": {
+   "archive_files": 80,
+   "archive_sha256": "d0f2564ed14ce201ced93b92e784c9da78c1419a09a7c5572cebac78146f4cbf",
+   "content_sha256": "610f048f3d077f099d7b33d8d94ac867629a5eb8b0458c04212786aeeb62e7f8",
+   "first_utc": "2020-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T16:00:00Z",
+   "rows": 7305
+  }
+ },
+ "symbols": {
+  "1000SATSUSDT": {
+   "bars_4h": 5961,
+   "content_sha256_4h": "c083fafd90c21fb54c78ce6803b33dc0c45375671697525d58853757f2dd08fd",
+   "first_utc": "2023-12-12T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "1000SATS/USDT"
+  },
+  "ADAUSDT": {
+   "bars_4h": 18344,
+   "content_sha256_4h": "a1dd084357729b3eb9c9e7922256351924c33a21219e1f52a15e1b17d8764712",
+   "first_utc": "2018-04-17T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ADA/USDT"
+  },
+  "APEUSDT": {
+   "bars_4h": 9771,
+   "content_sha256_4h": "bc30ee57d894c35213064cb0b5be5921271ef196e4470a80b1de63afd833c7f2",
+   "first_utc": "2022-03-17T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "APE/USDT"
+  },
+  "APTUSDT": {
+   "bars_4h": 8478,
+   "content_sha256_4h": "5c18009e3833da6fdc5dfdf621b31438ec7b4a986b6d5045c5ad912e451a6eb9",
+   "first_utc": "2022-10-19T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "APT/USDT"
+  },
+  "ARBUSDT": {
+   "bars_4h": 7545,
+   "content_sha256_4h": "69fb565dcd7b14fb0d1e1791d285e69621635accab4e21b2a00dfaf748065e9c",
+   "first_utc": "2023-03-23T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ARB/USDT"
+  },
+  "ASTERUSDT": {
+   "bars_4h": 1977,
+   "content_sha256_4h": "e6798c95567a831b2fcfd102f6518f1e0f578a3e9f4ddac51c4145a8f0c81f10",
+   "first_utc": "2025-10-06T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ASTER/USDT"
+  },
+  "ATOMUSDT": {
+   "bars_4h": 16087,
+   "content_sha256_4h": "33a74ee3995e680046b92507999f84d4f66410be9c1e5a8179d965131d6c646a",
+   "first_utc": "2019-04-29T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ATOM/USDT"
+  },
+  "AVAXUSDT": {
+   "bars_4h": 13019,
+   "content_sha256_4h": "f4e5f95019260655e552d2612da63c71b1b0dec4dc8b3bdf04d5ba88847bcca5",
+   "first_utc": "2020-09-22T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "AVAX/USDT"
+  },
+  "AXSUSDT": {
+   "bars_4h": 12759,
+   "content_sha256_4h": "a94e6185b7de4b3ebf7c63f0ce4a71cdb2042dc107d965f65b2c8e2a47fa2b79",
+   "first_utc": "2020-11-04T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "AXS/USDT"
+  },
+  "BANDUSDT": {
+   "bars_4h": 15236,
+   "content_sha256_4h": "a49ce151ec90026f8da798e0723a7b8e2fa94727610a29c5b72c91256af582a0",
+   "first_utc": "2019-09-18T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BAND/USDT"
+  },
+  "BCHABCUSDT": {
+   "bars_4h": 2258,
+   "content_sha256_4h": "cba68406aafb210f6cc50d64aef870d30166e200a97108987a382539371c31b7",
+   "first_utc": "2018-11-16T08:00:00Z",
+   "last_utc": "2019-11-28T04:00:00Z",
+   "pair": "BCHABC/USDT"
+  },
+  "BCHSVUSDT": {
+   "bars_4h": 943,
+   "content_sha256_4h": "a3bfd9bd3cb82d1cdaf6d3161017a081ce1da6448edb310cf453f6874e00cb27",
+   "first_utc": "2018-11-16T08:00:00Z",
+   "last_utc": "2019-04-22T12:00:00Z",
+   "pair": "BCHSV/USDT"
+  },
+  "BCHUSDT": {
+   "bars_4h": 14811,
+   "content_sha256_4h": "0e36ac8e5767f97b046755265206767613946b9728b6c4673125d1ffb7c1564c",
+   "first_utc": "2019-11-28T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BCH/USDT"
+  },
+  "BNBUSDT": {
+   "bars_4h": 18963,
+   "content_sha256_4h": "cce490cab7f3521108661c067332dbe647067b931031235565ec47c1397915f9",
+   "first_utc": "2018-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BNB/USDT"
+  },
+  "BOMEUSDT": {
+   "bars_4h": 5391,
+   "content_sha256_4h": "4e745073212991723a57a0eedd1eb8326b41e08f41e0ab2c43bb25333c9b532e",
+   "first_utc": "2024-03-16T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BOME/USDT"
+  },
+  "BONKUSDT": {
+   "bars_4h": 5944,
+   "content_sha256_4h": "eceb4c9f82ae417ebcdf9f4ed49a36a3247773ec45720895eb305066fc9fb411",
+   "first_utc": "2023-12-15T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BONK/USDT"
+  },
+  "BTCUSDT": {
+   "bars_4h": 18963,
+   "content_sha256_4h": "15f537f1c13afb80b7b8c3d41591ef19f841f18153cd05240e14f41779a36c7f",
+   "first_utc": "2018-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "BTC/USDT"
+  },
+  "BTTUSDT": {
+   "bars_4h": 6487,
+   "content_sha256_4h": "5b187d0e04d79aea3463efb9efe9d059daa5f83ab5e54ac6fac03d1a7e990123",
+   "first_utc": "2019-01-31T08:00:00Z",
+   "last_utc": "2022-01-17T04:00:00Z",
+   "pair": "BTT/USDT"
+  },
+  "CFXUSDT": {
+   "bars_4h": 11890,
+   "content_sha256_4h": "9d5bb8d9d2303bf151756233abef8def85858d0e65d729c77b2d26ae748d59df",
+   "first_utc": "2021-03-29T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "CFX/USDT"
+  },
+  "CHIPUSDT": {
+   "bars_4h": 795,
+   "content_sha256_4h": "253155754ae11a7061e7f481ea87ea0d78a6caa91c4daa0d414c6c574b2701e5",
+   "first_utc": "2026-04-21T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "CHIP/USDT"
+  },
+  "CHZUSDT": {
+   "bars_4h": 15310,
+   "content_sha256_4h": "037bbcbffd7c9d6774bb16eba5635015bcd795af4cad8b8c2d68d775e3a77b39",
+   "first_utc": "2019-09-06T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "CHZ/USDT"
+  },
+  "DASHUSDT": {
+   "bars_4h": 16279,
+   "content_sha256_4h": "416390b0a2246e9e7d9e04b3ec69977cb62e6d8e4963e108d2e58db8dc281095",
+   "first_utc": "2019-03-28T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "DASH/USDT"
+  },
+  "DOGEUSDT": {
+   "bars_4h": 15685,
+   "content_sha256_4h": "681ba7abec65c85f643939b22abab3fbd858687465038710b5607d7ed5dad0f5",
+   "first_utc": "2019-07-05T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "DOGE/USDT"
+  },
+  "DOTUSDT": {
+   "bars_4h": 13225,
+   "content_sha256_4h": "f8e0b7961de450a7ad1e99f94c817945c064d4607c2ebe246313221145eddfcc",
+   "first_utc": "2020-08-18T20:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "DOT/USDT"
+  },
+  "EDUUSDT": {
+   "bars_4h": 7329,
+   "content_sha256_4h": "fc59ff45f7ea497a3059cced721f1de560055356e05574215d5986b6610479e8",
+   "first_utc": "2023-04-28T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "EDU/USDT"
+  },
+  "ENAUSDT": {
+   "bars_4h": 5290,
+   "content_sha256_4h": "4b231ce17dbf9827164e05295a35a627bfed8ed2c01506b20d7c56c1b0c1957b",
+   "first_utc": "2024-04-02T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ENA/USDT"
+  },
+  "EOSUSDT": {
+   "bars_4h": 15322,
+   "content_sha256_4h": "c24794a2d376de3b22d8ea5d980c67d2bf00f26588168f596080af6974ed2cbf",
+   "first_utc": "2018-05-28T04:00:00Z",
+   "last_utc": "2025-05-26T04:00:00Z",
+   "pair": "EOS/USDT"
+  },
+  "ETCUSDT": {
+   "bars_4h": 18011,
+   "content_sha256_4h": "9cf2f7ee786bee8950f9b1cd5b53510c99edef053044546df56482f2d2f4f7a7",
+   "first_utc": "2018-06-12T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ETC/USDT"
+  },
+  "ETHUSDT": {
+   "bars_4h": 18963,
+   "content_sha256_4h": "dcc6082d416f46ec891502541724f95d215e743876a7698c33d54325005b6f13",
+   "first_utc": "2018-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ETH/USDT"
+  },
+  "FETUSDT": {
+   "bars_4h": 16445,
+   "content_sha256_4h": "2ed10c45544919e21321ebf703647b0b2c25caf7a68446334165681c60167d01",
+   "first_utc": "2019-02-28T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "FET/USDT"
+  },
+  "FFUSDT": {
+   "bars_4h": 2019,
+   "content_sha256_4h": "f8739a637af986138ae79d7de21688cc5465e6a7d674c8d7935cfb81767c1df4",
+   "first_utc": "2025-09-29T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "FF/USDT"
+  },
+  "FILUSDT": {
+   "bars_4h": 12878,
+   "content_sha256_4h": "0dc82473db029d81239150356ad1438781e6d364bfbb7f341474f022ec2bb4e8",
+   "first_utc": "2020-10-15T16:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "FIL/USDT"
+  },
+  "FLOKIUSDT": {
+   "bars_4h": 7286,
+   "content_sha256_4h": "e8718db5c6fc72892decea9401c281b39eb3d9190482e74c814735eb51501748",
+   "first_utc": "2023-05-05T16:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "FLOKI/USDT"
+  },
+  "FTMUSDT": {
+   "bars_4h": 12257,
+   "content_sha256_4h": "c9703ff040cff01f2c5d54e4b0ec60f615d43068d9f827e25b8c6956c5cc8d86",
+   "first_utc": "2019-06-11T04:00:00Z",
+   "last_utc": "2025-01-13T04:00:00Z",
+   "pair": "FTM/USDT"
+  },
+  "GALAUSDT": {
+   "bars_4h": 10883,
+   "content_sha256_4h": "d97649c1523d2ce5168c5775bdd77ac74a87cfdc51ca025d94fae227776065b6",
+   "first_utc": "2021-09-13T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "GALA/USDT"
+  },
+  "GASUSDT": {
+   "bars_4h": 7582,
+   "content_sha256_4h": "0b882aab477cd8cad6113f6637b244730252c26455be536ab3442340d18c7fe8",
+   "first_utc": "2023-03-17T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "GAS/USDT"
+  },
+  "GMTUSDT": {
+   "bars_4h": 9819,
+   "content_sha256_4h": "f2bfccf071834f70df029188576950777918d39136333ee9d43ccd9ab415d65c",
+   "first_utc": "2022-03-09T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "GMT/USDT"
+  },
+  "HBARUSDT": {
+   "bars_4h": 15172,
+   "content_sha256_4h": "13b057edad12e752f79ecf18fb7dd32c31e0cb09fb75a533ce3cd5f6f9c3cbd3",
+   "first_utc": "2019-09-29T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "HBAR/USDT"
+  },
+  "ICXUSDT": {
+   "bars_4h": 18003,
+   "content_sha256_4h": "a9b420c713955bf858edbda049f20d11bfbdecdabb536930dfd1bdc8b65f3e84",
+   "first_utc": "2018-06-13T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ICX/USDT"
+  },
+  "IDUSDT": {
+   "bars_4h": 7551,
+   "content_sha256_4h": "f95d4904ae3b14ccce5235a174a52837f03e74d6741bb8fb6916be82f607e845",
+   "first_utc": "2023-03-22T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ID/USDT"
+  },
+  "IOTAUSDT": {
+   "bars_4h": 18079,
+   "content_sha256_4h": "282120c0e8c78462874a58c6dabe0cdbb0065a5024fdf8264dec12800efc0094",
+   "first_utc": "2018-05-31T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "IOTA/USDT"
+  },
+  "LINKUSDT": {
+   "bars_4h": 16703,
+   "content_sha256_4h": "9e928b8066016ed97e62b0b3c7ea4244703e7841800b8d701afee77376703674",
+   "first_utc": "2019-01-16T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "LINK/USDT"
+  },
+  "LOOMUSDT": {
+   "bars_4h": 3126,
+   "content_sha256_4h": "aadd42f31f0afd18eceaa9a9675bde1008a44503984d9b49a00c93a9c65260fe",
+   "first_utc": "2023-03-24T08:00:00Z",
+   "last_utc": "2024-08-26T04:00:00Z",
+   "pair": "LOOM/USDT"
+  },
+  "LTCUSDT": {
+   "bars_4h": 18963,
+   "content_sha256_4h": "8ba8ca70a384d36e6898c69e1efdfdb0f9ce6e56129ee90c9107c1b23d653a90",
+   "first_utc": "2018-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "LTC/USDT"
+  },
+  "LUNAUSDT": {
+   "bars_4h": 13103,
+   "content_sha256_4h": "cfe2b67a5228e038bfd2953348ee96951288ae9d6284040f6a3f2c3d7657bdf8",
+   "first_utc": "2020-08-21T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "LUNA/USDT"
+  },
+  "MANAUSDT": {
+   "bars_4h": 13300,
+   "content_sha256_4h": "1cfb209e39555c6b046eec6c41de6c427c557f1781d7f0f43ed6dda897021885",
+   "first_utc": "2020-08-06T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "MANA/USDT"
+  },
+  "MASKUSDT": {
+   "bars_4h": 11549,
+   "content_sha256_4h": "807d3c303a5bbcff08767d53984b42f44ccfa513d64bc18f8fa6529053a00b33",
+   "first_utc": "2021-05-25T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "MASK/USDT"
+  },
+  "MATICUSDT": {
+   "bars_4h": 11779,
+   "content_sha256_4h": "ca0138869a5db3c5f8e733f483a02af5da9bfc77052a946c56bb73519eccf1be",
+   "first_utc": "2019-04-26T12:00:00Z",
+   "last_utc": "2024-09-10T04:00:00Z",
+   "pair": "MATIC/USDT"
+  },
+  "NEARUSDT": {
+   "bars_4h": 12887,
+   "content_sha256_4h": "ae660275ef4f225c7150a69b7d6c408561dfa64d3469c8678933eef803f6ce15",
+   "first_utc": "2020-10-14T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "NEAR/USDT"
+  },
+  "NEIROUSDT": {
+   "bars_4h": 4288,
+   "content_sha256_4h": "a00a3751ec8cb2ae50450730eda511da7cc60853f8660231530a1c529c74865f",
+   "first_utc": "2024-09-16T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "NEIRO/USDT"
+  },
+  "NEOUSDT": {
+   "bars_4h": 18963,
+   "content_sha256_4h": "c7c507ea51dd4a80ef31d4b0a9f5ee7af25b3dd9116e658c4d14128d75d815b3",
+   "first_utc": "2018-01-01T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "NEO/USDT"
+  },
+  "NOTUSDT": {
+   "bars_4h": 5025,
+   "content_sha256_4h": "b88365ddaef93e79e437082504b2a171513e0255a8c3a5e7e182c6f6e0332424",
+   "first_utc": "2024-05-16T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "NOT/USDT"
+  },
+  "ONTUSDT": {
+   "bars_4h": 18034,
+   "content_sha256_4h": "8fb934dee704396180a0cbfd012341d2c2483bdb564073c00acb0aa7214b6d9c",
+   "first_utc": "2018-06-08T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ONT/USDT"
+  },
+  "OPUSDT": {
+   "bars_4h": 9316,
+   "content_sha256_4h": "ca78f81398d8835bcc74da915b3f5412cf164f7959d3b988c01ad05afba9244d",
+   "first_utc": "2022-06-01T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "OP/USDT"
+  },
+  "ORDIUSDT": {
+   "bars_4h": 6171,
+   "content_sha256_4h": "0a7c82780cdd58c45489df8a9f184e9a65f0573482de24f52b6755c65e538ab1",
+   "first_utc": "2023-11-07T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ORDI/USDT"
+  },
+  "PENGUUSDT": {
+   "bars_4h": 3735,
+   "content_sha256_4h": "1ff886428b704de9dcf1120275a5c87a03468398f94c8f08ed4eec98e9ddf6a6",
+   "first_utc": "2024-12-17T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "PENGU/USDT"
+  },
+  "PEOPLEUSDT": {
+   "bars_4h": 10277,
+   "content_sha256_4h": "fdddea095e4dced5ab19eb41697410649f5888bf2c917fa6b3d67bbaafd5d570",
+   "first_utc": "2021-12-23T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "PEOPLE/USDT"
+  },
+  "PEPEUSDT": {
+   "bars_4h": 7286,
+   "content_sha256_4h": "a0b52f3af322792132f5371ee9f0bee670cfdd2e276ca6d16971ddac553579b9",
+   "first_utc": "2023-05-05T16:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "PEPE/USDT"
+  },
+  "RNDRUSDT": {
+   "bars_4h": 5808,
+   "content_sha256_4h": "96586f3b0ea550155377d821d769039dfb0135418f8ee220555ac8fe252cc116",
+   "first_utc": "2021-11-27T08:00:00Z",
+   "last_utc": "2024-07-22T04:00:00Z",
+   "pair": "RNDR/USDT"
+  },
+  "RUNEUSDT": {
+   "bars_4h": 13127,
+   "content_sha256_4h": "83be847d6b1b3f33f87d50f54961a837aaac0361f7569662f6bee63688efaa52",
+   "first_utc": "2020-09-04T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "RUNE/USDT"
+  },
+  "SANDUSDT": {
+   "bars_4h": 13251,
+   "content_sha256_4h": "75d140524e83ca9dbcb1afeb56d88f1848159de06a8927f7295f1db452dd7e7d",
+   "first_utc": "2020-08-14T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SAND/USDT"
+  },
+  "SEIUSDT": {
+   "bars_4h": 6675,
+   "content_sha256_4h": "125029b5c5652dc964cea5459c4c2739049e84aafe039357163e08ee6ed17083",
+   "first_utc": "2023-08-15T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SEI/USDT"
+  },
+  "SENTUSDT": {
+   "bars_4h": 1329,
+   "content_sha256_4h": "b05bb9145478c6a1457e5bab93d609066a2f3213638baffd11cd38ef1bc3cc46",
+   "first_utc": "2026-01-22T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SENT/USDT"
+  },
+  "SHIBUSDT": {
+   "bars_4h": 11638,
+   "content_sha256_4h": "bd6f0b54242a11c29eb4846621f285dee33b981eae13eca9211f819cba88df59",
+   "first_utc": "2021-05-10T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SHIB/USDT"
+  },
+  "SOLUSDT": {
+   "bars_4h": 13271,
+   "content_sha256_4h": "5172543e940d5acce8a0f1778e7a85983daaf336d9de020b90e769bca4434787",
+   "first_utc": "2020-08-11T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SOL/USDT"
+  },
+  "SUIUSDT": {
+   "bars_4h": 7299,
+   "content_sha256_4h": "6a40bf2455a8e087d90a6beefa119ed19d866e9a9fa86c65e7709f5cc9d28e1d",
+   "first_utc": "2023-05-03T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "SUI/USDT"
+  },
+  "SXPUSDT": {
+   "bars_4h": 12485,
+   "content_sha256_4h": "859e94369efed76b1b11c88846d0bef93da8640707a35582f40af4c173025852",
+   "first_utc": "2020-07-20T12:00:00Z",
+   "last_utc": "2026-04-01T04:00:00Z",
+   "pair": "SXP/USDT"
+  },
+  "TAOUSDT": {
+   "bars_4h": 5235,
+   "content_sha256_4h": "2ba120cb8efe9512f4e7786c676184383793024f314a65f48ee6d01746868505",
+   "first_utc": "2024-04-11T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "TAO/USDT"
+  },
+  "TIAUSDT": {
+   "bars_4h": 6212,
+   "content_sha256_4h": "6d6dc98be58ed9d182b27d6d3f3be5dff05fc3b0d255c8274e9d7c91494047a8",
+   "first_utc": "2023-10-31T16:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "TIA/USDT"
+  },
+  "TONUSDT": {
+   "bars_4h": 4146,
+   "content_sha256_4h": "b38da537b03742a53b9e839e323859c7d80acaf68bf164b92e0c1b87437d1937",
+   "first_utc": "2024-08-08T08:00:00Z",
+   "last_utc": "2026-06-30T04:00:00Z",
+   "pair": "TON/USDT"
+  },
+  "TRUMPUSDT": {
+   "bars_4h": 3538,
+   "content_sha256_4h": "9db200dff91c5e733e6368cb8e7b7185b692c20f94172896c1e81a1bab6369c6",
+   "first_utc": "2025-01-19T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "TRUMP/USDT"
+  },
+  "TRXUSDT": {
+   "bars_4h": 18013,
+   "content_sha256_4h": "78faa2b58262c0c867dcffc4860ccc1abe4ed1485c0876bdd34ae014c8d479dd",
+   "first_utc": "2018-06-11T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "TRX/USDT"
+  },
+  "UNIUSDT": {
+   "bars_4h": 13050,
+   "content_sha256_4h": "53f8cf44ed33d2e31e89347e9cafbd870c45273584ed5158f13f78367bbd66c2",
+   "first_utc": "2020-09-17T00:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "UNI/USDT"
+  },
+  "VETUSDT": {
+   "bars_4h": 17753,
+   "content_sha256_4h": "987c273280516b4ef06634da8794e5eebfc7882127eca0d06949e7f122591023",
+   "first_utc": "2018-07-25T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "VET/USDT"
+  },
+  "WIFUSDT": {
+   "bars_4h": 5457,
+   "content_sha256_4h": "0ae532d27ea70f2cb8996cc4f97e5d40878e47279c9b3f1047bb1eadffb3b5df",
+   "first_utc": "2024-03-05T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "WIF/USDT"
+  },
+  "WINUSDT": {
+   "bars_4h": 15524,
+   "content_sha256_4h": "6088fc491544da07b588b8f5086800e5f170174fd3f97c8a61513139f53e7c9a",
+   "first_utc": "2019-08-01T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "WIN/USDT"
+  },
+  "WLDUSDT": {
+   "bars_4h": 6808,
+   "content_sha256_4h": "c58a3c152f30500fc8fc89e6d79347c39533a610e41d54b9da411763f8d22645",
+   "first_utc": "2023-07-24T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "WLD/USDT"
+  },
+  "WLFIUSDT": {
+   "bars_4h": 2187,
+   "content_sha256_4h": "1611f7bd3ccbb1f1a58b01898471603e38403dcbd224a496583ad432eb67f84a",
+   "first_utc": "2025-09-01T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "WLFI/USDT"
+  },
+  "XLMUSDT": {
+   "bars_4h": 18079,
+   "content_sha256_4h": "8352b386c58d60667fada333cf4e245c786b850699c7884b53de322359f0353b",
+   "first_utc": "2018-05-31T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "XLM/USDT"
+  },
+  "XPLUSDT": {
+   "bars_4h": 2043,
+   "content_sha256_4h": "66f7620ba4f92f7686cb80e2d729027f0a2fa6cac93ae69e595e92bb291b4cf0",
+   "first_utc": "2025-09-25T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "XPL/USDT"
+  },
+  "XRPUSDT": {
+   "bars_4h": 18241,
+   "content_sha256_4h": "d97e91ae62e18b6453472c5e819d59dd2b965aba6b89ae9e40697f3d0f97f24d",
+   "first_utc": "2018-05-04T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "XRP/USDT"
+  },
+  "XTZUSDT": {
+   "bars_4h": 15201,
+   "content_sha256_4h": "731eb5f3b4f746ea4511830b851d6f2f30285d727c2ffab7ac689ec64a9a7665",
+   "first_utc": "2019-09-24T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "XTZ/USDT"
+  },
+  "YFIIUSDT": {
+   "bars_4h": 6510,
+   "content_sha256_4h": "431914bdfd1deeddca71359ee5f1f19e88a9b3daf0c85956d1c37d212425d988",
+   "first_utc": "2020-09-01T08:00:00Z",
+   "last_utc": "2023-08-22T04:00:00Z",
+   "pair": "YFII/USDT"
+  },
+  "YFIUSDT": {
+   "bars_4h": 13275,
+   "content_sha256_4h": "9ff33850f9332488c75a8f4b1d7058430f42d84c4ff47f500995068c6cd536e5",
+   "first_utc": "2020-08-10T12:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "YFI/USDT"
+  },
+  "ZECUSDT": {
+   "bars_4h": 16321,
+   "content_sha256_4h": "d259b90bd0c699fb3ca68b0d324de73d7ce518c9c492286455527d018871fff3",
+   "first_utc": "2019-03-21T04:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ZEC/USDT"
+  },
+  "ZILUSDT": {
+   "bars_4h": 16499,
+   "content_sha256_4h": "225a57340ec17d409cdcbbbc5c0555607f47c2912e46127911792d60af4db639",
+   "first_utc": "2019-02-19T08:00:00Z",
+   "last_utc": "2026-08-31T20:00:00Z",
+   "pair": "ZIL/USDT"
+  }
+ }
+}

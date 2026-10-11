@@ -1,0 +1,61 @@
+{
+ "a3_start_utc": "2021-02-01T00:00:00Z",
+ "classification_counts": {
+  "EXCLUDED_COMMODITY_PEGGED": 2,
+  "EXCLUDED_EXTERNAL_ASSET_PEGGED": 66,
+  "EXCLUDED_LEVERAGED": 50,
+  "EXCLUDED_STABLECOIN_OR_FIAT_PEGGED": 24,
+  "EXCLUDED_WRAPPED_DUPLICATE": 4,
+  "INCLUDED": 588
+ },
+ "counts": {
+  "engine_symbols": 86,
+  "funding_archive_files": 160,
+  "kline_archive_files": 27738,
+  "usdt_symbols_with_klines": 734
+ },
+ "data_limited": {
+  "A1": false,
+  "A2": false,
+  "A3": false
+ },
+ "dataset_id": "dataset_v3",
+ "engine_timeframe": "4h (derived from 1h; reconciliation gate in research/auth2/dataset_v3.py)",
+ "exchange": "binance",
+ "generator_code_sha256": {
+  "archive.py": "2e657cdda80fde5ab07cc2c93c9631a6d738e1f246fb153b1588d216082176af",
+  "dataset_v3.py": "f1fe6970bb833c575e831c8704bc21c6965e5166dcb700ad0da79f380a58ab14",
+  "universe.py": "fa0c778f5c8253631df789096eb3959c2e5518a814522472675c3a74aebee8b6"
+ },
+ "law": "research/auth2/FUNNEL_LAW_2.md §DATA, §POINT_IN_TIME_UNIVERSE_LAW, §A3_VALID_WINDOW",
+ "market_data_committed": false,
+ "market_type": "spot",
+ "program": "AUTH-2-DISCOVERY-QUALIFICATION-1",
+ "quote": "USDT",
+ "real_money_authorized": false,
+ "source": {
+  "archive": "https://data.binance.vision (bucket data.binance.vision)",
+  "checksum": "every zip verified against its published .CHECKSUM",
+  "funding_prefix": "data/futures/um/monthly/fundingRate/",
+  "kline_prefix": "data/spot/monthly/klines/",
+  "last_month": "2026-08"
+ },
+ "status": "frozen",
+ "tables_sha256": {
+  "research/datasets/dataset_v3/a3_window.json": "9ce40ec60571f4a04d5278da6b904955f418974437c2e5a23cbc328a9d29e987",
+  "research/datasets/dataset_v3/candidates.json": "5db4c1ae8a5c5621d4c6af91857840051f2ce4f722ccd687aa3090d9bbc7ce78",
+  "research/datasets/dataset_v3/coverage.json": "a87afc11a20a9d5086a1ceba673508a6eed2f9c4e31cb598d40f522eea126b8f",
+  "research/datasets/dataset_v3/engine_data.json": "3b7e8a00042b982ca226cf82038b3c68b1f4e39ac92c4058d8f9294427e6195c",
+  "research/datasets/dataset_v3/membership_u12.json": "36b95e0c0614847e9b8536d2ace14e73ab2b0f705350c75191f6fb280fabce84",
+  "research/datasets/dataset_v3/membership_u6.json": "1dff6b1970ae1b607111db19b827f647b4b62153ed059a52bf99b8c67e19cc00",
+  "research/datasets/dataset_v3/membership_u8.json": "401d4d6ad70f3d76a247a7e483a6f30a82aa40535f8049a864f7f3d772d9bf73"
+ },
+ "timeframe": "1h",
+ "window_utc": {
+  "engine_data_from": "2018-01-01T00:00:00Z",
+  "klines": [
+   "archive start",
+   "2026-08-31T23:59:59Z"
+  ]
+ }
+}

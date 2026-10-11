@@ -1,0 +1,357 @@
+{
+ "calibration": {
+  "delta": 0.3,
+  "edge": 0.287127685546875,
+  "first_seed": 500000,
+  "generator": {
+   "ANNUAL_VOL": 0.7,
+   "CRASH_HORIZON_DAYS": 30,
+   "CRASH_LOG_JUMP": -0.15,
+   "CRASH_P_BASE": 0.002,
+   "FACTOR_RHO": 0.6,
+   "FUNDING_MEAN": 0.0001,
+   "FUNDING_PER_DAY": 3,
+   "FUNDING_PHI": 0.985,
+   "FUNDING_SD": 4e-05,
+   "GARCH_ALPHA": 0.08,
+   "GARCH_BETA": 0.9,
+   "INTRADAY_RANGE": 0.5,
+   "N_ASSETS": {
+    "A1": 6,
+    "A2": 12,
+    "A3": 2
+   },
+   "T_DOF": 4.0,
+   "world_end_utc": "2026-09-01T00:00:00Z",
+   "world_start_utc": "2018-01-01T00:00:00Z"
+  },
+  "record": {
+   "path": "research/auth2/calibration_edges.json",
+   "sha256": "4b1553db910dae43efef0a60e0239f39766ca904c4731f2fad6004d6f10ad042"
+  },
+  "true_delta": 0.30019923177250063,
+  "years": 200
+ },
+ "code_sha256": {
+  "research/auth2/__init__.py": "dff91b16d8e9079b69b54ad021780f6ec60c07120dd9ede6fafaec71dd7db7e0",
+  "research/auth2/archive.py": "2e657cdda80fde5ab07cc2c93c9631a6d738e1f246fb153b1588d216082176af",
+  "research/auth2/calibration.py": "956e9eaaeb6a243b27d9b4971354d04fdf4ac88aeb9397b747463b3aa5a83f7b",
+  "research/auth2/closure.py": "96b7334de525bf7c260f26885ea0be4f198656c56bd565ae91fd55d4e8229362",
+  "research/auth2/dataset_v3.py": "f1fe6970bb833c575e831c8704bc21c6965e5166dcb700ad0da79f380a58ab14",
+  "research/auth2/dispatch_guard.py": "1c49dff3def411b5863a9d3ea8e073cca120ac22f54e8584989eb9e6100a4c09",
+  "research/auth2/engine/AUTH2ScheduleFollower.py": "b46890ab4a361cd962dfcaafd53d98fb873a92a778d7bb211b57bbd1a38b0d92",
+  "research/auth2/engine/markets.py": "be5e72da36581cdd1f824e9e85fcee128fb8062ed041ef751c30ac85fcc49e02",
+  "research/auth2/engine/run_backtest.py": "905ad98c4849c41a3f49cccb8d742e88d3d9ad9131a33641886bbc9852b800cf",
+  "research/auth2/engine_io.py": "1eb0ec6b3fd0ce6762c0ed50a35737f5cb6c758fb5845dd7e3a9695eaf61ff1e",
+  "research/auth2/engine_selftest.py": "9b748a5dd8cec9fb1fbce2617e92652f4ac8e97b857c7f9c4c7f86e31faf4413",
+  "research/auth2/families.py": "6fe8d9057b78c6bdccd37095c3d572649c275541b26c6340f2c40b3130b4ee6d",
+  "research/auth2/gates.py": "23c8aa41cc28b8ab2ade101a5d2169cb4869e6d5fb6edf3e048115783ab4868f",
+  "research/auth2/make_preregs.py": "30f22da8f8d712a41c068d8e3e757ef987f608e1a487d3cfb093191a063415d6",
+  "research/auth2/market_io.py": "27fc3495a2d81ae83b8ed879708757fcc05c960c67568505705b163427343a7c",
+  "research/auth2/replay.py": "e9ddededbe5132b0dd4670d772bc6ee1ef0568b9c53bdffcd8b24cf5e7342a01",
+  "research/auth2/run_node.py": "78907f0226f4fa02f40255ea2d73f01e5f4a2565f16b4691d839344d04e6fd56",
+  "research/auth2/signals.py": "b86dbd3a1349ff79d22d78bf25913ffc1222654eb5e9b09245c43dd1477eccd7",
+  "research/auth2/stats.py": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020",
+  "research/auth2/synthetic.py": "a2adbd58e81c9b2179ce6f3d80ac4d0326a2a183b31fb1c0724199b4ddef5dea",
+  "research/auth2/universe.py": "fa0c778f5c8253631df789096eb3959c2e5518a814522472675c3a74aebee8b6"
+ },
+ "compute": {
+  "parts": 1,
+  "planned_engine_invocations": 0,
+  "timeout_minutes": 60
+ },
+ "configurations": {
+  "family_configuration_n": 4,
+  "hypothesis": "CROWD-OVERLAY (risk-overlay experiment): BTC/ETH volatility-targeted base cut to 50% while 7-day mean funding is crowded (z > 2)",
+  "matched_benchmark": "A3-BASE: the base exposure without the overlay (paired ablation)",
+  "null": "random overlay: the same number and durations of overlay episodes at random non-overlapping times",
+  "perturbations": {
+   "P1": {
+    "z_threshold": 1.5
+   },
+   "P2": {
+    "z_threshold": 2.5
+   },
+   "P3": {
+    "cut_to": 0.0
+   }
+  },
+  "primary": {
+   "assets": 2,
+   "cut_to": 0.5,
+   "m7_days": 7,
+   "target_vol": 0.25,
+   "vol_window": 30,
+   "z_threshold": 2.0,
+   "z_window": 365
+  }
+ },
+ "dataset_lock": {
+  "path": "research/datasets/dataset_v3.lock.json",
+  "sha256": "fbadd0b192a5bbb3f65abe233444d7a8f7953af36aa35fc49fb3f8c275ac098e"
+ },
+ "disclosures": [
+  "Primary configurations are a human selection from the literature (package PRIMARY_CONFIGS), fixed before any AUTH-2 result; perturbations are reject-only.",
+  "Engine launcher (research/auth2/engine/run_backtest.py) installs a frozen market table, uses the frozen markets' price precision (none) instead of the tick Freqtrade infers from candles, and skips Freqtrade's defensive deep copy of the trade passed to strategy callbacks (proven result-identical); disclosed in IMPLEMENTATION_NOTES.md.",
+  "Before preregistration an implementation smoke test ran the A3 and A1 primary configurations once each on real Dataset V3 data over their scored windows and printed their engine total returns (A3 +104.0%, A1 +260.5%, under a since-removed -99% stop); no benchmark, dSR, p-value or gate was computed and nothing frozen was changed after it (IMPLEMENTATION_NOTES.md §Disclosed pre-registration exposure).",
+  "The A3 synthetic planted-edge generator was corrected before preregistration so a planted world keeps the no-edge expected drift (IMPLEMENTATION_NOTES.md §Synthetic worlds); the A3 edge was calibrated after it.",
+  "H1 upstream selection debt (42 strategies) is disclosed verbatim and not folded into A1's N = 21; lifetime TLOS configurations tested: 19 before AUTH-2 + 16 = 35."
+ ],
+ "dry_run": true,
+ "engine": {
+  "disclosed_engine_patches": [
+   "frozen ccxt market table (offline; delisted symbols)",
+   "price precision from the frozen markets (none)",
+   "defensive trade deep copy skipped (result-identical)"
+  ],
+  "image": "freqtradeorg/freqtrade:2026.7",
+  "launcher": {
+   "path": "research/auth2/engine/run_backtest.py",
+   "sha256": "905ad98c4849c41a3f49cccb8d742e88d3d9ad9131a33641886bbc9852b800cf"
+  },
+  "strategy": {
+   "path": "research/auth2/engine/AUTH2ScheduleFollower.py",
+   "sha256": "b46890ab4a361cd962dfcaafd53d98fb873a92a778d7bb211b57bbd1a38b0d92"
+  },
+  "timeframe": "4h"
+ },
+ "family": "A3",
+ "funnel_law": {
+  "path": "research/auth2/FUNNEL_LAW_2.md",
+  "sha256": "8aa91f5ec18cca488fdf3b4051f24fb41c11070faddafe5f866631d0c3234da5"
+ },
+ "hyperopt": 0,
+ "kind": "CALIBRATION_STAT",
+ "llm_agent_tokens": 0,
+ "node_id": "CAL-A3",
+ "predecessors": [
+  {
+   "node": "D0",
+   "on": [
+    "PASS"
+   ]
+  }
+ ],
+ "program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1",
+ "purpose": "CAL-A3-STAT: size (<= 10/200 no-edge worlds accepted) and power (>= 160/200 planted-edge worlds accepted at delta 0.3) of family A3's full gate stack, before any market-data trial.",
+ "real_money_authorized": false,
+ "requirements": {
+  "path": "research/auth2/requirements-auth2.txt",
+  "sha256": "75357dbde23fa95f4617eb2afbc2b3e98af598cf7a2aac3fe49918d61c1f8a3d"
+ },
+ "schema_version": "auth2-prereg-1.0.0",
+ "terminal_states": [
+  "PASS",
+  "LAW_INVALID",
+  "INCONCLUSIVE_UNDERPOWERED"
+ ],
+ "thresholds": {
+  "a1_episode_lookback": 120,
+  "a1_episode_min_days": 60,
+  "a1_min_sleeve_days": 730,
+  "a1_sleeves_positive": 4,
+  "a2_exempt_ranks": 6,
+  "a2_extra_slippage": 0.0005,
+  "a2_years": [
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024
+  ],
+  "a2_years_positive": 4,
+  "a3_cvar_level": 0.05,
+  "a3_episode_merge_days": 30,
+  "base_fee": 0.0015,
+  "bootstrap": {
+   "block_max": 60,
+   "block_min": 5,
+   "resamples": 10000,
+   "sensitivity": [
+    5,
+    20,
+    60
+   ],
+   "spa_vol_target": 0.2
+  },
+  "c4_alpha": 0.05,
+  "c4_draws": 1000,
+  "calibration": {
+   "delta": {
+    "A1": 0.4,
+    "A2": 0.4,
+    "A3": 0.3
+   },
+   "pc_seed": 777,
+   "power_min_accepted": 160,
+   "power_seeds": [
+    10001,
+    10200
+   ],
+   "size_max_accepted": 10,
+   "size_seeds": [
+    1,
+    200
+   ],
+   "true_delta_first_seed": 500000,
+   "true_delta_years": 200,
+   "worlds": 200
+  },
+  "coverage_min": {
+   "A1": 100,
+   "A2": 250,
+   "A3": 6
+  },
+  "dsr_threshold": 0.95,
+  "family_n": {
+   "A1": 21,
+   "A2": 6,
+   "A3": 4
+  },
+  "holm_alpha": 0.05,
+  "holm_m": 3,
+  "min_positive": {
+   "A1": 4,
+   "A2": 4,
+   "A3": 2
+  },
+  "null_seeds": {
+   "c4": [
+    1,
+    1000
+   ],
+   "n_fixture": 0,
+   "n_perturbations": {
+    "A1": [
+     1001,
+     1002,
+     1003,
+     1004,
+     1005
+    ],
+    "A2": [
+     1001,
+     1002,
+     1003,
+     1004,
+     1005
+    ],
+    "A3": [
+     1001,
+     1002,
+     1003
+    ]
+   }
+  },
+  "parity": {
+   "max_total_return_diff": 0.0025,
+   "min_correlation": 0.999
+  },
+  "pbo_blocks": 16,
+  "perturbation_fwer": 0.1,
+  "perturbations": {
+   "A1": {
+    "P1": {
+     "lookbacks": [
+      10,
+      20,
+      40
+     ]
+    },
+    "P2": {
+     "lookbacks": [
+      40,
+      120,
+      250
+     ]
+    },
+    "P3": {
+     "target_vol": 0.15
+    },
+    "P4": {
+     "target_vol": 0.4
+    },
+    "P5": {
+     "vol_window": 60
+    }
+   },
+   "A2": {
+    "P1": {
+     "lookback": 14
+    },
+    "P2": {
+     "lookback": 56
+    },
+    "P3": {
+     "k": 2
+    },
+    "P4": {
+     "k": 5
+    },
+    "P5": {
+     "skip": 0
+    }
+   },
+   "A3": {
+    "P1": {
+     "z_threshold": 1.5
+    },
+    "P2": {
+     "z_threshold": 2.5
+    },
+    "P3": {
+     "cut_to": 0.0
+    }
+   }
+  },
+  "primary": {
+   "A1": {
+    "lookbacks": [
+     20,
+     60,
+     120
+    ],
+    "sleeves": 6,
+    "target_vol": 0.25,
+    "vol_window": 30
+   },
+   "A2": {
+    "k": 3,
+    "lookback": 28,
+    "skip": 1,
+    "weekday": 0
+   },
+   "A3": {
+    "assets": 2,
+    "cut_to": 0.5,
+    "m7_days": 7,
+    "target_vol": 0.25,
+    "vol_window": 30,
+    "z_threshold": 2.0,
+    "z_window": 365
+   }
+  },
+  "seeds": {
+   "C3": 20261010,
+   "C7": 20261011,
+   "SPA": 20261012
+  },
+  "spa_alpha": 0.05,
+  "stress_fees": {
+   "x2": 0.003,
+   "x3": 0.0045
+  }
+ },
+ "trial_id": "TRIAL-AUTH2-CAL-A3",
+ "windows": {
+  "scored": {
+   "end_utc": "2025-01-01T00:00:00Z",
+   "start_utc": "2021-02-01T00:00:00Z"
+  },
+  "secondary": {
+   "end_utc": "2026-09-01T00:00:00Z",
+   "start_utc": "2025-01-01T00:00:00Z"
+  }
+ }
+}

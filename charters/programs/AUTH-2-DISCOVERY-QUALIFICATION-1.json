@@ -1,0 +1,303 @@
+{
+ "caps": {
+  "attributed_linux_minutes": 4000,
+  "calibration_trial_ids": 12,
+  "configurations": 16,
+  "engine_invocations": 240,
+  "hyperopt": 0,
+  "llm_agent_tokens": 0,
+  "paid_actions_overage_usd": 0,
+  "scientific_trial_ids": 5
+ },
+ "dag": {
+  "edges": [
+   {
+    "from": "D0",
+    "on": "PASS",
+    "to": "CAL-A1"
+   },
+   {
+    "from": "CAL-A1",
+    "on": "PASS",
+    "to": "PC-A1"
+   },
+   {
+    "from": "PC-A1",
+    "on": "SURVIVED",
+    "to": "N-A1"
+   },
+   {
+    "from": "N-A1",
+    "on": "REJECTED",
+    "to": "A1"
+   },
+   {
+    "from": "A1",
+    "on": "ANY_TERMINAL",
+    "to": "HOLM"
+   },
+   {
+    "from": "HOLM",
+    "on": "HOLM_PASS",
+    "to": "SC-A1"
+   },
+   {
+    "from": "D0",
+    "on": "PASS",
+    "to": "CAL-A2"
+   },
+   {
+    "from": "CAL-A2",
+    "on": "PASS",
+    "to": "PC-A2"
+   },
+   {
+    "from": "PC-A2",
+    "on": "SURVIVED",
+    "to": "N-A2"
+   },
+   {
+    "from": "N-A2",
+    "on": "REJECTED",
+    "to": "A2"
+   },
+   {
+    "from": "A2",
+    "on": "ANY_TERMINAL",
+    "to": "HOLM"
+   },
+   {
+    "from": "HOLM",
+    "on": "HOLM_PASS",
+    "to": "SC-A2"
+   },
+   {
+    "from": "D0",
+    "on": "PASS",
+    "to": "CAL-A3"
+   },
+   {
+    "from": "CAL-A3",
+    "on": "PASS",
+    "to": "PC-A3"
+   },
+   {
+    "from": "PC-A3",
+    "on": "SURVIVED",
+    "to": "N-A3"
+   },
+   {
+    "from": "N-A3",
+    "on": "REJECTED",
+    "to": "A3"
+   },
+   {
+    "from": "A3",
+    "on": "ANY_TERMINAL",
+    "to": "HOLM"
+   },
+   {
+    "from": "HOLM",
+    "on": "HOLM_PASS",
+    "to": "SC-A3"
+   }
+  ],
+  "max_depth": 7,
+  "max_nodes": 17,
+  "nodes": [
+   {
+    "family": null,
+    "id": "D0",
+    "kind": "DATA_LOCK",
+    "prereg_path": "research/auth2/prereg/D0.json",
+    "prereg_sha256": "85398caf6a322f2df1a67ef82d2161dfeee018f054ede363c65140a31f1eca38",
+    "trial_id": "TRIAL-AUTH2-D0"
+   },
+   {
+    "family": "A1",
+    "id": "CAL-A1",
+    "kind": "CALIBRATION_STAT",
+    "prereg_path": "research/auth2/prereg/CAL-A1.json",
+    "prereg_sha256": "d44631bf46d421218a2676cb2b70bbab75555926303a334df4a2cec6803018de",
+    "trial_id": "TRIAL-AUTH2-CAL-A1"
+   },
+   {
+    "family": "A2",
+    "id": "CAL-A2",
+    "kind": "CALIBRATION_STAT",
+    "prereg_path": "research/auth2/prereg/CAL-A2.json",
+    "prereg_sha256": "846e9127665f3fb1be4511b16c06733dc245b1183208f5cc05a5b0128fa735dc",
+    "trial_id": "TRIAL-AUTH2-CAL-A2"
+   },
+   {
+    "family": "A3",
+    "id": "CAL-A3",
+    "kind": "CALIBRATION_STAT",
+    "prereg_path": "research/auth2/prereg/CAL-A3.json",
+    "prereg_sha256": "dc15858abd0991409c0e729a2ca73e28af83cc795a18a4f4a2ba4873a12ca2b9",
+    "trial_id": "TRIAL-AUTH2-CAL-A3"
+   },
+   {
+    "family": "A1",
+    "id": "PC-A1",
+    "kind": "POSITIVE_CONTROL",
+    "prereg_path": "research/auth2/prereg/PC-A1.json",
+    "prereg_sha256": "80f8e486b0eeec56295f78651a1e6662d76714c695611cf56eb887fe75dfa93f",
+    "trial_id": "TRIAL-AUTH2-PC-A1"
+   },
+   {
+    "family": "A2",
+    "id": "PC-A2",
+    "kind": "POSITIVE_CONTROL",
+    "prereg_path": "research/auth2/prereg/PC-A2.json",
+    "prereg_sha256": "4464f01ba72b0e10e307b8a607f69f76959597e97922b1a3cb534480977ca5e7",
+    "trial_id": "TRIAL-AUTH2-PC-A2"
+   },
+   {
+    "family": "A3",
+    "id": "PC-A3",
+    "kind": "POSITIVE_CONTROL",
+    "prereg_path": "research/auth2/prereg/PC-A3.json",
+    "prereg_sha256": "1c8937db8055db080d4876cfee9e7483456aaadfa2f52bacad0046c9ffec07ae",
+    "trial_id": "TRIAL-AUTH2-PC-A3"
+   },
+   {
+    "family": "A1",
+    "id": "N-A1",
+    "kind": "NULL_CALIBRATION",
+    "prereg_path": "research/auth2/prereg/N-A1.json",
+    "prereg_sha256": "0f490a2d559f71faa343826e7ed90c3cafd42b807df83465b12bd316a3313c84",
+    "trial_id": "TRIAL-AUTH2-N-A1"
+   },
+   {
+    "family": "A2",
+    "id": "N-A2",
+    "kind": "NULL_CALIBRATION",
+    "prereg_path": "research/auth2/prereg/N-A2.json",
+    "prereg_sha256": "dc1148cff511676c617da099489ab0eed24a8980d15a06bf4985b028949a928d",
+    "trial_id": "TRIAL-AUTH2-N-A2"
+   },
+   {
+    "family": "A3",
+    "id": "N-A3",
+    "kind": "NULL_CALIBRATION",
+    "prereg_path": "research/auth2/prereg/N-A3.json",
+    "prereg_sha256": "8cbcc697df9a23d69c1b8d5227546329d00507ae351f7bb0eaca87c699952f1b",
+    "trial_id": "TRIAL-AUTH2-N-A3"
+   },
+   {
+    "family": "A1",
+    "id": "A1",
+    "kind": "SCIENTIFIC",
+    "prereg_path": "research/auth2/prereg/A1.json",
+    "prereg_sha256": "3cf19401107c463dd2a41f7b644b6f3750bc732f5287a3a9004fe563cbb0594a",
+    "trial_id": "TRIAL-AUTH2-A1"
+   },
+   {
+    "family": "A2",
+    "id": "A2",
+    "kind": "SCIENTIFIC",
+    "prereg_path": "research/auth2/prereg/A2.json",
+    "prereg_sha256": "c78287ab5c61bc714909c12c39e30b8fe6f0cc261f5dd0e4a27e22a93829339e",
+    "trial_id": "TRIAL-AUTH2-A2"
+   },
+   {
+    "family": "A3",
+    "id": "A3",
+    "kind": "SCIENTIFIC",
+    "prereg_path": "research/auth2/prereg/A3.json",
+    "prereg_sha256": "046735ef0e6f203c5a711e6f0a17d61b954bd982ab08aa046184b24dd1bf702b",
+    "trial_id": "TRIAL-AUTH2-A3"
+   },
+   {
+    "family": null,
+    "id": "HOLM",
+    "kind": "HOLM",
+    "prereg_path": "research/auth2/prereg/HOLM.json",
+    "prereg_sha256": "4dff912183fc6e86ec2fbd35e36f031bb17ab9a4195423ffbb6ce7716c9e0a1d",
+    "trial_id": "TRIAL-AUTH2-HOLM"
+   },
+   {
+    "family": "A1",
+    "id": "SC-A1",
+    "kind": "SECONDARY_CONFIRM",
+    "prereg_path": "research/auth2/prereg/SC-A1.json",
+    "prereg_sha256": "8cd8d09b491e523cfcf71c35c70eb0c2e75cd03ed39ee8a919b55e26d72c8372",
+    "trial_id": "TRIAL-AUTH2-A1"
+   },
+   {
+    "family": "A2",
+    "id": "SC-A2",
+    "kind": "SECONDARY_CONFIRM",
+    "prereg_path": "research/auth2/prereg/SC-A2.json",
+    "prereg_sha256": "02f1153b160525f8859aa7be17b77844b0e981dc56ee2de471666e0d3e888c65",
+    "trial_id": "TRIAL-AUTH2-A2"
+   },
+   {
+    "family": "A3",
+    "id": "SC-A3",
+    "kind": "SECONDARY_CONFIRM",
+    "prereg_path": "research/auth2/prereg/SC-A3.json",
+    "prereg_sha256": "cecb613643003daca1a5b3fefd95601b776b3f6ec37ef3a0aa4498b8b35c1361",
+    "trial_id": "TRIAL-AUTH2-A3"
+   }
+  ]
+ },
+ "dataset_lock": "research/datasets/dataset_v3.lock.json",
+ "development_window": {
+  "end": "2024-12-31",
+  "start": "2019-01-01"
+ },
+ "families": [
+  {
+   "hypothesis_class": "TSMOM-VT: per-sleeve time-series momentum with volatility targeting on point-in-time U6, long or cash",
+   "id": "A1",
+   "inherited_n": 15
+  },
+  {
+   "hypothesis_class": "XSMOM-LO: weekly cross-sectional momentum, top 3 of point-in-time U12 with a cash gate, long or cash",
+   "id": "A2",
+   "inherited_n": 0
+  },
+  {
+   "hypothesis_class": "CROWD-OVERLAY (risk-overlay experiment): BTC/ETH volatility-targeted base cut to 50% while 7-day mean funding is crowded (z > 2)",
+   "id": "A3",
+   "inherited_n": 0
+  }
+ ],
+ "frozen_hashes": {
+  "config_n_py": {
+   "path": "research/auth2/families.py",
+   "sha256": "6fe8d9057b78c6bdccd37095c3d572649c275541b26c6340f2c40b3130b4ee6d"
+  },
+  "funnel_law": {
+   "path": "research/auth2/FUNNEL_LAW_2.md",
+   "sha256": "8aa91f5ec18cca488fdf3b4051f24fb41c11070faddafe5f866631d0c3234da5"
+  },
+  "funnel_py": {
+   "path": "research/auth2/gates.py",
+   "sha256": "23c8aa41cc28b8ab2ade101a5d2169cb4869e6d5fb6edf3e048115783ab4868f"
+  },
+  "multiple_testing_py": {
+   "path": "research/auth2/stats.py",
+   "sha256": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020"
+  }
+ },
+ "holdout_law": "Option B unchanged: the first strict holdout is prospective live-market paper. The secondary segment 2025-01-01..2026-08-31 is non-pristine and reject-only (C10). A3 is scored from the lock's A3_START.",
+ "n_law": "Cumulative family configuration N for DSR: A1 = 21 (15 inherited + 6), A2 = 6, A3 = 4; the H1 upstream 42-strategy debt is disclosed, not folded in; lifetime TLOS configurations 19 + 16 = 35.",
+ "null_calibration_first": true,
+ "program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1",
+ "schema_version": 2,
+ "status": "ACTIVE",
+ "stop_rules": [
+  "a node outside this DAG, or a node whose predecessor did not end in the edge's state, never runs",
+  "CAL-Ax size FAIL => family LAW_INVALID; power FAIL or PC-Ax not SURVIVED => INCONCLUSIVE_UNDERPOWERED; N-Ax not REJECTED => LAW_INVALID; DATA_LIMITED at D0 => the family has no further node",
+  "one family's calibration failure never stops another family",
+  "any C1 integrity failure => INVALID_RUN; one technical retry within caps, otherwise STOP_PROGRAM",
+  "HOLM is the join: it runs once every family is terminal; a family without a scientific p-value enters with p = 1",
+  "any cap (240 invocations, 4,000 attributed minutes, USD 0 overage, monthly reserve) => no dispatch",
+  "DAG exhausted => closure record (terminal) and STOP"
+ ],
+ "terminal": "closure_record",
+ "version": 1
+}

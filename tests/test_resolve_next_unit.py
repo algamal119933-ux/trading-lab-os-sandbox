@@ -41,7 +41,12 @@ def policy_copy(tmp_path: Path) -> Path:
 def test_the_state_on_this_tree_is_the_designed_c6():
     result = rnu.resolve(REPO_ROOT, EMPTY)
     assert eligible(result) == ["CV-01", "CV-02", "CV-03"]
-    assert lane(result, "RESEARCH")["status"] == "NO_PROGRAM"
+    research = lane(result, "RESEARCH")
+    # AUTH-2 adds the first program. Its nodes are never selected here: the lane names the
+    # program's own runner and dispatch guard, and next_action is unchanged by it.
+    assert research["status"] == "PROGRAMS_PRESENT"
+    assert research["programs"] == ["AUTH-2-DISCOVERY-QUALIFICATION-1"]
+    assert [b["class"] for b in research["blockers"]] == ["EXTERNAL"]
     assert result["auto_merge"] == "INACTIVE"
     assert result["next_action"] == f"START auto/{CHARTER}/CV-01"
 

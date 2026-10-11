@@ -820,6 +820,20 @@ CEA_1_TEST_FIX_SCOPE: dict[str, str] = {
 }
 
 
+# PR #56, merged. Two parents: d1fe2b4f (main before) + 8c66a04f (the
+# claude/cea-1-merge-law-fetch branch).
+CEA_1_MERGE_LAW_FETCH_MERGE = "390bf4bf66ae92f49ff8a9490b59e142ed592724"
+
+# Every path the CEA-1 merge-law fetch fix touched -> the requirement it satisfies.
+# These entries were BRANCH_SCOPE while it was in flight.
+CEA_1_MERGE_LAW_FETCH_SCOPE: dict[str, str] = {
+    ".github/workflows/merge-law.yml":
+        "CEA-1 merge-law fix — authenticate the PR-head fetch (private repo; the job never reached its verdict)",
+    "tests/test_p2_scope_audit.py": "CEA-1 test fix (PR #54) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -853,6 +867,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "RESEARCH_CYCLE2_CLOSURE_1": (RESEARCH_CYCLE2_CLOSURE_1_MERGE, RESEARCH_CYCLE2_CLOSURE_1_SCOPE),
     "AUTH_1": (AUTH_1_MERGE, AUTH_1_SCOPE),
     "CEA_1_TEST_FIX": (CEA_1_TEST_FIX_MERGE, CEA_1_TEST_FIX_SCOPE),
+    "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -861,10 +876,56 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # out and starts being a permanent record.
 
 
+# AUTH-2-DISCOVERY-QUALIFICATION-1: the Owner-approved frozen package materialised as one
+# merge set (research/auth2/FUNNEL_LAW_2.md). Research lane only: nothing under P2, FP or
+# the commercial lane, no strategy or risk semantics, no Dataset V1/V2 change.
+_AUTH2 = "AUTH-2 (frozen package)"
+_AUTH2_NODES = ["D0", "CAL-A1", "CAL-A2", "CAL-A3", "PC-A1", "PC-A2", "PC-A3", "N-A1", "N-A2", "N-A3",
+                "A1", "A2", "A3", "HOLM", "SC-A1", "SC-A2", "SC-A3"]
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/workflows/merge-law.yml":
-        "CEA-1 merge-law fix — authenticate the PR-head fetch (private repo; the job never reached its verdict)",
-    "tests/test_p2_scope_audit.py": "CEA-1 test fix (PR #54) pinned to its merge; this branch's scope",
+    # -- records the package lists (§FINAL_AUTH2_SPEC "Records the package needs") ------
+    "research/auth2/FUNNEL_LAW_2.md": f"{_AUTH2} record 1 — the gate sections verbatim",
+    "charters/research_program.schema.json": f"{_AUTH2} record 2 — schema v2, minimal extension [OD-7]",
+    ".github/gates/check_research_program.py": f"{_AUTH2} record 2 — the v2 structural checks",
+    "research/auth2/prereg.schema.json": f"{_AUTH2} record 3 — auth2-prereg-1.0.0",
+    "research/datasets/dataset_v3.lock.json": f"{_AUTH2} record 4 — the Dataset V3 lock",
+    **{f"research/datasets/dataset_v3/{t}.json": f"{_AUTH2} record 4 — membership tables and coverage report"
+       for t in ("a3_window", "candidates", "coverage", "engine_data", "membership_u12", "membership_u6",
+                 "membership_u8")},
+    **{f"research/auth2/{f}": f"{_AUTH2} record 5 — fixtures, benchmarks, nulls, generators"
+       for f in ("__init__.py", "signals.py", "families.py", "synthetic.py", "engine/AUTH2ScheduleFollower.py")},
+    "research/auth2/replay.py": f"{_AUTH2} record 6 — the replay evaluator [OD-6]",
+    "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json": f"{_AUTH2} record 7 — the program charter",
+    **{f"research/auth2/prereg/{n}.json": f"{_AUTH2} record 7 — node preregistration" for n in _AUTH2_NODES},
+    "research/RESEARCH_CYCLE2_CLOSURE_1_ERRATA_1.md": f"{_AUTH2} record 8 — Cycle-2 errata (append-only)",
+    # -- the implementation of the frozen DAG --------------------------------------------
+    **{f"research/auth2/{f}": f"{_AUTH2} — Dataset V3 acquisition and point-in-time universe law"
+       for f in ("archive.py", "universe.py", "dataset_v3.py", "market_io.py")},
+    **{f"research/auth2/{f}": f"{_AUTH2} — the judged engine (freqtrade 2026.7, disclosed launcher patches)"
+       for f in ("engine/run_backtest.py", "engine/markets.py", "engine_io.py", "engine_selftest.py")},
+    "research/auth2/stats.py": f"{_AUTH2} — statistics (C3, C7, C9, BOOTSTRAP_RULE)",
+    "research/auth2/gates.py": f"{_AUTH2} — COMMON_GATES and family gates",
+    "research/auth2/calibration.py": f"{_AUTH2} — CALIBRATION_DAG size/power and the planted edge",
+    "research/auth2/calibration_edges.json": f"{_AUTH2} — the calibrated planted-edge record",
+    "research/auth2/run_node.py": f"{_AUTH2} — one node per job; refusals; --next",
+    "research/auth2/closure.py": f"{_AUTH2} — closure record and terminal ledger mapping",
+    "research/auth2/make_preregs.py": f"{_AUTH2} — preregistrations, charter and ledger preregistration",
+    "research/auth2/dispatch_guard.py": f"{_AUTH2} — COMPUTE_CAP_PROOF and MONTHLY_BILLING_PACING_RULE",
+    "research/auth2/requirements-auth2.txt": f"{_AUTH2} — arch hash pin (evidence task 5)",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_AUTH2} — operationalisations and disclosures",
+    ".github/workflows/auth2.yml": f"{_AUTH2} — one manually dispatched job per node",
+    "research/records/trial_ledger.jsonl": f"{_AUTH2} — 14 PREREGISTERED records (append-only)",
+    # -- CI, gates and their tests ---------------------------------------------------------
+    ".github/workflows/ci.yml": f"{_AUTH2} — install the arch pin; engine self-test in the pinned image",
+    ".github/gates/protected_paths.txt": f"{_AUTH2} — research/auth2/** and Dataset V3 tables protected",
+    ".github/gates/resolve_next_unit.py": f"{_AUTH2} — research lane names the program's runner",
+    "tests/test_protected_paths.py": f"{_AUTH2} — AUTH-2 judges are protected",
+    "tests/test_research_program_schema.py": f"{_AUTH2} — exactly the AUTH-2 program exists; v2 edges",
+    "tests/test_resolve_next_unit.py": f"{_AUTH2} — the research lane now has a program",
+    "tests/test_p2_scope_audit.py": f"{_AUTH2} — PR #56 pinned to its merge; this branch's scope",
+    **{f"tests/test_auth2_{t}.py": f"{_AUTH2} — verification before the PR"
+       for t in ("replay", "stats", "gates", "calibration", "dispatch_guard", "dag", "records", "engine")},
+    "tests/fixtures/auth2_engine_marks.json": f"{_AUTH2} — recorded engine marks for the replay parity fixture",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1236,12 +1297,22 @@ def test_no_risk_semantic_change():
     )
 
 
+# AUTH-2 adds Dataset V3 (record 4 of the Owner-approved package). Additive only: these
+# paths may be created on this branch, and every dataset file main already has stays
+# byte-identical.
+DATASET_ADDITIONS = ("research/datasets/dataset_v3.lock.json", "research/datasets/dataset_v3/")
+
+
 @needs_baseline
 def test_no_dataset_content_or_authority_change():
     base = merge_base()
     for path in _git("ls-tree", "-r", "--name-only", "HEAD", "research/datasets/").split():
+        if path.startswith(DATASET_ADDITIONS):
+            assert blob_at(base, path) is None, f"{path} existed on main; Dataset V3 may only be added"
+            continue
         assert blob_at(base, path) == blob_at("HEAD", path), path
-    assert not any(p.startswith("research/datasets/") for p in changed_paths())
+    assert not any(p.startswith("research/datasets/") and not p.startswith(DATASET_ADDITIONS)
+                   for p in changed_paths())
 
 
 @needs_baseline

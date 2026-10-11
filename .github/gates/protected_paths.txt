@@ -69,6 +69,13 @@ tests/test_null_control_schedules.py
 
 # -- data authority ---------------------------------------------------------
 research/datasets/*.lock.json
+research/datasets/dataset_v3/**
+
+# -- AUTH-2 (FUNNEL-LAW-2, replay evaluator, engine launcher, preregistrations,
+#    calibration record, dispatch guard): research/auth2/FUNNEL_LAW_2.md -------
+research/auth2/**
+tests/test_auth2_*.py
+tests/fixtures/auth2_*
 
 # -- CEA-1 gate tests -------------------------------------------------------
 tests/test_merge_law.py

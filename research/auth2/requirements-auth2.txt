@@ -1,0 +1,38 @@
+# AUTH-2 research requirements, every distribution hash-pinned (FUNNEL_LAW_2.md STATISTICS LIB:
+# bashtage/arch one exact version, hash-pinned at package freeze, never re-pinned inside the program).
+# Wheels for CPython 3.12 (CI, GitHub-hosted ubuntu-24.04) and 3.13 (local reproduction), manylinux x86_64.
+# Install after requirements-dev.txt with:
+#   pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
+# The engine itself is the pinned image freqtradeorg/freqtrade:2026.7 and is not installed from here.
+arch==8.0.0 \
+    --hash=sha256:13cbf04d45ecbee7578704a232f897cd02794d845f877158fb2838e6fb637887 \
+    --hash=sha256:8c1f1d8abefab2f69f7fdbef08cc18c8377667d3b8d197a1f301d97f0e686cd2
+numpy==2.5.3 \
+    --hash=sha256:b7e18c623bb5c95acb3b3328861272816ba199fb531921c5d6d0b675f1fde9e3 \
+    --hash=sha256:a5fa86b80fd24bcd1aff83ad23be44ea323de3f787be8f8b15d4a65621e25321
+scipy==1.18.1 \
+    --hash=sha256:f55fa87b6c612ecd6b058f167c53231b1d14e412efe361d3d6e38b3631c73218 \
+    --hash=sha256:fdaf5ea890a6183d0565f51a61799d67081bd5b1cf03c5f4b3fd3732108625c9
+pandas==2.3.3 \
+    --hash=sha256:b3d11d2fda7eb164ef27ffc14b4fcab16a80e1ce67e9f57e19ec0afaf715ba89 \
+    --hash=sha256:318d77e0e42a628c04dc56bcef4b40de67918f7041c2b061af1da41dcff670ac
+statsmodels==0.15.0 \
+    --hash=sha256:c6f2bd48915cc9b3b95c3c7f6ac363b6f8aaa38172962ba5f7f6885f0dfe57f2 \
+    --hash=sha256:bcaa1e4499697c4e023e5fa6fb04459a34e4f4a449c45ae441992e933bde24db
+pyarrow==22.0.0 \
+    --hash=sha256:c6c791b09c57ed76a18b03f2631753a4960eefbbca80f846da8baefc6491fcfe \
+    --hash=sha256:e0a15757fccb38c410947df156f9749ae4a3c89b2393741a50521f39a8cf202a
+wrapt==2.5.0 \
+    --hash=sha256:0cabb9c17ab79b2549d1f23b36f436473ad9253ef53995a817feba26fae69d5b \
+    --hash=sha256:b95a6eca3b927853529eea958310563c83140ae8451dd5dc4399c7da385dc4f3
+formulaic==1.2.2 --hash=sha256:0f84ff49e3fc9dc0e68ab08a0a9427874021aa6c558e66b44dc634a35739b09b
+interface-meta==2.0.1 --hash=sha256:f38016bef9a4429b6d0792d809be7b65e9781820c674bf7f463999086b6e6323
+narwhals==2.27.1 --hash=sha256:d057df13f5852b8e157596e82eb5e955fad267425df5e420e0ee9863da483b31
+patsy==1.0.3 --hash=sha256:d3dbebe8fd5f46e29912d030b63c6268647b59bf788a99e2af28a30234cf357c
+packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+python-dateutil==2.9.0.post0 --hash=sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427
+pytz==2026.5 --hash=sha256:e658af3757f9e26a9d25dd2aff38335acd92bc9104f890a894b2c1ba28311b03
+tzdata==2026.5 --hash=sha256:b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac
+six==1.17.0 --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
+typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+trialgate==0.5.0 --hash=sha256:30c4ac41342b0477a4ed7954ef7de1a4ab53af435c5498f5ce3d59b8d7b8db1d --hash=sha256:22e2933ce685cc75e093a9df75beb9b8b54728d1013b2e81d2af8b0379f1f710

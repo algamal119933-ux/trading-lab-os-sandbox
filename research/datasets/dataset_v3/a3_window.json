@@ -1,0 +1,35 @@
+{
+ "a3_end_utc": "2024-12-31T23:59:59Z",
+ "a3_start_utc": "2021-02-01T00:00:00Z",
+ "complete_folds": 4,
+ "data_limited": false,
+ "f0_utc": {
+  "BTCUSDT": "2020-01-01T00:00:00Z",
+  "ETHUSDT": "2020-01-01T00:00:00Z"
+ },
+ "first_stub_days": 334,
+ "first_stub_merged": false,
+ "folds": [
+  {
+   "end_utc": "2021-12-31",
+   "start_utc": "2021-02-01"
+  },
+  {
+   "end_utc": "2022-12-31",
+   "start_utc": "2022-01-01"
+  },
+  {
+   "end_utc": "2023-12-31",
+   "start_utc": "2023-01-01"
+  },
+  {
+   "end_utc": "2024-12-31",
+   "start_utc": "2024-01-01"
+  }
+ ],
+ "ready_utc": {
+  "BTCUSDT": "2021-01-07T00:00:00Z",
+  "ETHUSDT": "2021-01-07T00:00:00Z"
+ },
+ "rule": "READY = f0 + 365 + 7 days; A3_START = first 00:00 UTC month start >= max READY; calendar-year folds; a first segment < 183 days merges into the next year; >= 3 folds else DATA_LIMITED"
+}

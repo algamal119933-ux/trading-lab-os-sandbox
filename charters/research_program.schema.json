@@ -1,14 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "charters/research_program.schema.json",
-  "title": "CEA-1 precommitted research program (AUTH-2 structure)",
-  "description": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §12. Structure only: no program instance exists until the Owner merges one at charters/programs/<PROGRAM_ID>.json. Everything that could be chosen after seeing a result is fixed here first: the DAG, every preregistration and its hash, the N law, the caps, the holdout law and the judge's hashes. Edges may be conditioned only on terminal states. .github/gates/check_research_program.py enforces what JSON Schema cannot (hashes, commit order).",
+  "title": "CEA-1 precommitted research program (AUTH-2 structure; schema v2)",
+  "description": "docs/governance/CONTINUOUS_EXECUTION_AUTHORITY_1.md §12. Structure only: no program instance exists until the Owner merges one at charters/programs/<PROGRAM_ID>.json. Everything that could be chosen after seeing a result is fixed here first: the DAG, every preregistration and its hash, the N law, the caps, the holdout law and the judge's hashes. Edges may be conditioned only on terminal states. .github/gates/check_research_program.py enforces what JSON Schema cannot (hashes, commit order). Schema v2 (AUTH-2 Owner decision OD-7, minimal extension only): a program declaring schema_version 2 may also use the node kinds DATA_LOCK, CALIBRATION_STAT, POSITIVE_CONTROL, HOLM and SECONDARY_CONFIRM and the terminal edge states PASS, PRE_HOLM_PASS, HOLM_PASS and ANY_TERMINAL, and must carry each node's family plus the attributed-minutes, USD 0 overage and zero-token caps; its null-calibration-first law is per family (the validator checks every SCIENTIFIC node descends from a NULL_CALIBRATION node of its family). A program without schema_version is v1 and is judged exactly as before.",
   "type": "object",
   "additionalProperties": false,
   "required": ["program_id", "version", "status", "families", "dataset_lock", "development_window", "holdout_law",
                "frozen_hashes", "n_law", "caps", "dag", "null_calibration_first", "stop_rules", "terminal"],
   "properties": {
     "program_id": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9-]*$"},
+    "schema_version": {"enum": [1, 2]},
     "version": {"type": "integer", "minimum": 1},
     "status": {"enum": ["ACTIVE", "SUSPENDED", "CLOSED"]},
     "families": {
@@ -51,7 +52,10 @@
         "scientific_trial_ids": {"type": "integer", "minimum": 1},
         "calibration_trial_ids": {"type": "integer", "minimum": 0},
         "engine_invocations": {"type": "integer", "minimum": 1},
-        "hyperopt": {"const": 0}
+        "hyperopt": {"const": 0},
+        "attributed_linux_minutes": {"type": "integer", "minimum": 1},
+        "paid_actions_overage_usd": {"const": 0},
+        "llm_agent_tokens": {"const": 0}
       }
     },
     "dag": {
@@ -65,7 +69,9 @@
             "properties": {
               "id": {"type": "string", "minLength": 1},
               "trial_id": {"type": "string", "minLength": 1},
-              "kind": {"enum": ["NULL_CALIBRATION", "SCIENTIFIC"]},
+              "kind": {"enum": ["NULL_CALIBRATION", "SCIENTIFIC", "DATA_LOCK", "CALIBRATION_STAT",
+                                "POSITIVE_CONTROL", "HOLM", "SECONDARY_CONFIRM"]},
+              "family": {"type": ["string", "null"]},
               "prereg_path": {"type": "string", "minLength": 1},
               "prereg_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
             }
@@ -77,7 +83,8 @@
             "type": "object", "additionalProperties": false, "required": ["from", "on", "to"],
             "properties": {
               "from": {"type": "string"},
-              "on": {"enum": ["REJECTED", "SURVIVED", "INCONCLUSIVE"]},
+              "on": {"enum": ["REJECTED", "SURVIVED", "INCONCLUSIVE", "PASS", "PRE_HOLM_PASS", "HOLM_PASS",
+                              "ANY_TERMINAL"]},
               "to": {"type": "string"}
             }
           }
@@ -90,6 +97,32 @@
     "stop_rules": {"type": "array", "minItems": 1, "items": {"type": "string"}},
     "terminal": {"const": "closure_record"}
   },
+  "allOf": [
+    {
+      "if": {"not": {"required": ["schema_version"], "properties": {"schema_version": {"const": 2}}}},
+      "then": {
+        "properties": {
+          "dag": {"properties": {
+            "nodes": {"items": {"properties": {"kind": {"enum": ["NULL_CALIBRATION", "SCIENTIFIC"]}},
+                                "not": {"required": ["family"]}}},
+            "edges": {"items": {"properties": {"on": {"enum": ["REJECTED", "SURVIVED", "INCONCLUSIVE"]}}}}
+          }},
+          "caps": {"not": {"anyOf": [{"required": ["attributed_linux_minutes"]},
+                                     {"required": ["paid_actions_overage_usd"]},
+                                     {"required": ["llm_agent_tokens"]}]}}
+        }
+      }
+    },
+    {
+      "if": {"required": ["schema_version"], "properties": {"schema_version": {"const": 2}}},
+      "then": {
+        "properties": {
+          "dag": {"properties": {"nodes": {"items": {"required": ["family"]}}}},
+          "caps": {"required": ["attributed_linux_minutes", "paid_actions_overage_usd", "llm_agent_tokens"]}
+        }
+      }
+    }
+  ],
   "$defs": {
     "pinned": {
       "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
