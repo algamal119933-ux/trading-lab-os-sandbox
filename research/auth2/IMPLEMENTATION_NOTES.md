@@ -204,6 +204,21 @@ and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
   account's remaining included minutes or the USD 0 Actions budget cannot be read. It needs a repository secret
   `AUTH2_BILLING_TOKEN` (a token that may read the account's billing); without it every job stops at the guard.
   A run the in-job guard stops still counts as an attempt and its billed minutes count toward 4,000 (conservative).
+* Operated dispatch (Owner decision card "Check in Actions", after PR #57 merged). The executor's session
+  reaches GitHub only through repository endpoints, so it can neither read the account's billing nor download
+  run artifacts. The pre-dispatch guard therefore runs as its own job, `.github/workflows/auth2-guard.yml`
+  (10-minute timeout, the `AUTH2_BILLING_TOKEN` secret), and publishes its decision record as a job
+  annotation. A node (or the closure) is dispatched only after `.github/gates/auth2_operator.py
+  check-dispatch` verifies that record: a successful guard run of that node part on the current main,
+  deciding DISPATCH, at most 15 minutes old, with no AUTH-2 run created after it. Every guard (pre-dispatch
+  and in-job) is `dispatch_guard.decide`, unchanged, over the node runs, plus two additions for the guard
+  and closure jobs: none may be active, and their billed minutes count toward the 4,000-minute ledger. The
+  additions only refuse; no refusal of `dispatch_guard.py` is removed. Node jobs publish a summary of their
+  result records (sha256, terminal state, `data_limited`, `holm_pass`), which `auth2_operator.py next`
+  feeds to `run_node.eligible`. The closure record is computed by `.github/workflows/auth2-closure.yml`
+  (where the artifacts are readable), published the same way, and read back byte-exact (`readout`); the
+  terminal ledger records are appended from it by `closure.append_ledger`. Nothing under `research/auth2/`
+  changed, so every preregistration's code pins still hold.
 * `run_node.py` exits 4 on INVALID_RUN so the job fails and the one technical retry is available; every law
   terminal is a successful run. A second INVALID_RUN stops the program (`closure.py --stop-program`).
 

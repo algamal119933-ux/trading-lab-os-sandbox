@@ -1,0 +1,97 @@
+name: AUTH-2 closure record (manual dispatch only)
+
+# AUTH-2-DISCOVERY-QUALIFICATION-1 (research/auth2/FUNNEL_LAW_2.md §DAG_OPERATIONS CLOSURE): when
+# no node is eligible, research/auth2/closure.py writes the closure record from the node result
+# records, which live in the node runs' artifacts. The executor's session cannot download
+# artifacts, so the record is computed here and published as a job annotation
+# (.github/gates/auth2_operator.py readout). The terminal trial-ledger records are appended by
+# the operator from that record (closure.append_ledger), never by this job.
+#
+# workflow_dispatch only, after a guard run for CLOSURE said DISPATCH; it re-checks in the job.
+# It runs no engine, never commits, pushes or writes the ledger. dry_run stays true.
+on:
+  workflow_dispatch:
+    inputs:
+      predecessor_runs:
+        description: "Space-separated node run ids whose result records count (one per node part)"
+        type: string
+        required: true
+      stop_program:
+        description: "Close after an INVALID_RUN whose one technical retry is spent"
+        type: boolean
+        required: false
+        default: false
+
+run-name: AUTH2-CLOSURE
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: auth2-program
+  cancel-in-progress: false
+
+env:
+  PYTHONPATH: research
+
+jobs:
+  closure:
+    name: AUTH-2 closure record
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dependencies (arch and its closure hash-pinned)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
+          pip check
+
+      - name: 'Gate: dispatch guard (billing readable, serial, caps, never re-run)'
+        run: |
+          set -euo pipefail
+          python .github/gates/auth2_operator.py guard --node CLOSURE --repo-slug "$GITHUB_REPOSITORY" \
+            --in-job --self-run-id "$GITHUB_RUN_ID" --out out/guard.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
+
+      - name: 'Gate: paper safety'
+        run: python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example
+
+      - name: Download the node result records
+        run: |
+          set -euo pipefail
+          mkdir -p predecessors
+          for id in $PREDECESSORS; do
+            case "$id" in (*[!0-9]*|'') echo "::error::not a run id: $id"; exit 1 ;; esac
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --pattern 'auth2-*' --dir "predecessors/$id"
+          done
+          find predecessors -name '*.result.json' -print
+        env:
+          PREDECESSORS: ${{ inputs.predecessor_runs }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Write the closure record (refuses unless the DAG is exhausted)
+        run: |
+          set -euo pipefail
+          python research/auth2/closure.py --results predecessors --out out/closure.json \
+            ${{ inputs.stop_program && '--stop-program' || '' }}
+
+      - name: Publish the closure record
+        run: python .github/gates/auth2_operator.py annotate --title AUTH2_CLOSURE --file out/closure.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2closure
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 90
