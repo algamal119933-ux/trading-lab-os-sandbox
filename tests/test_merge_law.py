@@ -211,3 +211,35 @@ def test_a_base_without_the_law_fails_closed(capsys):
     assert ml.main(["--repo", str(REPO_ROOT), "--base", pre_cea, "--head", "HEAD",
                     "--branch", "claude/auth-1"]) == 1
     assert "BASE_POLICY_ABSENT" in capsys.readouterr().out
+
+
+def test_an_appended_ledger_record_verifies_from_git_in_a_fresh_process(tmp_path):
+    """CI runs the gate in a fresh interpreter on a BASE checkout: the BASE ledger module must
+    import its own fp package from the temporary copy, not from anything this process loaded."""
+    import sys
+
+    repo = _repo(tmp_path)
+    base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          check=True).stdout.strip()
+    script = (
+        "import sys; sys.path.insert(0, sys.argv[1] + '/research')\n"
+        "from trial_ledger import TrialLedger\n"
+        "led = TrialLedger(sys.argv[1] + '/research/records/trial_ledger.jsonl')\n"
+        "pre = next(r for r in led.records() if r.payload.get('state') == 'PREREGISTERED')\n"
+        "payload = dict(pre.payload, trial_id='TRIAL-MERGE-LAW-PROBE-1')\n"
+        "led.append(payload)\n"
+    )
+    subprocess.run([sys.executable, "-c", script, str(repo)], check=True)
+    head = _commit(repo, "append one PREREGISTERED record")
+    gates = REPO_ROOT / ".github" / "gates"
+    check = (
+        "import sys; sys.path.insert(0, sys.argv[1])\n"
+        "import merge_law as ml\n"
+        "print(ml.ledger_checks(__import__('pathlib').Path(sys.argv[2]), sys.argv[3], sys.argv[4]))\n"
+    )
+    out = subprocess.run([sys.executable, "-I", "-c", check, str(gates), str(repo), base, head],
+                         capture_output=True, text=True, cwd=tmp_path)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "(True, True)"
+    # and in this process, where fp is already importable from the repository
+    assert ml.ledger_checks(repo, base, head) == (True, True)

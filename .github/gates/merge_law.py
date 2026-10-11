@@ -165,8 +165,17 @@ def new_dependencies(repo: Path, base: str, head: str, changed: list[str]) -> li
     return sorted(added)
 
 
+LEDGER_PACKAGE = "research/fp"  # trial_ledger.py imports fp.ledger from its own directory
+
+
 def ledger_checks(repo: Path, base: str, head: str) -> tuple[bool, bool]:
-    """(append_only, verifies): HEAD ledger bytes, BASE ledger code."""
+    """(append_only, verifies): HEAD ledger bytes, BASE ledger code.
+
+    The BASE ledger module and the BASE ``fp`` package it imports are written
+    side by side into a temporary directory and imported from there only: any
+    ``fp`` already imported in this process is set aside for the duration, so
+    the verdict never depends on what else this process loaded.
+    """
     before = cp.read_at(repo, base, LEDGER) or ""
     after = cp.read_at(repo, head, LEDGER) or ""
     if before == after:
@@ -176,19 +185,31 @@ def ledger_checks(repo: Path, base: str, head: str) -> tuple[bool, bool]:
     code = cp.read_at(repo, base, LEDGER_CODE)
     if code is None:
         return True, False
+    package = [p for p in cp.git(repo, "ls-tree", "-r", "--name-only", base, "--", LEDGER_PACKAGE).splitlines()
+               if p.endswith(".py")]
     with tempfile.TemporaryDirectory() as tmp:
+        for rel in package:
+            dest = Path(tmp) / "fp" / Path(rel).relative_to(LEDGER_PACKAGE)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(cp.read_at(repo, base, rel) or "", encoding="utf-8")
         mod_path = Path(tmp) / "base_trial_ledger.py"
         mod_path.write_text(code, encoding="utf-8")
         ledger_path = Path(tmp) / "trial_ledger.jsonl"
         ledger_path.write_text(after, encoding="utf-8")
+        saved = {k: sys.modules.pop(k) for k in list(sys.modules) if k == "fp" or k.startswith("fp.")}
+        path_before = list(sys.path)
         spec = importlib.util.spec_from_file_location("base_trial_ledger", mod_path)
         module = importlib.util.module_from_spec(spec)
         sys.modules["base_trial_ledger"] = module
-        spec.loader.exec_module(module)
         try:
+            spec.loader.exec_module(module)
             return True, module.TrialLedger(ledger_path).verify() == []
         finally:
             sys.modules.pop("base_trial_ledger", None)
+            for k in [k for k in sys.modules if k == "fp" or k.startswith("fp.")]:
+                sys.modules.pop(k)
+            sys.modules.update(saved)
+            sys.path[:] = path_before
 
 
 def pull_request_at(repo: Path, base: str, head: str, branch: str, author: str | None,
