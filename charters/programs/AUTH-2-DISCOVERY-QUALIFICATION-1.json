@@ -110,7 +110,7 @@
     "id": "D0",
     "kind": "DATA_LOCK",
     "prereg_path": "research/auth2/prereg/D0.json",
-    "prereg_sha256": "bd69c0da4f736f8080fe33dd37de43425c3b62f27d7ac2c4e6c38d5fbd9174a3",
+    "prereg_sha256": "a2f0f30c4c7db06e698816ca92846bdfe62e6486bdc85dc034776459356be2c2",
     "trial_id": "TRIAL-AUTH2-D0"
    },
    {
@@ -118,7 +118,7 @@
     "id": "CAL-A1",
     "kind": "CALIBRATION_STAT",
     "prereg_path": "research/auth2/prereg/CAL-A1.json",
-    "prereg_sha256": "6c3e65a3da3bd674c630c28617eafba7b95d46ed0a0ce82cbea55c8e63572099",
+    "prereg_sha256": "175a02f33124ba7d5468d97c10754b2c4a420f3a599dec067cfa3188cbdda4e3",
     "trial_id": "TRIAL-AUTH2-CAL-A1"
    },
    {
@@ -126,7 +126,7 @@
     "id": "CAL-A2",
     "kind": "CALIBRATION_STAT",
     "prereg_path": "research/auth2/prereg/CAL-A2.json",
-    "prereg_sha256": "e5e6996049341f4674249cc74ded21b09636f01f076f3ed7a3f0931d816e3b53",
+    "prereg_sha256": "5284643b4a00e1d5d6cdbe3452f5eaea423fd340cdc08efb47424f89562d8420",
     "trial_id": "TRIAL-AUTH2-CAL-A2"
    },
    {
@@ -134,7 +134,7 @@
     "id": "CAL-A3",
     "kind": "CALIBRATION_STAT",
     "prereg_path": "research/auth2/prereg/CAL-A3.json",
-    "prereg_sha256": "a7cb37e220d88a783335dfc52e8ac77ad3ae5a13dc15e0b6a4a5d49bd6e5012c",
+    "prereg_sha256": "175ac84c3ade329ea4de7032a400de936a8b2f08b0fa3b4e01e66af0ad921c43",
     "trial_id": "TRIAL-AUTH2-CAL-A3"
    },
    {
@@ -142,7 +142,7 @@
     "id": "PC-A1",
     "kind": "POSITIVE_CONTROL",
     "prereg_path": "research/auth2/prereg/PC-A1.json",
-    "prereg_sha256": "5390bf95ea4bbbc00fa649746ddb650b806aa2b9a87c13b3f8dd6b093538f280",
+    "prereg_sha256": "88db864d241f0fbfe15852ef210f9b553fd333de7fdbabda9e2562f4cb199914",
     "trial_id": "TRIAL-AUTH2-PC-A1"
    },
    {
@@ -150,7 +150,7 @@
     "id": "PC-A2",
     "kind": "POSITIVE_CONTROL",
     "prereg_path": "research/auth2/prereg/PC-A2.json",
-    "prereg_sha256": "7984b86e6c4cd9897ce469768a80e56de38f884789a13443075cac4dbdd21b5f",
+    "prereg_sha256": "7537d8b036312d2c5dd40e33691b8a84ec6048a429d5e227a31a8afdb0f868f5",
     "trial_id": "TRIAL-AUTH2-PC-A2"
    },
    {
@@ -158,7 +158,7 @@
     "id": "PC-A3",
     "kind": "POSITIVE_CONTROL",
     "prereg_path": "research/auth2/prereg/PC-A3.json",
-    "prereg_sha256": "18fe2c313631b4a846bebc4fe6d19286e0e316bf85282b25cb8e94ade903caee",
+    "prereg_sha256": "f4199879aaf9086790d350073fef92169ad39e4777e490859833d9945b6116d1",
     "trial_id": "TRIAL-AUTH2-PC-A3"
    },
    {
@@ -166,7 +166,7 @@
     "id": "N-A1",
     "kind": "NULL_CALIBRATION",
     "prereg_path": "research/auth2/prereg/N-A1.json",
-    "prereg_sha256": "b017fe6c20418514a1a86ec42fd569b427afe2267b4e30ff19dba0af99cc11b8",
+    "prereg_sha256": "bd2c6e8e4fe831363847388defdc689326acc95d5844e3407eb5f5ee27b40aee",
     "trial_id": "TRIAL-AUTH2-N-A1"
    },
    {
@@ -174,7 +174,7 @@
     "id": "N-A2",
     "kind": "NULL_CALIBRATION",
     "prereg_path": "research/auth2/prereg/N-A2.json",
-    "prereg_sha256": "0d955330c3f3c770faeef5405a2f65ffb39beb58d97ff34d906d7a419e547955",
+    "prereg_sha256": "0f166fe10597fc4d9c5c82b1c9a265dd80faeb61c22e01de7a4d830098577a00",
     "trial_id": "TRIAL-AUTH2-N-A2"
    },
    {
@@ -182,7 +182,7 @@
     "id": "N-A3",
     "kind": "NULL_CALIBRATION",
     "prereg_path": "research/auth2/prereg/N-A3.json",
-    "prereg_sha256": "ee2c5c308a0e6ff710aaeae7bad42ec946c82bfd3d9c868691b3165804b81ad3",
+    "prereg_sha256": "e029808164de1b3dd6593a24cba626e30f23efe22d65ce44848bf03ccaa70894",
     "trial_id": "TRIAL-AUTH2-N-A3"
    },
    {
@@ -190,7 +190,7 @@
     "id": "A1",
     "kind": "SCIENTIFIC",
     "prereg_path": "research/auth2/prereg/A1.json",
-    "prereg_sha256": "5ac49a14ec88acd206ba9c439cbe151e566acd5cf534712a19fb5e09e9f467a5",
+    "prereg_sha256": "10129e7fddee7b060e44d15e97653065ea32060cb6214f95dbb0ae4080175fe9",
     "trial_id": "TRIAL-AUTH2-A1"
    },
    {
@@ -198,7 +198,7 @@
     "id": "A2",
     "kind": "SCIENTIFIC",
     "prereg_path": "research/auth2/prereg/A2.json",
-    "prereg_sha256": "3b247b8d8e47844083ab27bfb54e35abf9a34899b93a8e7af2a7df17ddd33275",
+    "prereg_sha256": "f6165c762bc172f0ed8b10b3b430c4a326cfe7c2343f75d2c1d10d809819ac0d",
     "trial_id": "TRIAL-AUTH2-A2"
    },
    {
@@ -206,7 +206,7 @@
     "id": "A3",
     "kind": "SCIENTIFIC",
     "prereg_path": "research/auth2/prereg/A3.json",
-    "prereg_sha256": "e5107fc3620bfe8741882f06efc4b48940d93213180c8f4c52bd7d6ec7aa9229",
+    "prereg_sha256": "2a60bc7d70760ad14cbe4f7d4f0eb4d8b8b808480aebeabf7742f89d53a903dc",
     "trial_id": "TRIAL-AUTH2-A3"
    },
    {
@@ -214,7 +214,7 @@
     "id": "HOLM",
     "kind": "HOLM",
     "prereg_path": "research/auth2/prereg/HOLM.json",
-    "prereg_sha256": "4d40f0ef4dadc5a3c564a498ff0ffa091ca61429b4d246920589a0218139dda7",
+    "prereg_sha256": "500ef76e5d3e5b2fc7ca91d754a402380f5305eeff4d3467fa6af986dae42e96",
     "trial_id": "TRIAL-AUTH2-HOLM"
    },
    {
@@ -222,7 +222,7 @@
     "id": "SC-A1",
     "kind": "SECONDARY_CONFIRM",
     "prereg_path": "research/auth2/prereg/SC-A1.json",
-    "prereg_sha256": "a298be2d568f09a2050bef40ad4831531998068d3fe99d3fe8bd8e81d766f1ca",
+    "prereg_sha256": "ba06afd7261b4efe3544c147496f55f51d078fe4ac91c36c9f861358324af5b7",
     "trial_id": "TRIAL-AUTH2-A1"
    },
    {
@@ -230,7 +230,7 @@
     "id": "SC-A2",
     "kind": "SECONDARY_CONFIRM",
     "prereg_path": "research/auth2/prereg/SC-A2.json",
-    "prereg_sha256": "80b3db0f099e1cb0b98717bed7333214a1f71c69bbabccfc7d2d6f72d20ae98f",
+    "prereg_sha256": "9c033f9cacde77293d53a976d74b2eb2b4a3f0c1bec5cf92a69b961b75131cbb",
     "trial_id": "TRIAL-AUTH2-A2"
    },
    {
@@ -238,7 +238,7 @@
     "id": "SC-A3",
     "kind": "SECONDARY_CONFIRM",
     "prereg_path": "research/auth2/prereg/SC-A3.json",
-    "prereg_sha256": "dec0f5e4e5f597e3f2f21d99f277f3ee23bab4759ee09bd90d2a5c78ce3a26b6",
+    "prereg_sha256": "2080418abc4c2c29576588f9066ac851233dcb0825138570288da861a4161e4d",
     "trial_id": "TRIAL-AUTH2-A3"
    }
   ]

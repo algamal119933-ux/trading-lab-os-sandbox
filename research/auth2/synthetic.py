@@ -168,6 +168,16 @@ def daily_z(f: np.ndarray, days: int, span: int = 365, m7_days: int = 7) -> np.n
     return z
 
 
+_scalar_exp = np.frompyfunc(math.exp, 1, 1)
+
+
+def _exp(x: np.ndarray) -> np.ndarray:
+    """exp through the C library's scalar exp. numpy's vectorised exp takes a different code
+    path on CPUs with and without AVX-512 and the results differ in the last bit, which would
+    make a world depend on the machine that generates it."""
+    return _scalar_exp(np.asarray(x, dtype=float)).astype(float)
+
+
 def _assemble(family: str, rng: np.random.Generator, logp: np.ndarray, t0: int, fund) -> World:
     days, n = logp.shape[0] - 1, logp.shape[1]
     pairs = [f"S{family[-1]}{j + 1:02d}/USDT" for j in range(n)]
@@ -182,11 +192,11 @@ def _assemble(family: str, rng: np.random.Generator, logp: np.ndarray, t0: int, 
         sd_bar = np.maximum(np.abs(dr), 1e-4) / math.sqrt(BARS_PER_DAY)
         inc = dr[:, None] / BARS_PER_DAY + sd_bar[:, None] * (noise[:, :, j] - noise[:, :, j].mean(axis=1, keepdims=True))
         path = logp[:-1, j][:, None] + np.cumsum(inc, axis=1)
-        c = np.exp(path).reshape(-1)
+        c = _exp(path).reshape(-1)
         o = np.concatenate([[math.exp(logp[0, j])], c[:-1]])
         ex = excursion[:, :, :, j].reshape(-1, 2) * np.repeat(sd_bar, BARS_PER_DAY)[:, None] * INTRADAY_RANGE
-        h = np.maximum(o, c) * np.exp(ex[:, 0])
-        lo = np.minimum(o, c) * np.exp(-ex[:, 1])
+        h = np.maximum(o, c) * _exp(ex[:, 0])
+        lo = np.minimum(o, c) * _exp(-ex[:, 1])
         close[:, j] = c
         bars[pairs[j]] = np.column_stack([times, o, h, lo, c, np.full(nb, 1000.0)])
     real = np.ones((nb, n), dtype=bool)

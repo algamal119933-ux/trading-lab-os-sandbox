@@ -170,6 +170,15 @@ log drift that returns its expected crash loss to the no-edge level, so a plante
 world in crash timing, not in expected drift. The A3 edge strength was calibrated after this change. No-edge
 worlds are unchanged.
 
+Same worlds on every CPU: bar prices are exp of the log path through the C library's scalar exp. numpy's
+vectorised exp takes a different code path on CPUs with and without AVX-512, and the last bit differed, so the
+first PR CI run (on a runner without AVX-512) regenerated a different A3 world from the one recorded here.
+Everything else in a world is IEEE arithmetic and square roots. With the change, worlds, schedules, replay results
+and true δ are bit-identical with numpy's AVX-512 paths enabled and disabled (`NPY_DISABLE_CPU_FEATURES`). The edge
+calibration was re-run in full on the revised generator: the same edges, with true δ moving only in the last digits
+(`calibration_edges.json` `code_revisions`). Real-data schedules never depended on this (verified with AVX-512 on
+and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
+
 ## Nulls and engine-run reuse
 
 * C4 null distributions use seeds 1–1000. The N-Ax fixture is null seed 0; its "perturbations" are null seeds

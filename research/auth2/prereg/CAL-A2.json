@@ -27,9 +27,9 @@
   },
   "record": {
    "path": "research/auth2/calibration_edges.json",
-   "sha256": "4b1553db910dae43efef0a60e0239f39766ca904c4731f2fad6004d6f10ad042"
+   "sha256": "f604aade0d6104c7e1013e9cde324c8dbd4376d2871988c8b1a5e2a4c647d160"
   },
-  "true_delta": 0.39996687015583055,
+  "true_delta": 0.39996687015583077,
   "years": 200
  },
  "code_sha256": {
@@ -52,7 +52,7 @@
   "research/auth2/run_node.py": "9f37fc5b8f216fcccae317322f794559e5002ef16c8938ebe0503636ce553b89",
   "research/auth2/signals.py": "b86dbd3a1349ff79d22d78bf25913ffc1222654eb5e9b09245c43dd1477eccd7",
   "research/auth2/stats.py": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020",
-  "research/auth2/synthetic.py": "a2adbd58e81c9b2179ce6f3d80ac4d0326a2a183b31fb1c0724199b4ddef5dea",
+  "research/auth2/synthetic.py": "58ec67ef20ab2e64de77d5a74adc3f6dc08063a1a8ac622072a4070f44ca7aea",
   "research/auth2/universe.py": "fa0c778f5c8253631df789096eb3959c2e5518a814522472675c3a74aebee8b6"
  },
  "compute": {

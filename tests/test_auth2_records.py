@@ -136,3 +136,18 @@ def test_requirements_are_hash_pinned():
         name = l.split("==")[0]
         block = text.split(l, 1)[1].split("==", 1)[0]
         assert "--hash=sha256:" in l or "--hash=sha256:" in block, name
+
+
+def test_the_ledger_only_appends_to_main():
+    import subprocess
+
+    def git(*a):
+        return subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True)
+
+    base = next((r.stdout.strip() for ref in ("origin/main", "main")
+                 if (r := git("merge-base", "HEAD", ref)).returncode == 0), None)
+    if base is None:
+        pytest.skip("no main reference in this checkout")
+    before = git("show", f"{base}:{RN.LEDGER_REL}")
+    assert before.returncode == 0, before.stderr
+    assert (REPO / RN.LEDGER_REL).read_text().startswith(before.stdout)
