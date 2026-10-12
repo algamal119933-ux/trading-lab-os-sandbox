@@ -26,6 +26,10 @@ research/auth2/dispatch_guard.decide, unchanged, over the node runs; this gate o
 jobs that are not node runs (guard and closure jobs): they must not be active (SERIAL) and their billed
 minutes count toward the 4,000-minute ledger. It never removes a refusal, so it can only be stricter.
 
+Billing is read here, not by dispatch_guard.read_billing: the endpoint that function calls was closed down by
+GitHub and answers HTTP 410 (see ``read_billing`` below). A run attempt after the first never runs a node or
+the closure again, and the minutes of every attempt count.
+
 PAPER / RESEARCH ONLY. Read-only against GitHub: it dispatches nothing and writes nothing there.
 """
 
@@ -37,6 +41,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,6 +64,30 @@ AUX = {GUARD_WORKFLOW: GUARD_TIMEOUT, CLOSURE_WORKFLOW: CLOSURE_TIMEOUT}
 CHUNK = 16000
 RECORD, RESULT, CLOSURE_RECORD = "AUTH2_GUARD_RECORD", "AUTH2_RESULT", "AUTH2_CLOSURE"
 
+# Billing evidence (FUNNEL_LAW_2.md §MONTHLY_BILLING_PACING_RULE). dispatch_guard.read_billing reads
+# GET /users/{owner}/settings/billing/actions, one of the product-specific billing endpoints GitHub closed down
+# (changelog 2025-09-26); it answers HTTP 410 "This endpoint has been moved". Its replacement for a personal
+# account is the enhanced billing platform's usage report (fine-grained token: "Plan" user permission, read):
+# per-day usage items with gross, discount and net amounts. That report does not carry either control the
+# pacing rule needs, and no other endpoint does for a personal account:
+#   remaining included minutes  no field holds the plan's included quota or what is left of it, and
+#                               discountAmount merges included usage with the free usage of public repositories
+#                               and self-hosted runners (GitHub docs, "Billing reports reference"), so no
+#                               difference of reported figures is the remaining allowance;
+#   USD 0 budget, stop usage    the budgets API exists for organizations only.
+# So the reader verifies what can be verified, that the billing token reads this account's report for this
+# month and the report is well formed, records it, and reports both controls as unproven: NO_DISPATCH.
+BILLING_USAGE = "/users/{owner}/settings/billing/usage?year={year}&month={month}"
+HTTP_CLASS = {401: "TOKEN_INVALID", 403: "PERMISSION_DENIED", 404: "NOT_FOUND", 410: "ENDPOINT_RETIRED"}
+NUMBER = (int, float)
+USAGE_FIELDS = {"date": str, "product": str, "sku": str, "unitType": str, "quantity": NUMBER,
+                "grossAmount": NUMBER, "discountAmount": NUMBER, "netAmount": NUMBER}
+INCLUDED_NOT_EXPOSED = ("NOT_EXPOSED: GitHub's billing API gives no included-minutes quota and no remaining included "
+                        "minutes; discountAmount merges included usage with public-repository and self-hosted "
+                        "discounts")
+BUDGET_NOT_EXPOSED = ("NOT_EXPOSED: GitHub's budgets API is organization-only, so a personal account's Actions "
+                      "budget and its stop-usage setting cannot be read")
+
 
 # -- the decision ---------------------------------------------------------------------------------
 
@@ -73,12 +102,14 @@ def _verdict(rec: dict, park: bool) -> dict:
     return rec
 
 
-def decide(state: dict, aux: list[dict], node: str, part: int) -> dict:
+def decide(state: dict, aux: list[dict], node: str, part: int, attempt: int = 1, earlier_minutes: int = 0) -> dict:
     """dispatch_guard.decide over the node runs, plus the checks for guard and closure jobs.
 
     ``aux`` = [{"id", "workflow", "status", "conclusion", "created_at", "minutes"}] for every guard and
-    closure run except the caller's own. CLOSURE has the HOLM plan (0 invocations, 15 minutes) widened to
-    CLOSURE_TIMEOUT; its re-run and attempt rules apply to the closure runs."""
+    closure run except the caller's own (minutes of all its attempts). CLOSURE has the HOLM plan (0
+    invocations, 15 minutes) widened to CLOSURE_TIMEOUT; its re-run and attempt rules apply to the closure
+    runs. ``attempt`` is the calling node or closure job's own run attempt (1 before dispatch);
+    ``earlier_minutes`` the billed minutes of node-run attempts dispatch_guard does not see."""
     if node == CLOSURE:
         rec = DG.decide(state, "HOLM", 1)
         rec["reasons"] = [r for r in rec["reasons"] if not r.startswith(("NEVER_RERUN", "ATTEMPTS"))]
@@ -95,22 +126,105 @@ def decide(state: dict, aux: list[dict], node: str, part: int) -> dict:
     else:
         rec = DG.decide(state, node, part)
     t = rec["timeout_minutes"]
+    if attempt > 1:
+        rec["reasons"].append(f"RE_RUN: this is attempt {attempt} of its run; a node or the closure runs once per "
+                              "dispatch, and a technical retry is a new dispatch")
     busy = [r["id"] for r in aux if r["status"] in DG.ACTIVE]
     if busy:
         rec["reasons"].append(f"SERIAL: AUTH-2 guard/closure run(s) {busy} still active")
-    aux_minutes = sum(int(r["minutes"]) for r in aux)
+    aux_minutes = sum(int(r["minutes"]) for r in aux) + int(earlier_minutes)
     rec["aux_minutes_ledger"] = aux_minutes
+    rec["earlier_attempt_minutes"] = int(earlier_minutes)
     if "minutes_ledger" in rec:
         total = rec["minutes_ledger"] + aux_minutes
         rec["total_minutes_ledger"] = total
-        cap = f"CAP: minutes ledger {total} (incl. {aux_minutes} guard/closure) + 2 x {t} > {DG.CAP_MINUTES}"
+        cap = (f"CAP: minutes ledger {total} (incl. {aux_minutes} guard/closure/earlier attempts) + 2 x {t} > "
+               f"{DG.CAP_MINUTES}")
         if total + 2 * t > DG.CAP_MINUTES and not any(r.startswith("CAP: minutes") for r in rec["reasons"]):
             rec["reasons"].append(cap)
     bill = state.get("billing") or {}
-    rec["billing"] = {k: bill.get(k) for k in ("readable", "remaining_included_minutes", "budget_usd_zero")}
+    if not bill.get("budget_usd_zero") and not any("budget of USD 0" in r for r in rec["reasons"]):
+        rec["reasons"].append("FAIL_CLOSED: an Actions budget of USD 0 that stops usage is not verified"
+                              + (f" ({bill['budget_reason']})" if bill.get("budget_reason") else ""))
+    rec["billing"] = {k: bill.get(k) for k in ("readable", "remaining_included_minutes", "budget_usd_zero",
+                                                "usage_evidence")}
     park = any(r.startswith("RESERVE") for r in rec["reasons"])
     rec["reasons"] = list(dict.fromkeys(rec["reasons"]))
     return _verdict(rec, park)
+
+
+# -- billing (read-only; the billing token only) ----------------------------------------------------
+
+def billing_get(path: str, token: str) -> tuple[int | None, object]:
+    """GET ``path`` with the billing token. The workflow's own token is never used for billing: it is removed
+    from the environment, so a missing secret can never turn into a misleading permission error."""
+    env = {k: v for k, v in os.environ.items() if k not in ("GH_TOKEN", "GITHUB_TOKEN")}
+    env["GH_TOKEN"] = token
+    proc = subprocess.run(["gh", "api", "-H", "Accept: application/vnd.github+json",
+                           "-H", "X-GitHub-Api-Version: 2022-11-28", path], capture_output=True, text=True, env=env)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        m = re.search(r"\(HTTP (\d{3})\)", err)
+        return (int(m[1]) if m else None), err[:300]
+    try:
+        return 200, json.loads(proc.stdout)
+    except ValueError:
+        return 200, None
+
+
+def usage_evidence(owner: str, year: int, month: int, status: int | None, body) -> dict:
+    """Classify one usage-report response; ``verified`` only for a well-formed report of this account and month.
+
+    A verified report proves the token, the account and the period. It is evidence, never a billing control."""
+    ev: dict = {"verified": False, "status": status, "period": f"{year:04d}-{month:02d}"}
+    if status != 200:
+        ev.update({"class": HTTP_CLASS.get(status, "API_ERROR"), "detail": str(body)[:300]})
+        return ev
+    items = body.get("usageItems") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        ev.update({"class": "MALFORMED", "detail": "the response has no usageItems list"})
+        return ev
+    actions: dict[str, dict] = {}
+    for it in items:
+        bad = sorted(k for k, kind in USAGE_FIELDS.items() if not isinstance(it, dict)
+                     or not isinstance(it.get(k), kind) or isinstance(it.get(k), bool))
+        if bad:
+            ev.update({"class": "MISSING_FIELDS", "detail": f"a usage item lacks or mistypes {bad}"})
+            return ev
+        if not it["date"].startswith(ev["period"]):
+            ev.update({"class": "WRONG_PERIOD", "detail": f"usage dated {it['date'][:32]} in the {ev['period']} report"})
+            return ev
+        repo = it.get("repositoryName") or ""
+        if not isinstance(repo, str) or (repo and not repo.lower().startswith(owner.lower() + "/")):
+            ev.update({"class": "WRONG_ACCOUNT", "detail": f"usage of {str(repo)[:100]} in the report for {owner}"})
+            return ev
+        if it["product"].lower() == "actions":
+            tot = actions.setdefault(it["sku"], {"unitType": it["unitType"], "quantity": 0.0, "grossAmount": 0.0,
+                                                 "discountAmount": 0.0, "netAmount": 0.0})
+            for k in ("quantity", "grossAmount", "discountAmount", "netAmount"):
+                tot[k] = round(tot[k] + float(it[k]), 6)
+    ev.update({"verified": True, "class": "USAGE_VERIFIED", "actions": actions})
+    return ev
+
+
+def read_billing(owner: str, token_env: str, now: datetime, get=billing_get) -> dict:
+    """The billing state dispatch_guard.decide reads. Neither control the pacing rule needs is exposed by
+    GitHub's API for a personal account (see BILLING_USAGE above), so ``readable`` and ``budget_usd_zero`` are
+    never true here and every decision is NO_DISPATCH; ``usage_evidence`` records what the token proved."""
+    token = (os.environ.get(token_env) or "").strip()
+    if not token:
+        ev = {"verified": False, "status": None, "class": "TOKEN_MISSING", "period": f"{now.year:04d}-{now.month:02d}",
+              "detail": f"{token_env} is not set; the workflow token is never used for billing"}
+    else:
+        path = BILLING_USAGE.format(owner=owner, year=now.year, month=now.month)
+        status, body = get(path, token)
+        ev = usage_evidence(owner, now.year, now.month, status, body)
+        ev["endpoint"] = path.split("?")[0]
+        if "detail" in ev:
+            ev["detail"] = ev["detail"].replace(token, "***")
+    reason = INCLUDED_NOT_EXPOSED if ev["verified"] else f"{ev['class']}: {ev['detail']}; {INCLUDED_NOT_EXPOSED}"
+    return {"readable": False, "remaining_included_minutes": None, "budget_usd_zero": False, "reason": reason,
+            "budget_reason": BUDGET_NOT_EXPOSED, "usage_evidence": ev}
 
 
 # -- collection (read-only, repository endpoints only) ---------------------------------------------
@@ -125,7 +239,7 @@ def read_aux_runs(slug: str, self_run_id: int | None) -> list[dict]:
             for r in batch:
                 if r["id"] == self_run_id:
                     continue
-                jobs = DG._api(f"/repos/{slug}/actions/runs/{r['id']}/jobs?per_page=100").get("jobs", [])
+                jobs = DG._api(f"/repos/{slug}/actions/runs/{r['id']}/jobs?per_page=100&filter=all").get("jobs", [])
                 if r["status"] == "completed" and not jobs:
                     raise RuntimeError(f"run {r['id']} cannot be reconciled with the Actions API")
                 minutes = sum(DG.billed_minutes(j, timeout) for j in jobs) if jobs else timeout
@@ -137,20 +251,61 @@ def read_aux_runs(slug: str, self_run_id: int | None) -> list[dict]:
     return out
 
 
+def earlier_attempt_minutes(slug: str) -> int:
+    """Billed minutes of the earlier attempts of re-run node runs. dispatch_guard.read_runs reads each run's
+    latest attempt only, so without this a re-run ("Re-run jobs" in GitHub) would drop them from the ledger."""
+    total, page = 0, 1
+    while True:
+        got = DG._api(f"/repos/{slug}/actions/workflows/{DG.WORKFLOW_FILE}/runs?per_page=100&page={page}")
+        batch = got.get("workflow_runs", [])
+        for r in batch:
+            latest = int(r.get("run_attempt") or 1)
+            if latest <= 1:
+                continue
+            m = DG.RUN_NAME.match(r.get("display_title") or "")
+            if not m:
+                raise RuntimeError(f"run {r['id']} has an unparseable title")
+            t = DG.node_plan(m["node"], int(m["part"]))["timeout_minutes"]
+            jobs = DG._api(f"/repos/{slug}/actions/runs/{r['id']}/jobs?per_page=100&filter=all").get("jobs", [])
+            total += sum(DG.billed_minutes(j, t) for j in jobs if int(j.get("run_attempt") or latest) < latest)
+        if len(batch) < 100:
+            break
+        page += 1
+    return total
+
+
+def collect(slug: str, owner: str, token_env: str, self_run_id: int | None) -> dict:
+    """dispatch_guard.collect with this module's billing reader (the one there calls a closed endpoint)."""
+    now = datetime.now(timezone.utc)
+    state = {"now": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "self_run_id": self_run_id,
+             "billing": read_billing(owner, token_env, now), "runs": []}
+    try:
+        state["runs"] = DG.read_runs(slug)
+        DG.attach_first_guard(slug, state["runs"], now.strftime("%Y-%m"))
+    except Exception as exc:  # noqa: BLE001 - every failure is the same fail-closed answer
+        state["runs_error"] = str(exc)[:300]
+    return state
+
+
 def guard(a) -> int:
     self_id = a.self_run_id or (int(os.environ["GITHUB_RUN_ID"]) if os.environ.get("GITHUB_RUN_ID") else None)
-    state = DG.collect(a.repo_slug, a.billing_owner or a.repo_slug.split("/")[0], a.billing_token_env,
-                       self_id if a.in_job else None)
+    attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT") or 1) if a.in_job else 1
+    state = collect(a.repo_slug, a.billing_owner or a.repo_slug.split("/")[0], a.billing_token_env,
+                    self_id if a.in_job else None)
     try:
         aux = read_aux_runs(a.repo_slug, self_id)
+        earlier = earlier_attempt_minutes(a.repo_slug)
     except Exception as exc:  # noqa: BLE001 - every failure is the same fail-closed answer
         state.setdefault("runs_error", f"guard/closure runs: {exc}"[:300])
-        aux = []
+        aux, earlier = [], 0
     if state.get("runs_error"):
         rec = {"node": a.node, "part": a.part, "decision": DG.NO_DISPATCH,
-               "reasons": [f"FAIL_CLOSED: AUTH-2 run history not readable ({state['runs_error']})"]}
+               "reasons": [f"FAIL_CLOSED: AUTH-2 run history not readable ({state['runs_error']})"],
+               "billing": {k: state["billing"].get(k) for k in ("readable", "remaining_included_minutes",
+                                                                 "budget_usd_zero", "usage_evidence")}}
     else:
-        rec = decide(state, aux, a.node, a.part)
+        rec = decide(state, aux, a.node, a.part, attempt, earlier)
+    rec["run_attempt"] = int(os.environ.get("GITHUB_RUN_ATTEMPT") or 1)
     rec["mode"] = "in-job" if a.in_job else "pre-dispatch"
     rec["checked_utc"] = state.get("now")
     rec["run_id"] = self_id
