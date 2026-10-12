@@ -1,0 +1,138 @@
+{
+ "appended_to": "a temporary copy of the trial ledger, deleted after this check",
+ "chain_verify_after": [],
+ "closure_py_refusals": {
+  "normal": "AUTH2_NODE_REFUSED: the DAG is not exhausted: next [('D0', 1)], retry []",
+  "stop_program": "AUTH2_NODE_REFUSED: STOP_PROGRAM needs a node whose last result is INVALID_RUN"
+ },
+ "option": "trial-ledger terminal records (NOT proposed; shown to prove why)",
+ "records": {
+  "TRIAL-AUTH2-A1": {
+   "frozen_ledger_mapping": "PARTIAL",
+   "ledger_schema": "PASS",
+   "mapping_note": "the law lists NOT_RUN reasons DATA_LIMITED, LAW_INVALID and INCONCLUSIVE_UNDERPOWERED; STOP_PROGRAM comes only from the pinned closure.py mapping and the charter stop rule",
+   "payload_sha256": "3a2ed52147f07116345e282aa295d4ddc2cae20009da881a3f25a57da2b2317f",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-A2": {
+   "frozen_ledger_mapping": "PARTIAL",
+   "ledger_schema": "PASS",
+   "mapping_note": "the law lists NOT_RUN reasons DATA_LIMITED, LAW_INVALID and INCONCLUSIVE_UNDERPOWERED; STOP_PROGRAM comes only from the pinned closure.py mapping and the charter stop rule",
+   "payload_sha256": "89885b18c56640d519d9f9b2650f16c57f2903d032c9082098f90796302bed34",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-A3": {
+   "frozen_ledger_mapping": "PARTIAL",
+   "ledger_schema": "PASS",
+   "mapping_note": "the law lists NOT_RUN reasons DATA_LIMITED, LAW_INVALID and INCONCLUSIVE_UNDERPOWERED; STOP_PROGRAM comes only from the pinned closure.py mapping and the charter stop rule",
+   "payload_sha256": "a70a99750fc21583c8971f739124361c773ba834f24d034529da922961bd8f3f",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-CAL-A1": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "ea7dbf8d3baa43c5e6f80d4822abf124ef5a251e542888408b2f9cf1314ed199",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-CAL-A2": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "ffcb63b4b3e0973bedd7da50a0b7f8074035062b3751104efa20bdd435d8488e",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-CAL-A3": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "d9d9f5793b125a166cbeff73dcdd2fb4737ca893fe727d067030ba8b02e520ea",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-D0": {
+   "frozen_ledger_mapping": "NONE",
+   "ledger_schema": "PASS",
+   "mapping_note": "D0 maps to COMPLETED with its terminal state, FAILED on INVALID_RUN, or ABORTED NOT_RUN if never reached; D0 has no result, no INVALID_RUN and was reached twice",
+   "payload_sha256": "a0ddb34e3305bab59b85c09ec0f8dac7a0dfbf627d34814a74d1de2aa4f20eb0",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "FAILED",
+   "terminal": "NO_RESULT_AFTER_RETRY"
+  },
+  "TRIAL-AUTH2-HOLM": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "4a6486baf3c9fea18798538c243cc95d74922f07c5d99ae4df4b3222629dc763",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-N-A1": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "e5f2961d31bc14a938ec1820313c568d82bc6025ba1f5ce453c0b62d32c54b30",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-N-A2": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "e20c72dcf1d602b94283ed0d4d530ca42f52b0b7e5b231aa75fc8c51dd644b3a",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-N-A3": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "069f8d85ca113909978b650e7eb8516cd430afc19d9190e347c1065644c16c50",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-PC-A1": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "ffd341b5012e5a62978ca208f8bfa5461bb3e37cd0d4ceac76d06a3377bf01bd",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-PC-A2": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "a10f65d9a5e25a4c64ce634dc9447368a40d7e82a0d26ef5694572a8b1a9bf1c",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  },
+  "TRIAL-AUTH2-PC-A3": {
+   "frozen_ledger_mapping": "YES",
+   "ledger_schema": "PASS",
+   "mapping_note": "ABORTED NOT_RUN if never reached",
+   "payload_sha256": "9046f48c23775c70b3fe4ca9b2fce1c93f55a52d33ff4dfd26972534ab4a1b8d",
+   "produced_by_frozen_closure": "NO: closure.py refuses (see closure_py_refusals)",
+   "state": "ABORTED",
+   "terminal": "NOT_RUN: STOP_PROGRAM"
+  }
+ },
+ "verdict": "schema-valid but not producible by the frozen closure, and D0 has no frozen mapping"
+}

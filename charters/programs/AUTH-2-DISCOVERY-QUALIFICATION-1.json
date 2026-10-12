@@ -288,7 +288,7 @@
  "null_calibration_first": true,
  "program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1",
  "schema_version": 2,
- "status": "ACTIVE",
+ "status": "CLOSED",
  "stop_rules": [
   "a node outside this DAG, or a node whose predecessor did not end in the edge's state, never runs",
   "CAL-Ax size FAIL => family LAW_INVALID; power FAIL or PC-Ax not SURVIVED => INCONCLUSIVE_UNDERPOWERED; N-Ax not REJECTED => LAW_INVALID; DATA_LIMITED at D0 => the family has no further node",

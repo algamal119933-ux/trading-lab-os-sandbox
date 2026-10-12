@@ -1,0 +1,913 @@
+{
+ "collected_utc": "2026-10-12T22:29:19Z",
+ "repo": {
+  "files_sha256": {
+   ".github/gates/auth2_operator.py": "e9116e77d467f5249d451569244b933ddcf5cd79f2404311d461f2f77a0fc0a1",
+   ".github/workflows/auth2.yml": "f45baa6ecd13d4d485a7c86d242b7edd5222d695d6de034d02767c7419496d7d",
+   "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json": "d6c057789fd8410aba39bebdacd2053c7893e14f4ed97fc38427b7ba65387a40",
+   "research/auth2/FUNNEL_LAW_2.md": "8aa91f5ec18cca488fdf3b4051f24fb41c11070faddafe5f866631d0c3234da5",
+   "research/auth2/closure.py": "96b7334de525bf7c260f26885ea0be4f198656c56bd565ae91fd55d4e8229362",
+   "research/auth2/dispatch_guard.py": "1c49dff3def411b5863a9d3ea8e073cca120ac22f54e8584989eb9e6100a4c09",
+   "research/auth2/run_node.py": "9f37fc5b8f216fcccae317322f794559e5002ef16c8938ebe0503636ce553b89",
+   "research/records/trial_ledger.jsonl": "9da92ae40d6b3aded94806c270e1b4f4ad737c606a6fd960d05615e0230616da"
+  },
+  "head": "8013e216075fcdfdf1068ef1b43b52aea5747d78",
+  "preregs_sha256": {
+   "research/auth2/prereg/A1.json": "10129e7fddee7b060e44d15e97653065ea32060cb6214f95dbb0ae4080175fe9",
+   "research/auth2/prereg/A2.json": "f6165c762bc172f0ed8b10b3b430c4a326cfe7c2343f75d2c1d10d809819ac0d",
+   "research/auth2/prereg/A3.json": "2a60bc7d70760ad14cbe4f7d4f0eb4d8b8b808480aebeabf7742f89d53a903dc",
+   "research/auth2/prereg/CAL-A1.json": "175a02f33124ba7d5468d97c10754b2c4a420f3a599dec067cfa3188cbdda4e3",
+   "research/auth2/prereg/CAL-A2.json": "5284643b4a00e1d5d6cdbe3452f5eaea423fd340cdc08efb47424f89562d8420",
+   "research/auth2/prereg/CAL-A3.json": "175ac84c3ade329ea4de7032a400de936a8b2f08b0fa3b4e01e66af0ad921c43",
+   "research/auth2/prereg/D0.json": "a2f0f30c4c7db06e698816ca92846bdfe62e6486bdc85dc034776459356be2c2",
+   "research/auth2/prereg/HOLM.json": "500ef76e5d3e5b2fc7ca91d754a402380f5305eeff4d3467fa6af986dae42e96",
+   "research/auth2/prereg/N-A1.json": "bd2c6e8e4fe831363847388defdc689326acc95d5844e3407eb5f5ee27b40aee",
+   "research/auth2/prereg/N-A2.json": "0f166fe10597fc4d9c5c82b1c9a265dd80faeb61c22e01de7a4d830098577a00",
+   "research/auth2/prereg/N-A3.json": "e029808164de1b3dd6593a24cba626e30f23efe22d65ce44848bf03ccaa70894",
+   "research/auth2/prereg/PC-A1.json": "88db864d241f0fbfe15852ef210f9b553fd333de7fdbabda9e2562f4cb199914",
+   "research/auth2/prereg/PC-A2.json": "7537d8b036312d2c5dd40e33691b8a84ec6048a429d5e227a31a8afdb0f868f5",
+   "research/auth2/prereg/PC-A3.json": "f4199879aaf9086790d350073fef92169ad39e4777e490859833d9945b6116d1",
+   "research/auth2/prereg/SC-A1.json": "ba06afd7261b4efe3544c147496f55f51d078fe4ac91c36c9f861358324af5b7",
+   "research/auth2/prereg/SC-A2.json": "9c033f9cacde77293d53a976d74b2eb2b4a3f0c1bec5cf92a69b961b75131cbb",
+   "research/auth2/prereg/SC-A3.json": "2080418abc4c2c29576588f9066ac851233dcb0825138570288da861a4161e4d"
+  },
+  "trial_ledger": {
+   "auth2": {
+    "TRIAL-AUTH2-A1": {
+     "purpose": "A1: the frozen primary configuration of family A1 against its matched benchmark on Dataset V3, with its precommitted reject-only perturbations, stresses and family gates (FUNNEL-LAW-2).",
+     "recorded_utc": "2026-10-11T05:16:41.230Z",
+     "seq": 36,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-A2": {
+     "purpose": "A2: the frozen primary configuration of family A2 against its matched benchmark on Dataset V3, with its precommitted reject-only perturbations, stresses and family gates (FUNNEL-LAW-2).",
+     "recorded_utc": "2026-10-11T05:16:41.251Z",
+     "seq": 37,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-A3": {
+     "purpose": "A3: the frozen primary configuration of family A3 against its matched benchmark on Dataset V3, with its precommitted reject-only perturbations, stresses and family gates (FUNNEL-LAW-2).",
+     "recorded_utc": "2026-10-11T05:16:41.272Z",
+     "seq": 38,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-CAL-A1": {
+     "purpose": "CAL-A1-STAT: size (<= 10/200 no-edge worlds accepted) and power (>= 160/200 planted-edge worlds accepted at delta 0.4) of family A1's full gate stack, before any market-data trial.",
+     "recorded_utc": "2026-10-11T05:16:41.022Z",
+     "seq": 27,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-CAL-A2": {
+     "purpose": "CAL-A2-STAT: size (<= 10/200 no-edge worlds accepted) and power (>= 160/200 planted-edge worlds accepted at delta 0.4) of family A2's full gate stack, before any market-data trial.",
+     "recorded_utc": "2026-10-11T05:16:41.057Z",
+     "seq": 28,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-CAL-A3": {
+     "purpose": "CAL-A3-STAT: size (<= 10/200 no-edge worlds accepted) and power (>= 160/200 planted-edge worlds accepted at delta 0.3) of family A3's full gate stack, before any market-data trial.",
+     "recorded_utc": "2026-10-11T05:16:41.081Z",
+     "seq": 29,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-D0": {
+     "purpose": "D0: rebuild Dataset V3 from the Binance public archive and prove the committed lock, membership, delisting and coverage tables byte-identical; decides DATA_LIMITED per family.",
+     "recorded_utc": "2026-10-11T05:16:40.983Z",
+     "seq": 26,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-HOLM": {
+     "purpose": "HOLM: Holm step-down across the three family hypotheses, m = 3 fixed, FWER 0.05; an untested family enters with p = 1.",
+     "recorded_utc": "2026-10-11T05:16:41.292Z",
+     "seq": 39,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-N-A1": {
+     "purpose": "N-A1: family A1's null fixture (seed 0, perturbation seeds 1001..) on real Dataset V3 data through every gate must be REJECTED; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.170Z",
+     "seq": 33,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-N-A2": {
+     "purpose": "N-A2: family A2's null fixture (seed 0, perturbation seeds 1001..) on real Dataset V3 data through every gate must be REJECTED; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.190Z",
+     "seq": 34,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-N-A3": {
+     "purpose": "N-A3: family A3's null fixture (seed 0, perturbation seeds 1001..) on real Dataset V3 data through every gate must be REJECTED; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.210Z",
+     "seq": 35,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-PC-A1": {
+     "purpose": "PC-A1: family A1's engine fixtures on one planted-edge synthetic world (seed 777) must SURVIVE every gate; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.110Z",
+     "seq": 30,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-PC-A2": {
+     "purpose": "PC-A2: family A2's engine fixtures on one planted-edge synthetic world (seed 777) must SURVIVE every gate; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.130Z",
+     "seq": 31,
+     "state": "PREREGISTERED"
+    },
+    "TRIAL-AUTH2-PC-A3": {
+     "purpose": "PC-A3: family A3's engine fixtures on one planted-edge synthetic world (seed 777) must SURVIVE every gate; replay parity of every run.",
+     "recorded_utc": "2026-10-11T05:16:41.149Z",
+     "seq": 32,
+     "state": "PREREGISTERED"
+    }
+   },
+   "records": 40,
+   "tip_digest": "87c8b0499bbaf9f51089cb04560cf045a37e55d378df701964d21f394fcce363",
+   "verify": []
+  }
+ },
+ "repository": "algamal119933-ux/trading-lab-os-sandbox",
+ "runs": [
+  {
+   "conclusion": "failure",
+   "created_at": "2026-10-11T23:36:08Z",
+   "event": "workflow_dispatch",
+   "guard_records": [
+    {
+     "a_m": null,
+     "aux_minutes_ledger": 0,
+     "checked_utc": "2026-10-12T00:03:00Z",
+     "decision": "NO_DISPATCH",
+     "minutes_ledger": 0,
+     "mode": "pre-dispatch",
+     "node": "D0",
+     "owner_evidence_digest": null,
+     "part": 1,
+     "r_m": null,
+     "reasons": [
+      "FAIL_CLOSED: remaining included Actions minutes not readable (usage: gh: This endpoint has been moved. (HTTP 410))"
+     ],
+     "remaining_included_minutes": null,
+     "sha": "76bb14d569fb1b53b59c2190de3bd34de0325b61",
+     "total_minutes_ledger": 0
+    }
+   ],
+   "head_branch": "main",
+   "head_sha": "76bb14d569fb1b53b59c2190de3bd34de0325b61",
+   "jobs": [
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-11T23:36:47Z",
+     "conclusion": "failure",
+     "name": "AUTH-2 guard D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-11T23:36:13Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-11T23:36:15Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-11T23:36:14Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:16Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-11T23:36:15Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:16Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-11T23:36:16Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:41Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-11T23:36:16Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:43Z",
+       "conclusion": "failure",
+       "name": "Gate: dispatch guard (billing readable, serial, caps, never re-run), published",
+       "number": 5,
+       "started_at": "2026-10-11T23:36:41Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:44Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 6,
+       "started_at": "2026-10-11T23:36:43Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:44Z",
+       "conclusion": "skipped",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 11,
+       "started_at": "2026-10-11T23:36:44Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:44Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 12,
+       "started_at": "2026-10-11T23:36:44Z"
+      },
+      {
+       "completed_at": "2026-10-11T23:36:44Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 13,
+       "started_at": "2026-10-11T23:36:44Z"
+      }
+     ]
+    },
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-12T00:03:08Z",
+     "conclusion": "failure",
+     "name": "AUTH-2 guard D0 part 1",
+     "run_attempt": 2,
+     "started_at": "2026-10-12T00:02:24Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T00:02:27Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T00:02:26Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:02:28Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T00:02:27Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:02:28Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T00:02:28Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:00Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T00:02:28Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:04Z",
+       "conclusion": "failure",
+       "name": "Gate: dispatch guard (billing readable, serial, caps, never re-run), published",
+       "number": 5,
+       "started_at": "2026-10-12T00:03:00Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:05Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 6,
+       "started_at": "2026-10-12T00:03:04Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:05Z",
+       "conclusion": "skipped",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 11,
+       "started_at": "2026-10-12T00:03:05Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:05Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 12,
+       "started_at": "2026-10-12T00:03:05Z"
+      },
+      {
+       "completed_at": "2026-10-12T00:03:05Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 13,
+       "started_at": "2026-10-12T00:03:05Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 2,
+   "run_id": 38184895792,
+   "status": "completed",
+   "timeout_minutes": 10,
+   "title": "AUTH2-GUARD D0 part 1",
+   "workflow": "auth2-guard.yml"
+  },
+  {
+   "conclusion": "failure",
+   "created_at": "2026-10-12T08:00:28Z",
+   "event": "workflow_dispatch",
+   "guard_records": [
+    {
+     "a_m": null,
+     "aux_minutes_ledger": 2,
+     "checked_utc": "2026-10-12T08:01:07Z",
+     "decision": "NO_DISPATCH",
+     "minutes_ledger": 0,
+     "mode": "pre-dispatch",
+     "node": "D0",
+     "owner_evidence_digest": "sha256:102a2643892b76a22497802a1305e3efddabb4512bf6acf48606e53c323929c4",
+     "part": 1,
+     "r_m": null,
+     "reasons": [
+      "FAIL_CLOSED: remaining included Actions minutes not readable (WRONG_ACCOUNT: usage of trading-lab-os-sandbox in the report for algamal119933-ux; NOT_EXPOSED: GitHub's billing API gives no included-minutes quota and no remaining included minutes; discountAmount merges included usage with public-repository and self-hosted discounts; OWNER_EVIDENCE_USAGE_NOT_VERIFIED: the Owner's own usage report was not verified with the billing token beside the attestation)",
+      "FAIL_CLOSED: an Actions budget of USD 0 that stops usage is not verified (NOT_EXPOSED: GitHub's budgets API is organization-only, so a personal account's Actions budget and its stop-usage setting cannot be read; OWNER_EVIDENCE_USAGE_NOT_VERIFIED: the Owner's own usage report was not verified with the billing token beside the attestation)"
+     ],
+     "remaining_included_minutes": null,
+     "sha": "e2cb36ed0840cc0f44f2572626db7b795340bfac",
+     "total_minutes_ledger": 2
+    }
+   ],
+   "head_branch": "main",
+   "head_sha": "e2cb36ed0840cc0f44f2572626db7b795340bfac",
+   "jobs": [
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-12T08:01:14Z",
+     "conclusion": "failure",
+     "name": "AUTH-2 guard D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-12T08:00:33Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T08:00:37Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T08:00:34Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:00:39Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T08:00:37Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:00:39Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T08:00:39Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:07Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T08:00:39Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:10Z",
+       "conclusion": "failure",
+       "name": "Gate: dispatch guard (Owner billing evidence, serial, caps, never re-run), published",
+       "number": 5,
+       "started_at": "2026-10-12T08:01:07Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:11Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 6,
+       "started_at": "2026-10-12T08:01:10Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:11Z",
+       "conclusion": "skipped",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 11,
+       "started_at": "2026-10-12T08:01:11Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:12Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 12,
+       "started_at": "2026-10-12T08:01:11Z"
+      },
+      {
+       "completed_at": "2026-10-12T08:01:12Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 13,
+       "started_at": "2026-10-12T08:01:12Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 1,
+   "run_id": 38220977904,
+   "status": "completed",
+   "timeout_minutes": 10,
+   "title": "AUTH2-GUARD D0 part 1",
+   "workflow": "auth2-guard.yml"
+  },
+  {
+   "conclusion": "success",
+   "created_at": "2026-10-12T15:43:21Z",
+   "event": "workflow_dispatch",
+   "guard_records": [
+    {
+     "a_m": 1495,
+     "aux_minutes_ledger": 3,
+     "checked_utc": "2026-10-12T15:43:53Z",
+     "decision": "DISPATCH",
+     "minutes_ledger": 0,
+     "mode": "pre-dispatch",
+     "node": "D0",
+     "owner_evidence_digest": "sha256:5582ba1f849be0fb15247e5cfe70e2dce97dcee2bcb0c70b05a0bee83d3e6a92",
+     "part": 1,
+     "r_m": 500,
+     "reasons": [],
+     "remaining_included_minutes": 1495,
+     "sha": "410418e3ac436683b75d5c338ce640fb5e7dab37",
+     "total_minutes_ledger": 3
+    }
+   ],
+   "head_branch": "main",
+   "head_sha": "410418e3ac436683b75d5c338ce640fb5e7dab37",
+   "jobs": [
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-12T15:43:59Z",
+     "conclusion": "success",
+     "name": "AUTH-2 guard D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-12T15:43:26Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T15:43:27Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T15:43:27Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:28Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T15:43:27Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:29Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T15:43:28Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:53Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T15:43:29Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:56Z",
+       "conclusion": "success",
+       "name": "Gate: dispatch guard (Owner billing evidence, serial, caps, never re-run), published",
+       "number": 5,
+       "started_at": "2026-10-12T15:43:53Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:57Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 6,
+       "started_at": "2026-10-12T15:43:56Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:57Z",
+       "conclusion": "success",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 11,
+       "started_at": "2026-10-12T15:43:57Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:58Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 12,
+       "started_at": "2026-10-12T15:43:57Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:43:58Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 13,
+       "started_at": "2026-10-12T15:43:58Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 1,
+   "run_id": 38272303141,
+   "status": "completed",
+   "timeout_minutes": 10,
+   "title": "AUTH2-GUARD D0 part 1",
+   "workflow": "auth2-guard.yml"
+  },
+  {
+   "conclusion": "failure",
+   "created_at": "2026-10-12T15:52:45Z",
+   "event": "workflow_dispatch",
+   "head_branch": "main",
+   "head_sha": "410418e3ac436683b75d5c338ce640fb5e7dab37",
+   "jobs": [
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-12T15:53:33Z",
+     "conclusion": "failure",
+     "name": "AUTH-2 D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-12T15:52:50Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T15:52:54Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T15:52:51Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:52:55Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T15:52:54Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:52:55Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T15:52:55Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:22Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T15:52:55Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:29Z",
+       "conclusion": "success",
+       "name": "Gate: dispatch guard (bound Owner billing evidence, serial, caps, never re-run)",
+       "number": 5,
+       "started_at": "2026-10-12T15:53:22Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:29Z",
+       "conclusion": "success",
+       "name": "Gate: paper safety",
+       "number": 6,
+       "started_at": "2026-10-12T15:53:29Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:29Z",
+       "conclusion": "success",
+       "name": "Download predecessor results",
+       "number": 7,
+       "started_at": "2026-10-12T15:53:29Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:30Z",
+       "conclusion": "success",
+       "name": "Restore the Dataset V3 archive cache",
+       "number": 8,
+       "started_at": "2026-10-12T15:53:29Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:30Z",
+       "conclusion": "skipped",
+       "name": "Pull the pinned Freqtrade image",
+       "number": 9,
+       "started_at": "2026-10-12T15:53:30Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:30Z",
+       "conclusion": "failure",
+       "name": "Run the node (refuses unless the program, ledger and DAG allow it)",
+       "number": 10,
+       "started_at": "2026-10-12T15:53:30Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:30Z",
+       "conclusion": "success",
+       "name": "Publish the result summary (the executor reads it; it cannot download artifacts)",
+       "number": 11,
+       "started_at": "2026-10-12T15:53:30Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:31Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 12,
+       "started_at": "2026-10-12T15:53:30Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:31Z",
+       "conclusion": "skipped",
+       "name": "Post Restore the Dataset V3 archive cache",
+       "number": 22,
+       "started_at": "2026-10-12T15:53:31Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:31Z",
+       "conclusion": "skipped",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 23,
+       "started_at": "2026-10-12T15:53:31Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:31Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 24,
+       "started_at": "2026-10-12T15:53:31Z"
+      },
+      {
+       "completed_at": "2026-10-12T15:53:31Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 25,
+       "started_at": "2026-10-12T15:53:31Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 1,
+   "run_id": 38273417548,
+   "status": "completed",
+   "timeout_minutes": 150,
+   "title": "AUTH2 D0 part 1",
+   "workflow": "auth2.yml"
+  },
+  {
+   "conclusion": "success",
+   "created_at": "2026-10-12T17:45:34Z",
+   "event": "workflow_dispatch",
+   "guard_records": [
+    {
+     "a_m": 1495,
+     "aux_minutes_ledger": 4,
+     "checked_utc": "2026-10-12T17:46:06Z",
+     "decision": "DISPATCH",
+     "minutes_ledger": 1,
+     "mode": "pre-dispatch",
+     "node": "D0",
+     "owner_evidence_digest": "sha256:e599f517a2cf1bc64f3d59570b2e4939e06a6dceea0f7859c5bb0c94c2e3c8c0",
+     "part": 1,
+     "r_m": 500,
+     "reasons": [],
+     "remaining_included_minutes": 1442,
+     "sha": "8013e216075fcdfdf1068ef1b43b52aea5747d78",
+     "total_minutes_ledger": 5
+    }
+   ],
+   "head_branch": "main",
+   "head_sha": "8013e216075fcdfdf1068ef1b43b52aea5747d78",
+   "jobs": [
+    {
+     "billed_minutes": 1,
+     "completed_at": "2026-10-12T17:46:15Z",
+     "conclusion": "success",
+     "name": "AUTH-2 guard D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-12T17:45:39Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T17:45:43Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T17:45:39Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:45:45Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T17:45:43Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:45:46Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T17:45:45Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:06Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T17:45:46Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:11Z",
+       "conclusion": "success",
+       "name": "Gate: dispatch guard (Owner billing evidence, serial, caps, never re-run), published",
+       "number": 5,
+       "started_at": "2026-10-12T17:46:06Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:12Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 6,
+       "started_at": "2026-10-12T17:46:11Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:12Z",
+       "conclusion": "success",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 11,
+       "started_at": "2026-10-12T17:46:12Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:13Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 12,
+       "started_at": "2026-10-12T17:46:12Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:46:13Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 13,
+       "started_at": "2026-10-12T17:46:13Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 1,
+   "run_id": 38286343057,
+   "status": "completed",
+   "timeout_minutes": 10,
+   "title": "AUTH2-GUARD D0 part 1",
+   "workflow": "auth2-guard.yml"
+  },
+  {
+   "conclusion": "cancelled",
+   "created_at": "2026-10-12T17:47:00Z",
+   "event": "workflow_dispatch",
+   "head_branch": "main",
+   "head_sha": "8013e216075fcdfdf1068ef1b43b52aea5747d78",
+   "jobs": [
+    {
+     "billed_minutes": 151,
+     "completed_at": "2026-10-12T20:17:38Z",
+     "conclusion": "cancelled",
+     "name": "AUTH-2 D0 part 1",
+     "run_attempt": 1,
+     "started_at": "2026-10-12T17:47:04Z",
+     "status": "completed",
+     "steps": [
+      {
+       "completed_at": "2026-10-12T17:47:06Z",
+       "conclusion": "success",
+       "name": "Set up job",
+       "number": 1,
+       "started_at": "2026-10-12T17:47:05Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:08Z",
+       "conclusion": "success",
+       "name": "Run actions/checkout@v4",
+       "number": 2,
+       "started_at": "2026-10-12T17:47:06Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:08Z",
+       "conclusion": "success",
+       "name": "Run actions/setup-python@v5",
+       "number": 3,
+       "started_at": "2026-10-12T17:47:08Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:39Z",
+       "conclusion": "success",
+       "name": "Install pinned dependencies (arch and its closure hash-pinned)",
+       "number": 4,
+       "started_at": "2026-10-12T17:47:08Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:48Z",
+       "conclusion": "success",
+       "name": "Gate: dispatch guard (bound Owner billing evidence, serial, caps, never re-run)",
+       "number": 5,
+       "started_at": "2026-10-12T17:47:39Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:49Z",
+       "conclusion": "success",
+       "name": "Gate: paper safety",
+       "number": 6,
+       "started_at": "2026-10-12T17:47:48Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:49Z",
+       "conclusion": "success",
+       "name": "Download predecessor results",
+       "number": 7,
+       "started_at": "2026-10-12T17:47:49Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:49Z",
+       "conclusion": "success",
+       "name": "Restore the Dataset V3 archive cache",
+       "number": 8,
+       "started_at": "2026-10-12T17:47:49Z"
+      },
+      {
+       "completed_at": "2026-10-12T17:47:49Z",
+       "conclusion": "skipped",
+       "name": "Pull the pinned Freqtrade image",
+       "number": 9,
+       "started_at": "2026-10-12T17:47:49Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:34Z",
+       "conclusion": "cancelled",
+       "name": "Run the node (refuses unless the program, ledger and DAG allow it)",
+       "number": 10,
+       "started_at": "2026-10-12T17:47:49Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:34Z",
+       "conclusion": "success",
+       "name": "Publish the result summary (the executor reads it; it cannot download artifacts)",
+       "number": 11,
+       "started_at": "2026-10-12T20:17:34Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:35Z",
+       "conclusion": "success",
+       "name": "Run actions/upload-artifact@v4",
+       "number": 12,
+       "started_at": "2026-10-12T20:17:34Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:35Z",
+       "conclusion": "skipped",
+       "name": "Post Restore the Dataset V3 archive cache",
+       "number": 22,
+       "started_at": "2026-10-12T20:17:35Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:35Z",
+       "conclusion": "skipped",
+       "name": "Post Run actions/setup-python@v5",
+       "number": 23,
+       "started_at": "2026-10-12T20:17:35Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:36Z",
+       "conclusion": "success",
+       "name": "Post Run actions/checkout@v4",
+       "number": 24,
+       "started_at": "2026-10-12T20:17:35Z"
+      },
+      {
+       "completed_at": "2026-10-12T20:17:36Z",
+       "conclusion": "success",
+       "name": "Complete job",
+       "number": 25,
+       "started_at": "2026-10-12T20:17:36Z"
+      }
+     ]
+    }
+   ],
+   "run_attempt": 1,
+   "run_id": 38286502721,
+   "status": "completed",
+   "timeout_minutes": 150,
+   "title": "AUTH2 D0 part 1",
+   "workflow": "auth2.yml"
+  }
+ ],
+ "schema": "auth2-closure-evidence/1"
+}
