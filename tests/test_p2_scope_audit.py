@@ -977,6 +977,28 @@ AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #62, merged. Two parents: e2cb36ed (main before, AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE) + 2b9d327a
+# (the claude/auth-2-usage-report-repository-name branch).
+AUTH_2_USAGE_REPORT_REPOSITORY_NAME_MERGE = "410418e3ac436683b75d5c338ce640fb5e7dab37"
+
+# AUTH-2 usage report repository name (guard run 38220977904, NO_DISPATCH: WRONG_ACCOUNT).
+# GitHub's per-user usage report names the account's own repositories without an owner
+# ("trading-lab-os-sandbox"), not in the docs example's "user/example" form, so the account
+# check refused every live report. A bare name is accepted; a name qualified with any other
+# owner, or a non-string, is still refused. No threshold, cap, input, binding or freshness
+# rule changes. research/auth2/*.py untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_REPO_NAME = "AUTH-2 usage report repository name"
+AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py": f"{_REPO_NAME} — the account check accepts the live report's bare names",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_REPO_NAME} — the live report form and guard run 38220977904",
+    "tests/test_auth2_operator.py": f"{_REPO_NAME} — live-form fixture; other owners still refused; replay",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2 Owner billing evidence bridge (PR #61) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1017,6 +1039,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2_BILLING_EVIDENCE": (AUTH_2_BILLING_EVIDENCE_MERGE, AUTH_2_BILLING_EVIDENCE_SCOPE),
     "AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE": (AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_MERGE,
                                              AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_SCOPE),
+    "AUTH_2_USAGE_REPORT_REPOSITORY_NAME": (AUTH_2_USAGE_REPORT_REPOSITORY_NAME_MERGE,
+                                            AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1024,19 +1048,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 usage report repository name (guard run 38220977904, NO_DISPATCH: WRONG_ACCOUNT).
-# GitHub's per-user usage report names the account's own repositories without an owner
-# ("trading-lab-os-sandbox"), not in the docs example's "user/example" form, so the account
-# check refused every live report. A bare name is accepted; a name qualified with any other
-# owner, or a non-string, is still refused. No threshold, cap, input, binding or freshness
-# rule changes. research/auth2/*.py untouched.
-_REPO_NAME = "AUTH-2 usage report repository name"
+# AUTH-2 node checkout history (D0 run 38273417548 refused: every node's ledger record "older
+# than the program"). The node job checked out one commit, so the program check dated the
+# program by the dispatched commit instead of the commit that first added it. The node job
+# now fetches full history, as CI does. No gate, record, threshold or cap changes;
+# research/auth2/*.py untouched.
+_HISTORY = "AUTH-2 node checkout history"
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/gates/auth2_operator.py": f"{_REPO_NAME} — the account check accepts the live report's bare names",
-    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_REPO_NAME} — the live report form and guard run 38220977904",
-    "tests/test_auth2_operator.py": f"{_REPO_NAME} — live-form fixture; other owners still refused; replay",
+    ".github/workflows/auth2.yml": f"{_HISTORY} — the node job fetches the history its program check reads",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_HISTORY} — D0 run 38273417548 and its cause, recorded",
+    "tests/test_auth2_operator.py": f"{_HISTORY} — full-history checkout pinned; depth-1 refusal reproduced",
     "tests/test_p2_scope_audit.py":
-        "AUTH-2 Owner billing evidence bridge (PR #61) pinned to its merge; this branch's scope",
+        "AUTH-2 usage report repository name (PR #62) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

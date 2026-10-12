@@ -21,6 +21,7 @@ import io
 import json
 import math
 import re
+import subprocess
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1018,6 +1019,35 @@ def test_node_jobs_guard_through_the_operator_and_publish_their_results():
     assert pub["if"] == "always()" and "annotate-results" in pub["run"]
     names = [s.get("name", s.get("uses", "")) for s in steps]
     assert names.index(pub["name"]) < names.index("actions/upload-artifact@v4")
+
+
+def test_the_node_job_checks_out_the_history_its_program_check_reads():
+    checkout = next(s for s in load("auth2.yml")["jobs"]["node"]["steps"]
+                    if s.get("uses", "").startswith("actions/checkout"))
+    assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_a_depth_one_checkout_refuses_every_node_and_full_history_passes(tmp_path):
+    """D0 run 38273417548 (main 410418e): a depth-1 checkout holds only the dispatched commit, so the program
+    check takes it for the commit that added the program and finds every node's PREREGISTERED record older than
+    the program. A full clone of the same commit passes."""
+    import check_research_program as crp
+
+    def git(*args, cwd=REPO) -> str:
+        return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True,
+                              timeout=300).stdout.strip()
+
+    if git("rev-parse", "--is-shallow-repository") != "false":
+        pytest.skip("this checkout is shallow itself, so there is no full history to compare with")
+    head = git("rev-parse", "HEAD")
+    program = json.loads((REPO / "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json").read_text())
+    for depth, refused in ((["--depth", "1"], len(program["dag"]["nodes"])), ([], 0)):
+        clone = tmp_path / ("shallow" if depth else "full")
+        git("clone", "--quiet", "--no-checkout", *depth, f"file://{REPO}", str(clone), cwd=tmp_path)
+        git("checkout", "--quiet", "--detach", head, cwd=clone)
+        problems = crp.check(clone)
+        assert len(problems) == refused, problems
+        assert all("ledger record older than the program" in p for p in problems)
 
 
 def test_guard_and_closure_artifacts_are_never_read_as_node_results():
