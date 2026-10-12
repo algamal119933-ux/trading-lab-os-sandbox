@@ -382,9 +382,11 @@ def test_the_evidence_digest_is_deterministic_and_covers_every_field():
 # -- a synthetic GitHub: the bridge end to end ------------------------------------------------------------
 
 def usage_item(**kw) -> dict:
+    """One usage item in the live report's form: guard run 38220977904 read the repository name without its
+    owner."""
     it = {"date": "2026-10-11", "product": "Actions", "sku": "Actions Linux", "quantity": 12.0, "unitType": "Minutes",
           "pricePerUnit": 0.008, "grossAmount": 0.096, "discountAmount": 0.096, "netAmount": 0.0,
-          "repositoryName": f"{OWNER}/trading-lab-os-sandbox"}
+          "repositoryName": "trading-lab-os-sandbox"}
     it.update(kw)
     return it
 
@@ -1148,6 +1150,75 @@ def test_another_account_or_billing_period_never_dispatches(monkeypatch, item, w
     bill, _ = read_with(monkeypatch, (200, {"usageItems": [usage_item(), item]}))
     assert bill["usage_evidence"]["class"] == why
     assert decided(bill)["decision"] == DG.NO_DISPATCH
+
+
+def test_the_live_report_names_the_accounts_repositories_without_an_owner(monkeypatch):
+    """Guard run 38220977904 (2026-10-12, main e2cb36e): GitHub's live report named the repository
+    "trading-lab-os-sandbox", not the docs example's "user/example" form, and the account check refused it
+    (WRONG_ACCOUNT), so no report could ever verify. The report is per user: a bare name is this account's, and a
+    name qualified with any other owner is still refused."""
+    live = usage_item(repositoryName="trading-lab-os-sandbox")
+    for also in ([], [usage_item(repositoryName=f"{OWNER}/trading-lab-os-sandbox")],
+                 [usage_item(repositoryName=f"{OWNER.upper()}/Trading-Lab-OS-Sandbox")],
+                 [usage_item(repositoryName="")], [usage_item(repositoryName=None)],
+                 [usage_item(product="Copilot", sku="Copilot Premium Request", unitType="requests")]):
+        bill, _ = read_with(monkeypatch, (200, {"usageItems": [live, *also]}))
+        assert bill["usage_evidence"]["class"] == "USAGE_VERIFIED", also
+        assert bill["usage_evidence"]["verified"] is True
+    for name in ("someone-else/trading-lab-os-sandbox", f"{OWNER}x/trading-lab-os-sandbox", "/trading-lab-os-sandbox",
+                 f"someone-else/{OWNER}", 7, ["trading-lab-os-sandbox"]):
+        for items in ([live, usage_item(repositoryName=name)], [usage_item(repositoryName=name), live]):
+            bill, _ = read_with(monkeypatch, (200, {"usageItems": items}))
+            assert bill["usage_evidence"]["class"] == "WRONG_ACCOUNT", name
+            assert decided(bill)["decision"] == DG.NO_DISPATCH
+
+
+# Guard run 38220977904's Owner evidence object as its record published it (usage_api_verified false).
+LIVE_SHA = "e2cb36ed0840cc0f44f2572626db7b795340bfac"
+LIVE_EVIDENCE = {"schema": "AUTH2_OWNER_BILLING_EVIDENCE_1", "repository": SLUG, "guard_run_id": 38220977904,
+                 "guard_run_attempt": 1, "main_sha": LIVE_SHA, "node": "D0", "part": 1, "actor": OWNER,
+                 "actor_id": 325778659, "triggering_actor": OWNER, "triggering_actor_id": 325778659,
+                 "billing_month": "2026-10", "remaining_included_linux_minutes": 1495,
+                 "budget_usd_zero_confirmed": True, "stop_usage_confirmed": True,
+                 "attested_utc": "2026-10-12T08:00:28Z", "usage_api_verified": False, "usage_endpoint": USAGE_PATH,
+                 "usage_period": "2026-10",
+                 "evidence_digest": "sha256:102a2643892b76a22497802a1305e3efddabb4512bf6acf48606e53c323929c4"}
+
+
+def replay_38220977904(world, items) -> dict:
+    """The Owner's guard run 38220977904 again (main e2cb36e, 1495 minutes, both confirmations) over ``items``."""
+    world.usage = (200, {"usageItems": items})
+    return world.owner_guard(38220977904, created="2026-10-12T08:00:28Z", minutes="1495", run={"head_sha": LIVE_SHA})
+
+
+def test_guard_run_38220977904_replayed_over_the_live_report_form_dispatches_at_every_gate(world):
+    """Its evidence differs from the published one only in usage_api_verified, and the reserve law, not the
+    account check, decides: 1495 - 2 x 150 >= R_m 500."""
+    assert OP.evidence_digest(LIVE_EVIDENCE) == LIVE_EVIDENCE["evidence_digest"]  # the copy above is exact
+    pre = replay_38220977904(world, [usage_item(date="2026-10-01"), usage_item(date="2026-10-12", quantity=3.0)])
+    assert pre["decision"] == DG.DISPATCH, pre["reasons"]
+    ev = pre["billing"]["owner_evidence"]
+    assert ev == {**LIVE_EVIDENCE, "usage_api_verified": True, "evidence_digest": ev["evidence_digest"]}
+    assert ev["evidence_digest"] == OP.evidence_digest(ev) != LIVE_EVIDENCE["evidence_digest"]
+    assert (pre["month"], pre["a_m"], pre["r_m"], pre["remaining_included_minutes"], pre["timeout_minutes"]) == \
+        ("2026-10", 1495, 500, 1495, 150)
+    assert pre["billing"]["usage_evidence"]["class"] == "USAGE_VERIFIED"
+    chk = world.check(38220977904, when="2026-10-12T08:05:00Z", main=LIVE_SHA)
+    assert chk["decision"] == DG.DISPATCH, chk["reasons"]
+    assert chk["dispatch_inputs"] == {"node": "D0", "part": "1", "guard_run": "38220977904",
+                                      "evidence_digest": ev["evidence_digest"]}
+    job = world.dispatch(38220978000, guard_run=38220977904, digest=ev["evidence_digest"],
+                         created="2026-10-12T08:06:00Z", sha=LIVE_SHA)
+    assert job["decision"] == DG.DISPATCH, job["reasons"]
+    assert job["billing"]["owner_evidence"] == ev
+
+
+def test_guard_run_38220977904_replayed_with_another_owners_repository_still_refuses(world):
+    other = usage_item(date="2026-10-12", repositoryName="someone-else/trading-lab-os-sandbox")
+    pre = replay_38220977904(world, [usage_item(date="2026-10-01"), other])
+    assert pre["decision"] == DG.NO_DISPATCH and pre["billing"]["usage_evidence"]["class"] == "WRONG_ACCOUNT"
+    assert pre["billing"]["owner_evidence"] == LIVE_EVIDENCE  # the published refusal, byte for byte
+    assert world.check(38220977904, when="2026-10-12T08:05:00Z", main=LIVE_SHA)["decision"] == DG.NO_DISPATCH
 
 
 @pytest.mark.parametrize("status", [None, 404, 500, 503])

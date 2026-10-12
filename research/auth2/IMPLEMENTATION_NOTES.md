@@ -261,6 +261,14 @@ and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
   the inputs `check-dispatch` printed are dispatched. Limitation: the executor's GitHub access is the Owner's account,
   so the actor check proves the account, not who typed the figures. The executor therefore never dispatches
   `auth2-guard.yml`; only the Owner does.
+* Usage report repository names (guard run 38220977904, after PR #61). GitHub's live usage report names the account's
+  own repositories without an owner (`"repositoryName": "trading-lab-os-sandbox"`), not in the "user/example" form of
+  its docs example, and the account check required the owner prefix. It therefore refused every live report
+  (WRONG_ACCOUNT, at HTTP 200), and the Owner's D0 attestation (1,495 minutes, both confirmations) decided
+  NO_DISPATCH. The report is per account: the endpoint names the account, and GitHub answers it only for a token that
+  may read that account's billing. A bare name is therefore this account's repository and is accepted, as is the
+  owner-qualified form for this account. A name qualified with any other owner, or a name that is not a string, is
+  still refused. No threshold, cap, input, binding, freshness or evidence rule changed.
 * `run_node.py` exits 4 on INVALID_RUN so the job fails and the one technical retry is available; every law
   terminal is a successful run. A second INVALID_RUN stops the program (`closure.py --stop-program`).
 

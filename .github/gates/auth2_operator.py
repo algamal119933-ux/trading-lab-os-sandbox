@@ -228,7 +228,10 @@ def usage_evidence(owner: str, year: int, month: int, status: int | None, body) 
             ev.update({"class": "WRONG_PERIOD", "detail": f"usage dated {it['date'][:32]} in the {ev['period']} report"})
             return ev
         repo = it.get("repositoryName") or ""
-        if not isinstance(repo, str) or (repo and not repo.lower().startswith(owner.lower() + "/")):
+        # The report is per user and names the account's own repositories without an owner (live, guard run
+        # 38220977904: "trading-lab-os-sandbox"; GitHub's docs example shows "user/example"). A bare name is
+        # therefore this account's; a name qualified with another owner is refused.
+        if not isinstance(repo, str) or ("/" in repo and not repo.lower().startswith(owner.lower() + "/")):
             ev.update({"class": "WRONG_ACCOUNT", "detail": f"usage of {str(repo)[:100]} in the report for {owner}"})
             return ev
         if it["product"].lower() == "actions":

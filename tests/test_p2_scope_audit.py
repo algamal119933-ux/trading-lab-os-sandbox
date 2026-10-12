@@ -952,6 +952,31 @@ AUTH_2_BILLING_EVIDENCE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #61, merged. Two parents: 2a48f249 (main before, AUTH_2_BILLING_EVIDENCE) + 6cc4559d (the
+# claude/auth-2-owner-billing-evidence-bridge branch).
+AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_MERGE = "e2cb36ed0840cc0f44f2572626db7b795340bfac"
+
+# AUTH-2 Owner billing evidence bridge (Owner decision AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1).
+# GitHub's API exposes neither pacing-rule control for a personal account, so the Owner
+# attests both in the pre-dispatch guard run, authenticated by the run's actor as the Actions
+# API reports it, beside the billing token's verified usage report. Every node and closure
+# dispatch names that guard run and its evidence digest, and the in-job guard verifies the
+# binding. A_m stays the first node run's in-job record. research/auth2/*.py untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_BRIDGE = "AUTH-2 Owner billing evidence bridge"
+AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py":
+        f"{_BRIDGE} — Owner evidence and digest; node/closure binding verified in the job; first-month A_m",
+    ".github/workflows/auth2-guard.yml": f"{_BRIDGE} — the Owner's typed billing inputs, read from the event",
+    ".github/workflows/auth2.yml": f"{_BRIDGE} — the dispatch names its guard run and evidence digest",
+    ".github/workflows/auth2-closure.yml": f"{_BRIDGE} — the closure is bound the same way",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BRIDGE} — the evidence source and the binding, recorded",
+    "tests/test_auth2_operator.py": f"{_BRIDGE} — actor, inputs, usage, digest, binding, A_m, caps, replay",
+    "tests/test_p2_scope_audit.py": "AUTH-2 billing evidence (PR #60) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -990,6 +1015,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2": (AUTH_2_MERGE, AUTH_2_SCOPE),
     "AUTH_2_OPERATOR_GATE": (AUTH_2_OPERATOR_GATE_MERGE, AUTH_2_OPERATOR_GATE_SCOPE),
     "AUTH_2_BILLING_EVIDENCE": (AUTH_2_BILLING_EVIDENCE_MERGE, AUTH_2_BILLING_EVIDENCE_SCOPE),
+    "AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE": (AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_MERGE,
+                                             AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -997,22 +1024,19 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 Owner billing evidence bridge (Owner decision AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1).
-# GitHub's API exposes neither pacing-rule control for a personal account, so the Owner
-# attests both in the pre-dispatch guard run, authenticated by the run's actor as the Actions
-# API reports it, beside the billing token's verified usage report. Every node and closure
-# dispatch names that guard run and its evidence digest, and the in-job guard verifies the
-# binding. A_m stays the first node run's in-job record. research/auth2/*.py untouched.
-_BRIDGE = "AUTH-2 Owner billing evidence bridge"
+# AUTH-2 usage report repository name (guard run 38220977904, NO_DISPATCH: WRONG_ACCOUNT).
+# GitHub's per-user usage report names the account's own repositories without an owner
+# ("trading-lab-os-sandbox"), not in the docs example's "user/example" form, so the account
+# check refused every live report. A bare name is accepted; a name qualified with any other
+# owner, or a non-string, is still refused. No threshold, cap, input, binding or freshness
+# rule changes. research/auth2/*.py untouched.
+_REPO_NAME = "AUTH-2 usage report repository name"
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/gates/auth2_operator.py":
-        f"{_BRIDGE} — Owner evidence and digest; node/closure binding verified in the job; first-month A_m",
-    ".github/workflows/auth2-guard.yml": f"{_BRIDGE} — the Owner's typed billing inputs, read from the event",
-    ".github/workflows/auth2.yml": f"{_BRIDGE} — the dispatch names its guard run and evidence digest",
-    ".github/workflows/auth2-closure.yml": f"{_BRIDGE} — the closure is bound the same way",
-    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BRIDGE} — the evidence source and the binding, recorded",
-    "tests/test_auth2_operator.py": f"{_BRIDGE} — actor, inputs, usage, digest, binding, A_m, caps, replay",
-    "tests/test_p2_scope_audit.py": "AUTH-2 billing evidence (PR #60) pinned to its merge; this branch's scope",
+    ".github/gates/auth2_operator.py": f"{_REPO_NAME} — the account check accepts the live report's bare names",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_REPO_NAME} — the live report form and guard run 38220977904",
+    "tests/test_auth2_operator.py": f"{_REPO_NAME} — live-form fixture; other owners still refused; replay",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2 Owner billing evidence bridge (PR #61) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
