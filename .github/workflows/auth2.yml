@@ -71,6 +71,11 @@ jobs:
     timeout-minutes: ${{ fromJSON('{"D0":150,"CAL-A1":60,"PC-A1":150,"N-A1":150,"A1":120,"SC-A1":30,"CAL-A2":60,"PC-A2":180,"N-A2":180,"A2":240,"SC-A2":45,"CAL-A3":60,"PC-A3":60,"N-A3":60,"A3":45,"SC-A3":15,"HOLM":15}')[inputs.node] }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # run_node's program check (check_research_program.py, commit order) reads the commit that first added
+          # the program file. A depth-1 checkout holds only the dispatched commit, which then looks like that
+          # commit, so every node is refused (run 38273417548). Full history, as ci.yml checks it.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

@@ -269,6 +269,14 @@ and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
   may read that account's billing. A bare name is therefore this account's repository and is accepted, as is the
   owner-qualified form for this account. A name qualified with any other owner, or a name that is not a string, is
   still refused. No threshold, cap, input, binding, freshness or evidence rule changed.
+* Node checkout history (D0 run 38273417548, after PR #62). The node job checked out one commit (the
+  `actions/checkout` default, depth 1). `run_node`'s program check (`check_research_program.py`, commit order) dates
+  the program by the commit that first added it, and in that checkout the only commit, the dispatched main
+  (410418e, 2026-10-12T08:29:03Z), looked like that commit. Every node's PREREGISTERED record (2026-10-11T05:16:40Z
+  on) was therefore "older than the program", and the node refused before any data work. In full history the program
+  was first added at 2026-10-11T00:38:48Z (ef6336d), before every record, and the check passes, as it does in CI,
+  which fetches full history. The node job now fetches full history too. The run counts as D0's first run, so one
+  D0 run remains (dispatch_guard MAX_ATTEMPTS 2). No gate, record, threshold or cap changed.
 * `run_node.py` exits 4 on INVALID_RUN so the job fails and the one technical retry is available; every law
   terminal is a successful run. A second INVALID_RUN stops the program (`closure.py --stop-program`).
 
