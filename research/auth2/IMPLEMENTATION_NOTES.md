@@ -219,6 +219,21 @@ and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
   (where the artifacts are readable), published the same way, and read back byte-exact (`readout`); the
   terminal ledger records are appended from it by `closure.append_ledger`. Nothing under `research/auth2/`
   changed, so every preregistration's code pins still hold.
+* Billing evidence (after PR #59; the first guard runs answered HTTP 403, then HTTP 410). `dispatch_guard.read_billing`
+  reads `GET /users/{owner}/settings/billing/actions`, one of the product-specific billing endpoints GitHub closed
+  down (changelog 2025-09-26); it answers 410 "This endpoint has been moved" (the earlier 403 was the workflow's own
+  token answering while the secret was unset). The guard now reads billing through `.github/gates/auth2_operator.py`
+  instead: the replacement for a personal account, `GET /users/{owner}/settings/billing/usage` (enhanced billing
+  platform; fine-grained token with the "Plan" user permission, read), called with the billing token only, never
+  the workflow token. A well-formed report of this account and month is recorded as evidence of the token, the
+  account and the period. It cannot prove either control the pacing rule needs, and no GitHub endpoint can for a
+  personal account: no field holds the included-minutes quota or the remaining included minutes, and
+  `discountAmount` merges included usage with the free usage of public repositories and self-hosted runners
+  (GitHub docs, "Billing reports reference"), so no difference of reported figures is the remaining allowance;
+  and the budgets API exists for organizations only, so the USD 0 budget and its stop-usage setting cannot be
+  read. Both controls therefore stay unproven and every decision is NO_DISPATCH (fail-closed) until the Owner
+  settles how they are evidenced. The same change makes a re-run attempt of a node or closure job refuse in the job
+  (RE_RUN; a technical retry is a new dispatch) and counts the billed minutes of every attempt toward 4,000.
 * `run_node.py` exits 4 on INVALID_RUN so the job fails and the one technical retry is available; every law
   terminal is a successful run. A second INVALID_RUN stops the program (`closure.py --stop-program`).
 

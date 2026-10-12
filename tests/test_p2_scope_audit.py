@@ -908,6 +908,29 @@ AUTH_2_SCOPE: dict[str, str] = {
 }
 
 
+# PR #59, merged. Two parents: 70e047ec (main before, AUTH_2) + dd75a5d0 (the
+# claude/auth-2-guard-in-actions branch).
+AUTH_2_OPERATOR_GATE_MERGE = "76bb14d569fb1b53b59c2190de3bd34de0325b61"
+
+# AUTH-2 operator gate (Owner decision card: "Check in Actions"). The executor's session
+# cannot read account billing or download run artifacts, so the pre-dispatch guard runs in
+# Actions and every record the executor needs is published as a job annotation. Nothing
+# under research/auth2/ changes: its code is pinned by sha256 in every preregistration.
+# These entries were BRANCH_SCOPE while it was in flight.
+_OPGATE = "AUTH-2 operator gate (guard in Actions)"
+AUTH_2_OPERATOR_GATE_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py":
+        f"{_OPGATE} — dispatch_guard.decide unchanged plus guard/closure jobs; check-dispatch; readouts",
+    ".github/workflows/auth2-guard.yml": f"{_OPGATE} — the pre-dispatch guard job, record published",
+    ".github/workflows/auth2-closure.yml": f"{_OPGATE} — the closure record computed where the artifacts are",
+    ".github/workflows/auth2.yml": f"{_OPGATE} — in-job guard through the operator; result summary published",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_OPGATE} — the dispatch procedure as operated",
+    "tests/test_auth2_operator.py": f"{_OPGATE} — refusals, freshness, byte-exact channel, workflows",
+    "tests/test_p2_scope_audit.py": "AUTH-2 (PR #57) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -944,6 +967,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CEA_1_MERGE_LAW_FETCH": (CEA_1_MERGE_LAW_FETCH_MERGE, CEA_1_MERGE_LAW_FETCH_SCOPE),
     "CEA_1_MERGE_LAW_LEDGER_IMPORT": (CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE, CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE),
     "AUTH_2": (AUTH_2_MERGE, AUTH_2_SCOPE),
+    "AUTH_2_OPERATOR_GATE": (AUTH_2_OPERATOR_GATE_MERGE, AUTH_2_OPERATOR_GATE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -951,20 +975,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 operator gate (Owner decision card: "Check in Actions"). The executor's session
-# cannot read account billing or download run artifacts, so the pre-dispatch guard runs in
-# Actions and every record the executor needs is published as a job annotation. Nothing
-# under research/auth2/ changes: its code is pinned by sha256 in every preregistration.
-_OPGATE = "AUTH-2 operator gate (guard in Actions)"
+# AUTH-2 billing evidence (Owner P0 "D0 Billing Guard Corrective Execution"). The billing
+# endpoint dispatch_guard reads was closed down by GitHub (HTTP 410); the guard reads the
+# supported usage report with the billing token only and records what it proves. Neither
+# pacing-rule control (remaining included minutes, the USD 0 budget) is exposed for a
+# personal account, so both stay unproven: NO_DISPATCH. research/auth2/*.py untouched.
+_BILLING = "AUTH-2 billing evidence"
 BRANCH_SCOPE: dict[str, str] = {
     ".github/gates/auth2_operator.py":
-        f"{_OPGATE} — dispatch_guard.decide unchanged plus guard/closure jobs; check-dispatch; readouts",
-    ".github/workflows/auth2-guard.yml": f"{_OPGATE} — the pre-dispatch guard job, record published",
-    ".github/workflows/auth2-closure.yml": f"{_OPGATE} — the closure record computed where the artifacts are",
-    ".github/workflows/auth2.yml": f"{_OPGATE} — in-job guard through the operator; result summary published",
-    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_OPGATE} — the dispatch procedure as operated",
-    "tests/test_auth2_operator.py": f"{_OPGATE} — refusals, freshness, byte-exact channel, workflows",
-    "tests/test_p2_scope_audit.py": "AUTH-2 (PR #57) pinned to its merge; this branch's scope",
+        f"{_BILLING} — supported usage endpoint, token-only, classified failures; RE_RUN; all-attempt minutes",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BILLING} — the closed endpoint and the evidence gap, recorded",
+    "tests/test_auth2_operator.py": f"{_BILLING} — 410/403/401/missing token/fields/malformed/account/period/caps/replay",
+    "tests/test_p2_scope_audit.py": "AUTH-2 operator gate (PR #59) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
