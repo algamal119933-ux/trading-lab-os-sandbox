@@ -234,6 +234,33 @@ and off on identical bars), so the N-Ax to Ax engine-run reuse is unaffected.
   read. Both controls therefore stay unproven and every decision is NO_DISPATCH (fail-closed) until the Owner
   settles how they are evidenced. The same change makes a re-run attempt of a node or closure job refuse in the job
   (RE_RUN; a technical retry is a new dispatch) and counts the billed minutes of every attempt toward 4,000.
+* Owner billing evidence (Owner decision AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1, after PR #60). Only the evidence
+  source of the two controls GitHub does not expose changes; the rule, A_m, R_m and the caps do not. The Owner states
+  both in the pre-dispatch guard run itself: `auth2-guard.yml` takes the remaining included Linux minutes the billing
+  page shows (digits only: no sign, separator, space or leading zero) and two choices, `actions_budget_usd_zero` and
+  `stop_usage_enabled`, that default to NOT_CONFIRMED. The guard reads them from the event GitHub delivered to the job,
+  never from an environment value, repository variable, committed file or secret, and accepts them only when the
+  Actions API reports the Owner (`algamal119933-ux`, account id 325778659) as the run's actor and triggering actor,
+  at the run's first attempt, on main, with the event's sender the same account. The usage report is still read with
+  the billing token beside it, as independent evidence of the token, account, month and schema; it never supplies a
+  figure, and without it nothing dispatches. The guard records one evidence object (`AUTH2_OWNER_BILLING_EVIDENCE_1`:
+  repository, guard run and attempt, main SHA, node part, actor and triggering actor with their ids, billing month,
+  remaining minutes, both confirmations, the run's creation time, the usage endpoint and period, and the sha256 of all
+  of it). Only valid evidence beside a verified usage report makes billing readable, with the attested minutes and a
+  confirmed budget. Every node or closure dispatch names that guard run and evidence digest (`check-dispatch` prints
+  both). Its in-job guard reads the guard record from the guard run's artifact and verifies, as of its own run's
+  creation, what `check-dispatch` verified before the dispatch: same repository, node part and main SHA; a
+  successful first-attempt guard run by the Owner deciding DISPATCH; valid evidence with that digest; a verified usage
+  report; a record at most 15 minutes old; no AUTH-2 run created after the guard run. It then takes the billing state
+  from that record, never from its own inputs, and verifies the usage report again itself. A_m stays where
+  `dispatch_guard` keeps it. A guard run fixes nothing. The in-job record of the month's first node run states A_m (the
+  attested remaining minutes at that dispatch) and R_m = max(500, ceil(0.20 × A_m)), and every later guard that month
+  takes both from it; later attestations give only the current remaining minutes. That record must be the run's own,
+  for the month, the same across its attempts, and resting on the Owner evidence it was dispatched on; otherwise every
+  guard that month refuses. So a month's first node run whose binding fails states no A_m and blocks the month: only
+  the inputs `check-dispatch` printed are dispatched. Limitation: the executor's GitHub access is the Owner's account,
+  so the actor check proves the account, not who typed the figures. The executor therefore never dispatches
+  `auth2-guard.yml`; only the Owner does.
 * `run_node.py` exits 4 on INVALID_RUN so the job fails and the one technical retry is available; every law
   terminal is a successful run. A second INVALID_RUN stops the program (`closure.py --stop-program`).
 

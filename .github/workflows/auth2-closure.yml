@@ -7,7 +7,8 @@ name: AUTH-2 closure record (manual dispatch only)
 # (.github/gates/auth2_operator.py readout). The terminal trial-ledger records are appended by
 # the operator from that record (closure.append_ledger), never by this job.
 #
-# workflow_dispatch only, after a guard run for CLOSURE said DISPATCH; it re-checks in the job.
+# workflow_dispatch only, after a guard run for CLOSURE said DISPATCH; it names that run and its
+# Owner evidence digest, and the guard re-checks the binding in the job.
 # It runs no engine, never commits, pushes or writes the ledger. dry_run stays true.
 on:
   workflow_dispatch:
@@ -21,6 +22,14 @@ on:
         type: boolean
         required: false
         default: false
+      guard_run:
+        description: "The auth2-guard.yml run that said DISPATCH for CLOSURE"
+        type: string
+        required: true
+      evidence_digest:
+        description: "That guard record's Owner evidence digest (sha256:...)"
+        type: string
+        required: true
 
 run-name: AUTH2-CLOSURE
 
@@ -54,12 +63,15 @@ jobs:
           pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
           pip check
 
-      - name: 'Gate: dispatch guard (billing readable, serial, caps, never re-run)'
+      - name: 'Gate: dispatch guard (bound Owner billing evidence, serial, caps, never re-run)'
         run: |
           set -euo pipefail
           python .github/gates/auth2_operator.py guard --node CLOSURE --repo-slug "$GITHUB_REPOSITORY" \
-            --in-job --self-run-id "$GITHUB_RUN_ID" --out out/guard.json
+            --in-job --self-run-id "$GITHUB_RUN_ID" --out out/guard.json \
+            --guard-run "$GUARD_RUN" --evidence-digest "$EVIDENCE_DIGEST"
         env:
+          GUARD_RUN: ${{ inputs.guard_run }}
+          EVIDENCE_DIGEST: ${{ inputs.evidence_digest }}
           GH_TOKEN: ${{ github.token }}
           AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
 

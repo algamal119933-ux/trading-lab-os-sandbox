@@ -2,16 +2,26 @@
 adds refusals to research/auth2/dispatch_guard.decide, a dispatch needs a fresh, successful guard run's
 DISPATCH record on the current main, and the published records survive the annotation channel byte-exact.
 
-PAPER / RESEARCH ONLY. Nothing here calls GitHub: every function under test is pure.
+The Owner billing evidence bridge (AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1): the two pacing-rule controls GitHub
+does not expose for a personal account are the Owner's attestation in the guard run, authenticated by the run's
+actor as the Actions API reports it; a node or closure run is bound to that guard record by its run id and
+evidence digest; A_m is the month's first node run's. ``World`` is a synthetic GitHub that drives the whole
+bridge end to end: the Owner's guard run, the executor's check, the node's in-job guard and the next month.
+
+PAPER / RESEARCH ONLY. Nothing here calls GitHub: every function under test is pure or runs against ``World``.
 """
 
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import importlib.util
+import io
 import json
+import math
 import re
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -31,6 +41,13 @@ _spec.loader.exec_module(OP)
 
 MAIN = "a" * 40
 NOW = datetime(2026, 11, 3, 10, 0, tzinfo=timezone.utc)
+OWNER = "algamal119933-ux"
+OWNER_USER = {"login": OWNER, "id": 325778659}
+OTHER_USER = {"login": "someone-else", "id": 4242}
+SLUG = f"{OWNER}/trading-lab-os-sandbox"
+USAGE_PATH = f"/users/{OWNER}/settings/billing/usage"
+OCT = datetime(2026, 10, 12, 0, 5, tzinfo=timezone.utc)
+TOKEN = "TESTONLY-billing-token-0123456789"  # not a token format: the hygiene gate scans for real ones
 
 
 def state(**kw) -> dict:
@@ -146,27 +163,70 @@ def test_result_summaries_carry_what_the_frozen_dag_reads(tmp_path):
     assert ("CAL-A1", 1) in nxt["next"] and not any(n.endswith("A3") for n, _ in nxt["next"])
 
 
-# -- check-dispatch -------------------------------------------------------------------------------
+# -- check-dispatch: a fresh, successful Owner guard record on main --------------------------------------
+
+USAGE_OK = {"verified": True, "status": 200, "class": "USAGE_VERIFIED", "period": "2026-11", "endpoint": USAGE_PATH,
+            "actions": {}}
+
 
 def guard_run(i=100, node="D0", part=1, sha=MAIN, conclusion="success", created="2026-11-03T09:55:00Z", **kw):
     r = {"id": i, "path": f".github/workflows/{OP.GUARD_WORKFLOW}", "event": "workflow_dispatch",
          "head_branch": "main", "head_sha": sha, "status": "completed", "conclusion": conclusion,
-         "display_title": f"AUTH2-GUARD {node} part {part}", "created_at": created}
+         "display_title": f"AUTH2-GUARD {node} part {part}", "created_at": created, "run_attempt": 1,
+         "actor": OWNER_USER, "triggering_actor": OWNER_USER, "repository": {"full_name": SLUG}}
     r.update(kw)
     return r
 
 
-def record(node="D0", part=1, decision=DG.DISPATCH, checked="2026-11-03T09:55:30Z", run_id=100, sha=MAIN):
+def evidence(run_id=100, node="D0", part=1, sha=MAIN, attested="2026-11-03T09:55:00Z", tamper=False, **kw) -> dict:
+    """Valid Owner evidence of guard run ``run_id``. ``kw`` changes fields; the digest then covers the change,
+    unless ``tamper`` (the object was edited after it was digested) or ``evidence_digest`` is given."""
+    ev = {"schema": OP.EVIDENCE_SCHEMA, "repository": SLUG, "guard_run_id": run_id, "guard_run_attempt": 1,
+          "main_sha": sha, "node": node, "part": part, "actor": OWNER, "actor_id": 325778659,
+          "triggering_actor": OWNER, "triggering_actor_id": 325778659, "billing_month": attested[:7],
+          "remaining_included_linux_minutes": 2400, "budget_usd_zero_confirmed": True, "stop_usage_confirmed": True,
+          "attested_utc": attested, "usage_api_verified": True, "usage_endpoint": USAGE_PATH,
+          "usage_period": attested[:7]}
+    ev["evidence_digest"] = OP.evidence_digest(ev)
+    ev.update(kw)
+    if not tamper and "evidence_digest" not in kw:
+        ev["evidence_digest"] = OP.evidence_digest(ev)
+    return ev
+
+
+def billing(ev, **kw) -> dict:
+    b = {"readable": True, "remaining_included_minutes": ev["remaining_included_linux_minutes"],
+         "budget_usd_zero": True, "usage_evidence": USAGE_OK, "owner_evidence": ev, "owner_evidence_problems": []}
+    b.update(kw)
+    return b
+
+
+def record(node="D0", part=1, decision=DG.DISPATCH, checked="2026-11-03T09:55:30Z", run_id=100, sha=MAIN,
+           ev=None, bill=None, **kw) -> list[dict]:
+    """The annotations of a guard run's published record; ``kw`` replaces record fields."""
+    ev = evidence(run_id=run_id, node=node, part=part, sha=sha) if ev is None else ev
     body = {"node": node, "part": part, "decision": decision, "mode": "pre-dispatch", "checked_utc": checked,
-            "run_id": run_id, "sha": sha, "reasons": [] if decision == DG.DISPATCH else ["X"]}
+            "run_id": run_id, "sha": sha, "run_attempt": 1, "reasons": [] if decision == DG.DISPATCH else ["X"],
+            "billing": billing(ev) if bill is None else bill}
+    body.update(kw)
     return notes_from(OP.annotation_lines(OP.RECORD, (json.dumps(body) + "\n").encode()))
 
 
+def check(run, notes, later=(), node="D0", part=1, main=MAIN, now=NOW, **kw) -> dict:
+    return OP.check_dispatch(run, OP.annotated_records(notes), list(later), node, part, main, now, slug=SLUG, **kw)
+
+
+LATER = [{"id": 100, "status": "completed", "created_at": "2026-11-03T09:55:00Z"}]
+
+
 def test_a_fresh_successful_dispatch_record_on_main_dispatches():
-    d = OP.check_dispatch(guard_run(), record(), [{"id": 100, "status": "completed",
-                                                   "created_at": "2026-11-03T09:55:00Z"}],
-                          "D0", 1, MAIN, NOW)
+    d = check(guard_run(), record(), LATER)
     assert d["decision"] == DG.DISPATCH, d["reasons"]
+    ev = evidence()
+    assert d["owner_evidence"] == ev
+    assert d["dispatch_inputs"] == {"node": "D0", "part": "1", "guard_run": "100",
+                                    "evidence_digest": ev["evidence_digest"]}
+    assert check(guard_run(), record(), LATER, digest=ev["evidence_digest"])["decision"] == DG.DISPATCH
 
 
 @pytest.mark.parametrize("run,notes,later,why", [
@@ -183,23 +243,709 @@ def test_a_fresh_successful_dispatch_record_on_main_dispatches():
     (guard_run(), record(), [{"id": 101, "status": "completed", "created_at": "2026-11-03T09:56:00Z"}],
      "created after"),
     (guard_run(), record(), [{"id": 7, "status": "queued", "created_at": "2026-11-02T00:00:00Z"}], "SERIAL"),
+    # who dispatched the guard run, at which attempt, in which repository: the Actions API's answer
+    (guard_run(actor=OTHER_USER, triggering_actor=OTHER_USER), record(), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(triggering_actor=OTHER_USER), record(), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(actor=OTHER_USER), record(), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(actor={"login": OWNER, "id": 1}, triggering_actor={"login": OWNER, "id": 1}), record(), [],
+     "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(run_attempt=2), record(), [], "OWNER_EVIDENCE_REPLAYED"),
+    (guard_run(repository={"full_name": "someone-else/fork"}), record(), [], f"is not a run of {SLUG}"),
+    (guard_run(created="2026-11-03T09:54:00Z"), record(), [], "attestation time is not the guard run's dispatch"),
+    (guard_run(), record(run_attempt=2), [], "does not name this run, its first attempt and main"),
+    (guard_run(), record(mode="in-job"), [], "guard record is for"),
+    # the record's Owner evidence
+    (guard_run(), record(bill=billing(evidence(), owner_evidence=None)), [], "OWNER_EVIDENCE_MISSING"),
+    (guard_run(), record(ev=evidence(tamper=True, remaining_included_linux_minutes=99999)), [],
+     "OWNER_EVIDENCE_DIGEST_MISMATCH"),
+    (guard_run(), record(ev=evidence(evidence_digest="sha256:" + "0" * 64)), [], "OWNER_EVIDENCE_DIGEST_MISMATCH"),
+    (guard_run(), record(ev=evidence(evidence_digest="0" * 64)), [], "OWNER_EVIDENCE_DIGEST_MISMATCH"),
+    (guard_run(), record(ev=evidence(actor="someone-else", triggering_actor="someone-else")), [],
+     "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(actor_id=1, triggering_actor_id=1)), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(actor="someone-else")), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(actor_id=1)), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(triggering_actor="someone-else")), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(triggering_actor_id=1)), [], "OWNER_EVIDENCE_ACTOR_MISMATCH"),
+    (guard_run(), record(ev=evidence(guard_run_id=99)), [], "OWNER_EVIDENCE_WRONG_RUN"),
+    (guard_run(), record(ev=evidence(guard_run_attempt=2)), [], "OWNER_EVIDENCE_REPLAYED"),
+    (guard_run(), record(ev=evidence(main_sha="b" * 40)), [], "OWNER_EVIDENCE_WRONG_SHA"),
+    (guard_run(), record(ev=evidence(node="CAL-A1")), [], "OWNER_EVIDENCE_WRONG_NODE"),
+    (guard_run(), record(ev=evidence(part=2)), [], "OWNER_EVIDENCE_WRONG_NODE"),
+    (guard_run(), record(ev=evidence(repository="someone-else/fork")), [], "OWNER_EVIDENCE_WRONG_REPOSITORY"),
+    (guard_run(), record(ev=evidence(billing_month="2026-10")), [], "OWNER_EVIDENCE_WRONG_MONTH"),
+    (guard_run(), record(ev=evidence(usage_period="2026-10")), [], "OWNER_EVIDENCE_WRONG_MONTH"),
+    (guard_run(created="2026-10-31T23:59:00Z"), record(ev=evidence(attested="2026-10-31T23:59:00Z")), [],
+     "OWNER_EVIDENCE_WRONG_MONTH"),
+    (guard_run(), record(ev=evidence(remaining_included_linux_minutes=-1)), [], "OWNER_EVIDENCE_REMAINING_INVALID"),
+    (guard_run(), record(ev=evidence(remaining_included_linux_minutes="2400")), [], "OWNER_EVIDENCE_MALFORMED"),
+    (guard_run(), record(ev=evidence(remaining_included_linux_minutes=True)), [], "OWNER_EVIDENCE_MALFORMED"),
+    (guard_run(), record(ev=evidence(budget_usd_zero_confirmed=False)), [], "OWNER_EVIDENCE_BUDGET_NOT_CONFIRMED"),
+    (guard_run(), record(ev=evidence(stop_usage_confirmed=False)), [], "OWNER_EVIDENCE_STOP_USAGE_NOT_CONFIRMED"),
+    (guard_run(), record(ev=evidence(usage_api_verified=False)), [], "OWNER_EVIDENCE_USAGE_NOT_VERIFIED"),
+    (guard_run(), record(ev=evidence(usage_endpoint="/users/someone-else/settings/billing/usage")), [],
+     "OWNER_EVIDENCE_USAGE_NOT_VERIFIED"),
+    (guard_run(), record(ev=evidence(schema="AUTH2_OWNER_BILLING_EVIDENCE_0")), [], "OWNER_EVIDENCE_MALFORMED"),
+    (guard_run(), record(ev=evidence(note="an extra field")), [], "OWNER_EVIDENCE_MALFORMED"),
+    (guard_run(), record(ev=evidence(attested_utc="2026-11-03 09:55")), [], "OWNER_EVIDENCE_MALFORMED"),
+    # the record's billing state rests on that evidence and on a verified usage report
+    (guard_run(), record(bill=billing(evidence(), remaining_included_minutes=99999)), [],
+     "does not rest on its Owner evidence"),
+    (guard_run(), record(bill=billing(evidence(), budget_usd_zero=False)), [], "does not rest on its Owner evidence"),
+    (guard_run(), record(bill=billing(evidence(), readable=False)), [], "does not rest on its Owner evidence"),
+    (guard_run(), record(bill=billing(evidence(), usage_evidence={**USAGE_OK, "verified": False})), [],
+     "usage report is not verified"),
+    (guard_run(), record(bill=billing(evidence(), usage_evidence={**USAGE_OK, "period": "2026-10"})), [],
+     "usage report is not verified"),
+    (guard_run(), record(bill=billing(evidence(), usage_evidence={**USAGE_OK, "class": "TOKEN_MISSING"})), [],
+     "usage report is not verified"),
+    (guard_run(), record(bill=billing(evidence(), usage_evidence={**USAGE_OK, "endpoint": "/x"})), [],
+     "usage report is not verified"),
+    (guard_run(), record(bill=billing(evidence(), usage_evidence=None)), [], "usage report is not verified"),
 ])
 def test_anything_short_of_that_never_dispatches(run, notes, later, why):
-    d = OP.check_dispatch(run, notes, later, "D0", 1, MAIN, NOW)
-    assert d["decision"] == DG.NO_DISPATCH
+    d = check(run, notes, later)
+    assert d["decision"] == DG.NO_DISPATCH and d["dispatch_inputs"] is None and d["owner_evidence"] is None
     assert any(why in r for r in d["reasons"]), d["reasons"]
 
 
 def test_a_record_from_the_future_is_not_fresh():
-    d = OP.check_dispatch(guard_run(), record(checked=(NOW + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")),
-                          [], "D0", 1, MAIN, NOW)
+    d = check(guard_run(), record(checked=(NOW + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")))
     assert any("not fresh" in r for r in d["reasons"])
+
+
+def test_a_dispatch_naming_another_digest_never_dispatches():
+    d = check(guard_run(), record(), LATER, digest="sha256:" + "0" * 64)
+    assert d["decision"] == DG.NO_DISPATCH and any("OWNER_EVIDENCE_DIGEST_MISMATCH" in r for r in d["reasons"])
+
+
+# -- the Owner's inputs and the evidence object --------------------------------------------------------
+
+INPUTS = {"remaining_included_linux_minutes": "2400", "actions_budget_usd_zero": "CONFIRMED",
+          "stop_usage_enabled": "CONFIRMED"}
+
+
+def test_the_owner_is_the_repository_owners_account():
+    assert (OP.OWNER_LOGIN, OP.OWNER_ID) == (OWNER, 325778659) and SLUG.split("/")[0] == OP.OWNER_LOGIN
+    assert OP.USAGE_ENDPOINT.format(owner=OP.OWNER_LOGIN) == USAGE_PATH
+
+
+def test_the_owner_inputs_parse_strictly():
+    assert OP.parse_owner_inputs(INPUTS) == ({"budget_usd_zero_confirmed": True, "stop_usage_confirmed": True,
+                                              "remaining_included_linux_minutes": 2400}, [])
+    assert OP.parse_owner_inputs({**INPUTS, "remaining_included_linux_minutes": "0"})[0][OP.MINUTES_INPUT] == 0
+    values, problems = OP.parse_owner_inputs({**INPUTS, "actions_budget_usd_zero": "NOT_CONFIRMED"})
+    assert problems == [] and values["budget_usd_zero_confirmed"] is False  # parsed, and refused as evidence
+
+
+@pytest.mark.parametrize("raw", ["-5", "-0", "+5", "12.5", "2400.0", "1,000", "1 000", " 100", "100 ", "0100", "00",
+                                 "2e3", "0x10", "١٢٣", "½", "1234567890", "None", "true", "∞", 2400])
+def test_a_remaining_minutes_value_that_is_not_plain_digits_is_refused(raw):
+    values, problems = OP.parse_owner_inputs({**INPUTS, "remaining_included_linux_minutes": raw})
+    assert values is None and problems and problems[0].startswith("OWNER_EVIDENCE_REMAINING_INVALID")
+
+
+@pytest.mark.parametrize("value", ["yes", "Yes", "true", "True", "1", "on", "y", "confirmed", "Confirmed",
+                                   "CONFIRMED ", True])
+def test_a_confirmation_is_only_the_choice_confirmed(value):
+    for key in OP.CONFIRMATIONS:
+        values, problems = OP.parse_owner_inputs({**INPUTS, key: value})
+        assert values is None and any(p.startswith("OWNER_EVIDENCE_MALFORMED") for p in problems)
+
+
+@pytest.mark.parametrize("key", list(INPUTS))
+def test_a_missing_owner_input_is_refused(key):
+    for given in ({k: v for k, v in INPUTS.items() if k != key}, {**INPUTS, key: ""}, {**INPUTS, key: None}):
+        values, problems = OP.parse_owner_inputs(given)
+        assert values is None and problems[0].startswith("OWNER_EVIDENCE_MISSING")
+    for nothing in (None, [], "inputs"):
+        assert OP.parse_owner_inputs(nothing)[1][0].startswith("OWNER_EVIDENCE_MISSING")
+
+
+def test_the_evidence_digest_is_deterministic_and_covers_every_field():
+    ev = evidence()
+    assert set(ev) == set(OP.EVIDENCE_FIELDS)
+    assert not OP.owner_evidence_problems(ev, slug=SLUG, guard_run_id=100, main_sha=MAIN, node="D0", part=1,
+                                          month="2026-11")
+    body = {k: v for k, v in ev.items() if k != "evidence_digest"}
+    assert ev["evidence_digest"] == "sha256:" + hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert OP.evidence_digest(dict(reversed(list(ev.items())))) == ev["evidence_digest"]  # key order is irrelevant
+    for k, v in body.items():
+        changed = {**ev, k: (not v) if isinstance(v, bool) else v + 1 if isinstance(v, int) else v + "x"}
+        assert OP.evidence_digest(changed) != ev["evidence_digest"], k
+        problems = OP.owner_evidence_problems(changed, slug=SLUG, guard_run_id=100, main_sha=MAIN, node="D0",
+                                              part=1, month="2026-11")
+        assert any(p.startswith("OWNER_EVIDENCE_DIGEST_MISMATCH") for p in problems), k
+
+
+# -- a synthetic GitHub: the bridge end to end ------------------------------------------------------------
+
+def usage_item(**kw) -> dict:
+    it = {"date": "2026-10-11", "product": "Actions", "sku": "Actions Linux", "quantity": 12.0, "unitType": "Minutes",
+          "pricePerUnit": 0.008, "grossAmount": 0.096, "discountAmount": 0.096, "netAmount": 0.0,
+          "repositoryName": f"{OWNER}/trading-lab-os-sandbox"}
+    it.update(kw)
+    return it
+
+
+def at(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def iso(t: datetime) -> str:
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def zipped(files: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data in files.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+class World:
+    """One repository's AUTH-2 runs as the Actions API reports them (jobs of every attempt, artifacts,
+    annotations) and the account's billing usage report. The operator runs against it unchanged: only
+    dispatch_guard's two readers, the billing reader and the operator's clock are replaced."""
+
+    def __init__(self, monkeypatch, capsys, tmp_path):
+        self.mp, self.capsys, self.tmp = monkeypatch, capsys, tmp_path
+        self.runs: dict[int, dict] = {}
+        self.jobs: dict[int, list] = {}
+        self.artifacts: dict[int, list] = {}
+        self.notes: dict[int, list] = {}
+        self.usage = None  # None: a well-formed report of this account for the clock's month
+        self.billing_calls: list = []
+        self.unexpected: list = []
+        self.printed: list = []
+        self.clock = type("Clock", (datetime,), {"at": NOW, "now": classmethod(lambda cls, tz=None: cls.at)})
+        monkeypatch.setattr(OP, "datetime", self.clock)
+        monkeypatch.setattr(DG, "_api", self.api)
+        monkeypatch.setattr(DG, "_api_bytes", self.api_bytes)
+        monkeypatch.setattr(OP, "billing_get", self.billing)
+        monkeypatch.setenv("AUTH2_BILLING_TOKEN", TOKEN)
+        monkeypatch.setenv("GH_TOKEN", "workflow-token")
+        for k in ("GITHUB_EVENT_PATH", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_ACTOR",
+                  "GITHUB_TRIGGERING_ACTOR"):
+            monkeypatch.delenv(k, raising=False)
+
+    # GitHub's side
+    def api(self, path, token_env=None):
+        route, _, query = path.partition("?")
+        if "/settings/billing" in route:
+            self.unexpected.append(f"billing read with the workflow token: {path}")
+        route = route.removeprefix(f"/repos/{SLUG}")
+        if m := re.fullmatch(r"/actions/workflows/([\w.-]+)/runs", route):
+            first_page = "page=1" in query.split("&")
+            return {"workflow_runs": [copy.deepcopy(r) for r in self.runs.values()
+                                      if first_page and r["path"] == f".github/workflows/{m[1]}"]}
+        if m := re.fullmatch(r"/actions/runs/(\d+)", route):
+            if int(m[1]) not in self.runs:
+                raise RuntimeError("gh: Not Found (HTTP 404)")
+            return copy.deepcopy(self.runs[int(m[1])])
+        if m := re.fullmatch(r"/actions/runs/(\d+)/jobs", route):
+            run = self.runs[int(m[1])]
+            jobs = self.jobs[run["id"]] if "filter=all" in query else \
+                [j for j in self.jobs[run["id"]] if j["run_attempt"] == run["run_attempt"]]
+            return {"jobs": copy.deepcopy(jobs)}
+        if m := re.fullmatch(r"/actions/runs/(\d+)/artifacts", route):
+            return {"artifacts": [{k: a[k] for k in ("id", "name", "expired")}
+                                  for a in self.artifacts.get(int(m[1]), [])]}
+        if m := re.fullmatch(r"/check-runs/(\d+)/annotations", route):
+            return copy.deepcopy(self.notes.get(int(m[1]), []))
+        self.unexpected.append(path)
+        raise RuntimeError(f"gh: Not Found (HTTP 404) {path}")
+
+    def api_bytes(self, path):
+        for a in (a for arts in self.artifacts.values() for a in arts):
+            if path == f"/repos/{SLUG}/actions/artifacts/{a['id']}/zip":
+                return a["zip"]
+        self.unexpected.append(path)
+        raise RuntimeError(f"gh: Not Found (HTTP 404) {path}")
+
+    def billing(self, path, token):
+        self.billing_calls.append((path, token))
+        return self.usage or (200, {"usageItems": [usage_item(date=f"{self.clock.at:%Y-%m}-01")]})
+
+    def add(self, rid, workflow, title, created, *, status="completed", conclusion="success", attempt=1,
+            actor=OWNER_USER, sha=MAIN, minutes=1) -> dict:
+        start = at(created)
+        self.runs[rid] = {"id": rid, "path": f".github/workflows/{workflow}", "event": "workflow_dispatch",
+                          "head_branch": "main", "head_sha": sha, "status": status, "conclusion": conclusion,
+                          "display_title": title, "created_at": created, "run_attempt": attempt, "actor": actor,
+                          "triggering_actor": actor, "repository": {"full_name": SLUG}}
+        self.jobs[rid] = [{"id": rid * 10 + n, "run_attempt": n, "status": "completed", "started_at": iso(start),
+                           "completed_at": iso(start + timedelta(minutes=minutes))} for n in range(1, attempt + 1)]
+        if status != "completed":
+            self.jobs[rid][-1].update(status="in_progress", completed_at=None)
+        return self.runs[rid]
+
+    def finish(self, rid, conclusion, minutes=1):
+        self.runs[rid].update(status="completed", conclusion=conclusion)
+        job = self.jobs[rid][-1]
+        job.update(status="completed", completed_at=iso(at(job["started_at"]) + timedelta(minutes=minutes)))
+
+    def publish(self, rid, name, files: dict[str, bytes]):
+        aid = 9000 + sum(len(arts) for arts in self.artifacts.values())
+        self.artifacts.setdefault(rid, []).append({"id": aid, "name": name, "expired": False, "zip": zipped(files)})
+
+    # the jobs
+    def job(self, rid, argv, event, env=None) -> tuple[dict, bytes, str]:
+        """Run the operator as job ``rid``'s guard step does, with the environment GitHub gives it."""
+        run, n = self.runs[rid], len(self.printed)
+        (self.tmp / f"event-{n}.json").write_text(json.dumps(event))
+        out = self.tmp / f"record-{n}.json"
+        given = {"GITHUB_RUN_ID": str(rid), "GITHUB_RUN_ATTEMPT": str(run["run_attempt"]),
+                 "GITHUB_SHA": run["head_sha"], "GITHUB_EVENT_PATH": str(self.tmp / f"event-{n}.json"), **(env or {})}
+        for k, v in given.items():
+            self.mp.delenv(k, raising=False) if v is None else self.mp.setenv(k, v)
+        self.capsys.readouterr()
+        code = OP.main([*argv, "--repo-slug", SLUG, "--self-run-id", str(rid), "--out", str(out)])
+        printed = self.capsys.readouterr().out
+        self.printed.append(printed)
+        data = out.read_bytes()
+        rec = json.loads(data)
+        assert code == (0 if rec["decision"] == DG.DISPATCH else 3)
+        assert printed.rstrip().endswith(f"AUTH2_DISPATCH_GUARD = {rec['decision']}")
+        return rec, data, printed
+
+    def owner_guard(self, rid, node="D0", part=1, *, created="2026-11-03T09:55:00Z", minutes="2400",
+                    budget="CONFIRMED", stop="CONFIRMED", inputs=None, event=None, sender=None, run=None,
+                    attempt=1, env=None) -> dict:
+        """The Owner dispatches auth2-guard.yml with the billing page's figures; its job starts 40 s later and
+        publishes its record as an annotation and an artifact."""
+        self.add(rid, OP.GUARD_WORKFLOW, f"AUTH2-GUARD {node} part {part}", created, status="in_progress",
+                 conclusion=None, attempt=attempt)
+        self.runs[rid].update(run or {})
+        given = {"node": node, "part": str(part), "remaining_included_linux_minutes": minutes,
+                 "actions_budget_usd_zero": budget, "stop_usage_enabled": stop}
+        for k, v in (inputs or {}).items():
+            given.pop(k) if v is None else given.update({k: v})
+        payload = {"inputs": given, "sender": sender or self.runs[rid]["triggering_actor"], "ref": "refs/heads/main",
+                   "repository": {"full_name": SLUG}, **(event or {})}
+        self.clock.at = at(created) + timedelta(seconds=40)
+        rec, data, printed = self.job(rid, ["guard", "--node", node, "--part", str(part), "--annotate"], payload, env)
+        self.notes[self.jobs[rid][-1]["id"]] = notes_from(
+            "\n".join(line for line in printed.splitlines() if line.startswith("::notice ")))
+        self.publish(rid, f"auth2guard-{node}-p{part}", {"guard.json": data})
+        self.finish(rid, "success" if rec["decision"] == DG.DISPATCH else "failure")
+        return rec
+
+    def check(self, rid, node="D0", part=1, *, when="2026-11-03T09:57:00Z", main=MAIN) -> dict:
+        """The executor's ``check-dispatch`` before dispatching (it reads the record from the annotation)."""
+        self.clock.at = at(when)
+        self.capsys.readouterr()
+        code = OP.main(["check-dispatch", "--guard-run", str(rid), "--node", node, "--part", str(part),
+                        "--repo-slug", SLUG, "--main-sha", main])
+        body, _, decision = self.capsys.readouterr().out.rpartition("AUTH2_DISPATCH_CHECK = ")
+        rec = json.loads(body)
+        assert decision.strip() == rec["decision"] and code == (0 if rec["decision"] == DG.DISPATCH else 3)
+        return rec
+
+    def dispatch(self, rid, node="D0", part=1, *, guard_run, digest, created="2026-11-03T09:58:00Z", attempt=1,
+                 sha=MAIN, env=None, inputs=None, run=None) -> dict:
+        """auth2.yml (auth2-closure.yml for CLOSURE) dispatched naming a guard run and an evidence digest; the
+        in-job guard runs a minute later and the run's artifact keeps its record."""
+        closure = node == OP.CLOSURE
+        workflow, title = (OP.CLOSURE_WORKFLOW, OP.CLOSURE_TITLE) if closure else \
+            (DG.WORKFLOW_FILE, f"AUTH2 {node} part {part}")
+        self.add(rid, workflow, title, created, status="in_progress", conclusion=None, attempt=attempt, sha=sha)
+        self.runs[rid].update(run or {})
+        argv = ["guard", "--node", node, "--part", str(part), "--in-job"]
+        argv += ["--guard-run", str(guard_run)] if guard_run is not None else []
+        argv += ["--evidence-digest", digest] if digest is not None else []
+        given = {"guard_run": str(guard_run), "evidence_digest": str(digest), **(inputs or {})}
+        self.clock.at = at(created) + timedelta(seconds=60)
+        rec, data, _ = self.job(rid, argv, {"inputs": given, "sender": OWNER_USER}, env)
+        self.finish(rid, "success" if rec["decision"] == DG.DISPATCH else "failure", minutes=30)
+        self.publish(rid, "auth2closure" if closure else f"auth2-{node}-p{part}",
+                     {"guard.json": data, f"{node}.result.json": b"{}"})
+        return rec
+
+
+@pytest.fixture
+def world(monkeypatch, capsys, tmp_path):
+    w = World(monkeypatch, capsys, tmp_path)
+    yield w
+    assert w.unexpected == []
+    assert all(token == TOKEN for _path, token in w.billing_calls)  # the billing token, never another
+    assert not any(TOKEN in printed for printed in w.printed)
+
+
+def d0_flow(world, minutes="2400") -> tuple[dict, dict, dict]:
+    """The Owner's guard run 100 for D0, the executor's check, and node run 200 dispatched on it."""
+    pre = world.owner_guard(100, minutes=minutes)
+    chk = world.check(100)
+    digest = (chk["dispatch_inputs"] or {}).get("evidence_digest", "sha256:" + "0" * 64)
+    return pre, chk, world.dispatch(200, guard_run=100, digest=digest)
+
+
+def test_a_fully_valid_owner_evidence_state_dispatches_at_every_gate(world):
+    pre, chk, job = d0_flow(world)
+    assert (pre["decision"], chk["decision"], job["decision"]) == (DG.DISPATCH,) * 3, \
+        (pre["reasons"], chk["reasons"], job["reasons"])
+    ev = pre["billing"]["owner_evidence"]
+    assert ev == {"schema": "AUTH2_OWNER_BILLING_EVIDENCE_1", "repository": SLUG, "guard_run_id": 100,
+                  "guard_run_attempt": 1, "main_sha": MAIN, "node": "D0", "part": 1, "actor": OWNER,
+                  "actor_id": 325778659, "triggering_actor": OWNER, "triggering_actor_id": 325778659,
+                  "billing_month": "2026-11", "remaining_included_linux_minutes": 2400,
+                  "budget_usd_zero_confirmed": True, "stop_usage_confirmed": True,
+                  "attested_utc": "2026-11-03T09:55:00Z", "usage_api_verified": True, "usage_endpoint": USAGE_PATH,
+                  "usage_period": "2026-11", "evidence_digest": OP.evidence_digest(ev)}
+    assert (pre["billing"]["readable"], pre["billing"]["remaining_included_minutes"],
+            pre["billing"]["budget_usd_zero"], pre["billing"]["owner_evidence_problems"]) == (True, 2400, True, [])
+    assert chk["dispatch_inputs"] == {"node": "D0", "part": "1", "guard_run": "100",
+                                      "evidence_digest": ev["evidence_digest"]}
+    assert job["billing"]["owner_evidence"] == ev  # the node consumes the guard's evidence
+    assert job["binding"] == {"guard_run": 100, "evidence_digest": ev["evidence_digest"]}
+    assert (job["mode"], job["run_id"], job["sha"], job["run_attempt"]) == ("in-job", 200, MAIN, 1)
+    # the guard and the job each verify the usage report themselves, with the billing token only
+    assert world.billing_calls == [(f"{USAGE_PATH}?year=2026&month=11", TOKEN)] * 2
+
+
+def test_the_node_workflows_own_inputs_never_become_billing_evidence(world):
+    world.owner_guard(100)
+    digest = world.check(100)["dispatch_inputs"]["evidence_digest"]
+    job = world.dispatch(200, guard_run=100, digest=digest,
+                         inputs={"remaining_included_linux_minutes": "999999", "actions_budget_usd_zero": "CONFIRMED",
+                                 "stop_usage_enabled": "CONFIRMED"})
+    assert job["decision"] == DG.DISPATCH
+    assert job["billing"]["remaining_included_minutes"] == 2400 and job["a_m"] == 2400
+
+
+def no_jobs(w):
+    w.add(52, DG.WORKFLOW_FILE, "AUTH2 CAL-A1 part 1", "2026-10-01T00:00:00Z")
+    w.jobs[52] = []
+
+
+PRE_DISPATCH_BREAKS = [
+    # the Owner's attestation
+    ("OWNER_EVIDENCE_MISSING", dict(inputs={"remaining_included_linux_minutes": None})),
+    ("OWNER_EVIDENCE_MISSING", dict(minutes="")),
+    ("OWNER_EVIDENCE_REMAINING_INVALID", dict(minutes="-5")),
+    ("OWNER_EVIDENCE_REMAINING_INVALID", dict(minutes="2400.0")),
+    ("OWNER_EVIDENCE_REMAINING_INVALID", dict(minutes="2,400")),
+    ("OWNER_EVIDENCE_REMAINING_INVALID", dict(minutes="٢٤٠٠")),
+    ("OWNER_EVIDENCE_BUDGET_NOT_CONFIRMED", dict(budget="NOT_CONFIRMED")),
+    ("OWNER_EVIDENCE_MALFORMED", dict(budget="yes")),
+    ("OWNER_EVIDENCE_MISSING", dict(inputs={"actions_budget_usd_zero": None})),
+    ("OWNER_EVIDENCE_STOP_USAGE_NOT_CONFIRMED", dict(stop="NOT_CONFIRMED")),
+    ("OWNER_EVIDENCE_MALFORMED", dict(stop="true")),
+    ("OWNER_EVIDENCE_MISSING", dict(inputs={"stop_usage_enabled": None})),
+    ("OWNER_EVIDENCE_MISSING", dict(event={"inputs": None})),
+    ("OWNER_EVIDENCE_WRONG_NODE", dict(inputs={"node": "CAL-A1"})),
+    # who attests: the run's actor and triggering actor as the Actions API reports them, never the environment
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(run={"actor": OTHER_USER, "triggering_actor": OTHER_USER})),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(run={"triggering_actor": OTHER_USER})),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(run={"actor": OTHER_USER})),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(run={"actor": {"login": OWNER, "id": 1},
+                                                "triggering_actor": {"login": OWNER, "id": 1}})),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(sender=OTHER_USER)),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(run={"actor": OTHER_USER, "triggering_actor": OTHER_USER},
+                                           env={"GITHUB_ACTOR": OWNER, "GITHUB_TRIGGERING_ACTOR": OWNER})),
+    # where and when
+    ("OWNER_EVIDENCE_REPLAYED", dict(attempt=2)),
+    ("OWNER_EVIDENCE_PROVENANCE", dict(run={"head_branch": "owner-branch"})),
+    ("OWNER_EVIDENCE_PROVENANCE", dict(run={"event": "push"})),
+    ("OWNER_EVIDENCE_WRONG_REPOSITORY", dict(run={"repository": {"full_name": "someone-else/fork"}})),
+    ("OWNER_EVIDENCE_WRONG_SHA", dict(env={"GITHUB_SHA": "b" * 40})),
+    ("OWNER_EVIDENCE_MISSING", dict(env={"GITHUB_EVENT_PATH": None})),
+    ("OWNER_EVIDENCE_WRONG_MONTH", dict(created="2026-10-31T23:59:50Z")),
+    # the independent usage report: a valid attestation alone is not enough
+    ("TOKEN_MISSING", dict(env={"AUTH2_BILLING_TOKEN": None})),
+    ("TOKEN_INVALID", dict(usage=(401, "gh: Bad credentials (HTTP 401)"))),
+    ("PERMISSION_DENIED", dict(usage=(403, "gh: Resource not accessible by personal access token (HTTP 403)"))),
+    ("ENDPOINT_RETIRED", dict(usage=(410, "gh: This endpoint has been moved. (HTTP 410)"))),
+    ("MALFORMED", dict(usage=(200, {"items": []}))),
+    ("MISSING_FIELDS", dict(usage=(200, {"usageItems": [usage_item(date="2026-11-01", quantity="12")]}))),
+    ("WRONG_ACCOUNT", dict(usage=(200, {"usageItems": [usage_item(date="2026-11-01",
+                                                                  repositoryName="someone-else/repo")]}))),
+    ("WRONG_PERIOD", dict(usage=(200, {"usageItems": [usage_item(date="2026-10-31")]}))),
+    # nor beside a ledger that refuses
+    ("CAP: minutes", dict(setup=lambda w: w.add(50, OP.GUARD_WORKFLOW, "AUTH2-GUARD D0 part 1",
+                                                "2026-11-01T00:00:00Z", minutes=3800))),
+    ("SERIAL", dict(setup=lambda w: w.add(51, OP.CLOSURE_WORKFLOW, OP.CLOSURE_TITLE, "2026-11-03T09:50:00Z",
+                                          status="in_progress", conclusion=None))),
+    ("cannot be reconciled", dict(setup=no_jobs)),
+    ("run history not readable", dict(setup=lambda w: w.add(53, DG.WORKFLOW_FILE, "AUTH2 something",
+                                                            "2026-11-01T00:00:00Z"))),
+]
+
+
+@pytest.mark.parametrize("why,kw", PRE_DISPATCH_BREAKS)
+def test_removing_any_pre_dispatch_evidence_bit_never_dispatches(world, why, kw):
+    kw = dict(kw)
+    world.usage = kw.pop("usage", None)
+    kw.pop("setup", lambda w: None)(world)
+    pre = world.owner_guard(100, **kw)
+    assert pre["decision"] == DG.NO_DISPATCH
+    assert any(why in r for r in pre["reasons"]), pre["reasons"]
+    if why.startswith("OWNER_EVIDENCE"):
+        assert pre["billing"]["readable"] is False and pre["billing"]["budget_usd_zero"] is False
+    assert world.check(100)["decision"] == DG.NO_DISPATCH
+
+
+def test_without_the_billing_token_nothing_is_requested_and_nothing_dispatches(world):
+    pre = world.owner_guard(100, env={"AUTH2_BILLING_TOKEN": None})
+    assert world.billing_calls == [] and pre["decision"] == DG.NO_DISPATCH
+    assert pre["billing"]["owner_evidence_problems"][0].startswith("OWNER_EVIDENCE_USAGE_NOT_VERIFIED")
+
+
+def republish(world, rid, change):
+    """Rewrite guard run ``rid``'s published record, annotation and artifact alike (a consistent forgery)."""
+    art = world.artifacts[rid][0]
+    with zipfile.ZipFile(io.BytesIO(art["zip"])) as z:
+        rec = json.loads(z.read("guard.json"))
+    change(rec)
+    data = (json.dumps(rec, indent=1, sort_keys=True) + "\n").encode()
+    art["zip"] = zipped({"guard.json": data})
+    world.notes[world.jobs[rid][-1]["id"]] = notes_from(OP.annotation_lines(OP.RECORD, data))
+
+
+CHECK_BREAKS = [
+    ("not fresh", dict(when="2026-11-03T10:10:41Z")),  # 15 min 1 s after the guard's check at 09:55:40
+    ("titled", dict(node="CAL-A1")),
+    ("not main", dict(main="b" * 40)),
+    ("created after the guard run", dict(setup=lambda w: w.add(150, OP.GUARD_WORKFLOW, "AUTH2-GUARD CAL-A1 part 1",
+                                                               "2026-11-03T09:56:30Z"))),
+    ("SERIAL", dict(setup=lambda w: w.add(151, DG.WORKFLOW_FILE, "AUTH2 CAL-A1 part 1", "2026-11-03T09:56:30Z",
+                                          status="queued", conclusion=None))),
+    ("OWNER_EVIDENCE_REPLAYED", dict(setup=lambda w: w.runs[100].update(run_attempt=2))),
+    ("OWNER_EVIDENCE_ACTOR_MISMATCH", dict(setup=lambda w: w.runs[100].update(triggering_actor=OTHER_USER))),
+    ("did not succeed", dict(setup=lambda w: w.runs[100].update(conclusion="cancelled"))),
+    ("guard record unreadable", dict(setup=lambda w: w.notes.clear())),
+    ("OWNER_EVIDENCE_DIGEST_MISMATCH", dict(setup=lambda w: republish(
+        w, 100, lambda r: r["billing"]["owner_evidence"].update(remaining_included_linux_minutes=99999)))),
+    ("does not rest on its Owner evidence", dict(setup=lambda w: republish(
+        w, 100, lambda r: r["billing"].update(remaining_included_minutes=99999)))),
+    ("usage report is not verified", dict(setup=lambda w: republish(
+        w, 100, lambda r: r["billing"]["usage_evidence"].update(verified=False)))),
+    ("guard decided PARK", dict(setup=lambda w: republish(w, 100, lambda r: r.update(decision=DG.PARK)))),
+]
+
+
+@pytest.mark.parametrize("why,kw", CHECK_BREAKS)
+def test_the_executor_check_refuses_anything_short_of_the_owners_bound_record(world, why, kw):
+    kw = dict(kw)
+    assert world.owner_guard(100)["decision"] == DG.DISPATCH
+    kw.pop("setup", lambda w: None)(world)
+    chk = world.check(100, **kw)
+    assert chk["decision"] == DG.NO_DISPATCH and chk["dispatch_inputs"] is None
+    assert any(why in r for r in chk["reasons"]), chk["reasons"]
+
+
+IN_JOB_BREAKS = [
+    ("OWNER_EVIDENCE_BINDING_MISSING", dict(guard_run=None)),
+    ("OWNER_EVIDENCE_BINDING_MISSING", dict(digest=None)),
+    ("OWNER_EVIDENCE_BINDING_MISSING", dict(digest="sha256:" + "A" * 64)),
+    ("OWNER_EVIDENCE_BINDING_MISSING", dict(guard_run="100 101")),
+    ("OWNER_EVIDENCE_BINDING_MISSING", dict(guard_run="0100")),
+    ("OWNER_EVIDENCE_DIGEST_MISMATCH", dict(digest="sha256:" + "0" * 64)),
+    ("OWNER_EVIDENCE_BINDING_UNREADABLE", dict(guard_run="777")),
+    ("not fresh", dict(created="2026-11-03T10:10:41Z")),  # dispatched 15 min 1 s after the guard's check
+    ("titled", dict(node="CAL-A1")),  # a CAL-A1 run naming D0's guard run
+    ("not main", dict(sha="b" * 40)),  # main moved between the guard run and the dispatch
+    ("created after the guard run", dict(setup=lambda w: w.add(150, OP.GUARD_WORKFLOW, "AUTH2-GUARD CAL-A1 part 1",
+                                                               "2026-11-03T09:57:30Z"))),
+    ("OWNER_EVIDENCE_REPLAYED", dict(setup=lambda w: w.runs[100].update(run_attempt=2))),
+    ("guard record unreadable", dict(setup=lambda w: w.artifacts.update({100: []}))),
+    ("guard record unreadable", dict(setup=lambda w: w.artifacts[100].append({**w.artifacts[100][0], "id": 9999}))),
+    ("OWNER_EVIDENCE_BINDING", dict(run={"head_branch": "owner-branch"})),
+    ("TOKEN_MISSING", dict(env={"AUTH2_BILLING_TOKEN": None})),
+    ("ENDPOINT_RETIRED", dict(setup=lambda w: setattr(w, "usage", (410, "gh: moved (HTTP 410)")))),
+    ("RE_RUN", dict(attempt=2)),
+]
+
+
+@pytest.mark.parametrize("why,kw", IN_JOB_BREAKS)
+def test_the_in_job_guard_refuses_anything_short_of_the_bound_owner_record(world, why, kw):
+    kw = dict(kw)
+    world.owner_guard(100)
+    digest = world.check(100)["dispatch_inputs"]["evidence_digest"]
+    kw.pop("setup", lambda w: None)(world)
+    kw.setdefault("guard_run", 100)
+    kw.setdefault("digest", digest)
+    job = world.dispatch(200, kw.pop("node", "D0"), **kw)
+    assert job["decision"] == DG.NO_DISPATCH
+    assert any(why in r for r in job["reasons"]), job["reasons"]
+    # the billing state is readable only through a verified binding and the job's own verified usage report
+    assert job["billing"]["readable"] is (why == "RE_RUN")
+
+
+def test_the_closure_dispatch_is_bound_the_same_way(world):
+    pre = world.owner_guard(100, OP.CLOSURE)
+    chk = world.check(100, OP.CLOSURE)
+    assert pre["decision"] == chk["decision"] == DG.DISPATCH, (pre["reasons"], chk["reasons"])
+    bad = world.dispatch(200, OP.CLOSURE, guard_run=100, digest="sha256:" + "0" * 64)
+    assert bad["decision"] == DG.NO_DISPATCH and bad["billing"]["owner_evidence"] is None
+    assert any("OWNER_EVIDENCE_DIGEST_MISMATCH" in r for r in bad["reasons"])
+    world.owner_guard(101, OP.CLOSURE, created="2026-11-03T10:30:00Z")
+    digest = world.check(101, OP.CLOSURE, when="2026-11-03T10:32:00Z")["dispatch_inputs"]["evidence_digest"]
+    job = world.dispatch(201, OP.CLOSURE, guard_run=101, digest=digest, created="2026-11-03T10:33:00Z")
+    assert job["decision"] == DG.DISPATCH, job["reasons"]
+    assert job["node"] == OP.CLOSURE and job["binding"] == {"guard_run": 101, "evidence_digest": digest}
+
+
+# -- A_m: fixed by the month's first node run, from the Owner's attestation at that dispatch ---------------
+
+def test_the_first_node_run_of_a_month_fixes_a_m_and_later_attestations_never_change_it(world):
+    pre, _chk, job = d0_flow(world, minutes="3001")
+    assert (pre["month"], pre["a_m"], pre["r_m"]) == ("2026-11", 3001, 601)  # a candidate: a guard run fixes nothing
+    assert job["decision"] == DG.DISPATCH
+    assert (job["month"], job["a_m"], job["r_m"], job["remaining_included_minutes"]) == ("2026-11", 3001, 601, 3001)
+    assert job["r_m"] == max(500, math.ceil(0.20 * 3001)) == DG.reserve(3001)
+    for rid, created, minutes, decision in ((300, "2026-11-03T11:00:00Z", "9000", DG.DISPATCH),
+                                            (301, "2026-11-03T12:00:00Z", "721", DG.DISPATCH),  # 721 - 120 = R_m
+                                            (302, "2026-11-03T13:00:00Z", "720", DG.PARK)):  # 600 < 601
+        later = world.owner_guard(rid, "CAL-A1", created=created, minutes=minutes)
+        assert (later["a_m"], later["r_m"], later["remaining_included_minutes"]) == (3001, 601, int(minutes))
+        assert later["decision"] == decision, later["reasons"]
+    assert DG.reserve(2500) == 500 and DG.reserve(2501) == 501 and DG.reserve(0) == 500
+
+
+def test_a_new_month_takes_a_new_a_m_at_its_own_first_node_run(world):
+    d0_flow(world, minutes="3001")
+    dec = world.owner_guard(400, "CAL-A1", created="2026-12-01T09:00:00Z", minutes="1500")
+    assert (dec["decision"], dec["month"], dec["a_m"], dec["r_m"]) == (DG.DISPATCH, "2026-12", 1500, 500)
+    digest = world.check(400, "CAL-A1", when="2026-12-01T09:02:00Z")["dispatch_inputs"]["evidence_digest"]
+    job = world.dispatch(500, "CAL-A1", guard_run=400, digest=digest, created="2026-12-01T09:03:00Z")
+    assert (job["decision"], job["month"], job["a_m"], job["r_m"]) == (DG.DISPATCH, "2026-12", 1500, 500)
+    after = world.owner_guard(401, "CAL-A2", created="2026-12-02T09:00:00Z", minutes="900")
+    assert (after["month"], after["a_m"], after["r_m"], after["remaining_included_minutes"]) == \
+        ("2026-12", 1500, 500, 900)
+
+
+def rewrite_first(world, rid, change):
+    art = world.artifacts[rid][0]
+    with zipfile.ZipFile(io.BytesIO(art["zip"])) as z:
+        files = {n: z.read(n) for n in z.namelist()}
+    rec = json.loads(files["guard.json"])
+    change(rec)
+    files["guard.json"] = (json.dumps(rec, indent=1, sort_keys=True) + "\n").encode()
+    art["zip"] = zipped(files)
+
+
+def second_record(world):
+    """A second artifact of the first node run that states another A_m."""
+    with zipfile.ZipFile(io.BytesIO(world.artifacts[200][0]["zip"])) as z:
+        rec = json.loads(z.read("guard.json"))
+    rec.update(a_m=5000, r_m=1000)
+    world.publish(200, "auth2-D0-p1", {"guard.json": json.dumps(rec).encode()})
+
+
+FIRST_RECORD_BREAKS = [
+    ("has no in-job guard record stating A_m", lambda w: w.artifacts.update({200: []})),
+    ("has no in-job guard record stating A_m", lambda w: w.artifacts[200][0].update(expired=True)),
+    ("has no in-job guard record stating A_m", lambda w: rewrite_first(w, 200, lambda r: r.pop("a_m"))),
+    ("has no in-job guard record stating A_m", lambda w: rewrite_first(w, 200, lambda r: r.update(run_id=201))),
+    ("has no in-job guard record stating A_m",
+     lambda w: rewrite_first(w, 200, lambda r: r.update(mode="pre-dispatch"))),
+    ("is unreadable", lambda w: w.artifacts[200][0].update(zip=b"PK-not-a-zip")),
+    ("conflicting A_m records", second_record),
+    ("invalid A_m record", lambda w: rewrite_first(w, 200, lambda r: r.update(r_m=501))),
+    ("invalid A_m record", lambda w: rewrite_first(w, 200, lambda r: r.update(month="2026-10"))),
+    ("invalid A_m record", lambda w: rewrite_first(w, 200, lambda r: r.update(a_m=-1))),
+    ("invalid A_m record", lambda w: rewrite_first(w, 200, lambda r: r.update(a_m="2400"))),
+    ("does not rest on the Owner evidence", lambda w: rewrite_first(
+        w, 200, lambda r: r.update(a_m=5000, r_m=1000, remaining_included_minutes=5000))),
+    ("does not rest on the Owner evidence", lambda w: rewrite_first(
+        w, 200, lambda r: r["billing"].update(owner_evidence=None))),
+    ("does not rest on the Owner evidence", lambda w: rewrite_first(
+        w, 200, lambda r: r["binding"].update(evidence_digest="sha256:" + "0" * 64))),
+    ("does not rest on the Owner evidence", lambda w: rewrite_first(
+        w, 200, lambda r: r["billing"]["owner_evidence"].update(remaining_included_linux_minutes=5000))),
+]
+
+
+@pytest.mark.parametrize("why,breaker", FIRST_RECORD_BREAKS)
+def test_a_missing_unreadable_conflicting_or_unbound_first_node_record_never_dispatches(world, why, breaker):
+    d0_flow(world)
+    breaker(world)
+    later = world.owner_guard(300, "CAL-A1", created="2026-11-03T11:00:00Z", minutes="2000")
+    assert later["decision"] == DG.NO_DISPATCH
+    assert any(why in r for r in later["reasons"]), later["reasons"]
+    assert "a_m" not in later  # R_m is unknown, so no reserve is computed
+
+
+def test_the_in_job_guard_reads_the_first_node_record_itself(world):
+    d0_flow(world)
+    world.owner_guard(300, "CAL-A1", created="2026-11-03T11:00:00Z", minutes="2000")
+    digest = world.check(300, "CAL-A1", when="2026-11-03T11:02:00Z")["dispatch_inputs"]["evidence_digest"]
+    world.artifacts[200] = []  # the first node run's record is gone by the dispatch
+    job = world.dispatch(301, "CAL-A1", guard_run=300, digest=digest, created="2026-11-03T11:03:00Z")
+    assert job["decision"] == DG.NO_DISPATCH
+    assert any("has no in-job guard record stating A_m" in r for r in job["reasons"])
+
+
+# -- caps, attempts and replay under valid Owner evidence ----------------------------------------------------
+
+def owner_billing(minutes=100000) -> dict:
+    return OP.billing_state(USAGE_OK, {"evidence": evidence(remaining_included_linux_minutes=minutes), "problems": []})
+
+
+def test_valid_owner_evidence_never_lifts_the_4000_minute_or_240_invocation_cap():
+    bill = owner_billing()
+    assert (bill["readable"], bill["remaining_included_minutes"], bill["budget_usd_zero"]) == (True, 100000, True)
+    assert OP.decide(state(billing=bill), [aux(1, minutes=3700)], "D0", 1)["decision"] == DG.DISPATCH  # 4000
+    cap = OP.decide(state(billing=bill), [aux(1, minutes=3701)], "D0", 1)  # 3701 + 2 x 150 > 4000
+    assert cap["decision"] == DG.NO_DISPATCH and any(r.startswith("CAP: minutes") for r in cap["reasons"])
+    runs = [{"id": i, "node": "PC-A1", "part": 1, "status": "completed", "conclusion": "failure",
+             "created_at": f"2026-11-01T{i:02d}:00:00Z",
+             "jobs": [{"status": "completed", "started_at": "2026-11-01T00:00:00Z",
+                       "completed_at": "2026-11-01T00:01:00Z"}],
+             "guard": {"month": "2026-11", "a_m": 100000}} for i in range(17)]
+    assert OP.decide(state(billing=bill, runs=runs), [], "SC-A1", 1)["decision"] == DG.DISPATCH  # 221 + 2 x 1
+    inv = OP.decide(state(billing=bill, runs=runs), [], "PC-A3", 1)  # 17 x 13 + 2 x 11 = 243 > 240
+    assert inv["decision"] == DG.NO_DISPATCH and any(r.startswith("CAP: invocation") for r in inv["reasons"])
+
+
+def test_evidence_with_any_problem_leaves_billing_unreadable():
+    ev = evidence()
+    assert OP.billing_state(USAGE_OK, {"evidence": ev, "problems": []})["readable"] is True
+    for usage, owner in ((USAGE_OK, {"evidence": ev, "problems": ["OWNER_EVIDENCE_X"]}),
+                         (USAGE_OK, {"evidence": None, "problems": []}), (USAGE_OK, None),
+                         ({**USAGE_OK, "verified": False, "class": "ENDPOINT_RETIRED"},
+                          {"evidence": ev, "problems": []})):
+        bill = OP.billing_state(usage, owner)
+        assert (bill["readable"], bill["remaining_included_minutes"], bill["budget_usd_zero"]) == (False, None, False)
+        assert OP.decide(state(billing=bill), [], "D0", 1)["decision"] == DG.NO_DISPATCH
+
+
+def test_every_attempt_of_a_re_run_guard_counts_and_the_re_run_never_attests(world):
+    replay = world.owner_guard(90, created="2026-11-03T09:00:00Z", attempt=2)
+    assert replay["decision"] == DG.NO_DISPATCH
+    assert any("OWNER_EVIDENCE_REPLAYED" in r for r in replay["reasons"])
+    pre, chk, job = d0_flow(world)
+    assert (pre["decision"], chk["decision"], job["decision"]) == (DG.DISPATCH,) * 3
+    assert pre["aux_minutes_ledger"] == 2 and job["aux_minutes_ledger"] == 3  # run 90's two attempts, then run 100
+
+
+def test_no_token_reaches_any_record_annotation_artifact_or_log(world):
+    world.usage = (403, f"gh: token {TOKEN} lacks the Plan permission (HTTP 403)")
+    pre = world.owner_guard(100)
+    assert pre["decision"] == DG.NO_DISPATCH and "***" in pre["billing"]["usage_evidence"]["detail"]
+    world.usage = None
+    world.owner_guard(101, created="2026-11-03T09:56:00Z")
+    digest = world.check(101, when="2026-11-03T09:58:00Z")["dispatch_inputs"]["evidence_digest"]
+    world.usage = (401, f"gh: Bad credentials for {TOKEN} (HTTP 401)")
+    job = world.dispatch(200, guard_run=101, digest=digest, created="2026-11-03T09:59:00Z")
+    assert job["decision"] == DG.NO_DISPATCH and "***" in job["billing"]["usage_evidence"]["detail"]
+    stored = [a["zip"] for arts in world.artifacts.values() for a in arts]
+    stored += [json.dumps(n).encode() for n in world.notes.values()] + [p.encode() for p in world.printed]
+    assert stored and not any(TOKEN.encode() in blob for blob in stored)
 
 
 # -- the workflows ---------------------------------------------------------------------------------
 
 def load(name: str) -> dict:
     return yaml.safe_load((WF / name).read_text())
+
+
+def inputs_of(name: str) -> dict:
+    wf = load(name)
+    return wf.get("on", wf.get(True))["workflow_dispatch"]["inputs"]
 
 
 @pytest.mark.parametrize("name,run_name", [
@@ -232,6 +978,36 @@ def test_the_guard_workflow_offers_every_node_and_closure():
     assert OP.GUARD_TITLE.match("AUTH2-GUARD PC-A2 part 2")
 
 
+def test_the_owner_states_both_controls_only_in_typed_guard_inputs():
+    inputs = inputs_of("auth2-guard.yml")
+    assert set(inputs) == {"node", "part", OP.MINUTES_INPUT, *OP.CONFIRMATIONS}
+    minutes = inputs[OP.MINUTES_INPUT]
+    assert minutes["type"] == "string" and minutes["required"] is True and "default" not in minutes
+    for key in OP.CONFIRMATIONS:
+        assert inputs[key]["type"] == "choice" and inputs[key]["required"] is True
+        assert inputs[key]["options"] == [OP.NOT_CONFIRMED, OP.CONFIRMED] and inputs[key]["default"] == OP.NOT_CONFIRMED
+    # read from the event GitHub delivered: no step, environment value or expression carries them
+    jobs = json.dumps(load("auth2-guard.yml")["jobs"])
+    for key in (OP.MINUTES_INPUT, *OP.CONFIRMATIONS):
+        assert key not in jobs
+    assert "github.actor" not in jobs and "github.triggering_actor" not in jobs
+    for name in ("auth2-guard.yml", "auth2.yml", "auth2-closure.yml"):
+        assert "vars." not in (WF / name).read_text()
+
+
+@pytest.mark.parametrize("name,job", [("auth2.yml", "node"), ("auth2-closure.yml", "closure")])
+def test_node_and_closure_dispatches_name_the_guard_run_and_digest_only(name, job):
+    inputs = inputs_of(name)
+    for key in ("guard_run", "evidence_digest"):
+        assert inputs[key]["type"] == "string" and inputs[key]["required"] is True
+    assert not set(inputs) & {OP.MINUTES_INPUT, *OP.CONFIRMATIONS}  # billing figures are never a dispatch input
+    guard = next(s for s in load(name)["jobs"][job]["steps"] if "dispatch guard" in s.get("name", ""))
+    assert guard["env"]["GUARD_RUN"] == "${{ inputs.guard_run }}"
+    assert guard["env"]["EVIDENCE_DIGEST"] == "${{ inputs.evidence_digest }}"
+    assert '--guard-run "$GUARD_RUN" --evidence-digest "$EVIDENCE_DIGEST"' in guard["run"]
+    assert "--in-job" in guard["run"] and "${{" not in guard["run"]  # inputs reach the shell as values only
+
+
 def test_node_jobs_guard_through_the_operator_and_publish_their_results():
     steps = load("auth2.yml")["jobs"]["node"]["steps"]
     guard = next(s for s in steps if "dispatch guard" in s.get("name", ""))
@@ -249,6 +1025,14 @@ def test_guard_and_closure_artifacts_are_never_read_as_node_results():
         assert not upload["with"]["name"].startswith("auth2-")
 
 
+def test_the_guard_artifact_is_the_one_the_in_job_binding_reads():
+    steps = load("auth2-guard.yml")["jobs"]["guard"]["steps"]
+    upload = next(s for s in steps if s.get("uses", "").startswith("actions/upload-artifact"))
+    assert upload["with"]["name"] == "auth2guard-${{ inputs.node }}-p${{ inputs.part }}"
+    assert upload["with"]["path"] == "out/guard.json" and upload["if"] == "always()"
+    assert "--out out/guard.json" in next(s for s in steps if "dispatch guard" in s.get("name", ""))["run"]
+
+
 def test_research_auth2_code_is_untouched_by_the_operator():
     """The gate lives outside research/auth2/, whose *.py files are pinned in every preregistration."""
     pins = json.loads((REPO / "research/auth2/prereg/D0.json").read_text())["code_sha256"]
@@ -257,19 +1041,6 @@ def test_research_auth2_code_is_untouched_by_the_operator():
 
 
 # -- billing evidence: the endpoint dispatch_guard reads is closed; nothing unproven dispatches ----------------
-
-OWNER = "algamal119933-ux"
-OCT = datetime(2026, 10, 12, 0, 5, tzinfo=timezone.utc)
-TOKEN = "TESTONLY-billing-token-0123456789"  # not a token format: the hygiene gate scans for real ones
-
-
-def usage_item(**kw) -> dict:
-    it = {"date": "2026-10-11", "product": "Actions", "sku": "Actions Linux", "quantity": 12.0, "unitType": "Minutes",
-          "pricePerUnit": 0.008, "grossAmount": 0.096, "discountAmount": 0.096, "netAmount": 0.0,
-          "repositoryName": f"{OWNER}/trading-lab-os-sandbox"}
-    it.update(kw)
-    return it
-
 
 def read_with(monkeypatch, response, token=TOKEN):
     calls = []
@@ -307,6 +1078,7 @@ def test_the_closed_endpoint_is_no_longer_called(monkeypatch):
     monkeypatch.setenv("AUTH2_BILLING_TOKEN", TOKEN)
     st = OP.collect("o/r", OWNER, "AUTH2_BILLING_TOKEN", None)
     assert st["runs"] == [] and "runs_error" not in st and st["billing"]["readable"] is False
+    assert st["billing"]["usage_evidence"]["class"] == "ENDPOINT_RETIRED"  # the patched reader answered, offline
 
 
 def test_a_403_is_a_permission_failure_not_an_api_migration(monkeypatch):
