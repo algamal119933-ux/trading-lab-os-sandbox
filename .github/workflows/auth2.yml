@@ -8,7 +8,10 @@ name: AUTH-2 node (preregistered, manual dispatch only)
 # succeeded node, at most one technical retry, 4,000 attributed minutes, 240 invocations,
 # the monthly CI reserve). The guard is research/auth2/dispatch_guard.py, unchanged, called
 # through .github/gates/auth2_operator.py, which also counts the guard and closure jobs. A node
-# is dispatched only after a run of .github/workflows/auth2-guard.yml for it said DISPATCH.
+# is dispatched only after a run of .github/workflows/auth2-guard.yml for it said DISPATCH, and
+# it names that run and its Owner evidence digest (`check-dispatch` prints both). The in-job
+# guard verifies that binding and takes the billing state from that guard record, never from
+# these inputs (AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1).
 #
 # workflow_dispatch only: no push, schedule or pull_request trigger, no matrix, no loop.
 # Results pass between nodes as artifacts (predecessor run ids are an input). This workflow
@@ -36,6 +39,14 @@ on:
         type: string
         required: false
         default: ""
+      guard_run:
+        description: "The auth2-guard.yml run that said DISPATCH for this node part"
+        type: string
+        required: true
+      evidence_digest:
+        description: "That guard record's Owner evidence digest (sha256:...)"
+        type: string
+        required: true
 
 run-name: AUTH2 ${{ inputs.node }} part ${{ inputs.part }}
 
@@ -72,15 +83,18 @@ jobs:
           pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
           pip check
 
-      - name: 'Gate: dispatch guard (billing readable, serial, caps, never re-run)'
+      - name: 'Gate: dispatch guard (bound Owner billing evidence, serial, caps, never re-run)'
         run: |
           set -euo pipefail
           mkdir -p out
           python .github/gates/auth2_operator.py guard --node "$NODE" --part "$PART" \
-            --repo-slug "$GITHUB_REPOSITORY" --in-job --self-run-id "$GITHUB_RUN_ID" --out out/guard.json
+            --repo-slug "$GITHUB_REPOSITORY" --in-job --self-run-id "$GITHUB_RUN_ID" --out out/guard.json \
+            --guard-run "$GUARD_RUN" --evidence-digest "$EVIDENCE_DIGEST"
         env:
           NODE: ${{ inputs.node }}
           PART: ${{ inputs.part }}
+          GUARD_RUN: ${{ inputs.guard_run }}
+          EVIDENCE_DIGEST: ${{ inputs.evidence_digest }}
           GH_TOKEN: ${{ github.token }}
           AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
 

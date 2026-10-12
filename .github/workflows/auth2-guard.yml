@@ -8,6 +8,13 @@ name: AUTH-2 pre-dispatch guard (manual dispatch only)
 # `auth2_operator.py check-dispatch` verifies that record: this guard run, on the current main,
 # succeeded (DISPATCH), is at most 15 minutes old, and no AUTH-2 run was created after it.
 #
+# Owner billing evidence (AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1): GitHub's API exposes neither
+# pacing-rule control for a personal account, so only the Owner dispatches this workflow and
+# states them in its last three inputs. The guard reads them from the event GitHub delivered,
+# never from an environment value, variable, file or secret, and accepts them only when the
+# Actions API names the Owner as this run's actor and triggering actor and the billing token
+# verifies this month's usage report. A re-run of this workflow is refused.
+#
 # workflow_dispatch only. It runs no node, reads no market data, pulls no image, never commits,
 # pushes or writes the trial ledger. Its billed minutes count toward the program's 4,000.
 on:
@@ -25,6 +32,22 @@ on:
         required: true
         default: "1"
         options: ["1", "2"]
+      remaining_included_linux_minutes:
+        description: "Owner: remaining included Linux minutes shown on the billing page now (digits only)"
+        type: string
+        required: true
+      actions_budget_usd_zero:
+        description: "Owner: the account's Actions budget is USD 0"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
+      stop_usage_enabled:
+        description: "Owner: that budget stops usage when it is reached"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
 
 run-name: AUTH2-GUARD ${{ inputs.node }} part ${{ inputs.part }}
 
@@ -58,7 +81,7 @@ jobs:
           pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
           pip check
 
-      - name: 'Gate: dispatch guard (billing readable, serial, caps, never re-run), published'
+      - name: 'Gate: dispatch guard (Owner billing evidence, serial, caps, never re-run), published'
         run: |
           set -euo pipefail
           python .github/gates/auth2_operator.py guard --node "$NODE" --part "$PART" \

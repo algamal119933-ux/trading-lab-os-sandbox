@@ -931,6 +931,27 @@ AUTH_2_OPERATOR_GATE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #60, merged. Two parents: 76bb14d5 (main before, AUTH_2_OPERATOR_GATE) + 2d338257 (the
+# claude/auth-2-billing-evidence branch).
+AUTH_2_BILLING_EVIDENCE_MERGE = "2a48f249171afd2ce86381927c426a3f68dae205"
+
+# AUTH-2 billing evidence (Owner P0 "D0 Billing Guard Corrective Execution"). The billing
+# endpoint dispatch_guard reads was closed down by GitHub (HTTP 410); the guard reads the
+# supported usage report with the billing token only and records what it proves. Neither
+# pacing-rule control (remaining included minutes, the USD 0 budget) is exposed for a
+# personal account, so both stay unproven: NO_DISPATCH. research/auth2/*.py untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_BILLING = "AUTH-2 billing evidence"
+AUTH_2_BILLING_EVIDENCE_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py":
+        f"{_BILLING} — supported usage endpoint, token-only, classified failures; RE_RUN; all-attempt minutes",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BILLING} — the closed endpoint and the evidence gap, recorded",
+    "tests/test_auth2_operator.py": f"{_BILLING} — 410/403/401/missing token/fields/malformed/account/period/caps/replay",
+    "tests/test_p2_scope_audit.py": "AUTH-2 operator gate (PR #59) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -968,6 +989,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "CEA_1_MERGE_LAW_LEDGER_IMPORT": (CEA_1_MERGE_LAW_LEDGER_IMPORT_MERGE, CEA_1_MERGE_LAW_LEDGER_IMPORT_SCOPE),
     "AUTH_2": (AUTH_2_MERGE, AUTH_2_SCOPE),
     "AUTH_2_OPERATOR_GATE": (AUTH_2_OPERATOR_GATE_MERGE, AUTH_2_OPERATOR_GATE_SCOPE),
+    "AUTH_2_BILLING_EVIDENCE": (AUTH_2_BILLING_EVIDENCE_MERGE, AUTH_2_BILLING_EVIDENCE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -975,18 +997,22 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 billing evidence (Owner P0 "D0 Billing Guard Corrective Execution"). The billing
-# endpoint dispatch_guard reads was closed down by GitHub (HTTP 410); the guard reads the
-# supported usage report with the billing token only and records what it proves. Neither
-# pacing-rule control (remaining included minutes, the USD 0 budget) is exposed for a
-# personal account, so both stay unproven: NO_DISPATCH. research/auth2/*.py untouched.
-_BILLING = "AUTH-2 billing evidence"
+# AUTH-2 Owner billing evidence bridge (Owner decision AUTH2-OWNER-BILLING-EVIDENCE-BRIDGE-1).
+# GitHub's API exposes neither pacing-rule control for a personal account, so the Owner
+# attests both in the pre-dispatch guard run, authenticated by the run's actor as the Actions
+# API reports it, beside the billing token's verified usage report. Every node and closure
+# dispatch names that guard run and its evidence digest, and the in-job guard verifies the
+# binding. A_m stays the first node run's in-job record. research/auth2/*.py untouched.
+_BRIDGE = "AUTH-2 Owner billing evidence bridge"
 BRANCH_SCOPE: dict[str, str] = {
     ".github/gates/auth2_operator.py":
-        f"{_BILLING} — supported usage endpoint, token-only, classified failures; RE_RUN; all-attempt minutes",
-    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BILLING} — the closed endpoint and the evidence gap, recorded",
-    "tests/test_auth2_operator.py": f"{_BILLING} — 410/403/401/missing token/fields/malformed/account/period/caps/replay",
-    "tests/test_p2_scope_audit.py": "AUTH-2 operator gate (PR #59) pinned to its merge; this branch's scope",
+        f"{_BRIDGE} — Owner evidence and digest; node/closure binding verified in the job; first-month A_m",
+    ".github/workflows/auth2-guard.yml": f"{_BRIDGE} — the Owner's typed billing inputs, read from the event",
+    ".github/workflows/auth2.yml": f"{_BRIDGE} — the dispatch names its guard run and evidence digest",
+    ".github/workflows/auth2-closure.yml": f"{_BRIDGE} — the closure is bound the same way",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_BRIDGE} — the evidence source and the binding, recorded",
+    "tests/test_auth2_operator.py": f"{_BRIDGE} — actor, inputs, usage, digest, binding, A_m, caps, replay",
+    "tests/test_p2_scope_audit.py": "AUTH-2 billing evidence (PR #60) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
