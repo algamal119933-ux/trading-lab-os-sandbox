@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """The readiness jobs' own steps, RT-1 to RT-11 (review section 4; Owner decisions OD-S2, OD-S5 and OD-S6).
 
-    python -m auth2q2.harness restore  --address A --dest D --assets-dir R [--cache-dir C] [--refill-cache]
-                                       [--expect-source cache|release] [--manifest-out M] --repo-slug O/R --out F
+    python -m auth2q2.harness restore  --address A --commit SHA --dest D --assets-dir R [--cache-dir C]
+                                       [--refill-cache] [--expect-source cache|release] [--manifest-out M]
+                                       --repo-slug O/R --out F
     python -m auth2q2.harness verify   --address A --manifest M --dest D --out F        (before every science phase)
     python -m auth2q2.harness d0       --repo . --cache D --out F                       (science, network removed)
     python -m auth2q2.harness engine   --repo . --cache D --work W --out F              (science, network removed)
@@ -10,12 +11,12 @@
     python -m auth2q2.harness tamper   --assets-dir R --out F                           (RT-6)
     python -m auth2q2.harness classify --test RT-6|RT-7|RT-10 --repo-slug O/R --run-id N [--expect F] --out F
     python -m auth2q2.harness prep-check --record F --repo .                       (RT-1, before publishing)
-    python -m auth2q2.harness compare-release --dir OUT --repo . --repo-slug O/R --out F  (RT-2)
+    python -m auth2q2.harness compare-release --dir OUT --commit SHA --repo . --repo-slug O/R --out F  (RT-2)
     python -m auth2q2.harness verdict  --test RT-n --job NAME --repo . --out F IN...
     python -m auth2q2.harness fail     --test RT-n --job NAME --reason TEXT --out F    (a test that did not finish)
 
-Restore. The snapshot comes from the Actions cache when the cache holds it whole, else from the immutable
-release, and either way every file is checked against the manifest at the snapshot's address before anything
+Restore. The snapshot comes from the Actions cache when the cache holds it whole (this run's own entry), else from
+the readiness commit's immutable release (release.py: one per snapshot address and readiness commit), and either way every file is checked against the manifest at the snapshot's address before anything
 reads it. The cache is only an accelerator: a missing or broken cache entry falls back to the release, and the
 receipt says why. Release assets are checked against GitHub's digests when they are downloaded and again right
 before they are unpacked, so an asset changed in between (RT-6) stops the restore and is named.
@@ -159,15 +160,16 @@ def _refill(src: Path, cache_dir: Path, dest: Path) -> None:
         shutil.copyfile(src / n, cache_dir / n)
 
 
-def restore(address: str, dest: Path, assets_dir: Path, *, cache_dir: Path | None = None, gh=None,
+def restore(address: str, dest: Path, assets_dir: Path, *, commit: str, cache_dir: Path | None = None, gh=None,
             refill_cache: bool = False, expect_source: str | None = None, manifest_out: Path | None = None) -> dict:
-    """Restore the snapshot at ``address`` into ``dest``: the cache if it holds it whole, else the release."""
-    RL.tag_for(address)  # a snapshot address, or refused
+    """Restore the snapshot at ``address`` into ``dest``: the cache if it holds it whole, else the readiness
+    commit ``commit``'s release."""
+    RL.tag_for(address, commit)  # a snapshot address and a readiness commit, or refused
     SN._empty_dir(dest)  # new or empty, checked once: a restore never writes over (or clears) existing files
     if cache_dir is not None and _overlaps(cache_dir, dest):
         raise HarnessError(f"the cache directory {cache_dir} overlaps the restore destination {dest}")
-    rec: dict = {"schema": RECEIPT_SCHEMA, "address": address, "source": None, "fallback_reason": None,
-                 "seconds": {}}
+    rec: dict = {"schema": RECEIPT_SCHEMA, "address": address, "commit": commit, "source": None,
+                 "fallback_reason": None, "seconds": {}}
     man = tar_sha = raw = None
     if cache_dir is not None:
         t = time.monotonic()
@@ -185,9 +187,9 @@ def restore(address: str, dest: Path, assets_dir: Path, *, cache_dir: Path | Non
         if gh is None:
             raise HarnessError("the cache cannot restore the snapshot and no release was given")
         t = time.monotonic()
-        rel = RL.the_snapshot(gh, address)
+        rel = RL.the_snapshot(gh, commit, address)
         if not _has_files(assets_dir):
-            RL.download(gh, assets_dir, address)  # each asset checked against GitHub's digest
+            RL.download(gh, assets_dir, commit, address)  # each asset checked against GitHub's digest
         rec["seconds"]["download"] = round(time.monotonic() - t, 1)
         t = time.monotonic()
         rec["asset_digests"] = check_assets(rel, assets_dir)  # again, right before use
@@ -450,19 +452,54 @@ def _prep_checks(rec: dict, repo: Path) -> dict:
             "thirty_two_workers": rec.get("workers") == 32}
 
 
-def compare_release(directory: Path, repo: Path, gh) -> dict:
-    """RT-2: a second cold preparation, not published, is the published snapshot byte for byte."""
+def _tag(address, commit) -> str | None:
+    try:
+        return RL.tag_for(address, commit)
+    except RL.ReleaseError:
+        return None
+
+
+SNAPSHOT_BINDING = ("address", "commit", "tag", "release_id")   # which release a verdict read, by its identity
+
+
+def snapshot_binding(rel) -> dict | None:
+    """The identity of the release a test read (a release summary), carried in its verdict for the record."""
+    return {k: rel.get(k) for k in SNAPSHOT_BINDING} if isinstance(rel, dict) else None
+
+
+def bound_to(rel, commit) -> bool:
+    """The release summary ``rel`` is the snapshot release of the readiness commit ``commit``."""
+    b = snapshot_binding(rel)
+    return b is not None and RL.is_commit(commit) and b["commit"] == commit \
+        and b["tag"] == _tag(b["address"], commit) and isinstance(b["release_id"], int) \
+        and not isinstance(b["release_id"], bool)
+
+
+def _this_run(rec: dict, env: dict, commit) -> bool:
+    """The preparation record is this run's own, made at this run's commit: fresh, current-run evidence."""
+    return RL.is_commit(commit) and env.get("sha") == commit and rec.get("commit") == commit \
+        and env.get("run_id") is not None and str(rec.get("run_id")) == str(env["run_id"]) \
+        and str(rec.get("run_attempt")) == "1"
+
+
+def compare_release(directory: Path, repo: Path, gh, commit: str) -> dict:
+    """RT-2: a second cold preparation at the readiness commit ``commit``, not published, is that commit's
+    published snapshot byte for byte."""
     rec = read_json(directory / RL.RECORD)
     raw = (directory / RL.MANIFEST).read_bytes()
     tar_sha = RL.sha256_file(directory / RL.TAR)
-    rel = RL.the_snapshot(gh)
+    rel = RL.the_snapshot(gh, commit)
     assets = RL.asset_map(rel)
+    env = run_env()
     checks = _prep_checks(rec, repo)
     checks.update({"same_manifest_digest": SN.address(raw) == RL.address_of(rel["tag_name"]) == rec.get("address"),
                    "same_tar_sha256": f"sha256:{tar_sha}" == assets[RL.TAR]["digest"]
-                   and tar_sha == rec.get("tar_sha256")})
+                   and tar_sha == rec.get("tar_sha256"),
+                   "prepared_cold_by_this_run_at_this_commit": _this_run(rec, env, commit),
+                   "release_bound_to_this_commit": bound_to(RL.summary(rel), commit) and env.get("sha") == commit})
     return result("RT-2", "Cold preparation", checks,
-                  {"address": SN.address(raw), "tar_sha256": tar_sha, "release": RL.summary(rel),
+                  {"address": SN.address(raw), "tar_sha256": tar_sha, "commit": commit, "release": RL.summary(rel),
+                   "snapshot_release": snapshot_binding(RL.summary(rel)),
                    "preparation": {k: rec.get(k) for k in ("seconds", "tar_bytes", "counts", "workers", "symbols",
                                                            "symbols_with_lock_identity", "run_id")}})
 
@@ -472,32 +509,49 @@ def verdict(test: str, job: str, inputs: list[Path], repo: Path) -> dict:
     docs = [read_json(p) for p in inputs]
     if test == "RT-1":
         rec, pub = docs
+        env = run_env()
+        commit, mode, by = env["sha"], pub.get("result"), pub.get("published_by_run")
+        assets = pub.get("assets") or {}
         checks = _prep_checks(rec, repo)
-        checks.update({"published": pub.get("result") == "PUBLISHED", "immutable": pub.get("immutable") is True,
-                       "tag_at_this_commit": pub.get("tag_commit") == os.environ.get("GITHUB_SHA")
-                       and pub.get("tag_commit") is not None,
-                       "release_is_this_preparation": pub.get("address") == rec.get("address")
-                       and (pub.get("assets") or {}).get(RL.TAR, {}).get("digest") == f"sha256:{rec.get('tar_sha256')}"})
+        checks.update({
+            "published_or_verified": mode in (RL.PUBLISHED, RL.VERIFIED_EXISTING),
+            "immutable": pub.get("immutable") is True,
+            "prepared_cold_by_this_run_at_this_commit": _this_run(rec, env, commit),
+            "release_bound_to_this_commit": RL.is_commit(commit) and pub.get("commit") == commit
+            and pub.get("tag") == _tag(rec.get("address"), commit),
+            "tag_at_this_commit": RL.is_commit(commit) and pub.get("tag_commit") == commit,
+            "release_is_this_preparation": pub.get("address") == rec.get("address")
+            and (assets.get(RL.MANIFEST) or {}).get("digest") == rec.get("address")
+            and (assets.get(RL.TAR) or {}).get("digest") == f"sha256:{rec.get('tar_sha256')}",
+            "published_by_an_rt1_run_at_this_commit": isinstance(by, int) and not isinstance(by, bool)
+            and env["run_id"] is not None and ((mode == RL.PUBLISHED and str(by) == str(env["run_id"]))
+                                               or (mode == RL.VERIFIED_EXISTING and str(by) != str(env["run_id"])))})
         meas = {"address": rec.get("address"), "tar_sha256": rec.get("tar_sha256"), "tar_bytes": rec.get("tar_bytes"),
+                "commit": commit, "publication": mode, "published_by_run": by,
                 "counts": rec.get("counts"), "seconds": rec.get("seconds"), "release": {
-                    k: pub.get(k) for k in ("tag", "release_id", "published_at", "assets", "tag_commit")}}
+                    k: pub.get(k) for k in ("tag", "commit", "release_id", "published_at", "assets", "tag_commit")}}
         return result(test, job, checks, meas)
     if test == "RT-3":
         (probe,) = docs
         probes = probe.get("probes") or {}
         checks = {"probe_passed": probe.get("result") == "PASS", "probes_made": len(probes) >= 4,
-                  "every_write_refused": bool(probes) and all(v.get("refused") is True for v in probes.values())}
+                  "every_write_refused": bool(probes) and all(v.get("refused") is True for v in probes.values()),
+                  "probed_this_commits_release": bound_to(probe.get("release"), run_env()["sha"])}
         if probe.get("part") == "immutability":
             checks["release_unchanged"] = probe.get("release_unchanged") is True
-        return result(test, job, checks, {"part": probe.get("part"), "probes": probes})
+        return result(test, job, checks, {"part": probe.get("part"), "probes": probes,
+                                          "snapshot_release": snapshot_binding(probe.get("release"))})
     if test in ("RT-4", "RT-11"):
         receipt, sci = docs
-        checks = {"restored_from_the_release": receipt.get("source") == RELEASE, **sci.get("checks", {})}
+        sha = run_env()["sha"]
+        checks = {"restored_from_the_release": receipt.get("source") == RELEASE, **sci.get("checks", {}),
+                  "restored_this_commits_release": receipt.get("commit") == sha and bound_to(receipt.get("release"), sha)}
         if test == "RT-4":
             checks["no_cache_used"] = receipt.get("fallback_reason") is None and \
                 "cache" not in (receipt.get("seconds") or {})
         meas = {"restore": {k: receipt.get(k) for k in ("seconds", "files", "tree_digest", "tar_sha256")},
-                "science": {k: v for k, v in sci.items() if k != "checks"}}
+                "science": {k: v for k, v in sci.items() if k != "checks"},
+                "snapshot_release": snapshot_binding(receipt.get("release"))}
         return result(test, job, checks, meas)
     if test == "RT-5":
         cold, warm = docs
@@ -506,10 +560,13 @@ def verdict(test: str, job: str, inputs: list[Path], repo: Path) -> dict:
                   "warm_restored_from_the_cache": warm.get("source") == CACHE and warm.get("fallback_reason") is None,
                   "same_snapshot": cold.get("address") == warm.get("address") is not None,
                   "same_tree_digest": cold.get("tree_digest") == warm.get("tree_digest") is not None,
-                  "every_file_verified": cold.get("files") == warm.get("files") and bool(cold.get("files"))}
+                  "every_file_verified": cold.get("files") == warm.get("files") and bool(cold.get("files")),
+                  "cold_restored_this_commits_release": cold.get("commit") == warm.get("commit") == run_env()["sha"]
+                  and bound_to(cold.get("release"), run_env()["sha"])}
         return result(test, job, checks, {"cold": {k: cold.get(k) for k in ("seconds", "fallback_reason", "files")},
                                           "warm": {k: warm.get(k) for k in ("seconds", "files")},
-                                          "tree_digest": warm.get("tree_digest")})
+                                          "tree_digest": warm.get("tree_digest"),
+                                          "snapshot_release": snapshot_binding(cold.get("release"))})
     raise HarnessError(f"{test} has no verdict here")
 
 
@@ -520,6 +577,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("restore")
     r.add_argument("--address", required=True)
+    r.add_argument("--commit", required=True, help="the readiness commit (the run's GITHUB_SHA)")
     r.add_argument("--dest", required=True)
     r.add_argument("--assets-dir", required=True)
     r.add_argument("--cache-dir")
@@ -555,6 +613,7 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("--repo", default=".")
     m = sub.add_parser("compare-release")
     m.add_argument("--dir", required=True)
+    m.add_argument("--commit", required=True, help="the readiness commit (the run's GITHUB_SHA)")
     m.add_argument("--repo", default=".")
     m.add_argument("--repo-slug", required=True)
     m.add_argument("--out", required=True)
@@ -585,7 +644,7 @@ def main(argv: list[str] | None = None) -> int:
     ok_word = "PASS"
     try:
         if a.cmd == "restore":
-            rec = restore(a.address, Path(a.dest), Path(a.assets_dir),
+            rec = restore(a.address, Path(a.dest), Path(a.assets_dir), commit=a.commit,
                           cache_dir=Path(a.cache_dir) if a.cache_dir else None, gh=RL.GH(a.repo_slug),
                           refill_cache=a.refill_cache, expect_source=a.expect_source,
                           manifest_out=Path(a.manifest_out) if a.manifest_out else None)
@@ -627,7 +686,7 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "classify":
             rec = classify(a.test, RL.GH(a.repo_slug), a.run_id, read_json(Path(a.expect)) if a.expect else None)
         elif a.cmd == "compare-release":
-            rec = compare_release(Path(a.dir), Path(a.repo).resolve(), RL.GH(a.repo_slug))
+            rec = compare_release(Path(a.dir), Path(a.repo).resolve(), RL.GH(a.repo_slug), a.commit)
         else:
             rec = verdict(a.test, a.job, [Path(p) for p in a.inputs], Path(a.repo).resolve())
         write_json(out, rec)

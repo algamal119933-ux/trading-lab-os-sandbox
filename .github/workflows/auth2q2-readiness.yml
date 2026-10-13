@@ -1,8 +1,9 @@
 name: AUTH2Q2 readiness, restore and guard (RT-4 to RT-11; manual dispatch only)
 
 # AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 readiness (Owner decisions OD-S1 to OD-S8 of 2026-10-12; review
-# sections 3 and 4). Every job here is read-only (OD-S3) and reads the snapshot only from the one immutable
-# release RT-1 published, through research/auth2q2/harness.py:
+# sections 3 and 4). Every job here is read-only (OD-S3) and reads the snapshot only from the immutable release
+# bound to this run's own commit (the readiness commit), which RT-1 published or verified at that commit, through
+# research/auth2q2/harness.py:
 #
 #   RT-4   restore cold from the release, verify every file, then rebuild Dataset V3 with the network removed
 #          and compare it with the committed lock byte for byte (the D0 data path)
@@ -138,7 +139,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
             --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
         env:
@@ -206,7 +208,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --cache-dir "$RUNNER_TEMP/cache" --refill-cache \
             --expect-source release --repo-slug "$GITHUB_REPOSITORY" --out out/cold.json
         env:
@@ -257,7 +260,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --cache-dir "$RUNNER_TEMP/cache" --expect-source cache \
             --repo-slug "$GITHUB_REPOSITORY" --out out/warm.json
         env:
@@ -316,7 +320,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
             --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
         env:
@@ -369,8 +374,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.release download --repo-slug "$GITHUB_REPOSITORY" --address "$ADDRESS" \
-            --dest "$RUNNER_TEMP/assets" --out out/download.json
+          python -m auth2q2.release download --repo-slug "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+            --address "$ADDRESS" --dest "$RUNNER_TEMP/assets" --out out/download.json
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -379,7 +384,8 @@ jobs:
 
       - name: Restore the snapshot
         run: |
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
             --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
         env:
@@ -687,7 +693,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.harness restore --address "$ADDRESS" --dest "$RUNNER_TEMP/snapshot" \
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
             --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
             --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
         env:

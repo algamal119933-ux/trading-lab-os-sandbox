@@ -28,9 +28,13 @@ is a refusal (fail closed):
                GitHub did not cancel or skip, cannot be reconciled and is refused
   RESERVE      remaining included minutes - this run's planned maximum >= R_m = max(500, ceil(0.20 x A_m)),
                A_m the remaining minutes the Owner stated at the month's first admitted readiness run; else PARK
-  TEST         RT-1 only while no snapshot release exists; every test that reads the snapshot only while exactly
-               one published, immutable, complete snapshot release exists; RT-8 only with a billing reading of
-               this month at least STORAGE_INTERVAL_HOURS old
+  TEST         RT-1 only while the run's commit has at most one published snapshot release (RT-1 again at the
+               same commit verifies that release and changes nothing; at a new commit it publishes that commit's
+               own); every test that reads the snapshot only while the run's commit has exactly one published,
+               immutable, complete snapshot release, the bot's, its tag naming and pointing at that commit
+               (release.py: one release per snapshot address and readiness commit; other commits' releases are
+               history and never read); RT-8 only with a billing reading of this month at least
+               STORAGE_INTERVAL_HOURS old
 
 The decision record is published as an artifact and as an annotation. The ledger is separate from the successor
 program's 4,000 minutes (OD-S7). Nothing here dispatches, writes GitHub, reads market data or runs a strategy.
@@ -340,20 +344,29 @@ def decide(f: dict) -> dict:
     if isinstance(rels, str):
         reasons.append(f"FAIL_CLOSED: the snapshot releases are unreadable ({rels[:200]})")
         rels = None
-    snap = [r for r in rels or [] if r.get("draft") is False]
+    commit = run.get("head_sha")
+    # this readiness execution's snapshot: the releases bound to the run's own commit, never another commit's
+    snap = RL.at_commit(rels or [], commit) if RL.is_commit(commit) else []
     rec["release"] = None
-    if rels is not None and test == "RT-1" and snap:
-        reasons.append(f"SNAPSHOT_EXISTS: RT-1 publishes the snapshot once; {[r.get('tag_name') for r in snap]} "
-                       "already published")
+    if rels is not None and test == "RT-1" and len(snap) > 1:
+        reasons.append(f"SNAPSHOT_AMBIGUOUS: the readiness commit has {len(snap)} published snapshot releases "
+                       f"{sorted(str(r.get('tag_name')) for r in snap)}; it may have one")
     if rels is not None and test in PL.NEEDS_SNAPSHOT:
-        problems = [] if len(snap) == 1 else [f"{len(snap)} published snapshot releases; exactly one is required"]
-        problems += RL.release_problems(snap[0]) if len(snap) == 1 else []
-        if len(snap) == 1 and (snap[0].get("author") or {}).get("login") != RL.BOT:
-            problems.append(f"the release's author is {(snap[0].get('author') or {}).get('login')!r}, not {RL.BOT}")
+        problems = [] if len(snap) == 1 else [f"{len(snap)} published snapshot releases for the readiness commit "
+                                              f"{str(commit)[:12]}; exactly one is required"]
+        if len(snap) == 1:
+            problems += RL.release_problems(snap[0], commit=commit)
+            if (snap[0].get("author") or {}).get("login") != RL.BOT:
+                problems.append(f"the release's author is {(snap[0].get('author') or {}).get('login')!r}, not "
+                                f"{RL.BOT}")
+            tagged = (f.get("tag_commits") or {}).get(snap[0].get("tag_name"))
+            if tagged != commit:
+                problems.append(f"the tag {snap[0].get('tag_name')} points at {str(tagged)[:12]}, not the readiness "
+                                f"commit {str(commit)[:12]}")
         if problems:
-            reasons.append(f"SNAPSHOT: {test} reads the published snapshot: {'; '.join(problems)[:300]}")
+            reasons.append(f"SNAPSHOT: {test} reads the readiness commit's snapshot: {'; '.join(problems)[:400]}")
         else:
-            rec["release"] = RL.summary(snap[0])
+            rec["release"] = {**RL.summary(snap[0]), "tag_commit": commit}
     if test == "RT-8":
         base = baseline(records if isinstance(records, list) else [], now)
         rec["rt8_baseline_run_id"] = base.get("run_id") if base else None
@@ -487,6 +500,9 @@ def collect(gh, test: str, now: datetime, usage_reader=None) -> dict:
         f["records"] = str(exc)[:200]
     try:
         f["releases"] = RL.snapshot_releases(gh)
+        commit = (f.get("run") or {}).get("head_sha")
+        f["tag_commits"] = {r["tag_name"]: RL.tag_commit(gh, r["tag_name"])
+                            for r in (RL.at_commit(f["releases"], commit) if RL.is_commit(commit) else [])}
     except RL.ReleaseError as exc:
         f["releases"] = str(exc)[:200]
     return f
@@ -508,13 +524,17 @@ def gate(a) -> int:
 
 def outputs(rec: dict) -> str:
     """The gate job's outputs for the test's jobs: the address, tag and hex of the snapshot the gate admitted the
-    run to read, all empty unless the decision is DISPATCH with a release."""
+    run to read, all empty unless the decision is DISPATCH with a release bound to the run's own commit."""
     release = rec.get("release") if isinstance(rec, dict) and rec.get("decision") == DG.DISPATCH else None
     m = RL.DIGEST.fullmatch(str((release or {}).get("address") or ""))
-    hexd = m[1] if m else ""
-    return (f"address={'sha256:' + hexd if hexd else ''}\n"
-            f"tag={RL.TAG_PREFIX + hexd if hexd else ''}\n"
-            f"hex={hexd}\n")
+    commit = rec.get("sha") if isinstance(rec, dict) else None
+    try:
+        tag = RL.tag_for(m[0], commit) if m else ""
+    except RL.ReleaseError:
+        tag = ""
+    if not tag or (release or {}).get("tag") != tag or (release or {}).get("commit") != commit:
+        return "address=\ntag=\nhex=\n"
+    return f"address={m[0]}\ntag={tag}\nhex={m[1]}\n"
 
 
 # -- RT-8: storage, retention and billing ------------------------------------------------------------
@@ -549,12 +569,14 @@ def rt8(own: dict, base: dict, rel: dict | None, artifacts: list[dict], cache_us
               "no_actions_charge": bool(net) and all(v == 0 for v in net.values()),
               "no_storage_charge_from_the_release": rate is not None and rate < STORAGE_RATE_GB,
               "release_immutable": bool(rel) and rel.get("immutable") is True,
+              "release_bound_to_this_commit": bool(rel) and _bound(rel, (own or {}).get("sha")),
               "release_has_no_expiry": bool(rel) and not any(k in rel for k in ("expires_at", "expired")),
               "artifact_storage_far_below_500_mb": live_bytes < ARTIFACT_LIMIT_BYTES,
               "every_readiness_artifact_expires": all(x.get("expires_at") for x in mine),
               "cache_within_10_gb": isinstance(cache_usage.get("active_caches_size_in_bytes"), int)
               and cache_usage["active_caches_size_in_bytes"] < CACHE_LIMIT_BYTES}
     meas = {"baseline_run_id": (base or {}).get("run_id"), "hours_between_readings": round(hours, 2) if hours else None,
+            "snapshot_release": _binding(rel),
             "actions_storage_gb_hours": {"before": _storage(u0), "after": _storage(u1)},
             "actions_linux_minutes": {"before": _linux(u0), "after": _linux(u1)},
             "storage_rate_gb": round(rate, 4) if rate is not None else None, "net_amounts": net,
@@ -723,6 +745,18 @@ def _result(test: str, job: str, checks: dict, meas: dict) -> dict:
     return H.result(test, job, checks, meas)
 
 
+def _binding(rel) -> dict | None:
+    from auth2q2 import harness as H
+
+    return H.snapshot_binding(RL.summary(rel)) if isinstance(rel, dict) and rel else None
+
+
+def _bound(rel: dict, commit) -> bool:
+    from auth2q2 import harness as H
+
+    return H.bound_to(RL.summary(rel), commit)
+
+
 # -- CLI ---------------------------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
@@ -767,7 +801,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             base_id = own.get("rt8_baseline_run_id")
             base = [r for r in gate_records(gh, int(base_id)) if r.get("run_id") == base_id] if base_id else []
-            rel = RL.the_snapshot(gh)
+            rel = RL.the_snapshot(gh, own.get("sha"), (own.get("release") or {}).get("address"))
             arts = _paged(gh, f"/repos/{gh.slug}/actions/artifacts", "artifacts")
             status, usage = gh.api("GET", f"/repos/{gh.slug}/actions/cache/usage")
             rec = rt8(own, base[0] if len(base) == 1 else {}, rel, arts, usage if status == 200 else {})

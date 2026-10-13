@@ -25,7 +25,14 @@ INFRA_READINESS = PASS only if every one of these holds, and the record says whi
   GATE       the gate published one record: DISPATCH for this test, run and commit, the ledger within the cap
   VERDICT    every verdict job published one record for this test, job, run and commit, and every one of its
              checks holds (PASS is re-derived, not read)
-  SNAPSHOT   every test that reads the snapshot read the one RT-1 published
+  SNAPSHOT   one readiness execution, one snapshot: RT-1's verdict names the snapshot address and the release
+             bound to it at the named commit (tag naming the address and the commit, tag on the commit, manifest
+             and tar digests the address and RT-1's own cold preparation), published by the named RT-1 run or,
+             when RT-1 was dispatched again at the same commit, by an earlier Owner-dispatched RT-1 run at that
+             commit in the evidence (its release job run at attempt 1) that RT-1 verified byte for byte; RT-2
+             prepared the same manifest and tar; every test that reads the snapshot was admitted to exactly that
+             release; and every verdict that read it itself (RT-2, RT-3, RT-4, RT-5, RT-8, RT-11) names exactly
+             that release. A release of another commit never satisfies any of it
   LEDGER     every job of every attempt of every readiness run, at the plan's timeouts, reconciles and is at
              most 300 minutes (OD-S4); the ledger is the gate's own function, so the numbers are the gate's
 
@@ -73,6 +80,13 @@ JOB_FIELDS = ("id", "name", "run_attempt", "status", "conclusion", "started_at",
               "runner_name")
 STEP_FIELDS = ("name", "number", "status", "conclusion", "started_at", "completed_at")
 TITLES = (RG.GATE_TITLE, RG.RT_TITLE)
+BINDING = ("address", "commit", "tag", "release_id", "tag_commit")   # what binds a release to a readiness run
+READERS = ("RT-2", "RT-3", "RT-4", "RT-5", "RT-8", "RT-11")  # whose verdicts name the release they read themselves
+
+
+def _key(k):
+    """``k`` if it can key a dict lookup, else None: malformed evidence is a FAIL, never a crash."""
+    return k if isinstance(k, (int, str)) and not isinstance(k, bool) else None
 
 
 def dumps(obj) -> bytes:
@@ -175,9 +189,10 @@ def _gate(test: str, run: dict, commit: str, slug: str) -> tuple[dict, list[str]
     if not isinstance(total, int) or isinstance(total, bool) or total > PL.READINESS_CAP:
         p.append(f"GATE: {test} run {run.get('id')} admitted a ledger total of {total}, not <= {PL.READINESS_CAP}")
     res = g.get("reserve") or {}
+    rel = g.get("release") if isinstance(g.get("release"), dict) else {}
     return {"decision": g.get("decision"), "checked_utc": g.get("checked_utc"), "ledger_minutes": led.get("minutes"),
             "total_if_admitted": total, "remaining": res.get("remaining"), "a_m": res.get("a_m"),
-            "r_m": res.get("r_m"), "release": (g.get("release") or {}).get("address")}, p
+            "r_m": res.get("r_m"), "release": {k: rel.get(k) for k in BINDING} if rel else None}, p
 
 
 def _verdicts(test: str, run: dict, commit: str) -> tuple[dict, list[str]]:
@@ -280,6 +295,57 @@ def _rt0(ci, ci_id, commit: str, slug: str) -> tuple[dict, list[str]]:
             "conclusion": ci.get("conclusion"), "result": FAIL if p else PASS}, p
 
 
+def _snapshot(m: dict, rt1_id, runs: dict, commit, slug) -> tuple[dict, list[str]]:
+    """The snapshot RT-1's verdict (``m``, its measurements) names, bound to the readiness commit, and why it is
+    not ([] when it is)."""
+    p: list[str] = []
+    m = m if isinstance(m, dict) else {}
+    rel = m.get("release") if isinstance(m.get("release"), dict) else {}
+    address, tar_sha = m.get("address"), m.get("tar_sha256")
+    if not (isinstance(address, str) and SN.DIGEST.fullmatch(address)):
+        return {"address": None}, [f"SNAPSHOT: RT-1 names no snapshot address ({str(address)[:80]})"]
+    tag = RL.tag_for(address, commit) if RL.is_commit(commit) else None
+    assets = rel.get("assets") if isinstance(rel.get("assets"), dict) else {}
+    if tag is None or rel.get("tag") != tag:
+        p.append(f"SNAPSHOT: RT-1's release {str(rel.get('tag'))[:140]} is not {address}'s at the readiness commit "
+                 f"{str(commit)[:12]}")
+    if commit is None or m.get("commit") != commit or rel.get("commit") != commit or rel.get("tag_commit") != commit:
+        p.append(f"SNAPSHOT: RT-1 ran at {str(m.get('commit'))[:12]} with a release of {str(rel.get('commit'))[:12]} "
+                 f"tagged on {str(rel.get('tag_commit'))[:12]}, not all the readiness commit {str(commit)[:12]}")
+    if (assets.get(RL.MANIFEST) or {}).get("digest") != address or \
+            (assets.get(RL.TAR) or {}).get("digest") != f"sha256:{tar_sha}":
+        p.append("SNAPSHOT: the release's manifest and tar digests are not RT-1's address and tar sha256")
+    if not isinstance(rel.get("release_id"), int):
+        p.append(f"SNAPSHOT: RT-1 names no release id ({str(rel.get('release_id'))[:40]})")
+    mode, by = m.get("publication"), m.get("published_by_run")
+    if mode in (RL.PUBLISHED, RL.VERIFIED_EXISTING) and (not isinstance(by, int) or isinstance(by, bool)):
+        p.append(f"SNAPSHOT: RT-1 names the publishing run {str(by)[:40]!r}, not a run id")
+    elif mode == RL.PUBLISHED:
+        if by != rt1_id:
+            p.append(f"SNAPSHOT: RT-1 run {rt1_id} says it published the release, which names run {by}")
+    elif mode == RL.VERIFIED_EXISTING:
+        pub = runs.get(by)
+        if by == rt1_id or pub is None:
+            p.append(f"SNAPSHOT: the release RT-1 verified was published by run {by}, which is not an earlier "
+                     "readiness run in the evidence")
+        else:
+            # what attempt 1 published: a later Re-run click (refused by the gate, its jobs skipped) moves the run's
+            # latest attempt, not the publication; the release job must have run at attempt 1
+            p += [f"SNAPSHOT: publishing run {by}: {x}" for x in _provenance("RT-1", {**pub, "run_attempt": 1}, commit,
+                                                                              slug)]
+            ran = [j for j in pub.get("jobs") or [] if isinstance(j, dict) and j.get("run_attempt") == 1
+                   and j.get("name") == PL.TESTS["RT-1"][2][0] and not AT.never_ran(j)]
+            if len(ran) != 1:
+                p.append(f"SNAPSHOT: publishing run {by} ran no release job at attempt 1")
+            if (pub.get("created_at") or "") >= ((runs.get(_key(rt1_id)) or {}).get("created_at") or ""):
+                p.append(f"SNAPSHOT: publishing run {by} is not earlier than RT-1's run {rt1_id}")
+    else:
+        p.append(f"SNAPSHOT: RT-1's publication is {str(mode)[:40]!r}, not {RL.PUBLISHED} or {RL.VERIFIED_EXISTING}")
+    return {"address": address, "tar_sha256": tar_sha, "commit": commit, "tag": tag,
+            "release_id": rel.get("release_id"), "tag_commit": rel.get("tag_commit"), "publication": mode,
+            "published_by_run": by, "release": rel}, p
+
+
 def decide(ev: dict, evidence_sha256: str | None = None) -> dict:
     """The readiness record over the evidence ``collect`` read. Pure: no I/O, no clock."""
     problems: list[str] = []
@@ -296,10 +362,10 @@ def decide(ev: dict, evidence_sha256: str | None = None) -> dict:
     ids = [v for v in named.values()]
     if any(not isinstance(i, int) or isinstance(i, bool) for i in ids) or len(set(map(str, ids))) != len(ids):
         problems.append(f"NAMES: every test names one run id, each a different run: {named}")
-    runs = {r.get("id"): r for r in ev.get("runs") or [] if isinstance(r, dict)}
+    runs = {_key(r.get("id")): r for r in ev.get("runs") or [] if isinstance(r, dict)}
     tests: dict[str, dict] = {}
     for test in PL.RUN_TESTS:
-        run = runs.get(named.get(test))
+        run = runs.get(_key(named.get(test)))
         if run is None:
             problems.append(f"NAMES: {test} names run {named.get(test)}, which is not a readiness run in the evidence")
             tests[test] = {"run_id": named.get(test), "result": FAIL}
@@ -317,16 +383,31 @@ def decide(ev: dict, evidence_sha256: str | None = None) -> dict:
                        "seconds": round(sum(x["seconds"] or 0 for x in rows), 1)}
     tests["RT-0"], p = _rt0(ev.get("ci_run"), named.get("RT-0"), commit, slug)
     problems += p
-    # one snapshot: the one RT-1 published, read by every test that reads a snapshot
+    # one readiness execution, one snapshot: the release bound to RT-1's address at the named commit
     rt1 = ((tests.get("RT-1") or {}).get("verdicts") or {}).get(PL.TESTS["RT-1"][2][0]) or {}
-    address = (rt1.get("measurements") or {}).get("address")
-    if not (isinstance(address, str) and SN.DIGEST.fullmatch(address)):
-        problems.append(f"SNAPSHOT: RT-1 names no snapshot address ({str(address)[:80]})")
-        address = None
+    snap, p = _snapshot(rt1.get("measurements") or {}, _key(named.get("RT-1")), runs, commit, slug)
+    problems += p
+    address = snap.get("address")
+    rt2 = ((tests.get("RT-2") or {}).get("verdicts") or {}).get(PL.TESTS["RT-2"][2][0]) or {}
+    m2 = rt2.get("measurements") or {}
+    if address is not None and (m2.get("address"), m2.get("tar_sha256"), (m2.get("release") or {}).get("tag")) != \
+            (address, snap.get("tar_sha256"), snap.get("tag")):
+        problems.append(f"SNAPSHOT: RT-2 prepared {str(m2.get('address'))[:80]} (tar {str(m2.get('tar_sha256'))[:16]}) "
+                        f"against {str((m2.get('release') or {}).get('tag'))[:140]}, not RT-1's snapshot")
     for test in sorted(PL.NEEDS_SNAPSHOT):
         got = ((tests.get(test) or {}).get("gate") or {}).get("release")
-        if address is not None and got != address:
-            problems.append(f"SNAPSHOT: {test} read the snapshot {got}, not RT-1's {address}")
+        want = {k: snap.get(k) for k in BINDING}
+        if address is not None and got != want:
+            problems.append(f"SNAPSHOT: {test} was admitted to the release {str(got)[:300]}, not RT-1's {want}")
+    # and every test that read the release itself names the one it read: RT-1's
+    read_want = {k: snap.get(k) for k in H.SNAPSHOT_BINDING}
+    for test in READERS:
+        for name, v in sorted(((tests.get(test) or {}).get("verdicts") or {}).items()):
+            got = (v.get("measurements") or {}).get("snapshot_release") if isinstance(v.get("measurements"), dict) \
+                else None
+            if address is not None and got != read_want:
+                problems.append(f"SNAPSHOT: {test} job {name!r} read the release {str(got)[:300]}, not RT-1's "
+                                f"{read_want}")
     # the readiness ledger, by the gate's own function
     led = RG.ledger([r for r in runs.values()], None)
     problems += [f"LEDGER: {x}" for x in led["problems"]]
@@ -347,9 +428,7 @@ def decide(ev: dict, evidence_sha256: str | None = None) -> dict:
     return {"schema": RECORD_SCHEMA, "program": SN.PROGRAM_ID, "repository": slug, "commit": commit,
             "INFRA_READINESS": FAIL if problems else PASS, "problems": problems,
             "tests": {t: tests[t] for t in PL.ALL_TESTS if t in tests},
-            "snapshot": {"address": address, "tag": RL.tag_for(address) if address else None,
-                         "tar_sha256": (rt1.get("measurements") or {}).get("tar_sha256"),
-                         "release": ((rt1.get("measurements") or {}).get("release") or {})},
+            "snapshot": snap,
             "ledger": {"minutes": led["minutes"], "cap": PL.READINESS_CAP, "runs": led["runs"]},
             "measured": dict(sorted(measured.items())), "collected_utc": ev.get("collected_utc"),
             "evidence_sha256": evidence_sha256, "real_money_authorized": False, "dry_run": True}

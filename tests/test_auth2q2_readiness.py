@@ -29,10 +29,12 @@ from auth2q2 import release as RL
 
 SLUG = "algamal119933-ux/trading-lab-os-sandbox"
 SHA = "a" * 40
+OLD = "b" * 40          # an earlier readiness commit
 NOW = datetime(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
 OWNER = {"login": OP.OWNER_LOGIN, "id": OP.OWNER_ID}
 DIGEST = "sha256:" + "d" * 64
-TAG = RL.TAG_PREFIX + "d" * 64
+TAG = RL.tag_for(DIGEST, SHA)
+OLD_TAG = RL.tag_for(DIGEST, OLD)
 
 
 @pytest.fixture(autouse=True)
@@ -86,7 +88,7 @@ def past_run(rid: int, test: str, jobs: list[dict], *, created: datetime = NOW -
 
 def release(**kw) -> dict:
     rel = {"id": 5, "tag_name": TAG, "draft": False, "prerelease": False, "immutable": True,
-           "author": {"login": RL.BOT},
+           "author": {"login": RL.BOT}, "target_commitish": SHA,
            "assets": [{"id": 10 + i, "name": n, "size": 100 + i, "state": "uploaded",
                        "digest": DIGEST if n == RL.MANIFEST else "sha256:" + str(i) * 64}
                       for i, n in enumerate(RL.ASSETS)]}
@@ -98,7 +100,7 @@ def facts(test: str = "RT-4", **kw) -> dict:
     f = {"test": test, "slug": SLUG, "now": NOW, "errors": [],
          "env": {"GITHUB_SHA": SHA, "GITHUB_RUN_ID": "9001", "GITHUB_RUN_ATTEMPT": "1"},
          "run": run_obj(test), "event": event(test), "usage": usage(), "main_sha": SHA, "runs": [],
-         "auth2_active": [], "records": [], "releases": [release()]}
+         "auth2_active": [], "records": [], "releases": [release()], "tag_commits": {TAG: SHA}}
     f.update(kw)
     for r in f["records"] if isinstance(f["records"], list) else []:  # each record's run, in the history
         if r.get("run_id") not in {x.get("id") for x in f["runs"]}:
@@ -207,10 +209,18 @@ def test_a_clean_owner_dispatch_is_admitted_and_records_its_evidence():
     (lambda f: f.update(records="HTTP 500"), "FAIL_CLOSED: earlier gate records"),
     (lambda f: f.update(releases="HTTP 500"), "FAIL_CLOSED: the snapshot releases"),
     (lambda f: f.update(releases=[]), "SNAPSHOT"),
-    (lambda f: f.update(releases=[release(), release(id=6, tag_name=RL.TAG_PREFIX + "e" * 64)]), "SNAPSHOT"),
     (lambda f: f.update(releases=[release(immutable=False)]), "SNAPSHOT"),
     (lambda f: f.update(releases=[release(assets=release()["assets"][:2])]), "SNAPSHOT"),
     (lambda f: f.update(releases=[release(author={"login": OP.OWNER_LOGIN})]), "SNAPSHOT"),
+    # this readiness execution's snapshot only: never another commit's, never an ambiguous or unanchored one
+    (lambda f: f.update(releases=[release(tag_name=OLD_TAG, target_commitish=OLD)]),
+     "SNAPSHOT: RT-4 reads the readiness commit's snapshot: 0 published"),
+    (lambda f: f.update(releases=[release(), release(id=6, tag_name=RL.tag_for("sha256:" + "e" * 64, SHA))]),
+     "2 published snapshot releases for the readiness commit"),
+    (lambda f: f.update(releases=[release(target_commitish=OLD)]), "targets"),
+    (lambda f: f.update(tag_commits={TAG: OLD}), "points at"),
+    (lambda f: f.update(tag_commits={}), "points at"),
+    (lambda f: f.update(releases=[release(tag_name=RL.TAG_PREFIX + "d" * 64)]), "0 published"),
     (lambda f: f.update(now=NOW + timedelta(minutes=16)), "STALE_EVIDENCE"),
     (lambda f: f.update(runs=[{**past_run(9000, "RT-5", [job(PL.GATE_JOB, 1)]),
                                 "updated_at": iso(NOW + timedelta(seconds=30))}], now=NOW + timedelta(minutes=1)),
@@ -258,10 +268,19 @@ def test_an_unreadable_run_is_refused_and_nothing_about_it_is_trusted():
     assert rec["decision"] == DG.NO_DISPATCH and rec["billing"]["owner_evidence"] is None
 
 
-def test_rt1_runs_only_while_no_snapshot_exists_and_rt9_rt10_need_none():
-    assert decide(facts("RT-1", run=run_obj("RT-1"), event=event("RT-1"), releases=[]))["decision"] == DG.DISPATCH
-    rec = decide(facts("RT-1", run=run_obj("RT-1"), event=event("RT-1")))
-    assert rec["decision"] == DG.NO_DISPATCH and rec["reasons"][0].startswith("SNAPSHOT_EXISTS")
+def test_rt1_runs_again_at_the_same_commit_and_at_a_new_one_but_never_beside_an_ambiguous_snapshot():
+    rt1 = dict(run=run_obj("RT-1"), event=event("RT-1"))
+    assert decide(facts("RT-1", releases=[], **rt1))["decision"] == DG.DISPATCH
+    # again at the same commit: RT-1 verifies the release it finds and changes nothing (release.py)
+    assert decide(facts("RT-1", **rt1))["decision"] == DG.DISPATCH
+    # at a new commit, beside an earlier commit's release: RT-1 prepares and publishes this commit's own
+    old = release(tag_name=OLD_TAG, target_commitish=OLD)
+    rec = decide(facts("RT-1", releases=[old], **rt1))
+    assert rec["decision"] == DG.DISPATCH and rec["release"] is None
+    two = [release(), release(id=6, tag_name=RL.tag_for("sha256:" + "e" * 64, SHA))]
+    rec = decide(facts("RT-1", releases=two, **rt1))
+    assert rec["decision"] == DG.NO_DISPATCH and rec["reasons"][0].startswith("SNAPSHOT_AMBIGUOUS")
+    assert decide(facts("RT-1", releases=[old, two[1]], **rt1))["decision"] == DG.DISPATCH
     for t in ("RT-9", "RT-10"):
         assert decide(facts(t, run=run_obj(t), event=event(t), releases=[]))["decision"] == DG.DISPATCH
     for t in sorted(PL.NEEDS_SNAPSHOT):
@@ -415,6 +434,7 @@ def test_rt8_passes_on_two_clean_readings_an_immutable_release_and_small_storage
     assert rec["result"] == "PASS", rec["problems"]
     assert rec["measurements"]["storage_rate_gb"] == pytest.approx(0.06)
     assert rec["measurements"]["hours_between_readings"] == 30.0
+    assert rec["measurements"]["snapshot_release"] == {"address": DIGEST, "commit": SHA, "tag": TAG, "release_id": 5}
 
 
 @pytest.mark.parametrize("change, check", [
@@ -428,6 +448,8 @@ def test_rt8_passes_on_two_clean_readings_an_immutable_release_and_small_storage
     (lambda a: a.update(base={}), "both_readings_verified"),
     (lambda a: a.update(rel=release(immutable=False)), "release_immutable"),
     (lambda a: a.update(rel=None), "release_immutable"),
+    (lambda a: a.update(rel=release(tag_name=OLD_TAG, target_commitish=OLD)), "release_bound_to_this_commit"),
+    (lambda a: a.update(rel=release(id=None)), "release_bound_to_this_commit"),
     (lambda a: a.update(rel={**release(), "expires_at": "2027-01-01T00:00:00Z"}), "release_has_no_expiry"),
     (lambda a: a["artifacts"].append({"name": "big", "size_in_bytes": 60 * 10 ** 6, "expired": False}),
      "artifact_storage_far_below_500_mb"),
@@ -466,6 +488,7 @@ class FakeActions:
         self.runs = {r["id"]: r for r in runs}
         self.self_run = self_run
         self.releases = releases if releases is not None else [release()]
+        self.tags = {r["tag_name"]: RL.commit_of(r["tag_name"]) for r in self.releases}
         self.records = records or {}  # run id -> gate record
         self.main = main
         self.fail = set(fail)
@@ -505,6 +528,10 @@ class FakeActions:
             return 200, {"artifacts": arts}
         if p.startswith("/releases?"):
             return 200, self._page(self.releases, path)
+        if p.startswith("/git/ref/tags/"):
+            tag = p.removeprefix("/git/ref/tags/")
+            return (200, {"object": {"sha": self.tags[tag], "type": "commit"}}) if tag in self.tags else \
+                (404, "gh: Not Found (HTTP 404)")
         raise AssertionError(f"unexpected GET {path}")
 
     def api_bytes(self, path):
@@ -685,13 +712,19 @@ def test_the_r_m_rule_is_auth2s():
 
 def test_the_gate_outputs_name_the_admitted_snapshot_and_nothing_else(tmp_path, capsys):
     hexd = "a" * 64
-    rec = {"decision": DG.DISPATCH, "release": {"address": "sha256:" + hexd}}
-    assert R.outputs(rec) == f"address=sha256:{hexd}\ntag={RL.TAG_PREFIX}{hexd}\nhex={hexd}\n"
+    tag = RL.tag_for("sha256:" + hexd, SHA)
+    rec = {"decision": DG.DISPATCH, "sha": SHA,
+           "release": {"address": "sha256:" + hexd, "tag": tag, "commit": SHA}}
+    assert R.outputs(rec) == f"address=sha256:{hexd}\ntag={tag}\nhex={hexd}\n"
+    assert tag.endswith(f"-at-{SHA}")
     empty = "address=\ntag=\nhex=\n"
     for bad in ({**rec, "decision": DG.PARK}, {**rec, "decision": DG.NO_DISPATCH}, {**rec, "release": None},
-                {"decision": DG.DISPATCH, "release": {"address": "sha256:" + "A" * 64}},
-                {"decision": DG.DISPATCH, "release": {"address": f"sha256:{hexd}\nhex=injected"}},
-                {"decision": DG.DISPATCH}, [], None):
+                {**rec, "release": {**rec["release"], "address": "sha256:" + "A" * 64}},
+                {**rec, "release": {**rec["release"], "address": f"sha256:{hexd}\nhex=injected"}},
+                {**rec, "sha": OLD},                                                # another run's commit
+                {**rec, "release": {**rec["release"], "commit": OLD}},              # another commit's release
+                {**rec, "release": {**rec["release"], "tag": RL.tag_for("sha256:" + hexd, OLD)}},
+                {**rec, "sha": None}, {"decision": DG.DISPATCH}, [], None):
         assert R.outputs(bad) == empty, bad
     p = tmp_path / "gate.json"
     p.write_text(json.dumps(rec))

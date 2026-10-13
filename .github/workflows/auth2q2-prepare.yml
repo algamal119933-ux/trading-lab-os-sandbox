@@ -5,11 +5,14 @@ name: AUTH2Q2 readiness, preparation and snapshot release (RT-1 to RT-3; manual 
 # archive, in the preparation job only) and the one that holds the only job allowed to write: the snapshot
 # release job, contents: write (OD-S3). Every other job here is read-only.
 #
-#   RT-1  prepare the snapshot cold and publish it as the immutable release (research/auth2q2/prepare.py,
-#         release.py): every archive file checksum-verified, the counts bound to the Dataset V3 lock, the
-#         release published draft-first with every digest checked, and removed again unless GitHub reports it
-#         immutable
-#   RT-2  prepare it again, cold, and compare it with the release: the same manifest digest and tar sha256
+#   RT-1  prepare the snapshot cold and publish it as the readiness commit's immutable release
+#         (research/auth2q2/prepare.py, release.py): every archive file checksum-verified, the counts bound to the
+#         Dataset V3 lock, the release tagged with the snapshot address and this commit, published draft-first
+#         with every digest checked, and removed again if GitHub reports it mutable. Dispatched again at
+#         the same commit, RT-1 prepares cold again and verifies the published release byte for byte, changing
+#         nothing; at a new commit it publishes that commit's own release
+#   RT-2  prepare it again, cold, and compare it with this commit's release: the same manifest digest and tar
+#         sha256
 #   RT-3  try to change the published release with the release job's write token, and to write anything with
 #         a read-only token: every write must be refused
 #
@@ -141,8 +144,8 @@ jobs:
         if: inputs.test == 'RT-2'
         run: |
           set -euo pipefail
-          python -m auth2q2.harness compare-release --dir "$RUNNER_TEMP/snapshot" --repo . \
-            --repo-slug "$GITHUB_REPOSITORY" --out out/rt2.json
+          python -m auth2q2.harness compare-release --dir "$RUNNER_TEMP/snapshot" --commit "$GITHUB_SHA" \
+            --repo . --repo-slug "$GITHUB_REPOSITORY" --out out/rt2.json
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -230,8 +233,8 @@ jobs:
         if: inputs.test == 'RT-3'
         run: |
           set -euo pipefail
-          python -m auth2q2.release probe-immutable --repo-slug "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/rt3" \
-            --out out/rt3-immutable.json
+          python -m auth2q2.release probe-immutable --repo-slug "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+            --dir "$RUNNER_TEMP/rt3" --out out/rt3-immutable.json
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -275,7 +278,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out
-          python -m auth2q2.release probe-read-only --repo-slug "$GITHUB_REPOSITORY" --out out/rt3-read-only.json
+          python -m auth2q2.release probe-read-only --repo-slug "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+            --out out/rt3-read-only.json
         env:
           GH_TOKEN: ${{ github.token }}
 

@@ -23,6 +23,7 @@ import auth2q2_readiness as RG  # noqa: E402
 from auth2q2 import harness as H  # noqa: E402
 from auth2q2 import plan as PL  # noqa: E402
 from auth2q2 import record as R  # noqa: E402
+from auth2q2 import release as RL  # noqa: E402
 from auth2q2 import snapshot as SN  # noqa: E402
 
 OP = RG.OP
@@ -30,6 +31,11 @@ COMMIT = "c" * 40
 SLUG = f"{OP.OWNER_LOGIN}/trading-lab-os-sandbox"
 OWNER = {"login": OP.OWNER_LOGIN, "id": OP.OWNER_ID}
 ADDRESS = "sha256:" + "a" * 64
+TAR_SHA = "b" * 64
+OLD = "d" * 40              # an earlier readiness commit, before a code repair
+TAG, OLD_TAG = RL.tag_for(ADDRESS, COMMIT), RL.tag_for(ADDRESS, OLD)
+BINDING = {"address": ADDRESS, "commit": COMMIT, "tag": TAG, "release_id": 5, "tag_commit": COMMIT}
+READ = {k: BINDING[k] for k in H.SNAPSHOT_BINDING}   # what a verdict that read the release names
 CI_ID = 9000
 RUN_IDS = {t: 1000 + i for i, t in enumerate(PL.RUN_TESTS)}
 
@@ -54,9 +60,20 @@ def gate_rec(test: str, run_id: int, /, **kw) -> dict:
            "main_sha": COMMIT, "reasons": [], "checked_utc": "2026-10-20T10:00:00Z",
            "ledger": {"minutes": 40, "total_if_admitted": 40 + PL.planned_max(test) + PL.NEXT_GATE_RESERVE},
            "reserve": {"remaining": 1500, "a_m": 1600, "r_m": 500},
-           "release": {"address": ADDRESS} if test in PL.NEEDS_SNAPSHOT else None}
+           "release": {**BINDING, "immutable": True, "draft": False} if test in PL.NEEDS_SNAPSHOT else None}
     rec.update(kw)
     return rec
+
+
+def rt1_measurements(**kw) -> dict:
+    """RT-1's verdict measurements: this run's cold preparation and the release bound to it at COMMIT."""
+    m = {"address": ADDRESS, "tar_sha256": TAR_SHA, "commit": COMMIT, "publication": RL.PUBLISHED,
+         "published_by_run": RUN_IDS["RT-1"],
+         "release": {"tag": TAG, "commit": COMMIT, "release_id": 5, "tag_commit": COMMIT,
+                     "assets": {RL.MANIFEST: {"digest": ADDRESS}, RL.TAR: {"digest": f"sha256:{TAR_SHA}"},
+                                RL.RECORD: {"digest": "sha256:" + "f" * 64}}}}
+    m.update(kw)
+    return m
 
 
 def verdict_rec(test: str, job: str, run_id: int, /, **kw) -> dict:
@@ -64,7 +81,12 @@ def verdict_rec(test: str, job: str, run_id: int, /, **kw) -> dict:
            "checks": {"everything_held": True}, "problems": [], "measurements": {}, "run_id": str(run_id),
            "run_attempt": "1", "sha": COMMIT, "created_utc": "2026-10-20T10:05:00Z"}
     if test == "RT-1":
-        rec["measurements"] = {"address": ADDRESS, "tar_sha256": "b" * 64, "release": {"tag": "t", "release_id": 5}}
+        rec["measurements"] = rt1_measurements()
+    if test == "RT-2":
+        rec["measurements"] = {"address": ADDRESS, "tar_sha256": TAR_SHA, "commit": COMMIT,
+                               "release": {"tag": TAG, "commit": COMMIT, "release_id": 5}}
+    if test in R.READERS:
+        rec["measurements"]["snapshot_release"] = dict(READ)
     rec.update(kw)
     return rec
 
@@ -147,7 +169,8 @@ def test_every_test_passing_at_one_commit_is_infra_readiness_pass():
     assert rec["schema"] == R.RECORD_SCHEMA and rec["program"] == SN.PROGRAM_ID and rec["commit"] == COMMIT
     assert set(rec["tests"]) == set(PL.ALL_TESTS)
     assert all(t["result"] == "PASS" for t in rec["tests"].values())
-    assert rec["snapshot"]["address"] == ADDRESS and rec["snapshot"]["tag"] == "auth2q2-snapshot-sha256-" + "a" * 64
+    assert rec["snapshot"]["address"] == ADDRESS and rec["snapshot"]["tag"] == TAG
+    assert {k: rec["snapshot"][k] for k in R.BINDING} == BINDING and rec["snapshot"]["publication"] == RL.PUBLISHED
     assert rec["real_money_authorized"] is False and rec["dry_run"] is True
     # the ledger is every job of every readiness run, at the plan's timeouts; skipped jobs bill nothing
     want = sum(t["billed_minutes"] for k, t in rec["tests"].items() if k != "RT-0")
@@ -332,7 +355,7 @@ def _unknown_job(ev):
     (lambda ev: ev["ci_run"]["jobs"][0].update(conclusion="failure"), "RT-0: CI run"),
     (lambda ev: ev["ci_run"].update(id=1), "RT-0: the CI run"),
     (lambda ev: ev.pop("ci_run"), "RT-0: the CI run"),
-    (_gate("RT-11", release={"address": "sha256:" + "e" * 64}), "SNAPSHOT: RT-11 read the snapshot"),
+    (_gate("RT-11", release={**BINDING, "address": "sha256:" + "e" * 64}), "SNAPSHOT: RT-11 was admitted"),
     (_verdict("RT-1", "Snapshot release (contents: write)", measurements={}), "SNAPSHOT: RT-1 names no"),
     (_past_run(PL.READINESS_CAP), "LEDGER: "),
     (_past_run(3, name="not a planned job"), "LEDGER: run 500"),
@@ -355,6 +378,162 @@ def test_the_cap_edge_passes_and_one_minute_more_fails():
     over = copy.deepcopy(ev)
     _past_run(PL.READINESS_CAP - used + 1)(over)
     assert decided(over)["INFRA_READINESS"] == "FAIL"
+
+
+# -- one readiness execution: RT-1 again at the same commit, a fresh restart at a new commit ----------------
+
+EARLIER_RT1 = 990
+
+
+def _earlier_rt1(commit: str = COMMIT, rid: int = EARLIER_RT1, **kw):
+    """An earlier RT-1 run that published the release and then failed (its release job's verdict failed)."""
+    def edit(ev):
+        r = run("RT-1", rid, 0)
+        r.update({"head_sha": commit, "created_at": "2026-10-20T09:30:00Z", "conclusion": "failure", **kw})
+        for j in r["jobs"]:
+            j["annotations"] = []
+            if j["name"] == "Snapshot release (contents: write)":
+                j["conclusion"] = "failure"
+        ev["runs"].append(r)
+    return edit
+
+
+def _rt1_verified(by: int = EARLIER_RT1, **kw):
+    """The named RT-1 run is RT-1 dispatched again: it verified the release run ``by`` published."""
+    return _verdict("RT-1", "Snapshot release (contents: write)",
+                    measurements=rt1_measurements(publication=RL.VERIFIED_EXISTING, published_by_run=by, **kw))
+
+
+def _both(*edits):
+    def edit(ev):
+        for e in edits:
+            e(ev)
+    return edit
+
+
+def _rt1_release(**kw):
+    m = rt1_measurements()
+    m["release"].update(kw)
+    return _verdict("RT-1", "Snapshot release (contents: write)", measurements=m)
+
+
+def test_rt1_again_at_the_same_commit_after_a_publication_that_then_failed_is_pass():
+    ev = evidence()
+    _both(_earlier_rt1(), _rt1_verified())(ev)
+    rec = decided(ev)
+    assert rec["INFRA_READINESS"] == "PASS", rec["problems"]
+    snap = rec["snapshot"]
+    assert snap["publication"] == RL.VERIFIED_EXISTING and snap["published_by_run"] == EARLIER_RT1
+    assert {k: snap[k] for k in R.BINDING} == BINDING
+    assert rec["tests"]["RT-1"]["run_id"] == RUN_IDS["RT-1"]  # the verdict is the named run's own, fresh
+    assert any(r["id"] == EARLIER_RT1 for r in rec["ledger"]["runs"])  # and the earlier run's minutes count
+
+
+def test_a_re_run_click_on_the_publishing_run_does_not_lock_the_commit_out():
+    ev = evidence()
+    _both(_earlier_rt1(run_attempt=2), _rt1_verified())(ev)  # the gate refused attempt 2; its jobs were skipped
+    rec = decided(ev)
+    assert rec["INFRA_READINESS"] == "PASS", rec["problems"]
+
+
+@pytest.mark.parametrize("by", [[1], {"a": 1}, 1.5, "990", None, True])
+def test_a_malformed_publishing_run_is_a_fail_not_a_crash(by):
+    for mode in (RL.PUBLISHED, RL.VERIFIED_EXISTING):
+        ev = evidence()
+        _verdict("RT-1", "Snapshot release (contents: write)",
+                 measurements=rt1_measurements(publication=mode, published_by_run=by))(ev)
+        rec = decided(ev)
+        assert rec["INFRA_READINESS"] == "FAIL"
+        assert any(p.startswith("SNAPSHOT: RT-1 names the publishing run") or p.startswith("SNAPSHOT: RT-1 run")
+                   for p in rec["problems"]), rec["problems"]
+
+
+@pytest.mark.parametrize("edit", [
+    lambda ev: ev["named"].update({"RT-1": [1]}),
+    lambda ev: ev["named"].update({"RT-4": {"a": 1}}),
+    lambda ev: ev["runs"].append({"id": [1], "jobs": []}),
+    lambda ev: _verdict("RT-1", "Snapshot release (contents: write)", measurements=[1])(ev),
+])
+def test_malformed_names_runs_or_measurements_are_a_fail_not_a_crash(edit):
+    ev = evidence()
+    edit(ev)
+    assert decided(ev)["INFRA_READINESS"] == "FAIL"
+
+
+def test_a_new_commit_qualifies_afresh_beside_an_earlier_commits_runs_and_release():
+    """After a code repair: every RT-0 to RT-11 verdict at the new commit, the earlier commit's RT-1 and RT-4
+    runs (and its release) still in the history and the ledger, never standing in for the new commit's."""
+    ev = evidence()
+    _earlier_rt1(OLD, 980)(ev)
+    old4 = run("RT-4", 981, 0)
+    old4.update(head_sha=OLD, created_at="2026-10-19T12:00:00Z")
+    ev["runs"].append(old4)
+    rec = decided(ev)
+    assert rec["INFRA_READINESS"] == "PASS", rec["problems"]
+    assert rec["commit"] == COMMIT and rec["snapshot"]["tag"] == TAG != OLD_TAG
+    assert {980, 981} <= {r["id"] for r in rec["ledger"]["runs"]}
+
+
+@pytest.mark.parametrize("edit, problem", [
+    # the earlier commit's RT-1 never stands in for the new commit's
+    (lambda ev: (_earlier_rt1(OLD, 980)(ev), ev["named"].update({"RT-1": 980})), "PROVENANCE: RT-1"),
+    (_both(_earlier_rt1(OLD, 980), _rt1_verified(980)), "SNAPSHOT: publishing run 980: PROVENANCE: RT-1"),
+    # stale release: RT-1 or a reader bound to another commit's release
+    (_rt1_release(tag=OLD_TAG), "SNAPSHOT: RT-1's release"),
+    (_rt1_release(commit=OLD), "SNAPSHOT: RT-1 ran at"),
+    (_rt1_release(tag_commit=OLD), "SNAPSHOT: RT-1 ran at"),
+    (_verdict("RT-1", "Snapshot release (contents: write)", measurements=rt1_measurements(commit=OLD)),
+     "SNAPSHOT: RT-1 ran at"),
+    (_gate("RT-4", release={**BINDING, "tag": OLD_TAG, "commit": OLD, "tag_commit": OLD}),
+     "SNAPSHOT: RT-4 was admitted"),
+    (_gate("RT-5", release={**BINDING, "tag_commit": OLD}), "SNAPSHOT: RT-5 was admitted"),
+    # cross-session evidence mixing: another release of the same snapshot, or no release at all
+    (_gate("RT-6", release={**BINDING, "release_id": 6}), "SNAPSHOT: RT-6 was admitted"),
+    (_gate("RT-8", release=None), "SNAPSHOT: RT-8 was admitted"),
+    (_rt1_release(release_id=None), "SNAPSHOT: RT-1 names no release id"),
+    (_verdict("RT-2", "Cold preparation", measurements={"address": ADDRESS, "tar_sha256": "0" * 64,
+                                                        "release": {"tag": TAG}}), "SNAPSHOT: RT-2 prepared"),
+    (_verdict("RT-2", "Cold preparation", measurements={"address": ADDRESS, "tar_sha256": TAR_SHA,
+                                                        "release": {"tag": OLD_TAG}}), "SNAPSHOT: RT-2 prepared"),
+    # wrong manifest or tar digest
+    (lambda ev: _rt1_release(assets={RL.MANIFEST: {"digest": "sha256:" + "0" * 64},
+                                     RL.TAR: {"digest": f"sha256:{TAR_SHA}"}})(ev),
+     "SNAPSHOT: the release's manifest and tar digests"),
+    (lambda ev: _rt1_release(assets={RL.MANIFEST: {"digest": ADDRESS}, RL.TAR: {"digest": "sha256:" + "0" * 64}})(ev),
+     "SNAPSHOT: the release's manifest and tar digests"),
+    # who published it
+    (_verdict("RT-1", "Snapshot release (contents: write)", measurements=rt1_measurements(published_by_run=1)),
+     "SNAPSHOT: RT-1 run"),
+    (_rt1_verified(), "SNAPSHOT: the release RT-1 verified was published by run 990"),          # no such run
+    (_rt1_verified(RUN_IDS["RT-1"]), "SNAPSHOT: the release RT-1 verified"),                     # itself
+    (_both(_earlier_rt1(created_at="2026-10-20T23:00:00Z"), _rt1_verified()), "SNAPSHOT: publishing run 990 is not"),
+    (_both(_earlier_rt1(display_title="AUTH2Q2-READINESS RT-2"), _rt1_verified()), "SNAPSHOT: publishing run 990"),
+    (_both(_earlier_rt1(actor={"login": "someone", "id": 1}), _rt1_verified()), "SNAPSHOT: publishing run 990"),
+    (_both(_earlier_rt1(), _rt1_verified(), lambda ev: [j.update(job(j["id"], j["name"], ran=False))
+                                                       for r in ev["runs"] if r["id"] == EARLIER_RT1 for j in r["jobs"]
+                                                       if j["name"] == "Snapshot release (contents: write)"]),
+     "SNAPSHOT: publishing run 990 ran no release job at attempt 1"),
+    # every verdict that read the release names RT-1's, never another commit's or another release's
+    (_verdict("RT-4", "RT-4 cold restore and D0 data path", measurements={"snapshot_release": {
+        **READ, "commit": OLD, "tag": OLD_TAG}}), "SNAPSHOT: RT-4 job"),
+    (_verdict("RT-11", "RT-11 engine data path", measurements={"snapshot_release": {**READ, "release_id": 6}}),
+     "SNAPSHOT: RT-11 job"),
+    (_verdict("RT-5", "RT-5 restore from the warm cache", measurements={}), "SNAPSHOT: RT-5 job"),
+    (_verdict("RT-3", "Read-only probe", measurements={"snapshot_release": None}), "SNAPSHOT: RT-3 job 'Read-only"),
+    (_verdict("RT-8", "RT-8 storage, retention and billing", measurements={"snapshot_release": {
+        **READ, "address": "sha256:" + "e" * 64}}), "SNAPSHOT: RT-8 job"),
+    (_verdict("RT-2", "Cold preparation", measurements={"address": ADDRESS, "tar_sha256": TAR_SHA,
+                                                        "release": {"tag": TAG}, "snapshot_release": "x"}),
+     "SNAPSHOT: RT-2 job"),
+    (_verdict("RT-1", "Snapshot release (contents: write)",
+              measurements=rt1_measurements(publication="ALREADY_PUBLISHED")), "SNAPSHOT: RT-1's publication"),
+])
+def test_snapshot_evidence_bound_to_another_execution_fails_infra_readiness(edit, problem):
+    ev = evidence()
+    edit(ev)
+    rec = decided(ev)
+    assert rec["INFRA_READINESS"] == "FAIL"
+    assert any(p.startswith(problem) for p in rec["problems"]), rec["problems"]
 
 
 def test_unreadable_evidence_is_a_fail_not_a_crash():

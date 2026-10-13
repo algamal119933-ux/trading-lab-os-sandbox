@@ -2,24 +2,39 @@
 """The snapshot's immutable release (Owner decisions OD-S2 and OD-S3; readiness tests RT-1, RT-3, RT-4).
 
     python -m auth2q2.release publish   --repo-slug O/R --dir OUT --commit SHA --out FILE
-    python -m auth2q2.release verify    --repo-slug O/R [--address sha256:HEX] --out FILE
-    python -m auth2q2.release download  --repo-slug O/R --dest DIR [--address sha256:HEX] --out FILE
-    python -m auth2q2.release probe-immutable --repo-slug O/R --dir DIR --out FILE      (contents: write)
-    python -m auth2q2.release probe-read-only --repo-slug O/R --out FILE                (contents: read)
+    python -m auth2q2.release verify    --repo-slug O/R --commit SHA [--address sha256:HEX] --out FILE
+    python -m auth2q2.release download  --repo-slug O/R --commit SHA --dest DIR [--address sha256:HEX] --out FILE
+    python -m auth2q2.release probe-immutable --repo-slug O/R --commit SHA --dir DIR --out FILE   (contents: write)
+    python -m auth2q2.release probe-read-only --repo-slug O/R --commit SHA --out FILE             (contents: read)
 
-One release per snapshot, tagged ``auth2q2-snapshot-sha256-<hex>`` from the snapshot's address, holding exactly
-three assets: manifest.json (its sha256 is the address), snapshot.tar and prepare-record.json. It is published
-the way GitHub's immutable releases are meant to be: a draft first, every asset attached and checked against the
-digest GitHub computed for it, and only then published. After publishing, the release must report
-``immutable: true``. GitHub's API shows whether the repository has immutable releases enabled only to a token with
-admin access, which no workflow token has, so it is checked on the release itself: a release this job just
-published that is not immutable means the setting is off, and that release and its tag are deleted (they were
-never immutable, so nothing is burned) before the job fails. A draft is deleted if anything fails before it is
-published. Nothing here ever deletes an immutable release or touches another release.
+Two identities. The snapshot's identity is its address, the sha256 of its manifest: content, never a commit. The
+readiness execution's identity is the commit every readiness run of one qualification is dispatched at (OD-S8).
+A snapshot release binds both: one release per (address, readiness commit), tagged
+``auth2q2-snapshot-sha256-<hex>-at-<commit>`` on that commit, holding exactly three assets: manifest.json (its
+sha256 is the address), snapshot.tar and prepare-record.json (the cold preparation of the RT-1 run that published
+it, at that commit). A readiness commit has at most one snapshot release; releases of other commits are history,
+never read and never changed.
 
-Readers (``verify``, ``download``) accept the snapshot only from the one published, immutable release with the
-three assets whose digests GitHub reports, and they check every downloaded byte against those digests; the
-restore then checks every file against the manifest (snapshot.py).
+It is published the way GitHub's immutable releases are meant to be: a draft first, every asset attached and
+checked against the digest GitHub computed for it, and only then published. After publishing, the release must
+report ``immutable: true``. GitHub's API shows whether the repository has immutable releases enabled only to a
+token with admin access, which no workflow token has, so it is checked on the release itself: a release this job
+just published that reports ``immutable: false`` means the setting is off, and that release and its tag are
+deleted (they were never immutable, so nothing is burned) before the job fails, saying exactly what, if anything,
+could not be removed. A release whose immutability GitHub does not state is never deleted; the job fails. A draft is deleted if anything fails before it
+is published, and a draft of this commit's tag that an earlier run left behind is deleted before publishing (a
+draft is never immutable and has no tag yet). Nothing here ever deletes, changes or moves an immutable release or
+its tag.
+
+RT-1 dispatched again at the same commit, after a publication that succeeded or one that was published and then
+failed, is idempotent: the release's three assets are downloaded and hashed, its manifest and tar must be this
+run's own cold preparation byte for byte, its record must be an earlier RT-1 run's at this commit (that run's
+first attempt), and the release is verified and left exactly as it is (VERIFIED_EXISTING). At a new commit RT-1 prepares cold and publishes that commit's own
+release; an earlier commit's release never stands in for it.
+
+Readers (``verify``, ``download``) accept the snapshot only from the one published, immutable release of the
+readiness commit, its tag on that commit, with the three assets whose digests GitHub reports, and they check every
+downloaded byte against those digests; the restore then checks every file against the manifest (snapshot.py).
 
 ``probe-immutable`` (RT-3, the publish job's write token) tries to change the published release in ways that
 can be undone if GitHub wrongly allowed them: attach a new asset, rename an asset, delete the small
@@ -50,31 +65,47 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE.parent) not in sys.path:
     sys.path.insert(0, str(_HERE.parent))
 
+from auth2q2 import plan as PL  # noqa: E402
 from auth2q2 import snapshot as SN  # noqa: E402
 
 TAG_PREFIX = "auth2q2-snapshot-sha256-"
-TAG = re.compile(re.escape(TAG_PREFIX) + r"([0-9a-f]{64})")
+TAG = re.compile(re.escape(TAG_PREFIX) + r"([0-9a-f]{64})-at-([0-9a-f]{40})")
+COMMIT = re.compile(r"[0-9a-f]{40}")
 MANIFEST, TAR, RECORD = "manifest.json", "snapshot.tar", "prepare-record.json"
 ASSETS = (MANIFEST, TAR, RECORD)
 BOT = "github-actions[bot]"
 DIGEST = re.compile(r"sha256:([0-9a-f]{64})")
 NO_TOKEN_ENV = ("AUTH2_BILLING_TOKEN",)
+PUBLISHED, VERIFIED_EXISTING = "PUBLISHED", "VERIFIED_EXISTING"
 
 
 class ReleaseError(Exception):
     """The release is not the snapshot it claims to be, or GitHub did not do what it must. Fail closed."""
 
 
-def tag_for(address: str) -> str:
+def tag_for(address: str, commit: str) -> str:
+    """The tag of the snapshot release binding ``address`` to the readiness commit ``commit``."""
     m = SN.DIGEST.fullmatch(address or "")
     if not m:
         raise ReleaseError(f"{str(address)[:80]!r} is not a snapshot address")
-    return TAG_PREFIX + m[1]
+    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+        raise ReleaseError(f"{str(commit)[:80]!r} is not a full commit sha")
+    return f"{TAG_PREFIX}{m[1]}-at-{commit}"
 
 
 def address_of(tag: str) -> str | None:
     m = TAG.fullmatch(tag or "")
     return f"sha256:{m[1]}" if m else None
+
+
+def commit_of(tag: str) -> str | None:
+    """The readiness commit a snapshot tag names (the tag must also point at it: ``tag_commit``)."""
+    m = TAG.fullmatch(tag or "")
+    return m[2] if m else None
+
+
+def is_commit(commit) -> bool:
+    return isinstance(commit, str) and COMMIT.fullmatch(commit) is not None
 
 
 def sha256_file(p: Path) -> str:
@@ -160,19 +191,25 @@ def asset_map(rel: dict) -> dict:
     return {a.get("name"): a for a in rel.get("assets") or [] if isinstance(a, dict)}
 
 
-def release_problems(rel, *, address: str | None = None, tar_sha256: str | None = None,
+def release_problems(rel, *, address: str | None = None, commit: str | None = None, tar_sha256: str | None = None,
                      draft_ok: bool = False) -> list[str]:
-    """Why ``rel`` is not a published, immutable snapshot release ([] when it is). With ``address`` /
-    ``tar_sha256``, its tag and digests must be those."""
+    """Why ``rel`` is not a published, immutable snapshot release ([] when it is). With ``address`` / ``commit``
+    / ``tar_sha256``, its tag and digests must be those. Its target is always the commit its tag names."""
     if not isinstance(rel, dict):
         return ["the release is unreadable"]
     p = []
     tag = rel.get("tag_name")
-    got = address_of(tag)
+    got, at = address_of(tag), commit_of(tag)
     if got is None:
-        p.append(f"tag {str(tag)[:100]!r} is not a snapshot tag")
-    elif address is not None and got != address:
-        p.append(f"tag {tag} is not the snapshot {address}")
+        p.append(f"tag {str(tag)[:140]!r} is not a snapshot tag")
+    else:
+        if address is not None and got != address:
+            p.append(f"tag {tag} is not the snapshot {address}")
+        if commit is not None and at != commit:
+            p.append(f"STALE_RELEASE: tag {tag} binds commit {at}, not the readiness commit {commit}")
+        if rel.get("target_commitish") != at:
+            p.append(f"the release targets {str(rel.get('target_commitish'))[:60]!r}, not the commit {at} its tag "
+                     "names")
     if not draft_ok:
         if rel.get("draft") is not False:
             p.append("the release is a draft")
@@ -211,23 +248,41 @@ def snapshot_releases(gh: GH) -> list[dict]:
         page += 1
 
 
-def the_snapshot(gh: GH, address: str | None = None) -> dict:
-    """The one published snapshot release (``address``'s, if given); refused unless exactly one exists and it is
-    published, immutable and complete."""
-    rels = [r for r in snapshot_releases(gh) if r.get("draft") is False]
-    if address is not None:
-        rels = [r for r in rels if address_of(r.get("tag_name")) == address]
+def tag_commit(gh: GH, tag: str) -> str | None:
+    """The commit ``tag`` points at (a lightweight tag on a commit), or None."""
+    status, ref = gh.api("GET", f"/repos/{gh.slug}/git/ref/tags/{tag}")
+    obj = (ref.get("object") or {}) if status == 200 and isinstance(ref, dict) else {}
+    return obj.get("sha") if obj.get("type") == "commit" and is_commit(obj.get("sha")) else None
+
+
+def at_commit(rels: list[dict], commit: str) -> list[dict]:
+    """The published snapshot releases bound to the readiness commit ``commit``."""
+    return [r for r in rels if r.get("draft") is False and commit_of(r.get("tag_name")) == commit]
+
+
+def the_snapshot(gh: GH, commit: str, address: str | None = None) -> dict:
+    """The readiness commit's one published snapshot release (``address``'s, if given): refused unless exactly one
+    release is bound to ``commit``, it is published, immutable, complete and the bot's, and its tag points at
+    ``commit``. Releases of other commits are history and are never read."""
+    if not is_commit(commit):
+        raise ReleaseError(f"{str(commit)[:60]!r} is not a full commit sha; the readiness commit is required")
+    rels = at_commit(snapshot_releases(gh), commit)
     if len(rels) != 1:
-        raise ReleaseError(f"{len(rels)} published snapshot release(s){' for ' + address if address else ''}; "
-                           "exactly one is required")
-    p = release_problems(rels[0], address=address)
+        raise ReleaseError(f"{len(rels)} published snapshot release(s) for the readiness commit {commit}; exactly "
+                           "one is required")
+    p = release_problems(rels[0], address=address, commit=commit)
+    if (rels[0].get("author") or {}).get("login") != BOT:
+        p.append(f"the release's author is {(rels[0].get('author') or {}).get('login')!r}, not {BOT}")
+    if not p and tag_commit(gh, rels[0]["tag_name"]) != commit:
+        p.append(f"the tag {rels[0]['tag_name']} does not point at the readiness commit {commit}")
     if p:
         raise ReleaseError("; ".join(p))
     return rels[0]
 
 
 def summary(rel: dict) -> dict:
-    return {"tag": rel.get("tag_name"), "address": address_of(rel.get("tag_name")), "release_id": rel.get("id"),
+    return {"tag": rel.get("tag_name"), "address": address_of(rel.get("tag_name")),
+            "commit": commit_of(rel.get("tag_name")), "release_id": rel.get("id"),
             "immutable": rel.get("immutable"), "draft": rel.get("draft"), "published_at": rel.get("published_at"),
             "target_commitish": rel.get("target_commitish"),
             "author": (rel.get("author") or {}).get("login"),
@@ -273,29 +328,116 @@ def notes(facts: dict, commit: str) -> str:
     return (f"Dataset V3 archive snapshot of {SN.PROGRAM_ID} (readiness, Owner decisions OD-S2/OD-S3).\n\n"
             f"Address (sha256 of {MANIFEST}): `{facts['address']}`\n\n"
             f"{TAR}: sha256 `{facts['tar_sha256']}`, {facts['files']} files\n\n"
-            f"Prepared and published at commit `{commit}` by the preparation workflow. Restore and verify with "
-            "`python -m auth2q2.snapshot restore` from that commit. PAPER / RESEARCH ONLY.\n")
+            f"Readiness commit: `{commit}`. Prepared cold and published at that commit by the preparation "
+            "workflow's RT-1 run; it is the snapshot of that commit's readiness execution only. Restore and verify "
+            "with `python -m auth2q2.snapshot restore` from that commit. PAPER / RESEARCH ONLY.\n")
 
 
-def publish(gh: GH, directory: Path, commit: str, run_id: str | None = None) -> dict:
-    """Publish the snapshot prepared at ``commit`` (by run ``run_id``) as its immutable release."""
+def publishing_run_problems(gh: GH, run_id, commit: str) -> list[str]:
+    """Why run ``run_id`` is not an RT-1 run of the preparation workflow, dispatched on main at ``commit``, at its
+    first attempt ([] when it is). Its first attempt is read as such: a later "Re-run" click (refused by the gate,
+    its jobs skipped) moves the run's latest attempt but not what attempt 1 published. The readiness record checks
+    its actor as well."""
+    if not str(run_id).isdigit():
+        return [f"the publishing run id {str(run_id)[:30]!r} is not a run id"]
+    status, run = gh.api("GET", f"/repos/{gh.slug}/actions/runs/{int(run_id)}/attempts/1")
+    if status != 200 or not isinstance(run, dict):
+        return [f"the publishing run {run_id} is unreadable (HTTP {status})"]
+    want = {"id": int(run_id), "path": f".github/workflows/{PL.PREPARE_WORKFLOW}", "event": "workflow_dispatch",
+            "head_branch": "main", "head_sha": commit, "display_title": PL.TITLE.format(test="RT-1"),
+            "run_attempt": 1}
+    return [f"the publishing run {run_id}'s {k} is {str(run.get(k))[:80]!r}, not {v!r}" for k, v in want.items()
+            if run.get(k) != v]
+
+
+def verify_existing(gh: GH, rel: dict, facts: dict, commit: str, run_id: str) -> dict:
+    """RT-1 again at ``commit``, whose snapshot release an earlier RT-1 run published: this run's own cold
+    preparation (``facts``) must be that release byte for byte, and its record an earlier RT-1 run's at this
+    commit. Nothing is written: the release, its assets and its tag stay exactly as they are."""
+    tag = rel.get("tag_name")
+    p = release_problems(rel, address=facts["address"], commit=commit, tar_sha256=facts["tar_sha256"])
+    if (rel.get("author") or {}).get("login") != BOT:
+        p.append(f"the release's author is {(rel.get('author') or {}).get('login')!r}, not {BOT}")
+    if p:
+        raise ReleaseError(f"the published release {tag} of this commit is not a usable snapshot release: "
+                           + "; ".join(p)[:600])
+    assets = asset_map(rel)
+    p = [f"{n}: the release holds {assets[n].get('digest')} ({assets[n].get('size')} bytes), this run's cold "
+         f"preparation {facts['digests'][n]} ({facts['sizes'][n]} bytes)" for n in (MANIFEST, TAR)
+         if assets[n].get("digest") != facts["digests"][n] or assets[n].get("size") != facts["sizes"][n]]
+    if p:
+        raise ReleaseError("SNAPSHOT_MISMATCH: this run's cold preparation is not the published snapshot: "
+                           + "; ".join(p))
+    tagged = tag_commit(gh, tag)
+    if tagged != commit:
+        raise ReleaseError(f"the tag {tag} points at {tagged}, not the readiness commit {commit}")
+    with tempfile.TemporaryDirectory() as td:  # every asset's bytes, not only the digests GitHub reports
+        rc, msg = gh.download(tag, list(ASSETS), Path(td))
+        if rc != 0:
+            raise ReleaseError(f"downloading the release's assets failed: {msg}")
+        got = {n: "sha256:" + sha256_file(Path(td) / n) if (Path(td) / n).is_file() else None for n in ASSETS}
+        raw = (Path(td) / RECORD).read_bytes() if got[RECORD] else b""
+    p = [f"{n}: the downloaded bytes hash to {got[n]}, not the release's digest {assets[n]['digest']}"
+         for n in ASSETS if got[n] != assets[n]["digest"]]
+    p += [f"{n}: the downloaded bytes are not this run's cold preparation {facts['digests'][n]}"
+          for n in (MANIFEST, TAR) if got[n] != facts["digests"][n]]
+    if p:
+        raise ReleaseError("SNAPSHOT_MISMATCH: " + "; ".join(p))
+    try:
+        prior = json.loads(raw)
+    except ValueError as exc:
+        raise ReleaseError(f"the release's {RECORD} is not JSON ({str(exc)[:120]})") from exc
+    prior = prior if isinstance(prior, dict) else {}
+    want = {"program": SN.PROGRAM_ID, "address": facts["address"], "tar_sha256": facts["tar_sha256"],
+            "commit": commit}
+    p = [f"its {k} is {str(prior.get(k))[:80]!r}, not {v!r}" for k, v in want.items() if prior.get(k) != v]
+    if str(prior.get("run_id")) == str(run_id):
+        p.append(f"it names this run {run_id}, which did not publish it")
+    if str(prior.get("run_attempt")) != "1":
+        p.append(f"it was prepared at attempt {str(prior.get('run_attempt'))[:10]}, not 1")
+    p += publishing_run_problems(gh, prior.get("run_id"), commit)
+    if p:
+        raise ReleaseError(f"PROVENANCE: the release's {RECORD} is not an earlier RT-1 run's at this commit: "
+                           + "; ".join(p)[:600])
+    return {"result": VERIFIED_EXISTING, **summary(rel), "tag_commit": tagged, "facts": facts,
+            "published_by_run": int(prior["run_id"]), "published_record_digest": assets[RECORD]["digest"]}
+
+
+def publish(gh: GH, directory: Path, commit: str, run_id: str | None) -> dict:
+    """RT-1 at ``commit`` (run ``run_id``): publish this run's cold preparation as the commit's immutable snapshot
+    release, or, if an earlier RT-1 run at this commit already published it, verify it (``verify_existing``).
+    A release of another commit is never read, reused or changed."""
+    if not is_commit(commit):
+        raise ReleaseError(f"{str(commit)[:50]!r} is not a full commit sha")
+    if not str(run_id or "").isdigit():
+        raise ReleaseError(f"the publishing run's id is required (GITHUB_RUN_ID is {str(run_id)[:30]!r})")
     paths, facts = local_files(directory, commit, run_id)
-    tag = tag_for(facts["address"])
-    existing = [r for r in snapshot_releases(gh) if r.get("tag_name") == tag]
-    if existing:
-        rel = existing[0]
-        p = release_problems(rel, address=facts["address"], tar_sha256=facts["tar_sha256"])
-        if len(existing) == 1 and not p:
-            if all(asset_map(rel)[n]["digest"] == d for n, d in facts["digests"].items()):
-                return {"result": "ALREADY_PUBLISHED", **summary(rel), "facts": facts}
-            p = [f"the snapshot is already published with another {RECORD}"]
-        raise ReleaseError(f"{len(existing)} release(s) for {tag} already exist: {'; '.join(p)[:300]}")
+    tag = tag_for(facts["address"], commit)
+    mine = [r for r in snapshot_releases(gh) if commit_of(r.get("tag_name")) == commit]
+    published = [r for r in mine if r.get("draft") is not True]  # anything not plainly a draft is never removed
+    other = sorted(str(r.get("tag_name")) for r in published if r.get("tag_name") != tag)
+    if other:
+        raise ReleaseError(f"SNAPSHOT_CONFLICT: the readiness commit {commit} already has the snapshot release(s) "
+                           f"{other}, of another address; this run's cold preparation is {facts['address']}. A "
+                           "readiness commit has one snapshot; nothing is published")
+    if len(published) > 1:
+        raise ReleaseError(f"{len(published)} releases are tagged {tag}; exactly one may be")
+    if published:
+        return verify_existing(gh, published[0], facts, commit, run_id)
+    for d in mine:  # drafts only: an earlier run's draft of this tag, never published, never immutable
+        if d.get("tag_name") != tag or (d.get("author") or {}).get("login") != BOT:
+            raise ReleaseError(f"a draft {str(d.get('tag_name'))[:140]} of this commit by "
+                               f"{(d.get('author') or {}).get('login')!r} exists that is not this snapshot's or "
+                               "not the bot's; nothing is published")
+        status, body = gh.api("DELETE", f"/repos/{gh.slug}/releases/{d['id']}")
+        if status != 200:
+            raise ReleaseError(f"an earlier run's draft {d.get('id')} of {tag} cannot be removed (HTTP {status})")
     status, ref = gh.api("GET", f"/repos/{gh.slug}/git/ref/tags/{tag}")
     if status != 404:
         raise ReleaseError(f"the tag {tag} already exists or is unreadable (HTTP {status}); a snapshot release "
                            "creates its own tag at the publishing commit")
-    rc, msg = gh.create_draft(tag, commit, f"AUTH-2-Q2 snapshot {facts['address'][:19]}", notes(facts, commit),
-                              [paths[n] for n in ASSETS])
+    rc, msg = gh.create_draft(tag, commit, f"AUTH-2-Q2 snapshot {facts['address'][:19]} at {commit[:12]}",
+                              notes(facts, commit), [paths[n] for n in ASSETS])
     drafts = [r for r in snapshot_releases(gh) if r.get("tag_name") == tag and r.get("draft") is True]
     if rc != 0 or len(drafts) != 1:
         for d in drafts:
@@ -303,7 +445,8 @@ def publish(gh: GH, directory: Path, commit: str, run_id: str | None = None) -> 
         raise ReleaseError(f"creating the draft failed (gh exit {rc}, {len(drafts)} draft(s)): {msg}")
     draft = drafts[0]
     try:
-        p = release_problems(draft, address=facts["address"], tar_sha256=facts["tar_sha256"], draft_ok=True)
+        p = release_problems(draft, address=facts["address"], commit=commit, tar_sha256=facts["tar_sha256"],
+                             draft_ok=True)
         assets = asset_map(draft)
         p += [f"{n}: GitHub's digest {assets[n].get('digest')} is not the local {d}"
               for n, d in facts["digests"].items() if n in assets and assets[n].get("digest") != d]
@@ -327,31 +470,37 @@ def publish(gh: GH, directory: Path, commit: str, run_id: str | None = None) -> 
         if not (status == 200 and isinstance(now, dict) and now.get("draft") is False):
             raise
     status, rel = gh.api("GET", f"/repos/{gh.slug}/releases/tags/{tag}")
-    p = release_problems(rel, address=facts["address"], tar_sha256=facts["tar_sha256"]) if status == 200 else \
-        [f"the published release is unreadable (HTTP {status})"]
+    p = release_problems(rel, address=facts["address"], commit=commit, tar_sha256=facts["tar_sha256"]) \
+        if status == 200 else [f"the published release is unreadable (HTTP {status})"]
     if status == 200 and isinstance(rel, dict) and rel.get("id") == draft["id"] and rel.get("immutable") is False:
-        # Published but mutable: the repository setting is off. This job's own release, never immutable, so it
-        # and its tag are removed and the tag stays usable; then fail.
-        gh.api("DELETE", f"/repos/{gh.slug}/releases/{rel['id']}")
-        gh.api("DELETE", f"/repos/{gh.slug}/git/refs/tags/{tag}")
-        raise ReleaseError("IMMUTABLE_RELEASES_NOT_ENABLED: the published release reported immutable false, so it "
-                           "and its tag were removed. Enable release immutability (Settings > General > "
-                           "Releases), then dispatch RT-1 again")
+        # Published but explicitly mutable: the repository setting is off. This job's own release, never
+        # immutable, so it and its tag are removed and the tag stays usable; then fail, saying what is left. A
+        # release whose immutability GitHub does not state is never deleted (it may be immutable): it fails below.
+        gone_rel = gh.api("DELETE", f"/repos/{gh.slug}/releases/{rel['id']}")[0] == 200
+        gone_tag = gh.api("DELETE", f"/repos/{gh.slug}/git/refs/tags/{tag}")[0] == 200
+        left = [x for x, gone in ((f"the mutable release {rel['id']}", gone_rel), (f"the tag {tag}", gone_tag))
+                if not gone]
+        raise ReleaseError("IMMUTABLE_RELEASES_NOT_ENABLED: the published release reported immutable false. "
+                           + ("It and its tag were removed. " if not left else
+                              f"Removing it failed; still there: {', '.join(left)}. Every later RT-1 at this commit "
+                              "is refused until the Owner removes them, or readiness moves to a new commit. ")
+                           + "Enable release immutability (Settings > General > Releases), then dispatch RT-1 "
+                           "again")
     if p:
         raise ReleaseError("the published release is not the snapshot: " + "; ".join(p))
-    status, ref = gh.api("GET", f"/repos/{gh.slug}/git/ref/tags/{tag}")
-    tagged = (ref.get("object") or {}).get("sha") if status == 200 and isinstance(ref, dict) else None
+    tagged = tag_commit(gh, tag)
     if tagged != commit:
         raise ReleaseError(f"the tag points at {tagged}, not the publishing commit {commit}")
-    return {"result": "PUBLISHED", **summary(rel), "tag_commit": tagged, "facts": facts}
+    return {"result": PUBLISHED, **summary(rel), "tag_commit": tagged, "facts": facts,
+            "published_by_run": int(run_id), "published_record_digest": facts["digests"][RECORD]}
 
 
 # -- read -----------------------------------------------------------------------------------------
 
-def download(gh: GH, dest: Path, address: str | None = None) -> dict:
-    """The snapshot release's three assets into ``dest`` (new or empty), each checked against GitHub's
-    digest, and the manifest against the tag's address."""
-    rel = the_snapshot(gh, address)
+def download(gh: GH, dest: Path, commit: str, address: str | None = None) -> dict:
+    """The readiness commit's snapshot release's three assets into ``dest`` (new or empty), each checked against
+    GitHub's digest, and the manifest against the tag's address."""
+    rel = the_snapshot(gh, commit, address)
     dest.mkdir(parents=True, exist_ok=True)
     if any(dest.iterdir()):
         raise ReleaseError(f"{dest} is not empty")
@@ -373,9 +522,10 @@ def _refused(status) -> bool:
     return isinstance(status, int) and 400 <= status < 500
 
 
-def probe_immutable(gh: GH, directory: Path) -> dict:
-    """With the publish job's write token: every change to the published snapshot must be refused."""
-    rel = the_snapshot(gh)
+def probe_immutable(gh: GH, directory: Path, commit: str) -> dict:
+    """With the publish job's write token: every change to the readiness commit's snapshot release must be
+    refused."""
+    rel = the_snapshot(gh, commit)
     tag, assets = rel["tag_name"], asset_map(rel)
     record_path = directory / RECORD
     if "sha256:" + sha256_file(record_path) != assets[RECORD]["digest"]:
@@ -433,11 +583,11 @@ def the_snapshot_or_none(gh: GH, tag: str) -> dict | None:
     return rel if status == 200 and isinstance(rel, dict) else None
 
 
-def probe_read_only(gh: GH, run_id: str) -> dict:
+def probe_read_only(gh: GH, run_id: str, commit: str) -> dict:
     """With a contents: read token: every write must be refused (HTTP 4xx). Each probe is harmless or undone if
     GitHub wrongly allowed it: an unreferenced blob, a probe tag and a probe draft (both deleted again with the
     token that created them) and a release-notes edit that writes the notes back unchanged."""
-    rel = the_snapshot(gh)
+    rel = the_snapshot(gh, commit)
     tag = rel["tag_name"]
     status, ref = gh.api("GET", f"/repos/{gh.slug}/git/ref/tags/{tag}")
     sha = (ref.get("object") or {}).get("sha") if status == 200 and isinstance(ref, dict) else None
@@ -474,10 +624,9 @@ def main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(name)
         p.add_argument("--repo-slug", required=True)
         p.add_argument("--out", required=True)
+        p.add_argument("--commit", required=True, help="the readiness commit (the run's GITHUB_SHA)")
         if name in ("publish", "probe-immutable"):
             p.add_argument("--dir", required=True)
-        if name == "publish":
-            p.add_argument("--commit", required=True)
         if name in ("verify", "download"):
             p.add_argument("--address")
         if name == "download":
@@ -485,18 +634,18 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     gh = GH(a.repo_slug)
     try:
+        if not is_commit(a.commit):
+            raise ReleaseError(f"{a.commit[:50]!r} is not a full commit sha")
         if a.cmd == "publish":
-            if not re.fullmatch(r"[0-9a-f]{40}", a.commit):
-                raise ReleaseError(f"{a.commit[:50]!r} is not a full commit sha")
             rec = publish(gh, Path(a.dir), a.commit, os.environ.get("GITHUB_RUN_ID"))
         elif a.cmd == "verify":
-            rec = summary(the_snapshot(gh, a.address))
+            rec = summary(the_snapshot(gh, a.commit, a.address))
         elif a.cmd == "download":
-            rec = download(gh, Path(a.dest), a.address)
+            rec = download(gh, Path(a.dest), a.commit, a.address)
         elif a.cmd == "probe-immutable":
-            rec = probe_immutable(gh, Path(a.dir))
+            rec = probe_immutable(gh, Path(a.dir), a.commit)
         else:
-            rec = probe_read_only(gh, os.environ.get("GITHUB_RUN_ID") or "local")
+            rec = probe_read_only(gh, os.environ.get("GITHUB_RUN_ID") or "local", a.commit)
     except (ReleaseError, SN.SnapshotError, OSError, ValueError) as exc:
         rec = {"result": "FAIL", "error": str(exc)[:1500]}
         print(f"::error::RELEASE_REFUSED: {str(exc)[:1500]}")
@@ -505,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(body)
     print(body, end="")
-    ok = rec.get("result") in ("PUBLISHED", "ALREADY_PUBLISHED", "PASS") or (
+    ok = rec.get("result") in (PUBLISHED, VERIFIED_EXISTING, "PASS") or (
         a.cmd in ("verify", "download") and "error" not in rec)
     print(f"RELEASE_{a.cmd.upper().replace('-', '_')} = {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 3

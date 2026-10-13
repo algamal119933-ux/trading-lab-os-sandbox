@@ -26,7 +26,7 @@ from auth2q2 import listing as L
 from auth2q2 import offline as OFF
 from auth2q2 import release as RL
 from auth2q2 import snapshot as SN
-from test_auth2q2_release import COMMIT, FakeGitHub, snapshot_files
+from test_auth2q2_release import COMMIT, NEW, RUN1, RUN2, FakeGitHub, snapshot_files
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -44,7 +44,7 @@ def snap(tmp_path):
     """A published snapshot: its local files and the GitHub that holds its release."""
     out = snapshot_files(tmp_path)
     gh = FakeGitHub()
-    RL.publish(gh, out, COMMIT)
+    RL.publish(gh, out, COMMIT, RUN1)
     address = json.loads((out / RL.RECORD).read_text())["address"]
     return out, gh, address
 
@@ -67,7 +67,7 @@ def cache_of(out: Path, where: Path) -> Path:
 def test_a_whole_cache_restores_without_the_release(snap, tmp_path):
     out, gh, address = snap
     calls = len(gh.calls)
-    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", cache_dir=cache_of(out, tmp_path / "c"), gh=gh,
+    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, cache_dir=cache_of(out, tmp_path / "c"), gh=gh,
                     manifest_out=tmp_path / "m.json")
     assert rec["source"] == H.CACHE and rec["fallback_reason"] is None and len(gh.calls) == calls
     assert rec["files"] == 7 and rec["tree_digest"] == SN.tree_digest(tmp_path / "data")
@@ -77,13 +77,13 @@ def test_a_whole_cache_restores_without_the_release(snap, tmp_path):
 
 def test_a_missing_cache_falls_back_to_the_release_and_can_refill_it(snap, tmp_path):
     out, gh, address = snap
-    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", cache_dir=tmp_path / "c", gh=gh,
+    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, cache_dir=tmp_path / "c", gh=gh,
                     refill_cache=True, expect_source=H.RELEASE)
     assert rec["source"] == H.RELEASE and rec["fallback_reason"].startswith(H.CACHE_MISS)
     assert rec["release"]["immutable"] is True and set(rec["asset_digests"]) == set(RL.ASSETS)
     for n in RL.ASSETS:
         assert (tmp_path / "c" / n).read_bytes() == (out / n).read_bytes()
-    warm = H.restore(address, tmp_path / "data2", tmp_path / "rel2", cache_dir=tmp_path / "c", gh=gh,
+    warm = H.restore(address, tmp_path / "data2", tmp_path / "rel2", commit=COMMIT, cache_dir=tmp_path / "c", gh=gh,
                      expect_source=H.CACHE)
     assert warm["tree_digest"] == rec["tree_digest"]
 
@@ -98,7 +98,7 @@ def test_a_broken_cache_is_discarded_for_the_release_and_nothing_of_it_survives(
     out, gh, address = snap
     c = cache_of(out, tmp_path / "c")
     damage(c)
-    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", cache_dir=c, gh=gh)
+    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, cache_dir=c, gh=gh)
     assert rec["source"] == H.RELEASE and rec["fallback_reason"].startswith(H.CACHE_INVALID)
     assert SN.verify_tree(tmp_path / "data", SN.load_manifest((out / RL.MANIFEST).read_bytes(), address)) == []
 
@@ -106,35 +106,35 @@ def test_a_broken_cache_is_discarded_for_the_release_and_nothing_of_it_survives(
 def test_a_cache_holding_another_snapshot_is_not_this_one(snap, tmp_path):
     out, gh, address = snap
     other = snapshot_files(tmp_path, "other", salt="x")
-    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", cache_dir=cache_of(other, tmp_path / "c"), gh=gh)
+    rec = H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, cache_dir=cache_of(other, tmp_path / "c"), gh=gh)
     assert rec["source"] == H.RELEASE and "not the snapshot address" in rec["fallback_reason"]
 
 
 def test_an_asset_changed_after_download_stops_the_restore_and_is_named(snap, tmp_path):
     out, gh, address = snap
-    RL.download(gh, tmp_path / "rel", address)
+    RL.download(gh, tmp_path / "rel", COMMIT, address)
     t = H.tamper(tmp_path / "rel")
     assert t["sha256_before"] != t["sha256_after"]
     with pytest.raises(RL.ReleaseError, match="snapshot.tar: sha256 .* is not the release's digest"):
-        H.restore(address, tmp_path / "data", tmp_path / "rel", gh=gh)
+        H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, gh=gh)
     assert not (tmp_path / "data").exists() or not any((tmp_path / "data").iterdir())
 
 
 def test_restore_refuses_what_it_cannot_prove(snap, tmp_path):
     out, gh, address = snap
     with pytest.raises(H.HarnessError, match="no release"):
-        H.restore(address, tmp_path / "d1", tmp_path / "r1", cache_dir=tmp_path / "none")
+        H.restore(address, tmp_path / "d1", tmp_path / "r1", commit=COMMIT, cache_dir=tmp_path / "none")
     with pytest.raises(H.HarnessError, match="not the cache"):
-        H.restore(address, tmp_path / "d2", tmp_path / "r2", cache_dir=tmp_path / "none", gh=gh,
+        H.restore(address, tmp_path / "d2", tmp_path / "r2", commit=COMMIT, cache_dir=tmp_path / "none", gh=gh,
                   expect_source=H.CACHE)
     with pytest.raises(RL.ReleaseError):
-        H.restore("sha256:" + "0" * 64, tmp_path / "d3", tmp_path / "r3", gh=gh)
+        H.restore("sha256:" + "0" * 64, tmp_path / "d3", tmp_path / "r3", commit=COMMIT, gh=gh)
     with pytest.raises(RL.ReleaseError):
-        H.restore("not-an-address", tmp_path / "d4", tmp_path / "r4", gh=gh)
+        H.restore("not-an-address", tmp_path / "d4", tmp_path / "r4", commit=COMMIT, gh=gh)
     (tmp_path / "d5").mkdir()
     (tmp_path / "d5" / "stray").write_text("x")
     with pytest.raises(SN.SnapshotError, match="not a new or empty"):
-        H.restore(address, tmp_path / "d5", tmp_path / "r5", gh=gh)
+        H.restore(address, tmp_path / "d5", tmp_path / "r5", commit=COMMIT, gh=gh)
 
 
 def test_restore_never_clears_a_destination_that_held_files_whatever_the_cache_holds(snap, tmp_path):
@@ -144,16 +144,16 @@ def test_restore_never_clears_a_destination_that_held_files_whatever_the_cache_h
     (dest / "keep.txt").write_text("not the snapshot's")
     for cache in (cache_of(out, tmp_path / "good"), tmp_path / "missing"):
         with pytest.raises(SN.SnapshotError, match="not a new or empty directory"):
-            H.restore(address, dest, tmp_path / f"rel-{cache.name}", cache_dir=cache, gh=gh)
+            H.restore(address, dest, tmp_path / f"rel-{cache.name}", commit=COMMIT, cache_dir=cache, gh=gh)
         assert (dest / "keep.txt").read_text() == "not the snapshot's"
 
 
 def test_a_cache_directory_overlapping_the_tree_or_the_assets_is_refused(snap, tmp_path):
     out, gh, address = snap
     with pytest.raises(H.HarnessError, match="overlaps"):
-        H.restore(address, tmp_path / "d1", tmp_path / "r1", cache_dir=tmp_path, gh=gh)
+        H.restore(address, tmp_path / "d1", tmp_path / "r1", commit=COMMIT, cache_dir=tmp_path, gh=gh)
     with pytest.raises(H.HarnessError, match="overlaps"):
-        H.restore(address, tmp_path / "d2", tmp_path / "r2", cache_dir=tmp_path / "r2", gh=gh, refill_cache=True)
+        H.restore(address, tmp_path / "d2", tmp_path / "r2", commit=COMMIT, cache_dir=tmp_path / "r2", gh=gh, refill_cache=True)
     assert not (tmp_path / "r2").exists() or all(p.name in RL.ASSETS for p in (tmp_path / "r2").iterdir())
 
 
@@ -169,14 +169,14 @@ def test_restore_verifies_the_unpacked_tree_itself_not_only_the_unpacker(snap, t
 
     monkeypatch.setattr(H, "_from_dir", unpack_then_damage)
     with pytest.raises(SN.SnapshotError, match="1 restored file\\(s\\) differ from the manifest; first: "):
-        H.restore(address, tmp_path / "data", tmp_path / "rel", gh=gh)
+        H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, gh=gh)
 
 
 # -- the check before science (RT-6) ---------------------------------------------------------------------
 
 def test_a_corrupted_restored_file_is_caught_and_named_before_science(snap, tmp_path, capsys):
     out, gh, address = snap
-    H.restore(address, tmp_path / "data", tmp_path / "rel", gh=gh, manifest_out=tmp_path / "m.json")
+    H.restore(address, tmp_path / "data", tmp_path / "rel", commit=COMMIT, gh=gh, manifest_out=tmp_path / "m.json")
     assert H.verify(address, tmp_path / "m.json", tmp_path / "data")["problem_count"] == 0
     c = H.corrupt(address, tmp_path / "m.json", tmp_path / "data")
     assert SN.data_kind(c["file"]) == "kline" and c["now_sha256"] != c["manifest_sha256"]
@@ -190,17 +190,35 @@ def test_a_corrupted_restored_file_is_caught_and_named_before_science(snap, tmp_
 def test_the_restore_cli_names_the_tampered_asset(snap, tmp_path, capsys, monkeypatch):
     out, gh, address = snap
     monkeypatch.setattr(H.RL, "GH", lambda slug: gh)
-    RL.download(gh, tmp_path / "rel", address)
+    RL.download(gh, tmp_path / "rel", COMMIT, address)
     H.tamper(tmp_path / "rel")
-    rc = H.main(["restore", "--address", address, "--dest", str(tmp_path / "data"), "--assets-dir",
+    rc = H.main(["restore", "--address", address, "--commit", COMMIT, "--dest", str(tmp_path / "data"), "--assets-dir",
                  str(tmp_path / "rel"), "--repo-slug", gh.slug, "--out", str(tmp_path / "r.json")])
     text = capsys.readouterr().out
     assert rc == 3 and "::error::RESTORE_REFUSED: snapshot.tar: sha256" in text
     shutil.rmtree(tmp_path / "rel")
-    rc = H.main(["restore", "--address", address, "--dest", str(tmp_path / "data2"), "--assets-dir",
-                 str(tmp_path / "rel"), "--cache-dir", str(tmp_path / "c"), "--repo-slug", gh.slug,
+    rc = H.main(["restore", "--address", address, "--commit", COMMIT, "--dest", str(tmp_path / "data2"),
+                 "--assets-dir", str(tmp_path / "rel"), "--cache-dir", str(tmp_path / "c"), "--repo-slug", gh.slug,
                  "--out", str(tmp_path / "r.json")])
     assert rc == 0 and "from the release; CACHE_MISS" in capsys.readouterr().out
+    rc = H.main(["restore", "--address", address, "--commit", NEW, "--dest", str(tmp_path / "data3"),
+                 "--assets-dir", str(tmp_path / "rel3"), "--repo-slug", gh.slug, "--out", str(tmp_path / "r3.json")])
+    assert rc == 3 and "0 published snapshot release(s) for the readiness commit" in capsys.readouterr().out
+
+
+def test_a_restore_at_another_commit_never_reads_this_commits_release(snap, tmp_path):
+    """Stale-release rejection: the release of an earlier readiness commit never feeds a later one's restore,
+    though its content (the address) is the same."""
+    out, gh, address = snap
+    with pytest.raises(RL.ReleaseError, match=f"0 published snapshot release\\(s\\) for the readiness commit {NEW}"):
+        H.restore(address, tmp_path / "d", tmp_path / "r", commit=NEW, gh=gh)
+    with pytest.raises(RL.ReleaseError, match="not a full commit sha"):
+        H.restore(address, tmp_path / "d2", tmp_path / "r2", commit="main", gh=gh)
+    rec = H.restore(address, tmp_path / "d3", tmp_path / "r3", commit=COMMIT, gh=gh)
+    assert rec["commit"] == COMMIT and rec["release"]["commit"] == COMMIT
+    # assets already downloaded (from this commit's release) are still judged against the named commit's release
+    with pytest.raises(RL.ReleaseError, match=f"for the readiness commit {NEW}"):
+        H.restore(address, tmp_path / "d4", tmp_path / "r3", commit=NEW, gh=gh)
 
 
 # -- science, offline ------------------------------------------------------------------------------------
@@ -469,25 +487,82 @@ def prep_record(repo: Path, **kw) -> dict:
     return rec
 
 
-def test_rt1_verdict_binds_the_preparation_the_lock_and_the_published_release(tmp_path, monkeypatch):
-    monkeypatch.setenv("GITHUB_SHA", COMMIT)
-    rec = prep_record(REPO)
-    pub = {"result": "PUBLISHED", "immutable": True, "tag_commit": COMMIT, "address": rec["address"],
-           "assets": {RL.TAR: {"digest": f"sha256:{rec['tar_sha256']}"}}}
+def rt1_docs(**pub_change) -> tuple[dict, dict]:
+    """RT-1's two documents at COMMIT, run RUN1: its own cold preparation and the publication."""
+    rec = prep_record(REPO, commit=COMMIT, run_id=RUN1, run_attempt="1")
+    tag = RL.tag_for(rec["address"], COMMIT)
+    pub = {"result": RL.PUBLISHED, "immutable": True, "tag": tag, "commit": COMMIT, "tag_commit": COMMIT,
+           "address": rec["address"], "published_by_run": int(RUN1), "release_id": 7,
+           "assets": {RL.MANIFEST: {"digest": rec["address"]}, RL.TAR: {"digest": f"sha256:{rec['tar_sha256']}"}}}
+    pub.update(pub_change)
+    return rec, pub
+
+
+def rt1_verdict(tmp_path, rec, pub) -> dict:
     (tmp_path / "r.json").write_text(json.dumps(rec))
     (tmp_path / "p.json").write_text(json.dumps(pub))
-    got = H.verdict("RT-1", "Snapshot release (contents: write)", [tmp_path / "r.json", tmp_path / "p.json"], REPO)
+    return H.verdict("RT-1", "Snapshot release (contents: write)", [tmp_path / "r.json", tmp_path / "p.json"], REPO)
+
+
+def test_rt1_verdict_binds_the_preparation_the_lock_and_the_published_release(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", COMMIT)
+    monkeypatch.setenv("GITHUB_RUN_ID", RUN1)
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    rec, pub = rt1_docs()
+    got = rt1_verdict(tmp_path, rec, pub)
     assert got["result"] == "PASS", got["problems"]
+    assert got["measurements"]["commit"] == COMMIT and got["measurements"]["publication"] == RL.PUBLISHED
+    assert got["measurements"]["release"]["tag"] == RL.tag_for(rec["address"], COMMIT)
     for edit in (lambda r, p: r.update(checksum_failures=1), lambda r, p: r["counts"].update(kline_archive_files=1),
                  lambda r, p: r.update(lock_sha256="0" * 64), lambda r, p: r.update(workers=8),
                  lambda r, p: p.update(immutable=False), lambda r, p: p.update(tag_commit="b" * 40),
                  lambda r, p: p.update(result="ALREADY_PUBLISHED"), lambda r, p: p.update(address="sha256:" + "0" * 64),
-                 lambda r, p: r.update(seconds={})):
+                 lambda r, p: r.update(seconds={}),
+                 # wrong commit, stale release, another session's preparation, another run's publication
+                 lambda r, p: r.update(commit="b" * 40), lambda r, p: r.update(run_id=RUN2),
+                 lambda r, p: r.update(run_attempt="2"), lambda r, p: p.update(commit=NEW),
+                 lambda r, p: p.update(tag=RL.tag_for(r["address"], NEW)), lambda r, p: p.update(published_by_run=12),
+                 lambda r, p: p.update(published_by_run=None), lambda r, p: p.update(published_by_run=True),
+                 lambda r, p: p["assets"][RL.MANIFEST].update(digest="sha256:" + "0" * 64),
+                 lambda r, p: p["assets"][RL.TAR].update(digest="sha256:" + "0" * 64)):
         r2, p2 = json.loads(json.dumps(rec)), json.loads(json.dumps(pub))
         edit(r2, p2)
-        (tmp_path / "r.json").write_text(json.dumps(r2))
-        (tmp_path / "p.json").write_text(json.dumps(p2))
-        assert H.verdict("RT-1", "x", [tmp_path / "r.json", tmp_path / "p.json"], REPO)["result"] == "FAIL"
+        assert rt1_verdict(tmp_path, r2, p2)["result"] == "FAIL", (r2, p2)
+    monkeypatch.setenv("GITHUB_SHA", NEW)  # this run is at another commit than its documents
+    assert rt1_verdict(tmp_path, rec, pub)["result"] == "FAIL"
+
+
+def test_rt1_verdict_again_at_the_same_commit_passes_on_a_verified_release_and_fresh_evidence(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", COMMIT)
+    monkeypatch.setenv("GITHUB_RUN_ID", RUN2)
+    rec, pub = rt1_docs(result=RL.VERIFIED_EXISTING, published_by_run=int(RUN1))
+    rec["run_id"] = RUN2  # this run's own cold preparation
+    got = rt1_verdict(tmp_path, rec, pub)
+    assert got["result"] == "PASS", got["problems"]
+    assert got["measurements"]["publication"] == RL.VERIFIED_EXISTING and got["run_id"] == RUN2
+    assert got["measurements"]["published_by_run"] == int(RUN1)
+    for edit in (lambda r, p: p.update(published_by_run=int(RUN2)),  # "verified" its own publication
+                 lambda r, p: p.update(published_by_run=True), lambda r, p: p.update(published_by_run="11"),
+                 lambda r, p: r.update(run_id=RUN1),                 # the earlier run's evidence, not fresh
+                 lambda r, p: p.update(tag_commit="b" * 40)):
+        r2, p2 = json.loads(json.dumps(rec)), json.loads(json.dumps(pub))
+        edit(r2, p2)
+        assert rt1_verdict(tmp_path, r2, p2)["result"] == "FAIL"
+    monkeypatch.delenv("GITHUB_RUN_ID")
+    assert rt1_verdict(tmp_path, rec, pub)["result"] == "FAIL"
+
+
+def test_a_release_is_bound_to_a_commit_only_when_its_summary_and_its_tag_both_name_it():
+    address = "sha256:" + "d" * 64
+    rel = {"address": address, "commit": COMMIT, "tag": RL.tag_for(address, COMMIT), "release_id": 7}
+    assert H.bound_to(rel, COMMIT)
+    assert not H.bound_to(rel, NEW)                               # another readiness commit
+    assert not H.bound_to({**rel, "commit": NEW}, COMMIT)         # the summary names another commit than its tag
+    assert not H.bound_to({**rel, "tag": RL.tag_for(address, NEW)}, COMMIT)
+    assert not H.bound_to({**rel, "address": "sha256:" + "0" * 64}, COMMIT)
+    for rid in (None, True, "7"):
+        assert not H.bound_to({**rel, "release_id": rid}, COMMIT)
+    assert not H.bound_to(None, COMMIT) and not H.bound_to(rel, "x" * 40)
 
 
 def test_rt1_checks_its_preparation_before_it_publishes_anything(tmp_path, capsys):
@@ -510,21 +585,38 @@ def test_rt1_checks_its_preparation_before_it_publishes_anything(tmp_path, capsy
 
 def test_rt2_a_second_preparation_must_be_the_published_snapshot(snap, tmp_path, monkeypatch):
     out, gh, address = snap
-    rec = json.loads((out / RL.RECORD).read_text())
+    monkeypatch.setenv("GITHUB_SHA", COMMIT)
+    monkeypatch.setenv("GITHUB_RUN_ID", "13")
+    again = snapshot_files(tmp_path, "rt2", run_id="13")  # RT-2's own cold preparation, same bytes
+    rec = json.loads((again / RL.RECORD).read_text())
     rec.update(prep_record(REPO, address=address, tar_sha256=rec["tar_sha256"]))
-    (out / RL.RECORD).write_text(json.dumps(rec))
-    got = H.compare_release(out, REPO, gh)
+    (again / RL.RECORD).write_text(json.dumps(rec))
+    got = H.compare_release(again, REPO, gh, COMMIT)
     assert got["result"] == "PASS", got["problems"]
-    other = snapshot_files(tmp_path, "again", salt="different bytes")
+    assert got["measurements"]["commit"] == COMMIT and got["measurements"]["release"]["commit"] == COMMIT
+    other = snapshot_files(tmp_path, "again", salt="different bytes", run_id="13")
     rec2 = json.loads((other / RL.RECORD).read_text())
     rec2.update(prep_record(REPO, address=rec2["address"], tar_sha256=rec2["tar_sha256"]))
     (other / RL.RECORD).write_text(json.dumps(rec2))
-    got = H.compare_release(other, REPO, gh)
+    got = H.compare_release(other, REPO, gh, COMMIT)
     assert got["result"] == "FAIL" and not got["checks"]["same_manifest_digest"]
     assert not got["checks"]["same_tar_sha256"]
+    monkeypatch.setenv("GITHUB_RUN_ID", "14")  # a preparation that is not this run's own
+    got = H.compare_release(again, REPO, gh, COMMIT)
+    assert got["result"] == "FAIL" and not got["checks"]["prepared_cold_by_this_run_at_this_commit"]
+    with pytest.raises(RL.ReleaseError, match="0 published"):  # never compared with another commit's release
+        H.compare_release(again, REPO, gh, NEW)
+    monkeypatch.setenv("GITHUB_RUN_ID", "13")
+    monkeypatch.setenv("GITHUB_SHA", NEW)  # the run is at another commit than the one it names
+    got = H.compare_release(again, REPO, gh, COMMIT)
+    assert got["result"] == "FAIL" and not got["checks"]["prepared_cold_by_this_run_at_this_commit"]
 
 
-def test_rt3_rt4_rt5_and_rt11_verdicts(tmp_path):
+def test_rt3_rt4_rt5_and_rt11_verdicts(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", COMMIT)
+    rel = {"address": "sha256:" + "d" * 64, "commit": COMMIT, "tag": RL.tag_for("sha256:" + "d" * 64, COMMIT),
+           "release_id": 7, "immutable": True}
+
     def files(*docs):
         paths = []
         for i, d in enumerate(docs):
@@ -533,7 +625,7 @@ def test_rt3_rt4_rt5_and_rt11_verdicts(tmp_path):
             paths.append(p)
         return paths
 
-    probe = {"result": "PASS", "part": "immutability", "release_unchanged": True,
+    probe = {"result": "PASS", "part": "immutability", "release_unchanged": True, "release": rel,
              "probes": {k: {"refused": True} for k in ("a", "b", "c", "d")}}
     assert H.verdict("RT-3", "x", files(probe), REPO)["result"] == "PASS"
     assert H.verdict("RT-3", "x", files({**probe, "release_unchanged": False}), REPO)["result"] == "FAIL"
@@ -541,12 +633,20 @@ def test_rt3_rt4_rt5_and_rt11_verdicts(tmp_path):
     one_got_through = {**probe["probes"], "d": {"refused": False}}
     rec = H.verdict("RT-3", "x", files({**probe, "probes": one_got_through}), REPO)
     assert rec["result"] == "FAIL" and rec["checks"]["every_write_refused"] is False
-    ro = {"result": "PASS", "part": "read-only", "probes": {k: {"refused": True} for k in "abcd"}}
-    assert H.verdict("RT-3", "x", files(ro), REPO)["result"] == "PASS"
+    ro = {"result": "PASS", "part": "read-only", "release": rel, "probes": {k: {"refused": True} for k in "abcd"}}
+    got = H.verdict("RT-3", "x", files(ro), REPO)
+    assert got["result"] == "PASS" and got["measurements"]["snapshot_release"] == {
+        k: rel[k] for k in H.SNAPSHOT_BINDING}
+    old = {**rel, "commit": NEW, "tag": RL.tag_for(rel["address"], NEW)}
+    for bad_rel in (old, {**rel, "tag": old["tag"]}, {**rel, "release_id": None}, None):
+        assert H.verdict("RT-3", "x", files({**ro, "release": bad_rel}), REPO)["result"] == "FAIL", bad_rel
     receipt = {"source": H.RELEASE, "fallback_reason": None, "seconds": {"download": 9.0}, "files": 7,
-               "tree_digest": "sha256:" + "1" * 64}
+               "tree_digest": "sha256:" + "1" * 64, "commit": COMMIT, "release": rel}
     sci = {"checks": {"network_removed": True, "lock_byte_identical": True}, "seconds": 400}
     assert H.verdict("RT-4", "x", files(receipt, sci), REPO)["result"] == "PASS"
+    for bad in ({**receipt, "commit": NEW}, {**receipt, "release": old}, {**receipt, "release": None}):
+        for t in ("RT-4", "RT-11"):  # restored, but not this commit's release
+            assert H.verdict(t, "x", files(bad, sci), REPO)["result"] == "FAIL", (t, bad)
     cached = {**receipt, "seconds": {"cache": 1.0, "download": 9.0},
               "fallback_reason": "CACHE_MISS: no cached snapshot in c"}
     assert H.verdict("RT-4", "x", files(cached, sci), REPO)["result"] == "FAIL"
@@ -556,8 +656,10 @@ def test_rt3_rt4_rt5_and_rt11_verdicts(tmp_path):
     assert H.verdict("RT-11", "x", files(cached, sci), REPO)["result"] == "PASS"  # RT-11 may use the cache
     cold = {**cached, "address": "sha256:" + "d" * 64}
     warm = {"source": H.CACHE, "fallback_reason": None, "seconds": {"cache": 2.0}, "files": 7,
-            "tree_digest": cold["tree_digest"], "address": cold["address"]}
+            "tree_digest": cold["tree_digest"], "address": cold["address"], "commit": COMMIT}
     assert H.verdict("RT-5", "x", files(cold, warm), REPO)["result"] == "PASS"
+    for c, w in (({**cold, "release": old}, warm), ({**cold, "commit": NEW}, warm), (cold, {**warm, "commit": NEW})):
+        assert H.verdict("RT-5", "x", files(c, w), REPO)["result"] == "FAIL"
     for c2, w2 in (({**cold, "fallback_reason": "CACHE_INVALID: x"}, warm), (cold, {**warm, "source": H.RELEASE}),
                    (cold, {**warm, "tree_digest": "sha256:" + "2" * 64}), ({**cold, "files": 6}, warm),
                    (cold, {**warm, "address": None}), ({**cold, "tree_digest": None}, {**warm, "tree_digest": None})):

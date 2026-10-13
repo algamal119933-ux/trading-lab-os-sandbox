@@ -170,6 +170,30 @@ def test_the_write_token_is_used_only_to_publish_and_probe_the_release():
             assert forbidden not in text(w), (w, forbidden)
 
 
+READERS = ("auth2q2.harness restore", "auth2q2.harness compare-release", "auth2q2.release download",
+           "auth2q2.release publish", "auth2q2.release verify", "auth2q2.release probe-immutable",
+           "auth2q2.release probe-read-only")
+
+
+def test_every_snapshot_reader_and_the_publisher_name_this_runs_commit(wf):
+    """One readiness execution, one commit: every command that selects a snapshot release names the run's own
+    commit, which the release's tag must bind, so a release of another commit is never read or verified."""
+    for step in (st for j in load(wf)["jobs"].values() for st in j.get("steps") or []):
+        cmd = " ".join(str(step.get("run") or "").replace("\\\n", " ").split())
+        for reader in READERS:
+            for m in re.finditer(re.escape(reader), cmd):
+                rest = cmd[m.end():].split(" python ")[0]
+                assert '--commit "$GITHUB_SHA"' in rest, (wf, step.get("name"), reader)
+
+
+def test_no_workflow_deletes_or_moves_a_release_or_a_tag_itself():
+    for w in PL.WORKFLOWS:
+        t = text(w)
+        for forbidden in ("gh release delete", "gh release edit", "gh release upload", "git push --delete",
+                          "-X DELETE", "--method DELETE", "git/refs"):
+            assert forbidden not in t, (w, forbidden)
+
+
 def test_every_checkout_keeps_no_credentials_and_every_action_is_pinned(wf):
     for name, job in jobs(wf).items():
         for step in job["steps"]:
