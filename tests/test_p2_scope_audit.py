@@ -1046,6 +1046,27 @@ AUTH2_GOVERNANCE_CLOSURE_1_SCOPE: dict[str, str] = {
 }
 
 
+# PR #65, merged. Two parents: f5c6bc33 (main before, AUTH2_GOVERNANCE_CLOSURE_1) + a93bbda9
+# (the claude/auth-2-od-c4-operator-refusal branch).
+AUTH_2_OD_C4_OPERATOR_REFUSAL_MERGE = "a80733f60c10a858f7f311a39b94043744d3630b"
+
+# AUTH-2 OD-C4 operator refusal (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
+# 2026-10-12, Gate 1, OD-C4; carried out on the Owner's instruction of 2026-10-13). Every AUTH-2
+# dispatch is refused unless the program charter says ACTIVE: at the Owner's pre-dispatch guard,
+# the executor's check-dispatch and the in-job guard of every node and closure run. It only adds
+# a refusal. No workflow, record, ledger, threshold or cap changes; research/auth2/ untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_OD_C4 = "AUTH-2 OD-C4 operator refusal"
+AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE: dict[str, str] = {
+    ".github/gates/auth2_operator.py":
+        f"{_OD_C4} — CHARTER_NOT_ACTIVE at the guard, in-job and at check-dispatch [OD-C4]",
+    "tests/test_auth2_operator.py":
+        f"{_OD_C4} — every gate, every status, unreadable charters; only a refusal is added",
+    "tests/test_p2_scope_audit.py": "AUTH2-GOVERNANCE-CLOSURE-1 (PR #64) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1090,6 +1111,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
                                             AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE),
     "AUTH_2_NODE_CHECKOUT_HISTORY": (AUTH_2_NODE_CHECKOUT_HISTORY_MERGE, AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE),
     "AUTH2_GOVERNANCE_CLOSURE_1": (AUTH2_GOVERNANCE_CLOSURE_1_MERGE, AUTH2_GOVERNANCE_CLOSURE_1_SCOPE),
+    "AUTH_2_OD_C4_OPERATOR_REFUSAL": (AUTH_2_OD_C4_OPERATOR_REFUSAL_MERGE, AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1097,18 +1119,47 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 OD-C4 operator refusal (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
-# 2026-10-12, Gate 1, OD-C4; carried out on the Owner's instruction of 2026-10-13). Every AUTH-2
-# dispatch is refused unless the program charter says ACTIVE: at the Owner's pre-dispatch guard,
-# the executor's check-dispatch and the in-job guard of every node and closure run. It only adds
-# a refusal. No workflow, record, ledger, threshold or cap changes; research/auth2/ untouched.
-_OD_C4 = "AUTH-2 OD-C4 operator refusal"
+# AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 successor readiness tooling (Owner decision "AUTH-2
+# CLOSURE AND SUCCESSOR READINESS", 2026-10-12, Gate 2: OD-S1 to OD-S8; carried out on the Owner's
+# instruction of 2026-10-13). The infrastructure the readiness runs RT-0 to RT-11 need, built and
+# tested offline: nothing is dispatched. No hypothesis, strategy, risk setting, threshold, window,
+# DAG, dataset science, preregistration or trial id changes; research/auth2/ and the trial ledger
+# untouched; the successor law is not written. Only the snapshot release job may write.
+_Q2 = "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling"
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/gates/auth2_operator.py":
-        f"{_OD_C4} — CHARTER_NOT_ACTIVE at the guard, in-job and at check-dispatch [OD-C4]",
-    "tests/test_auth2_operator.py":
-        f"{_OD_C4} — every gate, every status, unreadable charters; only a refusal is added",
-    "tests/test_p2_scope_audit.py": "AUTH2-GOVERNANCE-CLOSURE-1 (PR #64) pinned to its merge; this branch's scope",
+    "research/auth2q2/__init__.py": f"{_Q2} — the successor's readiness package, its id [OD-S1]",
+    "research/auth2q2/snapshot.py":
+        f"{_Q2} — deterministic content-addressed snapshot and manifest; strict, verified restore [OD-S2]",
+    "research/auth2q2/listing.py": f"{_Q2} — the archive listing replayed offline; any other request refused",
+    "research/auth2q2/offline.py": f"{_Q2} — the science phase without network: namespace probe, socket guard",
+    "research/auth2q2/prepare.py":
+        f"{_Q2} — checksum-verified parallel preparation bound to the Dataset V3 lock (RT-1, RT-2)",
+    "research/auth2q2/release.py":
+        f"{_Q2} — the immutable-release publication path and its RT-3 probes [OD-S2, OD-S3]",
+    "research/auth2q2/attempts.py":
+        f"{_Q2} — ADMISSION/INFRA/SCIENCE/RESULT, bounded INFRA retries, TECHNICAL_EXHAUSTION [OD-S5, OD-S6]",
+    "research/auth2q2/compute.py":
+        f"{_Q2} — the guarded 4,000-minute compute proof, timeout + 1, closure reserve [OD-S7]",
+    "research/auth2q2/plan.py": f"{_Q2} — RT-1 to RT-11 as jobs and timeouts; the 300-minute ledger [OD-S4]",
+    "research/auth2q2/harness.py":
+        f"{_Q2} — the readiness jobs' steps: restore, verify, offline science, classifiers, verdicts",
+    "research/auth2q2/record.py": f"{_Q2} — the INFRA_READINESS record, rebuilt and verified offline [OD-S8]",
+    ".github/gates/auth2q2_readiness.py":
+        f"{_Q2} — the readiness gate: Owner billing evidence, serial, 300-minute cap, R_m; RT-8, RT-9 [OD-S4]",
+    ".github/gates/protected_paths.txt": f"{_Q2} — the successor's tooling and its tests are protected paths",
+    ".github/workflows/auth2q2-prepare.yml":
+        f"{_Q2} — RT-1 to RT-3, Owner-dispatched; the only contents: write job [OD-S3, OD-S4]",
+    ".github/workflows/auth2q2-readiness.yml": f"{_Q2} — RT-4 to RT-11, Owner-dispatched, read-only [OD-S3, OD-S4]",
+    "tests/fixtures/auth2q2_jobs_api.json": f"{_Q2} — the jobs API shapes of AUTH-2's two D0 runs",
+    "tests/test_auth2q2_snapshot.py": f"{_Q2} — RT-0: manifest determinism, canonical tar, hostile restores",
+    "tests/test_auth2q2_prepare.py": f"{_Q2} — RT-0: preparation, listing replay, offline guard",
+    "tests/test_auth2q2_release.py": f"{_Q2} — RT-0: publish, immutability, download, RT-3 probes",
+    "tests/test_auth2q2_attempts.py": f"{_Q2} — RT-0: attempt classes, TECHNICAL_EXHAUSTION, compute proof",
+    "tests/test_auth2q2_readiness.py": f"{_Q2} — RT-0: the gate's refusals, ledger, reserve, RT-8, RT-9",
+    "tests/test_auth2q2_harness.py": f"{_Q2} — RT-0: restore and cache fallback, offline science, classifiers",
+    "tests/test_auth2q2_record.py": f"{_Q2} — RT-0: the readiness record, every shortfall a FAIL",
+    "tests/test_auth2q2_workflows.py": f"{_Q2} — RT-0: the two workflows hold to the plan and OD-S3",
+    "tests/test_p2_scope_audit.py": "AUTH-2 OD-C4 operator refusal (PR #65) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

@@ -1,0 +1,732 @@
+name: AUTH2Q2 readiness, restore and guard (RT-4 to RT-11; manual dispatch only)
+
+# AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 readiness (Owner decisions OD-S1 to OD-S8 of 2026-10-12; review
+# sections 3 and 4). Every job here is read-only (OD-S3) and reads the snapshot only from the immutable release
+# bound to this run's own commit (the readiness commit), which RT-1 published or verified at that commit, through
+# research/auth2q2/harness.py:
+#
+#   RT-4   restore cold from the release, verify every file, then rebuild Dataset V3 with the network removed
+#          and compare it with the committed lock byte for byte (the D0 data path)
+#   RT-5   restore with no cache entry (falls back to the release) and again from the warm cache: same tree
+#   RT-6   one restored byte changed, and separately an asset with the wrong digest: both stop before the
+#          science step, name the file, and classify INFRA
+#   RT-7   two probes with a no-op science step: one fails before it (INFRA), one after it starts (SCIENCE)
+#   RT-8   storage, retention and billing: two billing readings at least six hours apart, the release, the
+#          artifacts and the cache
+#   RT-9   the billing guard against the Actions API, minute for minute, and against breach fixtures
+#   RT-10  a job that runs into its 2-minute timeout bills 3 minutes: timeout + 1
+#   RT-11  restore, then the engine data path for A2's 86 symbols with the network removed: every 4h and
+#          funding hash matches the lock (the DATA_TRUTH check the N, A and SC nodes make)
+#
+# The science phase runs in its own network namespace (sudo unshare --net, dropped back to the runner's user),
+# where nothing outside the runner can be reached, and refuses to start if anything can; the archive listing is
+# replayed from the snapshot and every socket call in the process is refused too (offline.py, listing.py).
+#
+# Every run is dispatched by the Owner, one at a time, with the billing evidence in the last three inputs, and
+# starts with the readiness gate (.github/gates/auth2q2_readiness.py), the same job as in auth2q2-prepare.yml.
+# The test's jobs run only after it says DISPATCH. A re-run is refused. workflow_dispatch only. Nothing here
+# runs a strategy, a hypothesis, a trial or an engine, writes the trial ledger, commits or pushes.
+# PAPER / RESEARCH ONLY.
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Readiness test (RT-1 to RT-3 are in auth2q2-prepare.yml)"
+        type: choice
+        required: true
+        options: [RT-4, RT-5, RT-6, RT-7, RT-8, RT-9, RT-10, RT-11]
+      remaining_included_linux_minutes:
+        description: "Owner: remaining included Linux minutes shown on the billing page now (digits only)"
+        type: string
+        required: true
+      actions_budget_usd_zero:
+        description: "Owner: the account's Actions budget is USD 0"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
+      stop_usage_enabled:
+        description: "Owner: that budget stops usage when it is reached"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
+
+run-name: AUTH2Q2-READINESS ${{ inputs.test }}
+
+permissions: {}
+
+concurrency:
+  group: auth2q2-readiness
+  cancel-in-progress: false
+
+env:
+  PYTHONPATH: research
+
+jobs:
+  gate:
+    name: Readiness gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      address: ${{ steps.outputs.outputs.address }}
+      tag: ${{ steps.outputs.outputs.tag }}
+      hex: ${{ steps.outputs.outputs.hex }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'Gate: readiness gate (Owner billing evidence, serial, 300-minute ledger, R_m, never re-run), published'
+        run: |
+          set -euo pipefail
+          python .github/gates/auth2q2_readiness.py gate --test "$TEST" --repo-slug "$GITHUB_REPOSITORY" \
+            --out out/gate.json --annotate
+        env:
+          TEST: ${{ inputs.test }}
+          GH_TOKEN: ${{ github.token }}
+          AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
+
+      - name: 'Gate: paper safety'
+        run: python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example
+
+      - name: The snapshot the gate admitted this run to read
+        id: outputs
+        run: python .github/gates/auth2q2_readiness.py outputs --gate out/gate.json >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-gate
+          path: out/gate.json
+          if-no-files-found: error
+          retention-days: 90
+
+  rt4:
+    name: RT-4 cold restore and D0 data path
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-4'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dependencies (arch and its closure hash-pinned)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
+          pip check
+
+      - name: Restore the snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify the snapshot before science
+        run: |
+          python -m auth2q2.harness verify --address "$ADDRESS" --manifest "$RUNNER_TEMP/manifest.json" \
+            --dest "$RUNNER_TEMP/snapshot" --out out/verify.json
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" "HOME=$HOME" \
+            python -m auth2q2.harness d0 --repo . --cache "$RUNNER_TEMP/snapshot" --out out/science.json
+
+      - name: RT-4 verdict, published
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-4 --job "RT-4 cold restore and D0 data path" --repo . \
+            --out out/rt4.json out/receipt.json out/science.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt4.json || exit 1
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-4
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt5-cold:
+    name: RT-5 restore without a cache entry
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-5'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+      # This run's own key, which no earlier run can have saved: the restore meets no cache entry, as after
+      # one is deleted (deleting one needs actions: write, which no readiness job holds).
+      CACHE_KEY: auth2q2-rt5-${{ needs.gate.outputs.hex }}-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Look up the cache entry (there is none)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/cache
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Restore the snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --cache-dir "$RUNNER_TEMP/cache" --refill-cache \
+            --expect-source release --repo-slug "$GITHUB_REPOSITORY" --out out/cold.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Save the verified snapshot as the cache entry
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/cache
+          key: ${{ env.CACHE_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-5-cold
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt5-warm:
+    name: RT-5 restore from the warm cache
+    needs: [gate, rt5-cold]
+    if: ${{ !cancelled() && github.run_attempt == '1' && needs.gate.result == 'success' && inputs.test == 'RT-5' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+      CACHE_KEY: auth2q2-rt5-${{ needs.gate.outputs.hex }}-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore the cache entry
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/cache
+          key: ${{ env.CACHE_KEY }}
+          fail-on-cache-miss: true
+
+      - name: Restore the snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --cache-dir "$RUNNER_TEMP/cache" --expect-source cache \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/warm.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/download-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: auth2q2-RT-5-cold
+          path: out/cold
+
+      - name: RT-5 verdict, published
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-5 --job "RT-5 restore from the warm cache" --repo . \
+            --out out/rt5.json out/cold/cold.json out/warm.json || rc=$?
+          if [ ! -f out/rt5.json ]; then
+            python -m auth2q2.harness fail --test RT-5 --job "RT-5 restore from the warm cache" --out out/rt5.json \
+              --reason "a restore did not finish (no cold or warm receipt)" || true
+            rc=3
+          fi
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt5.json || exit 1
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-5-warm
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt6-corrupt:
+    name: RT-6 corrupted restored file
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-6'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore the snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 'RT-6: change one byte of one restored file'
+        run: |
+          python -m auth2q2.harness corrupt --address "$ADDRESS" --manifest "$RUNNER_TEMP/manifest.json" \
+            --dest "$RUNNER_TEMP/snapshot" --out out/expect.json
+
+      - name: Verify the snapshot before science
+        run: |
+          python -m auth2q2.harness verify --address "$ADDRESS" --manifest "$RUNNER_TEMP/manifest.json" \
+            --dest "$RUNNER_TEMP/snapshot" --out out/verify.json
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" "HOME=$HOME" \
+            python -m auth2q2.harness d0 --repo . --cache "$RUNNER_TEMP/snapshot" --out out/science.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-6-corrupt
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt6-digest:
+    name: RT-6 asset with the wrong digest
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-6'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the release assets (each checked against GitHub's digest)
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.release download --repo-slug "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+            --address "$ADDRESS" --dest "$RUNNER_TEMP/assets" --out out/download.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 'RT-6: change one byte of the downloaded snapshot.tar'
+        run: python -m auth2q2.harness tamper --assets-dir "$RUNNER_TEMP/assets" --out out/tamper.json
+
+      - name: Restore the snapshot
+        run: |
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify the snapshot before science
+        run: |
+          python -m auth2q2.harness verify --address "$ADDRESS" --manifest "$RUNNER_TEMP/manifest.json" \
+            --dest "$RUNNER_TEMP/snapshot" --out out/verify.json
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" "HOME=$HOME" \
+            python -m auth2q2.harness d0 --repo . --cache "$RUNNER_TEMP/snapshot" --out out/science.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-6-digest
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt6-classify:
+    name: RT-6 classify
+    needs: [gate, rt6-corrupt, rt6-digest]
+    if: ${{ !cancelled() && github.run_attempt == '1' && needs.gate.result == 'success' && inputs.test == 'RT-6' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: auth2q2-RT-6-corrupt
+          path: out/corrupt
+
+      - name: 'RT-6: both stopped before science, as INFRA, naming the file'
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness classify --test RT-6 --repo-slug "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --expect out/corrupt/expect.json --out out/rt6.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt6.json || exit 1
+          exit "$rc"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-6-classify
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt7-infra:
+    name: RT-7 probe infra
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-7'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Infrastructure phase (probe)
+        run: |
+          echo "RT-7: this probe fails in its infrastructure phase, before its science step starts"
+          exit 1
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            sh -c 'echo "RT-7: the no-op science step; it must never start here"'
+
+  rt7-science:
+    name: RT-7 probe science
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-7'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Infrastructure phase (probe)
+        run: |
+          echo "RT-7: the infrastructure phase succeeds"
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            sh -c 'echo "RT-7: the no-op science step started, and fails now on purpose"; exit 1'
+
+  rt7-classify:
+    name: RT-7 classify
+    needs: [gate, rt7-infra, rt7-science]
+    if: ${{ !cancelled() && github.run_attempt == '1' && needs.gate.result == 'success' && inputs.test == 'RT-7' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'RT-7: one probe INFRA, the other SCIENCE'
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness classify --test RT-7 --repo-slug "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --out out/rt7.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt7.json || exit 1
+          exit "$rc"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-7-classify
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt8:
+    name: RT-8 storage, retention and billing
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-8'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth2q2-gate
+          path: out/gate
+
+      - name: 'RT-8: two billing readings, the release, the artifacts and the cache'
+        run: |
+          set -uo pipefail
+          rc=0
+          python .github/gates/auth2q2_readiness.py rt8 --repo-slug "$GITHUB_REPOSITORY" --gate out/gate/gate.json \
+            --out out/rt8.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt8.json || exit 1
+          exit "$rc"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-8
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt9:
+    name: RT-9 billing guard
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-9'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth2q2-gate
+          path: out/gate
+
+      - name: 'RT-9: the gate''s ledger against the Actions API, and the breach fixtures'
+        run: |
+          set -uo pipefail
+          rc=0
+          python .github/gates/auth2q2_readiness.py rt9 --repo-slug "$GITHUB_REPOSITORY" --gate out/gate/gate.json \
+            --out out/rt9.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt9.json || exit 1
+          exit "$rc"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-9
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt10-probe:
+    name: RT-10 probe
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-10'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Run into the 2-minute timeout
+        run: |
+          echo "RT-10: this job runs into its 2-minute timeout on purpose"
+          sleep 600
+
+  rt10-classify:
+    name: RT-10 classify
+    needs: [gate, rt10-probe]
+    if: ${{ !cancelled() && github.run_attempt == '1' && needs.gate.result == 'success' && inputs.test == 'RT-10' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'RT-10: the probe bills its timeout + 1'
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness classify --test RT-10 --repo-slug "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID" \
+            --out out/rt10.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt10.json || exit 1
+          exit "$rc"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-10-classify
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  rt11:
+    name: RT-11 engine data path
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-11'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      ADDRESS: ${{ needs.gate.outputs.address }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dependencies (arch and its closure hash-pinned)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install --require-hashes --no-deps -r research/auth2/requirements-auth2.txt
+          pip check
+
+      - name: Restore the snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.harness restore --address "$ADDRESS" --commit "$GITHUB_SHA" \
+            --dest "$RUNNER_TEMP/snapshot" \
+            --assets-dir "$RUNNER_TEMP/assets" --expect-source release --manifest-out "$RUNNER_TEMP/manifest.json" \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/receipt.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify the snapshot before science
+        run: |
+          python -m auth2q2.harness verify --address "$ADDRESS" --manifest "$RUNNER_TEMP/manifest.json" \
+            --dest "$RUNNER_TEMP/snapshot" --out out/verify.json
+
+      - name: Science phase (network removed)
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env "PATH=$PATH" "PYTHONPATH=$PYTHONPATH" "HOME=$HOME" \
+            python -m auth2q2.harness engine --repo . --cache "$RUNNER_TEMP/snapshot" --work "$RUNNER_TEMP/work" \
+            --out out/science.json
+
+      - name: RT-11 verdict, published
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-11 --job "RT-11 engine data path" --repo . \
+            --out out/rt11.json out/receipt.json out/science.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt11.json || exit 1
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-11
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
