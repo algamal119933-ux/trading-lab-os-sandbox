@@ -77,6 +77,13 @@ research/auth2/**
 tests/test_auth2_*.py
 tests/fixtures/auth2_*
 
+# -- AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling (snapshot, offline science, attempt classes, compute
+#    proof, readiness plan, gate, harness and record; Owner decisions OD-S1 to OD-S8). The gate and the two
+#    workflows are under .github/** above -------------------------------------------------------------------
+research/auth2q2/**
+tests/test_auth2q2_*.py
+tests/fixtures/auth2q2_*
+
 # -- CEA-1 gate tests -------------------------------------------------------
 tests/test_merge_law.py
 tests/test_resolve_next_unit.py
