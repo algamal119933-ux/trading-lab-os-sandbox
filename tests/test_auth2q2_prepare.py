@@ -32,6 +32,14 @@ KL, FU = D.SPOT_PREFIX, D.FUNDING_PREFIX
 UNICODE = "币安人生USDT"
 
 
+@pytest.fixture(autouse=True)
+def _outside_actions(monkeypatch):
+    """The CLIs stamp GitHub Actions' run identity into their records; in CI those variables belong to the CI
+    run, not to the fixtures, so every test here starts without them and sets what it needs."""
+    for k in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_EVENT_PATH"):
+        monkeypatch.delenv(k, raising=False)
+
+
 def kline(sym: str, month: str, tf: str = "1h") -> str:
     return f"{KL}{sym}/{tf}/{sym}-{tf}-{month}.zip"
 

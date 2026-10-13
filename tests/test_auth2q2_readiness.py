@@ -35,6 +35,14 @@ DIGEST = "sha256:" + "d" * 64
 TAG = RL.TAG_PREFIX + "d" * 64
 
 
+@pytest.fixture(autouse=True)
+def _outside_actions(monkeypatch):
+    """The CLIs stamp GitHub Actions' run identity into their records; in CI those variables belong to the CI
+    run, not to the fixtures, so every test here starts without them and sets what it needs."""
+    for k in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_EVENT_PATH"):
+        monkeypatch.delenv(k, raising=False)
+
+
 def iso(t: datetime) -> str:
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 

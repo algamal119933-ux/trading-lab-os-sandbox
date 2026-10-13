@@ -34,6 +34,14 @@ CI_ID = 9000
 RUN_IDS = {t: 1000 + i for i, t in enumerate(PL.RUN_TESTS)}
 
 
+@pytest.fixture(autouse=True)
+def _outside_actions(monkeypatch):
+    """The CLIs stamp GitHub Actions' run identity into their records; in CI those variables belong to the CI
+    run, not to the fixtures, so every test here starts without them and sets what it needs."""
+    for k in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_EVENT_PATH"):
+        monkeypatch.delenv(k, raising=False)
+
+
 def notes(title: str, obj) -> list[dict]:
     body = json.dumps(obj, sort_keys=True).encode()
     return [{"title": title, "message": line.split("::", 2)[2]}

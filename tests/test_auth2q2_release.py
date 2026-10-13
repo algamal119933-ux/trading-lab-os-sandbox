@@ -29,6 +29,14 @@ PARENT = "b" * 40
 
 # -- the snapshot files ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _outside_actions(monkeypatch):
+    """The CLIs stamp GitHub Actions' run identity into their records; in CI those variables belong to the CI
+    run, not to the fixtures, so every test here starts without them and sets what it needs."""
+    for k in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_EVENT_PATH"):
+        monkeypatch.delenv(k, raising=False)
+
+
 def snapshot_files(tmp: Path, name: str = "out", salt: str = "") -> Path:
     """manifest.json, snapshot.tar and prepare-record.json as the preparation writes them."""
     root = tmp / f"tree-{name}"
