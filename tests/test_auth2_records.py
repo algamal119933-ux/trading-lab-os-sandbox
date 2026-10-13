@@ -1,7 +1,7 @@
 """AUTH-2 records (FUNNEL_LAW_2.md §FINAL_AUTH2_SPEC "Records the package needs"): the funnel
-law, the preregistrations and the charter equal what the code produces, every safety constant
-is pinned, the trial ledger binds every preregistration, and the Cycle-2 errata changes nothing
-it must not.
+law, the preregistrations and the charter equal what the code produces (the charter with its
+status CLOSED, AUTH2-GOVERNANCE-CLOSURE-1), every safety constant is pinned, the trial ledger
+binds every preregistration, and the Cycle-2 errata changes nothing it must not.
 
 PAPER / RESEARCH ONLY.
 """
@@ -29,8 +29,28 @@ def sha(rel: str) -> str:
     return hashlib.sha256((REPO / rel).read_bytes()).hexdigest()
 
 
-def test_committed_preregistrations_and_charter_are_exactly_what_the_code_produces():
-    assert MP.main(["--check"]) == 0
+# AUTH2-GOVERNANCE-CLOSURE-1 (Owner decision OD-C3, 2026-10-12): the charter's status is CLOSED. The
+# generator is pinned by sha256 in every preregistration (run_node.code_sha256), so it is not edited and
+# still writes the as-run charter, status ACTIVE. Everything else stays byte-exact.
+CLOSURE_RECORD = "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/governance_closure.proposed.json"
+
+
+def test_committed_preregistrations_and_charter_are_exactly_what_the_code_produces_closed():
+    files = MP.build()
+    as_run = files.pop(RN.PROGRAM_REL)
+    for rel, body in files.items():
+        assert (REPO / rel).read_bytes() == body, rel
+    assert sorted(p.relative_to(REPO).as_posix() for p in (REPO / MP.PREREG_DIR).glob("*.json")) == sorted(files)
+    # the committed charter is the code's charter with only its status set to CLOSED
+    assert (REPO / RN.PROGRAM_REL).read_bytes() == MP.dumps({**json.loads(as_run), "status": "CLOSED"}).encode()
+    # and the closure record names the code's as-run charter by its sha256
+    record = json.loads((REPO / CLOSURE_RECORD).read_text())
+    assert record["program"]["charter_sha256"] == hashlib.sha256(as_run).hexdigest()
+
+
+def test_the_generator_check_now_differs_only_in_the_closed_charter(capsys):
+    assert MP.main(["--check"]) == 2
+    assert capsys.readouterr().out.splitlines() == [f"DIFFERS  {RN.PROGRAM_REL}", "AUTH2_PREREG_CHECK = FAIL"]
 
 
 def test_every_preregistration_validates_and_is_paper_only():

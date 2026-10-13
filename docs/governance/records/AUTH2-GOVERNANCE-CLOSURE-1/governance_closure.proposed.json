@@ -1,0 +1,296 @@
+{
+ "authority": {
+  "merge": "OWNER_MERGE_REQUIRED (CEA-1 §11: no generator exists today, so every CLOSE record is OWNER_MERGE_REQUIRED)",
+  "owner_decisions": [
+   "2026-10-12T22:13:45Z decision card, option A: Close + successor",
+   "2026-10-12T22:14:10Z OWNER DECISION: OPTION A, CLOSE + SUCCESSOR, WITH SEPARATE GOVERNANCE AND ENGINEERING GATES"
+  ]
+ },
+ "classification": {
+  "distinguished_from": {
+   "charter_stop_program": "a C1 integrity failure (INVALID_RUN) whose one technical retry is spent. D0 produced no INVALID_RUN, because it never reached a comparison.",
+   "scientific_hypothesis_failure": "a node result that ends a family under the law (REJECTED, INCONCLUSIVE, LAW_INVALID, INCONCLUSIVE_UNDERPOWERED, DATA_LIMITED). No node produced a result."
+  },
+  "engine_invocations": 0,
+  "hypotheses_evaluated": 0,
+  "node_results": 0,
+  "scientific_outcome": "NONE",
+  "statement": "AUTH-2 stopped because its data-lock node D0 ended twice without a result. No hypothesis was evaluated, so this closure is evidence neither for nor against A1, A2 or A3.",
+  "terminal": "OPERATIONAL_EXHAUSTION"
+ },
+ "compute": {
+  "caps": {
+   "invocations": 240,
+   "minutes": 4000
+  },
+  "closure_minutes": 0,
+  "closure_runs": [],
+  "engine_invocations": 0,
+  "guard_minutes": 5,
+  "guard_runs": [
+   {
+    "billed_minutes": 2,
+    "conclusion": "failure",
+    "decisions": [
+     "NO_DISPATCH"
+    ],
+    "jobs": 2,
+    "run_attempt": 2,
+    "run_id": 38184895792
+   },
+   {
+    "billed_minutes": 1,
+    "conclusion": "failure",
+    "decisions": [
+     "NO_DISPATCH"
+    ],
+    "jobs": 1,
+    "run_attempt": 1,
+    "run_id": 38220977904
+   },
+   {
+    "billed_minutes": 1,
+    "conclusion": "success",
+    "decisions": [
+     "DISPATCH"
+    ],
+    "jobs": 1,
+    "run_attempt": 1,
+    "run_id": 38272303141
+   },
+   {
+    "billed_minutes": 1,
+    "conclusion": "success",
+    "decisions": [
+     "DISPATCH"
+    ],
+    "jobs": 1,
+    "run_attempt": 1,
+    "run_id": 38286343057
+   }
+  ],
+  "minutes_ledger": 157,
+  "node_minutes": 152,
+  "node_runs": [
+   38273417548,
+   38286502721
+  ]
+ },
+ "dry_run": true,
+ "effects": [
+  "AUTH-2 is closed: no AUTH-2 node, guard or closure job is dispatched after the Owner merges this",
+  "the 14 trial IDs are never preregistered again (the trial ledger refuses a second PREREGISTERED record for a trial ID)",
+  "a successor program registers new trial IDs and cites this record by its sha256"
+ ],
+ "evidence": {
+  "as_of_utc": "2026-10-12T22:29:19Z",
+  "evidence_sha256": "bbece74c7757c4c8030293b34c1c7e74615997d7d3bbd13b2cd0c1dc98394c3f"
+ },
+ "exhausted_node": {
+  "guard_decision_now": {
+   "decision": "NO_DISPATCH",
+   "inputs": "the pinned dispatch_guard.decide over the evidenced D0 runs, with billing set readable and ample so that only the attempt and cap rules can refuse",
+   "reasons": [
+    "ATTEMPTS: D0 part 1 already ran 2 time(s); the retry is spent"
+   ]
+  },
+  "max_attempts": 2,
+  "node": "D0",
+  "part": 1,
+  "runs": [
+   {
+    "billed_minutes": 1,
+    "cause": "run_node refused in its program check: a one-commit checkout made every PREREGISTERED record look older than the program (fixed by PR #63, merged as 8013e216)",
+    "cause_basis": "the node step failed within its first second; PR #63 and its tests",
+    "conclusion": "failure",
+    "head_sha": "410418e3ac436683b75d5c338ce640fb5e7dab37",
+    "node_step": {
+     "completed_at": "2026-10-12T15:53:30Z",
+     "conclusion": "failure",
+     "name": "Run the node (refuses unless the program, ledger and DAG allow it)",
+     "number": 10,
+     "started_at": "2026-10-12T15:53:30Z"
+    },
+    "result": "none",
+    "run_id": 38273417548
+   },
+   {
+    "billed_minutes": 151,
+    "cause": "the 150-minute job timeout cancelled the node step while dataset_v3.build fetched the archive (27,898 files) one file at a time; the archive cache restore took under one second, so no cache was found",
+    "cause_basis": "inferred from the step timings and the code path, because job logs are not readable (HTTP 403); see d0-run-38286502721-timeout.md",
+    "conclusion": "cancelled",
+    "head_sha": "8013e216075fcdfdf1068ef1b43b52aea5747d78",
+    "node_step": {
+     "completed_at": "2026-10-12T20:17:34Z",
+     "conclusion": "cancelled",
+     "name": "Run the node (refuses unless the program, ledger and DAG allow it)",
+     "number": 10,
+     "started_at": "2026-10-12T17:47:49Z"
+    },
+    "result": "none",
+    "run_id": 38286502721
+   }
+  ],
+  "trial_id": "TRIAL-AUTH2-D0"
+ },
+ "law_gap": "RETRY covers a job that ends without a result, but the pinned closure's STOP_PROGRAM path needs an INVALID_RUN result, so a retry spent without a result has no terminal.",
+ "preserved": [
+  "both D0 runs and their billed minutes",
+  "every guard run and its billed minutes",
+  "the 17 preregistrations, unchanged",
+  "the 14 PREREGISTERED trial-ledger records, unchanged",
+  "the charter, FUNNEL_LAW_2 and every code pin, unchanged"
+ ],
+ "program": {
+  "charter_path": "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json",
+  "charter_sha256": "d6c057789fd8410aba39bebdacd2053c7893e14f4ed97fc38427b7ba65387a40",
+  "funnel_law_sha256": "8aa91f5ec18cca488fdf3b4051f24fb41c11070faddafe5f866631d0c3234da5",
+  "id": "AUTH-2-DISCOVERY-QUALIFICATION-1",
+  "main_sha": "8013e216075fcdfdf1068ef1b43b52aea5747d78"
+ },
+ "real_money_authorized": false,
+ "record_id": "AUTH2-GOVERNANCE-CLOSURE-1",
+ "record_type": "PROGRAM_CLOSURE",
+ "schema_version": 1,
+ "status": "PROPOSED: binding only after the Owner merges it",
+ "trial_ledger_anchor": {
+  "auth2_preregistered": 14,
+  "auth2_terminal": 0,
+  "path": "research/records/trial_ledger.jsonl",
+  "records": 40,
+  "sha256": "9da92ae40d6b3aded94806c270e1b4f4ad737c606a6fd960d05615e0230616da",
+  "tip_digest": "87c8b0499bbaf9f51089cb04560cf045a37e55d378df701964d21f394fcce363"
+ },
+ "trials": {
+  "TRIAL-AUTH2-A1": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "SCIENTIFIC",
+   "node": "A1",
+   "preregistered_seq": 36,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-A2": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "SCIENTIFIC",
+   "node": "A2",
+   "preregistered_seq": 37,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-A3": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "SCIENTIFIC",
+   "node": "A3",
+   "preregistered_seq": 38,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-CAL-A1": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "CALIBRATION_STAT",
+   "node": "CAL-A1",
+   "preregistered_seq": 27,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-CAL-A2": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "CALIBRATION_STAT",
+   "node": "CAL-A2",
+   "preregistered_seq": 28,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-CAL-A3": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "CALIBRATION_STAT",
+   "node": "CAL-A3",
+   "preregistered_seq": 29,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-D0": {
+   "governance_status": "CLOSED_NOT_EVALUATED",
+   "kind": "DATA_LOCK",
+   "node": "D0",
+   "preregistered_seq": 26,
+   "reason": "operational exhaustion: no result after its one technical retry",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-HOLM": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "HOLM",
+   "node": "HOLM",
+   "preregistered_seq": 39,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-N-A1": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "NULL_CALIBRATION",
+   "node": "N-A1",
+   "preregistered_seq": 33,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-N-A2": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "NULL_CALIBRATION",
+   "node": "N-A2",
+   "preregistered_seq": 34,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-N-A3": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "NULL_CALIBRATION",
+   "node": "N-A3",
+   "preregistered_seq": 35,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-PC-A1": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "POSITIVE_CONTROL",
+   "node": "PC-A1",
+   "preregistered_seq": 30,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-PC-A2": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "POSITIVE_CONTROL",
+   "node": "PC-A2",
+   "preregistered_seq": 31,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  },
+  "TRIAL-AUTH2-PC-A3": {
+   "governance_status": "CLOSED_NOT_RUN",
+   "kind": "POSITIVE_CONTROL",
+   "node": "PC-A3",
+   "preregistered_seq": 32,
+   "reason": "never reached: D0 produced no result",
+   "trial_ledger_terminal": "none: the record stays open"
+  }
+ },
+ "why_not_trial_ledger": [
+  {
+   "clause": "FUNNEL_LAW_2.md §DAG_OPERATIONS LEDGER",
+   "finding": "D0 maps to COMPLETED with its terminal state, FAILED on INVALID_RUN, or ABORTED NOT_RUN if never reached; D0 has no result, no INVALID_RUN and was reached twice"
+  },
+  {
+   "clause": "FUNNEL_LAW_2.md §DAG_OPERATIONS CLOSURE",
+   "closure_py_refusals": {
+    "normal": "AUTH2_NODE_REFUSED: the DAG is not exhausted: next [('D0', 1)], retry []",
+    "stop_program": "AUTH2_NODE_REFUSED: STOP_PROGRAM needs a node whose last result is INVALID_RUN"
+   },
+   "finding": "the closure record is written by research/auth2/closure.py, which refuses this state"
+  },
+  {
+   "clause": "research/auth2/IMPLEMENTATION_NOTES.md, Ledger",
+   "finding": "Terminal records are appended at closure only, mapped as §DAG_OPERATIONS states."
+  }
+ ]
+}

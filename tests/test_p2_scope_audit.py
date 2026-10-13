@@ -999,6 +999,27 @@ AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE: dict[str, str] = {
 }
 
 
+# PR #63, merged. Two parents: 410418e3 (main before, AUTH_2_USAGE_REPORT_REPOSITORY_NAME) + 7e21a418
+# (the claude/auth-2-node-checkout-history branch).
+AUTH_2_NODE_CHECKOUT_HISTORY_MERGE = "8013e216075fcdfdf1068ef1b43b52aea5747d78"
+
+# AUTH-2 node checkout history (D0 run 38273417548 refused: every node's ledger record "older
+# than the program"). The node job checked out one commit, so the program check dated the
+# program by the dispatched commit instead of the commit that first added it. The node job
+# now fetches full history, as CI does. No gate, record, threshold or cap changes;
+# research/auth2/*.py untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_HISTORY = "AUTH-2 node checkout history"
+AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE: dict[str, str] = {
+    ".github/workflows/auth2.yml": f"{_HISTORY} — the node job fetches the history its program check reads",
+    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_HISTORY} — D0 run 38273417548 and its cause, recorded",
+    "tests/test_auth2_operator.py": f"{_HISTORY} — full-history checkout pinned; depth-1 refusal reproduced",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2 usage report repository name (PR #62) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1041,6 +1062,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
                                              AUTH_2_OWNER_BILLING_EVIDENCE_BRIDGE_SCOPE),
     "AUTH_2_USAGE_REPORT_REPOSITORY_NAME": (AUTH_2_USAGE_REPORT_REPOSITORY_NAME_MERGE,
                                             AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE),
+    "AUTH_2_NODE_CHECKOUT_HISTORY": (AUTH_2_NODE_CHECKOUT_HISTORY_MERGE, AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1048,18 +1070,24 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2 node checkout history (D0 run 38273417548 refused: every node's ledger record "older
-# than the program"). The node job checked out one commit, so the program check dated the
-# program by the dispatched commit instead of the commit that first added it. The node job
-# now fetches full history, as CI does. No gate, record, threshold or cap changes;
-# research/auth2/*.py untouched.
-_HISTORY = "AUTH-2 node checkout history"
+# AUTH2-GOVERNANCE-CLOSURE-1 (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
+# 2026-10-12, Gate 1: OD-C1 to OD-C7). AUTH-2 closes by a governance record outside the trial
+# ledger: OPERATIONAL_EXHAUSTION, scientific outcome NONE. The record folder holds the approved
+# bundle byte for byte. The charter's status becomes CLOSED and no other byte of it changes.
+# No ledger append, no dispatch, no operator change; research/auth2/*.py untouched.
+_CLOSURE = "AUTH2-GOVERNANCE-CLOSURE-1"
+_CLOSURE_DIR = "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/"
 BRANCH_SCOPE: dict[str, str] = {
-    ".github/workflows/auth2.yml": f"{_HISTORY} — the node job fetches the history its program check reads",
-    "research/auth2/IMPLEMENTATION_NOTES.md": f"{_HISTORY} — D0 run 38273417548 and its cause, recorded",
-    "tests/test_auth2_operator.py": f"{_HISTORY} — full-history checkout pinned; depth-1 refusal reproduced",
+    **{f"{_CLOSURE_DIR}{f}": f"{_CLOSURE} — the Owner-approved bundle, byte for byte [OD-C1, OD-C2]"
+       for f in ("evidence.json", "governance_closure.proposed.json", "trial_ledger_option.check.json",
+                 "SHA256SUMS", "closure_proposal.py")},
+    f"{_CLOSURE_DIR}README.md": f"{_CLOSURE} — the closure record; preservation steps [OD-C1, OD-C5, OD-C6]",
+    "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json": f"{_CLOSURE} — status CLOSED, nothing else [OD-C3]",
+    "tests/test_auth2_records.py": f"{_CLOSURE} — the charter is the code's, with only its status closed",
+    "tests/test_auth2_governance_closure.py":
+        f"{_CLOSURE} — the approved bundle, append-only; charter, ledger and rebuild checked",
     "tests/test_p2_scope_audit.py":
-        "AUTH-2 usage report repository name (PR #62) pinned to its merge; this branch's scope",
+        "AUTH-2 node checkout history (PR #63) pinned to its merge; this branch's scope; the record admitted",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1177,8 +1205,12 @@ MERGED_STAGES = sorted(MERGED_STAGE_SCOPES)
 # added there between Mq and the freeze would break the equivalence proof.
 # "charters/" and "verification/" arrive with CEA-1 (AUTH-1): the program charters
 # and the first charter's product directory. Both are outside RUNTIME_TREE.
+# The AUTH-2 governance closure record is admitted by its own folder, not by docs/governance/
+# (Owner decision OD-C1, 2026-10-12): the record, its evidence, its generator and any
+# append-only errata.
 ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/",
-                    ".github/workflows/", ".github/gates/", "charters/", "verification/")
+                    ".github/workflows/", ".github/gates/", "charters/", "verification/",
+                    "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/")
 # The master planning SSOT is admitted by its exact path, not by a docs/governance/
 # prefix: one non-authorizing planning document is the whole of what that
 # directory is for, and a prefix would let anything else arrive beside it.
