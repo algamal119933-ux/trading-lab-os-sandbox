@@ -1,0 +1,299 @@
+name: AUTH2Q2 readiness, preparation and snapshot release (RT-1 to RT-3; manual dispatch only)
+
+# AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 readiness (Owner decisions OD-S1 to OD-S8 of 2026-10-12; review
+# sections 3 and 4). The one readiness workflow that reads market data over the network (Binance's public
+# archive, in the preparation job only) and the one that holds the only job allowed to write: the snapshot
+# release job, contents: write (OD-S3). Every other job here is read-only.
+#
+#   RT-1  prepare the snapshot cold and publish it as the immutable release (research/auth2q2/prepare.py,
+#         release.py): every archive file checksum-verified, the counts bound to the Dataset V3 lock, the
+#         release published draft-first with every digest checked, and removed again unless GitHub reports it
+#         immutable
+#   RT-2  prepare it again, cold, and compare it with the release: the same manifest digest and tar sha256
+#   RT-3  try to change the published release with the release job's write token, and to write anything with
+#         a read-only token: every write must be refused
+#
+# Every run is dispatched by the Owner, one at a time, with the billing evidence in the last three inputs, and
+# starts with the readiness gate (.github/gates/auth2q2_readiness.py). The test's jobs run only after it says
+# DISPATCH: the Owner's evidence beside this month's usage report (AUTH2_BILLING_TOKEN, the gate step only),
+# serial, the 300-minute readiness ledger (OD-S4), the R_m reserve and the test's own preconditions. A re-run is
+# refused. workflow_dispatch only. Nothing here runs a strategy, a hypothesis, a trial or an engine, writes the
+# trial ledger, commits or pushes. PAPER / RESEARCH ONLY.
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Readiness test: RT-1 first, then RT-2 and RT-3"
+        type: choice
+        required: true
+        options: [RT-1, RT-2, RT-3]
+      remaining_included_linux_minutes:
+        description: "Owner: remaining included Linux minutes shown on the billing page now (digits only)"
+        type: string
+        required: true
+      actions_budget_usd_zero:
+        description: "Owner: the account's Actions budget is USD 0"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
+      stop_usage_enabled:
+        description: "Owner: that budget stops usage when it is reached"
+        type: choice
+        required: true
+        default: NOT_CONFIRMED
+        options: [NOT_CONFIRMED, CONFIRMED]
+
+run-name: AUTH2Q2-READINESS ${{ inputs.test }}
+
+permissions: {}
+
+concurrency:
+  group: auth2q2-readiness
+  cancel-in-progress: false
+
+env:
+  PYTHONPATH: research
+
+jobs:
+  gate:
+    name: Readiness gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      address: ${{ steps.outputs.outputs.address }}
+      tag: ${{ steps.outputs.outputs.tag }}
+      hex: ${{ steps.outputs.outputs.hex }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'Gate: readiness gate (Owner billing evidence, serial, 300-minute ledger, R_m, never re-run), published'
+        run: |
+          set -euo pipefail
+          python .github/gates/auth2q2_readiness.py gate --test "$TEST" --repo-slug "$GITHUB_REPOSITORY" \
+            --out out/gate.json --annotate
+        env:
+          TEST: ${{ inputs.test }}
+          GH_TOKEN: ${{ github.token }}
+          AUTH2_BILLING_TOKEN: ${{ secrets.AUTH2_BILLING_TOKEN }}
+
+      - name: 'Gate: paper safety'
+        run: python3 scripts/paper_guard.py --config freqtrade/user_data/config.paper.json.example
+
+      - name: The snapshot the gate admitted this run to read
+        id: outputs
+        run: python .github/gates/auth2q2_readiness.py outputs --gate out/gate.json >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-gate
+          path: out/gate.json
+          if-no-files-found: error
+          retention-days: 90
+
+  prepare:
+    name: Cold preparation
+    needs: gate
+    if: github.run_attempt == '1' && (inputs.test == 'RT-1' || inputs.test == 'RT-2')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare the snapshot cold (32 workers, every file checksum-verified, bound to the lock)
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.prepare run --repo . --work "$RUNNER_TEMP/archive" --out-dir "$RUNNER_TEMP/snapshot" \
+            --workers 32 2>&1 | tee out/prepare.log
+          cp "$RUNNER_TEMP/snapshot/prepare-record.json" out/
+
+      - name: 'RT-1: every preparation check holds before anything is published (the release is immutable)'
+        if: inputs.test == 'RT-1'
+        run: python -m auth2q2.harness prep-check --record "$RUNNER_TEMP/snapshot/prepare-record.json" --repo .
+
+      - name: Hand the snapshot to the release job (this run's own cache entry)
+        if: inputs.test == 'RT-1'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/snapshot
+          key: auth2q2-prep-${{ github.run_id }}
+
+      - name: 'RT-2: the second cold preparation is the published snapshot, byte for byte'
+        if: inputs.test == 'RT-2'
+        run: |
+          set -euo pipefail
+          python -m auth2q2.harness compare-release --dir "$RUNNER_TEMP/snapshot" --repo . \
+            --repo-slug "$GITHUB_REPOSITORY" --out out/rt2.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: RT-2 verdict, published
+        if: ${{ !cancelled() && inputs.test == 'RT-2' }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          if [ ! -f out/rt2.json ]; then
+            python -m auth2q2.harness fail --test RT-2 --job "Cold preparation" --out out/rt2.json \
+              --reason "the cold preparation or its comparison with the release did not finish" || true
+          fi
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt2.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-${{ inputs.test }}-preparation
+          path: |
+            out/*.json
+            out/prepare.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  release:
+    name: 'Snapshot release (contents: write)'
+    needs: [gate, prepare]
+    if: >-
+      ${{ !cancelled() && github.run_attempt == '1' && needs.gate.result == 'success' &&
+      ((inputs.test == 'RT-1' && needs.prepare.result == 'success') || inputs.test == 'RT-3') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.gate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'RT-1: take the prepared snapshot (this run''s own cache entry)'
+        if: inputs.test == 'RT-1'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/snapshot
+          key: auth2q2-prep-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - name: 'RT-1: publish the immutable release (draft first, digests checked, immutable or removed)'
+        if: inputs.test == 'RT-1'
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.release publish --repo-slug "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/snapshot" \
+            --commit "$GITHUB_SHA" --out out/publish.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: RT-1 verdict, published
+        if: ${{ !cancelled() && inputs.test == 'RT-1' }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-1 --job "Snapshot release (contents: write)" --repo . \
+            --out out/rt1.json "$RUNNER_TEMP/snapshot/prepare-record.json" out/publish.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt1.json || exit 1
+          exit "$rc"
+
+      - name: 'RT-3: take the release''s small record asset, to restore it if a probe got through'
+        if: inputs.test == 'RT-3'
+        run: |
+          set -euo pipefail
+          mkdir -p out "$RUNNER_TEMP/rt3"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern prepare-record.json --dir "$RUNNER_TEMP/rt3"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 'RT-3: try to change the immutable release with this job''s write token'
+        if: inputs.test == 'RT-3'
+        run: |
+          set -euo pipefail
+          python -m auth2q2.release probe-immutable --repo-slug "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/rt3" \
+            --out out/rt3-immutable.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: RT-3 verdict (immutability), published
+        if: ${{ !cancelled() && inputs.test == 'RT-3' }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-3 --job "Snapshot release (contents: write)" --repo . \
+            --out out/rt3.json out/rt3-immutable.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt3.json || exit 1
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-${{ inputs.test }}-release
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  read-only-probe:
+    name: Read-only probe
+    needs: gate
+    if: github.run_attempt == '1' && inputs.test == 'RT-3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 'RT-3: try to write with a contents: read token'
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          python -m auth2q2.release probe-read-only --repo-slug "$GITHUB_REPOSITORY" --out out/rt3-read-only.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: RT-3 verdict (read-only), published
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          rc=0
+          python -m auth2q2.harness verdict --test RT-3 --job "Read-only probe" --repo . --out out/rt3.json \
+            out/rt3-read-only.json || rc=$?
+          python .github/gates/auth2q2_readiness.py annotate --title AUTH2Q2_RT --file out/rt3.json || exit 1
+          exit "$rc"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auth2q2-RT-3-read-only
+          path: out/*.json
+          if-no-files-found: warn
+          retention-days: 30
