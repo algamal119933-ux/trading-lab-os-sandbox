@@ -8,6 +8,10 @@ actor as the Actions API reports it; a node or closure run is bound to that guar
 evidence digest; A_m is the month's first node run's. ``World`` is a synthetic GitHub that drives the whole
 bridge end to end: the Owner's guard run, the executor's check, the node's in-job guard and the next month.
 
+The program charter (Owner decision OD-C4): nothing dispatches unless the AUTH-2 charter says ACTIVE, at the
+Owner's guard, the executor's check and the in-job guard alike. ``World`` reads the charter AUTH-2 ran under
+(status ACTIVE) unless a test closes it; this checkout's own charter is CLOSED (AUTH2-GOVERNANCE-CLOSURE-1).
+
 PAPER / RESEARCH ONLY. Nothing here calls GitHub: every function under test is pure or runs against ``World``.
 """
 
@@ -22,6 +26,7 @@ import json
 import math
 import re
 import subprocess
+import sys
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -50,11 +55,18 @@ USAGE_PATH = f"/users/{OWNER}/settings/billing/usage"
 OCT = datetime(2026, 10, 12, 0, 5, tzinfo=timezone.utc)
 TOKEN = "TESTONLY-billing-token-0123456789"  # not a token format: the hygiene gate scans for real ones
 
+# The AUTH-2 charter: CLOSED in this checkout since AUTH2-GOVERNANCE-CLOSURE-1 (OD-C3); as run, it said ACTIVE.
+CHARTER_CLOSED = (REPO / OP.CHARTER_REL).read_bytes()
+CHARTER_AS_RUN = (json.dumps({**json.loads(CHARTER_CLOSED), "status": "ACTIVE"}, indent=1, sort_keys=True,
+                             ensure_ascii=False) + "\n").encode()
+ACTIVE = {"path": OP.CHARTER_REL, "rev": "working tree", "status": "ACTIVE",
+          "sha256": hashlib.sha256(CHARTER_AS_RUN).hexdigest()}
+
 
 def state(**kw) -> dict:
     s = {"now": "2026-11-03T10:00:00Z", "self_run_id": None,
          "billing": {"readable": True, "remaining_included_minutes": 2000, "budget_usd_zero": True},
-         "runs": []}
+         "runs": [], "charter": ACTIVE}
     s.update(kw)
     return s
 
@@ -208,7 +220,7 @@ def record(node="D0", part=1, decision=DG.DISPATCH, checked="2026-11-03T09:55:30
     ev = evidence(run_id=run_id, node=node, part=part, sha=sha) if ev is None else ev
     body = {"node": node, "part": part, "decision": decision, "mode": "pre-dispatch", "checked_utc": checked,
             "run_id": run_id, "sha": sha, "run_attempt": 1, "reasons": [] if decision == DG.DISPATCH else ["X"],
-            "billing": billing(ev) if bill is None else bill}
+            "billing": billing(ev) if bill is None else bill, "charter": ACTIVE}
     body.update(kw)
     return notes_from(OP.annotation_lines(OP.RECORD, (json.dumps(body) + "\n").encode()))
 
@@ -303,6 +315,15 @@ def test_a_fresh_successful_dispatch_record_on_main_dispatches():
     (guard_run(), record(bill=billing(evidence(), usage_evidence={**USAGE_OK, "endpoint": "/x"})), [],
      "usage report is not verified"),
     (guard_run(), record(bill=billing(evidence(), usage_evidence=None)), [], "usage report is not verified"),
+    # the record shows the program charter ACTIVE (OD-C4)
+    (guard_run(), record(charter={**ACTIVE, "status": "CLOSED"}), [], "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter={**ACTIVE, "status": "active"}), [], "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter={**ACTIVE, "error": "OSError: unreadable"}), [], "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter={"path": OP.CHARTER_REL, "rev": "working tree", "error": "x"}), [],
+     "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter={**ACTIVE, "error": ""}), [], "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter=None), [], "CHARTER_NOT_ACTIVE"),
+    (guard_run(), record(charter="ACTIVE"), [], "CHARTER_NOT_ACTIVE"),
 ])
 def test_anything_short_of_that_never_dispatches(run, notes, later, why):
     d = check(run, notes, later)
@@ -410,8 +431,9 @@ def zipped(files: dict[str, bytes]) -> bytes:
 
 class World:
     """One repository's AUTH-2 runs as the Actions API reports them (jobs of every attempt, artifacts,
-    annotations) and the account's billing usage report. The operator runs against it unchanged: only
-    dispatch_guard's two readers, the billing reader and the operator's clock are replaced."""
+    annotations), the account's billing usage report and the AUTH-2 charter. The operator runs against it
+    unchanged: only dispatch_guard's two readers, the billing reader, the charter file reader and the operator's
+    clock are replaced."""
 
     def __init__(self, monkeypatch, capsys, tmp_path):
         self.mp, self.capsys, self.tmp = monkeypatch, capsys, tmp_path
@@ -423,11 +445,14 @@ class World:
         self.billing_calls: list = []
         self.unexpected: list = []
         self.printed: list = []
+        self.charter: dict = {None: CHARTER_AS_RUN}  # by checkout: None, a job's own; a sha, that main
+        self.charter_reads: list = []
         self.clock = type("Clock", (datetime,), {"at": NOW, "now": classmethod(lambda cls, tz=None: cls.at)})
         monkeypatch.setattr(OP, "datetime", self.clock)
         monkeypatch.setattr(DG, "_api", self.api)
         monkeypatch.setattr(DG, "_api_bytes", self.api_bytes)
         monkeypatch.setattr(OP, "billing_get", self.billing)
+        monkeypatch.setattr(OP, "charter_bytes", self.charter_bytes)
         monkeypatch.setenv("AUTH2_BILLING_TOKEN", TOKEN)
         monkeypatch.setenv("GH_TOKEN", "workflow-token")
         for k in ("GITHUB_EVENT_PATH", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA", "GITHUB_ACTOR",
@@ -471,6 +496,15 @@ class World:
     def billing(self, path, token):
         self.billing_calls.append((path, token))
         return self.usage or (200, {"usageItems": [usage_item(date=f"{self.clock.at:%Y-%m}-01")]})
+
+    def charter_bytes(self, rev=None, repo=None):
+        """The charter file in a job's checkout (``rev`` None) or at the main the executor checks; a main the
+        test does not name holds the checkout's. An exception stored there is raised, as a failed read is."""
+        self.charter_reads.append(rev)
+        raw = self.charter.get(rev, self.charter[None])
+        if isinstance(raw, Exception):
+            raise raw
+        return raw
 
     def add(self, rid, workflow, title, created, *, status="completed", conclusion="success", attempt=1,
             actor=OWNER_USER, sha=MAIN, minutes=1) -> dict:
@@ -674,6 +708,10 @@ PRE_DISPATCH_BREAKS = [
     ("cannot be reconciled", dict(setup=no_jobs)),
     ("run history not readable", dict(setup=lambda w: w.add(53, DG.WORKFLOW_FILE, "AUTH2 something",
                                                             "2026-11-01T00:00:00Z"))),
+    # nor while the program charter is not ACTIVE in the guard's checkout (OD-C4)
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: w.charter.update({None: CHARTER_CLOSED}))),
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: w.charter.update({None: FileNotFoundError(2, "No such file")}))),
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: w.charter.update({None: b"{"}))),
 ]
 
 
@@ -726,6 +764,11 @@ CHECK_BREAKS = [
     ("usage report is not verified", dict(setup=lambda w: republish(
         w, 100, lambda r: r["billing"]["usage_evidence"].update(verified=False)))),
     ("guard decided PARK", dict(setup=lambda w: republish(w, 100, lambda r: r.update(decision=DG.PARK)))),
+    # the charter at the main checked, and in the record (OD-C4)
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: w.charter.update({MAIN: CHARTER_CLOSED}))),
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: w.charter.update({MAIN: OSError("git cat-file: fatal: bad object")}))),
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: republish(w, 100, lambda r: r.pop("charter")))),
+    ("CHARTER_NOT_ACTIVE", dict(setup=lambda w: republish(w, 100, lambda r: r["charter"].update(status="CLOSED")))),
 ]
 
 
@@ -1353,3 +1396,350 @@ def test_earlier_attempts_of_a_re_run_node_run_are_counted(monkeypatch):
     runs[DG.WORKFLOW_FILE][0]["display_title"] = "something else"
     with pytest.raises(RuntimeError):
         OP.earlier_attempt_minutes("o/r")
+
+
+# -- the program charter: nothing dispatches unless it is ACTIVE (Owner decision OD-C4) ------------------------
+
+AS_RUN_SHA256 = "d6c057789fd8410aba39bebdacd2053c7893e14f4ed97fc38427b7ba65387a40"  # AUTH2-GOVERNANCE-CLOSURE-1
+CLOSED_SHA256 = "1472916afc5101ccf5e7c8d161684e4bd5a98e6f18aa275fab5cfc6b70d84ba6"
+EVIDENCE_COMMIT = "8013e216075fcdfdf1068ef1b43b52aea5747d78"  # the last main with the charter ACTIVE
+OD_C4_BASE = "f5c6bc332288c5968926ce536db0f1d4cb710f64"  # PR #64's merge: the charter CLOSED, no refusal yet
+DROP = object()
+HOLM_DONE = [{"id": 1, "node": "HOLM", "part": 1, "status": "completed", "conclusion": "success",
+              "created_at": "2026-11-01T00:00:00Z",
+              "jobs": [{"status": "completed", "started_at": "2026-11-01T00:00:00Z",
+                        "completed_at": "2026-11-01T00:02:00Z"}],
+              "guard": {"month": "2026-11", "a_m": 2000}}]
+
+
+def charter_with(**kw) -> bytes:
+    """The as-run charter with ``kw`` replacing fields (DROP removes one), written as the repository writes it."""
+    c = json.loads(CHARTER_AS_RUN)
+    for k, v in kw.items():
+        c.pop(k) if v is DROP else c.update({k: v})
+    return (json.dumps(c, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode()
+
+
+def reads(monkeypatch, raw):
+    """``read_charter`` over the file ``raw`` (bytes, or an exception the read raises)."""
+    def charter_bytes(rev=None, repo=None):
+        if isinstance(raw, Exception):
+            raise raw
+        return raw
+    monkeypatch.setattr(OP, "charter_bytes", charter_bytes)
+    return OP.read_charter()
+
+
+def refusal(status, rev="working tree") -> str:
+    return (f"CHARTER_NOT_ACTIVE: {OP.PROGRAM_ID} is {repr(status)[:60]} ({OP.CHARTER_REL} at {rev}), not "
+            "'ACTIVE'; no AUTH-2 node or closure may run")
+
+
+def test_the_charters_here_are_the_one_auth2_ran_under_and_the_closed_one():
+    assert hashlib.sha256(CHARTER_AS_RUN).hexdigest() == AS_RUN_SHA256 == ACTIVE["sha256"]
+    assert hashlib.sha256(CHARTER_CLOSED).hexdigest() == CLOSED_SHA256
+    assert json.loads(CHARTER_CLOSED)["status"] == "CLOSED"
+
+
+@pytest.mark.parametrize("node,part", [*((n, p) for n, plan in RN.NODES.items() for p in range(1, plan["parts"] + 1)),
+                                       (OP.CLOSURE, 1)])
+def test_auth2_is_closed_here_so_every_node_part_and_the_closure_are_refused(node, part):
+    """This checkout's charter, read as the guard reads its own checkout in Actions, refuses every node part and
+    the closure in a state that otherwise decides exactly as before, the refusal added last."""
+    charter = OP.read_charter()
+    assert charter == {"path": OP.CHARTER_REL, "rev": "working tree", "status": "CLOSED", "sha256": CLOSED_SHA256}
+    s = state(runs=HOLM_DONE) if node == OP.CLOSURE else state()
+    active = OP.decide(copy.deepcopy(s), [], node, part)
+    closed = OP.decide({**copy.deepcopy(s), "charter": charter}, [], node, part)
+    assert closed["decision"] == DG.NO_DISPATCH and closed["charter"] == charter
+    assert closed["reasons"] == active["reasons"] + [refusal("CLOSED")]
+
+
+def test_only_the_status_active_dispatches(monkeypatch):
+    assert reads(monkeypatch, CHARTER_AS_RUN) == ACTIVE
+    assert OP.decide(state(charter=OP.read_charter()), [], "D0", 1)["decision"] == DG.DISPATCH
+
+
+@pytest.mark.parametrize("status", ["CLOSED", "SUSPENDED", "DRAFT", "REVOKED", "PAUSED", "active", "Active",
+                                    " ACTIVE", "ACTIVE ", "ACTIVE\n", "АCTIVE", "", None, 0, 1, True,
+                                    ["ACTIVE"], {"status": "ACTIVE"}])
+def test_any_status_but_exactly_active_is_refused(monkeypatch, status):
+    charter = reads(monkeypatch, charter_with(status=status))
+    assert charter["status"] == status
+    d = OP.decide(state(charter=charter), [], "D0", 1)
+    assert d["decision"] == DG.NO_DISPATCH and d["reasons"] == [refusal(status)]
+
+
+@pytest.mark.parametrize("raw,why", [
+    (FileNotFoundError(2, "No such file or directory"), "FileNotFoundError"),
+    (OSError("git cat-file: fatal: invalid object name"), "OSError: git cat-file"),
+    (subprocess.TimeoutExpired(["git"], 60), "TimeoutExpired"),
+    (b"", "JSONDecodeError"),
+    (b'{"program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1", "status": "ACTIVE"', "JSONDecodeError"),
+    (b"\xff\xfe\xfd", "Error"),
+    (b"[" * 200000 + b"]" * 200000, "RecursionError"),
+    (b'["ACTIVE"]', "not the AUTH-2-DISCOVERY-QUALIFICATION-1 charter"),
+    (b'"ACTIVE"', "not the AUTH-2-DISCOVERY-QUALIFICATION-1 charter"),
+    (charter_with(program_id="AUTH-2-DISCOVERY-QUALIFICATION-2"), "not the AUTH-2-DISCOVERY-QUALIFICATION-1 charter"),
+    (charter_with(program_id=DROP), "not the AUTH-2-DISCOVERY-QUALIFICATION-1 charter"),
+    (charter_with(status=DROP), "or it has no status"),
+    (b'{"program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1", "status": "CLOSED", "status": "ACTIVE"}',
+     "duplicate keys ['status']"),
+    (b'{"program_id": "x", "program_id": "AUTH-2-DISCOVERY-QUALIFICATION-1", "status": "ACTIVE"}',
+     "duplicate keys ['program_id']"),
+    (CHARTER_AS_RUN.replace(b'"status": "ACTIVE"', b'"status": "CLOSED", "status": "ACTIVE"'),
+     "duplicate keys ['status']"),
+], ids=["missing", "git", "timeout", "empty", "truncated", "not-utf8", "deep", "array", "string", "other-program",
+        "no-program", "no-status", "status-twice", "program-twice", "status-twice-in-charter"])
+def test_a_charter_that_cannot_be_read_as_this_programs_is_refused(monkeypatch, raw, why):
+    charter = reads(monkeypatch, raw)
+    assert set(charter) == {"path", "rev", "error"} and why in charter["error"], charter
+    d = OP.decide(state(charter=charter), [], "D0", 1)
+    assert d["decision"] == DG.NO_DISPATCH and len(d["reasons"]) == 1
+    assert d["reasons"][0].startswith(f"CHARTER_NOT_ACTIVE: the {OP.PROGRAM_ID} charter is unreadable (")
+
+
+@pytest.mark.parametrize("charter", [DROP, None, {}, {"path": OP.CHARTER_REL}, "ACTIVE", ["ACTIVE"],
+                                     {**ACTIVE, "error": "x"}, {**ACTIVE, "error": ""}, {**ACTIVE, "error": None}])
+def test_a_decision_without_a_readable_charter_never_dispatches(charter):
+    s = state()
+    s.pop("charter") if charter is DROP else s.update(charter=charter)
+    d = OP.decide(s, [], "D0", 1)
+    assert d["decision"] == DG.NO_DISPATCH and len(d["reasons"]) == 1
+    assert d["reasons"][0].startswith(f"CHARTER_NOT_ACTIVE: the {OP.PROGRAM_ID} charter is unreadable (")
+
+
+@pytest.mark.parametrize("rev", ["8013e216", "--output=/tmp/x", "-p", "", "A" * 40, "a" * 39, "a" * 41, "HEAD",
+                                 "main", "origin/main", "a" * 40 + "\n", f"{'a' * 40}:x"])
+def test_check_dispatch_reads_the_charter_only_at_a_full_commit_sha(monkeypatch, rev):
+    """``check-dispatch --main-sha`` reaches git only as a full lowercase sha, so no option or ref name can."""
+    got = []
+    monkeypatch.setattr(OP, "charter_bytes", lambda rev=None, repo=None: got.append(rev) or CHARTER_AS_RUN)
+    charter = OP.read_charter(rev)
+    assert got == [] and "is not a full commit sha" in charter["error"]
+    assert OP.charter_refusals(charter)[0].startswith("CHARTER_NOT_ACTIVE")
+
+
+def test_the_charter_is_read_from_the_commit_named_not_the_working_tree(tmp_path):
+    def git(*args) -> str:
+        return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+                               "-c", "commit.gpgsign=false", *args], capture_output=True, text=True, check=True,
+                              timeout=60).stdout.strip()
+
+    git("init", "--quiet")
+    (tmp_path / "README").write_text("no charter yet\n")
+    git("add", "-A")
+    git("commit", "--quiet", "--no-verify", "-m", "before")
+    before = git("rev-parse", "HEAD")
+    path = tmp_path / OP.CHARTER_REL
+    path.parent.mkdir(parents=True)
+    commits = {}
+    for status, raw in (("ACTIVE", CHARTER_AS_RUN), ("CLOSED", CHARTER_CLOSED)):
+        path.write_bytes(raw)
+        git("add", "-A")
+        git("commit", "--quiet", "--no-verify", "-m", status)
+        commits[status] = git("rev-parse", "HEAD")
+    path.write_bytes(CHARTER_AS_RUN)  # the working tree says ACTIVE; at a commit, the commit decides
+    assert OP.read_charter(commits["ACTIVE"], tmp_path) == {**ACTIVE, "rev": commits["ACTIVE"]}
+    assert OP.read_charter(commits["CLOSED"], tmp_path) == {"path": OP.CHARTER_REL, "rev": commits["CLOSED"],
+                                                            "status": "CLOSED", "sha256": CLOSED_SHA256}
+    assert OP.read_charter(None, tmp_path) == ACTIVE
+    for missing in (before, "f" * 40):
+        error = OP.read_charter(missing, tmp_path)["error"]
+        assert error.startswith("OSError: git cat-file: fatal:") and error.endswith("(is main fetched here?)")
+
+
+def test_a_symlink_never_stands_in_for_the_charter(tmp_path):
+    """In the checkout, a symlinked charter or charter directory is refused, even when it points at a file that
+    says ACTIVE. At a commit, git stores a symlink as its target path, which is not JSON."""
+    decoy = tmp_path / "decoy"
+    decoy.mkdir()
+    (decoy / f"{OP.PROGRAM_ID}.json").write_bytes(CHARTER_AS_RUN)
+    as_file = tmp_path / "file-link"
+    (as_file / "charters/programs").mkdir(parents=True)
+    (as_file / OP.CHARTER_REL).symlink_to(decoy / f"{OP.PROGRAM_ID}.json")
+    as_dir = tmp_path / "dir-link"
+    (as_dir / "charters").mkdir(parents=True)
+    (as_dir / "charters/programs").symlink_to(decoy, target_is_directory=True)
+    for repo in (as_file, as_dir):
+        assert (repo / OP.CHARTER_REL).read_bytes() == CHARTER_AS_RUN  # the link itself resolves to ACTIVE
+        charter = OP.read_charter(None, repo)
+        assert charter["error"] == f"OSError: {OP.CHARTER_REL} is reached through a symlink"
+        assert OP.decide(state(charter=charter), [], "D0", 1)["decision"] == DG.NO_DISPATCH
+
+    def git(*args) -> str:
+        return subprocess.run(["git", "-C", str(as_file), "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+                               "-c", "commit.gpgsign=false", *args], capture_output=True, text=True, check=True,
+                              timeout=60).stdout.strip()
+
+    git("init", "--quiet")
+    git("add", "-A")
+    git("commit", "--quiet", "--no-verify", "-m", "a symlinked charter")
+    assert git("ls-files", "-s", OP.CHARTER_REL).startswith("120000 ")
+    assert OP.read_charter(git("rev-parse", "HEAD"), as_file)["error"].startswith("JSONDecodeError")
+
+
+def test_a_local_replace_ref_cannot_reopen_the_charter_at_a_commit(tmp_path):
+    """``git replace`` can make a clone show other bytes for an object; the charter is read without it."""
+    def git(*args) -> str:
+        return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+                               "-c", "commit.gpgsign=false", *args], capture_output=True, text=True, check=True,
+                              timeout=60).stdout.strip()
+
+    git("init", "--quiet")
+    path = tmp_path / OP.CHARTER_REL
+    path.parent.mkdir(parents=True)
+    blobs = {}
+    for status, raw in (("ACTIVE", CHARTER_AS_RUN), ("CLOSED", CHARTER_CLOSED)):
+        path.write_bytes(raw)
+        git("add", "-A")
+        git("commit", "--quiet", "--no-verify", "-m", status)
+        blobs[status] = git("rev-parse", f"HEAD:{OP.CHARTER_REL}")
+    closed = git("rev-parse", "HEAD")
+    git("replace", blobs["CLOSED"], blobs["ACTIVE"])
+    assert json.loads(git("show", f"{closed}:{OP.CHARTER_REL}"))["status"] == "ACTIVE"  # what git shows by default
+    assert OP.read_charter(closed, tmp_path)["status"] == "CLOSED"
+
+
+def test_the_charter_was_active_through_auth2s_last_main_and_is_closed_since():
+    for rev in (EVIDENCE_COMMIT, OD_C4_BASE):
+        if subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", f"{rev}^{{commit}}"],
+                          capture_output=True, timeout=60).returncode != 0:
+            pytest.skip("this checkout does not hold AUTH-2's history (shallow)")
+    assert OP.read_charter(EVIDENCE_COMMIT) == {**ACTIVE, "rev": EVIDENCE_COMMIT}
+    assert OP.read_charter(OD_C4_BASE) == {"path": OP.CHARTER_REL, "rev": OD_C4_BASE, "status": "CLOSED",
+                                           "sha256": CLOSED_SHA256}
+
+
+@pytest.fixture(scope="module")
+def base_operator(tmp_path_factory):
+    """The operator as main had it before this refusal (PR #64's merge), loaded beside today's."""
+    got = subprocess.run(["git", "-C", str(REPO), "cat-file", "blob", f"{OD_C4_BASE}:.github/gates/auth2_operator.py"],
+                         capture_output=True, timeout=60)
+    if got.returncode != 0:
+        pytest.skip("this checkout does not hold the base commit (shallow history)")
+    path = tmp_path_factory.mktemp("base") / "auth2_operator_base.py"
+    path.write_bytes(got.stdout)
+    saved = list(sys.path)
+    spec = importlib.util.spec_from_file_location("auth2_operator_base", path)
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path[:] = saved
+    assert mod.DG is DG and not hasattr(mod, "charter_refusals")
+    return mod
+
+
+BIG = {"readable": True, "remaining_included_minutes": 100000, "budget_usd_zero": True}
+LOW = {"readable": True, "remaining_included_minutes": 535, "budget_usd_zero": True}
+ONLY_ADDS = [  # (state, aux, node, part, attempt, earlier minutes): decisions of every kind before OD-C4
+    (state(), [], "D0", 1, 1, 0),
+    (state(), [aux(1, minutes=40)], "PC-A2", 2, 1, 0),
+    (state(billing={"readable": False, "reason": "HTTP 403"}), [aux(1)], "D0", 1, 1, 0),
+    (state(billing={"readable": True, "remaining_included_minutes": 700, "budget_usd_zero": True}), [], "A2", 1, 1, 0),
+    (state(), [aux(5, status="in_progress", conclusion=None)], "D0", 1, 1, 0),
+    (state(billing=BIG), [aux(1, minutes=3700)], "PC-A2", 1, 1, 0),
+    (state(billing=BIG), [], "N-A2", 1, 1, 3900),
+    (state(), [], "CAL-A1", 1, 2, 0),
+    (state(first_record_problems=["FAIL_CLOSED: the month's first record is unreadable"]), [], "A1", 1, 1, 0),
+    (state(runs=HOLM_DONE), [], OP.CLOSURE, 1, 1, 0),
+    (state(runs=HOLM_DONE), [aux(2, OP.CLOSURE_WORKFLOW)], OP.CLOSURE, 1, 1, 0),
+    (state(runs=HOLM_DONE), [aux(2, OP.CLOSURE_WORKFLOW, conclusion="failure"),
+                             aux(3, OP.CLOSURE_WORKFLOW, conclusion="failure")], OP.CLOSURE, 1, 1, 0),
+    (state(billing=LOW), [], OP.CLOSURE, 1, 1, 0),
+    (state(billing=LOW), [], "D0", 1, 1, 0),
+]
+
+
+def test_the_refusal_only_adds_to_the_decision_before_it(base_operator):
+    """OD-C4 "only adds a refusal": with the charter ACTIVE every decision is the base operator's, field for
+    field; with it CLOSED, missing or unreadable the reasons are the base's plus CHARTER_NOT_ACTIVE, last, and
+    the decision is NO_DISPATCH, whatever it was (PARK included)."""
+    seen = set()
+    closed = {**ACTIVE, "status": "CLOSED"}
+    for s, ax, node, part, attempt, earlier in ONLY_ADDS:
+        before = base_operator.decide(copy.deepcopy(s), copy.deepcopy(ax), node, part, attempt, earlier)
+        seen.add(before["decision"])
+        active = OP.decide(copy.deepcopy(s), copy.deepcopy(ax), node, part, attempt, earlier)
+        assert active.pop("charter") == ACTIVE and active == before
+        for charter in (closed, None, DROP, {"path": OP.CHARTER_REL, "rev": "working tree", "error": "x"}):
+            s2 = copy.deepcopy(s)
+            s2.pop("charter") if charter is DROP else s2.update(charter=charter)
+            after = OP.decide(s2, copy.deepcopy(ax), node, part, attempt, earlier)
+            assert after.pop("charter") == (None if charter is DROP else charter)
+            assert after.pop("decision") == DG.NO_DISPATCH
+            refused = after.pop("reasons")
+            assert refused == before["reasons"] + OP.charter_refusals(None if charter is DROP else charter)
+            assert after == {k: v for k, v in before.items() if k not in ("decision", "reasons")}
+    assert seen == {DG.DISPATCH, DG.PARK, DG.NO_DISPATCH}
+
+
+# end to end, through World: the Owner's guard run, the executor's check and the node's or closure's own guard
+
+def test_each_gate_reads_the_charter_where_it_runs(world):
+    """The Owner's guard and the node's in-job guard read their own checkout; the executor's check reads main."""
+    pre, chk, job = d0_flow(world)
+    assert (pre["decision"], chk["decision"], job["decision"]) == (DG.DISPATCH,) * 3
+    assert world.charter_reads == [None, MAIN, None]
+    assert pre["charter"] == job["charter"] == ACTIVE and chk["charter"] == {**ACTIVE, "rev": MAIN}
+
+
+@pytest.mark.parametrize("node", ["D0", OP.CLOSURE])
+def test_a_closed_charter_refuses_at_every_gate_even_with_valid_owner_evidence(world, node):
+    world.charter[None] = CHARTER_CLOSED
+    pre = world.owner_guard(100, node)
+    assert pre["decision"] == DG.NO_DISPATCH and pre["reasons"] == [refusal("CLOSED")]
+    assert pre["billing"]["owner_evidence_problems"] == []  # the evidence is valid; the charter alone refuses
+    chk = world.check(100, node)
+    assert chk["decision"] == DG.NO_DISPATCH and chk["dispatch_inputs"] is None and chk["owner_evidence"] is None
+    assert refusal("CLOSED", MAIN) in chk["reasons"]
+    assert any(r.startswith("CHARTER_NOT_ACTIVE: the guard record shows") for r in chk["reasons"])
+    job = world.dispatch(200, node, guard_run=100, digest=pre["billing"]["owner_evidence"]["evidence_digest"])
+    assert job["decision"] == DG.NO_DISPATCH and refusal("CLOSED") in job["reasons"]
+    assert job["charter"]["status"] == "CLOSED"
+
+
+@pytest.mark.parametrize("node", ["D0", OP.CLOSURE])
+def test_the_charter_alone_refuses_the_executors_check(world, node):
+    """The Owner's guard read ACTIVE and decided DISPATCH; at the main the executor checks, the charter reads
+    CLOSED. Nothing else is wrong, and the check refuses."""
+    assert world.owner_guard(100, node)["decision"] == DG.DISPATCH
+    world.charter[MAIN] = CHARTER_CLOSED
+    chk = world.check(100, node)
+    assert (chk["decision"], chk["dispatch_inputs"], chk["owner_evidence"]) == (DG.NO_DISPATCH, None, None)
+    assert chk["reasons"] == [refusal("CLOSED", MAIN)] and chk["charter"]["rev"] == MAIN
+
+
+@pytest.mark.parametrize("node", ["D0", OP.CLOSURE])
+def test_the_charter_alone_refuses_the_in_job_guard(world, node):
+    """The guard and the check passed; the dispatched run's own checkout says CLOSED. It refuses before the node
+    or the closure runs, for that reason alone."""
+    world.owner_guard(100, node)
+    chk = world.check(100, node)
+    assert chk["decision"] == DG.DISPATCH
+    world.charter[None] = CHARTER_CLOSED
+    job = world.dispatch(200, node, guard_run=100, digest=chk["dispatch_inputs"]["evidence_digest"])
+    assert job["decision"] == DG.NO_DISPATCH and job["reasons"] == [refusal("CLOSED")]
+    assert job["billing"]["readable"] is True  # the binding held; only the charter refused
+
+
+def test_a_closed_charter_is_named_even_when_the_run_history_is_unreadable(world):
+    world.charter[None] = CHARTER_CLOSED
+    world.add(53, DG.WORKFLOW_FILE, "AUTH2 something", "2026-11-01T00:00:00Z")  # a title no node run has
+    pre = world.owner_guard(100)
+    assert pre["decision"] == DG.NO_DISPATCH and pre["charter"]["status"] == "CLOSED"
+    assert pre["reasons"][0].startswith("FAIL_CLOSED: AUTH-2 run history not readable")
+    assert pre["reasons"][1:] == [refusal("CLOSED")]
+
+
+@pytest.mark.parametrize("name", ["auth2-guard.yml", "auth2.yml", "auth2-closure.yml"])
+def test_every_auth2_job_guards_on_its_own_commits_checkout(name):
+    """The guard reads the charter from the checkout, so every AUTH-2 job checks out the commit it was dispatched
+    at (no other ref or repository) before its guard step runs the operator."""
+    [job] = load(name)["jobs"].values()
+    steps = job["steps"]
+    checkout = next(i for i, s in enumerate(steps) if s.get("uses", "").startswith("actions/checkout"))
+    guard = next(i for i, s in enumerate(steps) if "dispatch guard" in s.get("name", ""))
+    assert checkout < guard and not {"ref", "repository", "path"} & set(steps[checkout].get("with") or {})
+    assert "python .github/gates/auth2_operator.py guard " in steps[guard]["run"]

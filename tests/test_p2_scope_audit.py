@@ -1019,6 +1019,32 @@ AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #64, merged. Two parents: 8013e216 (main before, AUTH_2_NODE_CHECKOUT_HISTORY) + 48aeb4fd
+# (the claude/auth-2-governance-closure-1 branch).
+AUTH2_GOVERNANCE_CLOSURE_1_MERGE = "f5c6bc332288c5968926ce536db0f1d4cb710f64"
+
+# AUTH2-GOVERNANCE-CLOSURE-1 (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
+# 2026-10-12, Gate 1: OD-C1 to OD-C7). AUTH-2 closes by a governance record outside the trial
+# ledger: OPERATIONAL_EXHAUSTION, scientific outcome NONE. The record folder holds the approved
+# bundle byte for byte. The charter's status becomes CLOSED and no other byte of it changes.
+# No ledger append, no dispatch, no operator change; research/auth2/*.py untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_CLOSURE = "AUTH2-GOVERNANCE-CLOSURE-1"
+_CLOSURE_DIR = "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/"
+AUTH2_GOVERNANCE_CLOSURE_1_SCOPE: dict[str, str] = {
+    **{f"{_CLOSURE_DIR}{f}": f"{_CLOSURE} — the Owner-approved bundle, byte for byte [OD-C1, OD-C2]"
+       for f in ("evidence.json", "governance_closure.proposed.json", "trial_ledger_option.check.json",
+                 "SHA256SUMS", "closure_proposal.py")},
+    f"{_CLOSURE_DIR}README.md": f"{_CLOSURE} — the closure record; preservation steps [OD-C1, OD-C5, OD-C6]",
+    "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json": f"{_CLOSURE} — status CLOSED, nothing else [OD-C3]",
+    "tests/test_auth2_records.py": f"{_CLOSURE} — the charter is the code's, with only its status closed",
+    "tests/test_auth2_governance_closure.py":
+        f"{_CLOSURE} — the approved bundle, append-only; charter, ledger and rebuild checked",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2 node checkout history (PR #63) pinned to its merge; this branch's scope; the record admitted",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1063,6 +1089,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2_USAGE_REPORT_REPOSITORY_NAME": (AUTH_2_USAGE_REPORT_REPOSITORY_NAME_MERGE,
                                             AUTH_2_USAGE_REPORT_REPOSITORY_NAME_SCOPE),
     "AUTH_2_NODE_CHECKOUT_HISTORY": (AUTH_2_NODE_CHECKOUT_HISTORY_MERGE, AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE),
+    "AUTH2_GOVERNANCE_CLOSURE_1": (AUTH2_GOVERNANCE_CLOSURE_1_MERGE, AUTH2_GOVERNANCE_CLOSURE_1_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1070,24 +1097,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH2-GOVERNANCE-CLOSURE-1 (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
-# 2026-10-12, Gate 1: OD-C1 to OD-C7). AUTH-2 closes by a governance record outside the trial
-# ledger: OPERATIONAL_EXHAUSTION, scientific outcome NONE. The record folder holds the approved
-# bundle byte for byte. The charter's status becomes CLOSED and no other byte of it changes.
-# No ledger append, no dispatch, no operator change; research/auth2/*.py untouched.
-_CLOSURE = "AUTH2-GOVERNANCE-CLOSURE-1"
-_CLOSURE_DIR = "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/"
+# AUTH-2 OD-C4 operator refusal (Owner decision "AUTH-2 CLOSURE AND SUCCESSOR READINESS",
+# 2026-10-12, Gate 1, OD-C4; carried out on the Owner's instruction of 2026-10-13). Every AUTH-2
+# dispatch is refused unless the program charter says ACTIVE: at the Owner's pre-dispatch guard,
+# the executor's check-dispatch and the in-job guard of every node and closure run. It only adds
+# a refusal. No workflow, record, ledger, threshold or cap changes; research/auth2/ untouched.
+_OD_C4 = "AUTH-2 OD-C4 operator refusal"
 BRANCH_SCOPE: dict[str, str] = {
-    **{f"{_CLOSURE_DIR}{f}": f"{_CLOSURE} — the Owner-approved bundle, byte for byte [OD-C1, OD-C2]"
-       for f in ("evidence.json", "governance_closure.proposed.json", "trial_ledger_option.check.json",
-                 "SHA256SUMS", "closure_proposal.py")},
-    f"{_CLOSURE_DIR}README.md": f"{_CLOSURE} — the closure record; preservation steps [OD-C1, OD-C5, OD-C6]",
-    "charters/programs/AUTH-2-DISCOVERY-QUALIFICATION-1.json": f"{_CLOSURE} — status CLOSED, nothing else [OD-C3]",
-    "tests/test_auth2_records.py": f"{_CLOSURE} — the charter is the code's, with only its status closed",
-    "tests/test_auth2_governance_closure.py":
-        f"{_CLOSURE} — the approved bundle, append-only; charter, ledger and rebuild checked",
-    "tests/test_p2_scope_audit.py":
-        "AUTH-2 node checkout history (PR #63) pinned to its merge; this branch's scope; the record admitted",
+    ".github/gates/auth2_operator.py":
+        f"{_OD_C4} — CHARTER_NOT_ACTIVE at the guard, in-job and at check-dispatch [OD-C4]",
+    "tests/test_auth2_operator.py":
+        f"{_OD_C4} — every gate, every status, unreadable charters; only a refusal is added",
+    "tests/test_p2_scope_audit.py": "AUTH2-GOVERNANCE-CLOSURE-1 (PR #64) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
