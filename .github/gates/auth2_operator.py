@@ -23,9 +23,9 @@ what ``next`` reads to apply the frozen DAG (run_node.eligible), and the closure
 record (``readout``).
 
 Nothing here changes research/auth2/: its code is pinned by sha256 in every preregistration. The decision is
-research/auth2/dispatch_guard.decide, unchanged, over the node runs; this gate only adds checks for the AUTH-2
-jobs that are not node runs (guard and closure jobs): they must not be active (SERIAL) and their billed
-minutes count toward the 4,000-minute ledger. It never removes a refusal, so it can only be stricter.
+research/auth2/dispatch_guard.decide, unchanged, over the node runs; this gate only adds checks. Among them, the
+AUTH-2 jobs that are not node runs (guard and closure jobs) must not be active (SERIAL), and their billed minutes
+count toward the 4,000-minute ledger. It never removes a refusal, so it can only be stricter.
 
 Billing is read here, not by dispatch_guard.read_billing: the endpoint that function calls was closed down by
 GitHub and answers HTTP 410 (see ``read_billing`` below). A run attempt after the first never runs a node or
@@ -40,6 +40,13 @@ for this account and month; it records them as one Owner-evidence object with a 
 closure dispatch names that guard run and digest. Its in-job guard verifies the binding (``check_dispatch``,
 measured at the run's creation, which is the dispatch) and takes the billing state from that record, never from
 its own inputs. A_m stays where dispatch_guard keeps it: the in-job guard record of the month's first node run.
+
+Program charter (Owner decision OD-C4, AUTH2-GOVERNANCE-CLOSURE-1). Nothing dispatches unless the AUTH-2 charter
+(CHARTER_REL) says status ACTIVE. The guard reads it from the job's own checkout, in both of its modes: the
+Owner's pre-dispatch guard and the in-job guard of every node and closure run. A guard record that does not show
+it ACTIVE binds no dispatch, and ``check-dispatch`` also reads it at the main it is checking, in the local clone
+(fetch main first). Any other status, a charter that is missing, unreadable, ambiguous or reached through a
+symlink, or a file that is not this program's charter is refused as CHARTER_NOT_ACTIVE. This only adds a refusal.
 
 PAPER / RESEARCH ONLY. Read-only against GitHub: it dispatches nothing and writes nothing there.
 """
@@ -76,6 +83,8 @@ CLOSURE_TITLE = "AUTH2-CLOSURE"
 AUX = {GUARD_WORKFLOW: GUARD_TIMEOUT, CLOSURE_WORKFLOW: CLOSURE_TIMEOUT}
 CHUNK = 16000
 RECORD, RESULT, CLOSURE_RECORD = "AUTH2_GUARD_RECORD", "AUTH2_RESULT", "AUTH2_CLOSURE"
+PROGRAM_ID = "AUTH-2-DISCOVERY-QUALIFICATION-1"
+CHARTER_REL = f"charters/programs/{PROGRAM_ID}.json"
 
 # Billing evidence (FUNNEL_LAW_2.md §MONTHLY_BILLING_PACING_RULE). dispatch_guard.read_billing reads
 # GET /users/{owner}/settings/billing/actions, one of the product-specific billing endpoints GitHub closed down
@@ -119,6 +128,71 @@ CONFIRMATIONS = {"actions_budget_usd_zero": "budget_usd_zero_confirmed", "stop_u
 WHOLE_MINUTES = re.compile(r"0|[1-9][0-9]{0,8}")  # digits only: no sign, separator, space or leading zero
 RUN_ID = re.compile(r"[1-9][0-9]{0,19}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+SHA = re.compile(r"[0-9a-f]{40}")
+
+
+# -- the program charter (Owner decision OD-C4) ---------------------------------------------------------
+
+def charter_bytes(rev: str | None = None, repo: Path = REPO) -> bytes:
+    """The charter file: in the checkout (``rev`` None; in Actions, the job's own commit) or at commit ``rev``.
+    Only the file committed at that path counts: a symlink in the checkout is refused, and git reads the commit's
+    own objects (``--no-replace-objects``), where a symlink is not JSON."""
+    if rev is None:
+        path = repo / CHARTER_REL
+        if path.resolve() != repo.resolve() / CHARTER_REL:
+            raise OSError(f"{CHARTER_REL} is reached through a symlink")
+        return path.read_bytes()
+    got = subprocess.run(["git", "--no-replace-objects", "-C", str(repo), "cat-file", "blob", f"{rev}:{CHARTER_REL}"],
+                         capture_output=True, timeout=60)
+    if got.returncode != 0:
+        raise OSError(f"git cat-file: {got.stderr.decode(errors='replace').strip()[:120]} (is main fetched here?)")
+    return got.stdout
+
+
+def _unique_keys(pairs: list) -> dict:
+    """A key given twice ({"status": "CLOSED", "status": "ACTIVE"}) is ambiguous, so it is refused."""
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"duplicate keys {sorted({k for k in keys if keys.count(k) > 1})}")
+    return dict(pairs)
+
+
+def read_charter(rev: str | None = None, repo: Path = REPO) -> dict:
+    """The AUTH-2 charter's status, from the checkout or at commit ``rev`` (the main a dispatch is checked
+    against: a full sha, nothing else). Anything that cannot be read is an error, never a status."""
+    where = "working tree" if rev is None else str(rev)[:64]
+    try:
+        if rev is not None and not SHA.fullmatch(rev):
+            raise ValueError(f"{str(rev)[:50]!r} is not a full commit sha")
+        raw = charter_bytes(rev, repo)
+        charter = json.loads(raw, object_pairs_hook=_unique_keys)
+    except Exception as exc:  # noqa: BLE001 - every failure is the same fail-closed answer
+        return {"path": CHARTER_REL, "rev": where, "error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+    if not isinstance(charter, dict) or charter.get("program_id") != PROGRAM_ID or "status" not in charter:
+        return {"path": CHARTER_REL, "rev": where, "error": f"not the {PROGRAM_ID} charter, or it has no status"}
+    return {"path": CHARTER_REL, "rev": where, "status": charter["status"], "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def charter_refusals(charter) -> list[str]:
+    """No AUTH-2 dispatch unless the charter's status is exactly ACTIVE. A charter that was not read, or could
+    not be, is refused the same way: fail closed."""
+    if not isinstance(charter, dict) or "error" in charter or "status" not in charter:
+        why = (charter.get("error") or "no status") if isinstance(charter, dict) else "not read"
+        return [f"CHARTER_NOT_ACTIVE: the {PROGRAM_ID} charter is unreadable ({why}); fail closed"]
+    if charter["status"] != "ACTIVE":
+        return [f"CHARTER_NOT_ACTIVE: {PROGRAM_ID} is {repr(charter['status'])[:60]} ({CHARTER_REL} at "
+                f"{charter.get('rev')}), not 'ACTIVE'; no AUTH-2 node or closure may run"]
+    return []
+
+
+def refuse_unless_active(rec: dict, charter: dict) -> dict:
+    """The executor's check-dispatch record, refused when the charter at the checked main is not ACTIVE."""
+    rec["charter"] = charter
+    refusals = charter_refusals(charter)
+    if refusals:
+        rec["reasons"] = list(dict.fromkeys(rec["reasons"] + refusals))
+        rec.update(decision=DG.NO_DISPATCH, owner_evidence=None, dispatch_inputs=None)
+    return rec
 
 
 # -- the decision ---------------------------------------------------------------------------------
@@ -181,6 +255,8 @@ def decide(state: dict, aux: list[dict], node: str, part: int, attempt: int = 1,
                               + (f" ({bill['budget_reason']})" if bill.get("budget_reason") else ""))
     rec["billing"] = {k: bill.get(k) for k in ("readable", "remaining_included_minutes", "budget_usd_zero",
                                                 "usage_evidence", "owner_evidence", "owner_evidence_problems")}
+    rec["reasons"] += charter_refusals(state.get("charter"))  # OD-C4, last: a state without the charter is refused
+    rec["charter"] = state.get("charter")
     park = any(r.startswith("RESERVE") for r in rec["reasons"])
     rec["reasons"] = list(dict.fromkeys(rec["reasons"]))
     return _verdict(rec, park)
@@ -520,7 +596,7 @@ def collect(slug: str, owner: str, token_env: str, self_run_id: int | None, owne
     now = now or datetime.now(timezone.utc)
     usage = usage if usage is not None else read_usage(owner, token_env, now)
     state = {"now": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "self_run_id": self_run_id,
-             "billing": billing_state(usage, owner_evidence), "runs": []}
+             "billing": billing_state(usage, owner_evidence), "runs": [], "charter": read_charter()}
     try:
         state["runs"] = DG.read_runs(slug)
         state["first_record_problems"] = attach_first_record(slug, state["runs"], now.strftime("%Y-%m"),
@@ -601,7 +677,8 @@ def guard(a) -> int:
         aux, earlier = [], 0
     if state.get("runs_error"):
         rec = {"node": a.node, "part": a.part, "decision": DG.NO_DISPATCH,
-               "reasons": [f"FAIL_CLOSED: AUTH-2 run history not readable ({state['runs_error']})"],
+               "reasons": [f"FAIL_CLOSED: AUTH-2 run history not readable ({state['runs_error']})",
+                           *charter_refusals(state.get("charter"))], "charter": state.get("charter"),
                "billing": {k: state["billing"].get(k) for k in ("readable", "remaining_included_minutes",
                                                                  "budget_usd_zero", "usage_evidence",
                                                                  "owner_evidence", "owner_evidence_problems")}}
@@ -718,8 +795,9 @@ def check_dispatch(run: dict, records: list[bytes] | Exception, later_runs: list
                    main_sha: str, now: datetime, *, slug: str, self_run_id: int | None = None,
                    digest: str | None = None, month: str | None = None) -> dict:
     """DISPATCH only if the guard run of (node, part) on this main and repository succeeded at its first attempt,
-    was dispatched by the Owner, is fresh, decided DISPATCH on valid Owner evidence beside a verified usage report,
-    and no AUTH-2 run was created after it (``later_runs``: every AUTH-2 run, any workflow).
+    was dispatched by the Owner, is fresh, decided DISPATCH on valid Owner evidence beside a verified usage report
+    with the program charter ACTIVE, and no AUTH-2 run was created after it (``later_runs``: every AUTH-2 run, any
+    workflow).
 
     ``records`` are the guard records the run published (or the error reading them). The executor calls this
     before dispatching (``now`` = now). A node or closure run calls it in the job on the guard run it names, with
@@ -756,6 +834,10 @@ def check_dispatch(run: dict, records: list[bytes] | Exception, later_runs: list
             reasons.append(f"guard record is for {rec.get('node')} part {rec.get('part')} ({rec.get('mode')})")
         if rec.get("decision") != DG.DISPATCH:
             reasons.append(f"guard decided {rec.get('decision')}: {rec.get('reasons')}")
+        seen = rec.get("charter") if isinstance(rec.get("charter"), dict) else {}
+        if seen.get("status") != "ACTIVE" or "error" in seen:
+            reasons.append(f"CHARTER_NOT_ACTIVE: the guard record shows the {PROGRAM_ID} charter as "
+                           f"{str(seen.get('status', seen.get('error', 'not read')))[:160]!r}, not 'ACTIVE'")
         if rec.get("run_id") != run.get("id") or rec.get("sha") != main_sha or rec.get("run_attempt") != 1:
             reasons.append("guard record does not name this run, its first attempt and main")
         try:
@@ -884,6 +966,7 @@ def main(argv: list[str] | None = None) -> int:
         run, notes = run_annotations(a.repo_slug, a.guard_run)
         rec = check_dispatch(run, annotated_records(notes), all_runs(a.repo_slug), a.node, a.part, a.main_sha,
                              datetime.now(timezone.utc), slug=a.repo_slug)
+        rec = refuse_unless_active(rec, read_charter(a.main_sha))  # OD-C4: the charter at the main it checks
         print(json.dumps(rec, indent=1, sort_keys=True))
         print(f"AUTH2_DISPATCH_CHECK = {rec['decision']}")
         return 0 if rec["decision"] == DG.DISPATCH else 3
