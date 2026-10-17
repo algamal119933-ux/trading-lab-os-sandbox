@@ -142,7 +142,7 @@ cp -a <LANE> <primary evidence store>/ && cp -a <LANE> <SECOND_EVIDENCE_STORE>/ 
 | T0 | `COHORT_START` (PAPER_T0). The freeze law binds |
 | T0 + 1 h, + 24 h | first-candle check and first-day check (coverage, ledger `verify()`, isolation from P2) |
 | weekly | `RECONCILIATION` incident; a status line to the Owner, with no performance claim |
-| ACTIVATION_UTC + 30 d = END_UTC (H1-WINDOW-AMENDMENT-1) | stop the worker, write `COHORT_TERMINAL`, copy and verify both evidence copies |
+| ACTIVATION_UTC + 10 d = END_UTC (H1-WINDOW-AMENDMENT-1) | stop the worker, write `COHORT_TERMINAL`, copy and verify both evidence copies |
 | after END_UTC | fetch the window's public candles, run the B1 replay and the §4 benchmarks, and classify PROSPECTIVE_BEHAVIOR (B1, B3, B4, B5; B2 reported only) and OPERATIONAL_CAPABILITY (§5). EDGE_EVIDENCE = NOT_EVALUATED |
 
 There is no early stop for performance, no extension and no automatic transition (§5.1, §10).

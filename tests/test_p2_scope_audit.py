@@ -1199,10 +1199,10 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_h1_launch_prep.py":
         "H1 pre-launch preparation — every refusal of the four tools, on synthetic inputs",
     # Stacked on the pre-launch preparation: H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to
-    # 180 days; 20:29Z: run the plan). A draft record beside the package, adopted only by the Owner's window
-    # choice and merge; the card denies until then. The frozen package and P2 are untouched.
-    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_30D.md":
-        "H1 window amendment — 30-day operational window, B2 reported only, EDGE_EVIDENCE not evaluated",
+    # 180 days; 20:29Z: run the plan; 20:44Z: 10 days). A record beside the package, effective only on the Owner's
+    # merge; the card denies until then. The frozen package and P2 are untouched.
+    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
+        "H1 window amendment — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
 }
 
 

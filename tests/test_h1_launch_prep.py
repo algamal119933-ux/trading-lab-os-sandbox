@@ -321,13 +321,13 @@ def test_the_gate_pins_the_merged_records():
 
 def test_the_window_amendment_is_operational_only_and_leaves_the_package_frozen():
     text = (REPO / card.WINDOW_AMENDMENT).read_text()
-    assert "END_UTC              = ACTIVATION_UTC + 30 days" in text
+    assert "END_UTC              = ACTIVATION_UTC + 10 days" in text
     assert "EDGE_EVIDENCE is\n                              NOT_EVALUATED" in text
     assert gate.H1_PACKAGE_DIGEST in text and "REAL_MONEY_AUTHORIZED = NO" in text
     assert sha((REPO / gate.PACKAGE_MANIFEST).read_bytes()) == gate.H1_PACKAGE_DIGEST
 
 
-def test_a_pending_window_amendment_is_not_adopted():
+def test_an_unmerged_window_amendment_is_not_adopted():
     built = card.build_card("HEAD", None, None, None)
     row = built["rows"]["H1_WINDOW_AMENDMENT"]
     assert row["value"] == "NOT_ADOPTED" and not row["pass"] and "H1_WINDOW_AMENDMENT" in built["not_pass"]
