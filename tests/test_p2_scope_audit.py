@@ -1198,6 +1198,15 @@ BRANCH_SCOPE: dict[str, str] = {
         "H1 pre-launch preparation — the launch binder; templates only, no T0 [item 4]",
     "tests/test_h1_launch_prep.py":
         "H1 pre-launch preparation — every refusal of the four tools, on synthetic inputs",
+    # The vanished-upstream pin gate (Owner directive, 2026-10-17T21:39:21Z: fix only this, without weakening
+    # hash, identity, provenance or security). upstream_pins.json is byte-identical; a 404 is excused only
+    # while the G5 and G6 records above are present with their pinned sha256, and no bytes are cached for it.
+    "research/external/upstream_vanished.json":
+        "vanished-upstream pin gate — btc_strategy_lab listed VANISHED; upstream_pins.json byte-identical",
+    "research/external/pin_upstream.py":
+        "vanished-upstream pin gate — a pinned 404 is recorded, not failed; reappearing bytes must still match",
+    "tests/test_upstream_vanished.py":
+        "vanished-upstream pin gate — every way past the gate the pins would not allow is refused",
 }
 
 

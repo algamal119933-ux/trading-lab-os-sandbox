@@ -1,0 +1,18 @@
+{
+  "schema_version": "UPSTREAM_VANISHED_V1",
+  "purpose": "Upstreams that no longer serve their pinned files. upstream_pins.json is left byte-identical: the pins stay the identity. pin_upstream.py --verify records a 404 on a file of a source listed here instead of failing, only while every record named is present with its pinned sha256. Bytes that are fetched again must still match the pins exactly; any other error still fails; nothing is cached for a vanished file, so --materialize refuses it. The only lawful bytes are a recovered copy verified against the pins (H1-MATERIALISATION-AMENDMENT-1). No repin, no reconstruction, no substitution.",
+  "authority": "Owner directive, 2026-10-17T21:39:21Z (user_01H7pPnm6dL1F2scmKs6u5jk): fix only the vanished-upstream pin-gate issue, without weakening hash, identity, provenance or security requirements",
+  "sources": {
+    "btc_strategy_lab": {
+      "state": "VANISHED",
+      "repo": "wiktorj137/btc-strategy-lab",
+      "commit": "b68a5518b4a3eba2fde1733160d7d7de356023b5",
+      "first_observed": "2026-10-16",
+      "observation": "every pinned file at this commit answers HTTP 404 from raw.githubusercontent.com and GitHub's repository lookup answers not found (EXECUTION-READY-PACKAGE-1 §0, 2026-10-16); reproduced on main ecfec82 and in CI on 2026-10-17",
+      "records": {
+        "research/paper/h1/amendments/G5_HOST_CHECK.md": "2870d7dc6ca812342b040e3864dfdf0b5151c9cf876483eeaa7f79ed909159f9",
+        "research/paper/h1/amendments/H1_AMENDMENTS_G6.md": "0575c3a2d780892ceaee28f703d7d73caa675a8a53d8409c0f084feb669252fd"
+      }
+    }
+  }
+}
