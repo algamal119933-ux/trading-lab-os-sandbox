@@ -316,6 +316,21 @@ def test_the_gate_pins_the_merged_records():
     assert sha((REPO / gate.AMENDMENTS).read_bytes()) == gate.G6_AMENDMENTS_SHA256
     for path, digest in card.G11_RECORDS.items():
         assert sha((REPO / path).read_bytes()) == digest, path
+    assert sha((REPO / card.WINDOW_AMENDMENT).read_bytes()) == card.WINDOW_AMENDMENT_SHA256
+
+
+def test_the_window_amendment_is_operational_only_and_leaves_the_package_frozen():
+    text = (REPO / card.WINDOW_AMENDMENT).read_text()
+    assert "END_UTC              = ACTIVATION_UTC + 30 days" in text
+    assert "EDGE_EVIDENCE is\n                              NOT_EVALUATED" in text
+    assert gate.H1_PACKAGE_DIGEST in text and "REAL_MONEY_AUTHORIZED = NO" in text
+    assert sha((REPO / gate.PACKAGE_MANIFEST).read_bytes()) == gate.H1_PACKAGE_DIGEST
+
+
+def test_a_pending_window_amendment_is_not_adopted():
+    built = card.build_card("HEAD", None, None, None)
+    row = built["rows"]["H1_WINDOW_AMENDMENT"]
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"] and "H1_WINDOW_AMENDMENT" in built["not_pass"]
 
 
 # -- host placement -----------------------------------------------------------
@@ -359,7 +374,7 @@ def test_the_card_defaults_to_deny_here():
     assert built["OWNER_DECISION_DEFAULT"] == "DENY"
     assert built["REAL_MONEY_AUTHORIZED"] == "NO"
     assert {"P2_TERMINAL_STATUS", "SOURCE_SHA256_STATUS", "MATERIALISATION_PREFLIGHT",
-            "SECOND_EVIDENCE_STORE"} <= set(built["not_pass"])
+            "SECOND_EVIDENCE_STORE", "H1_WINDOW_AMENDMENT"} <= set(built["not_pass"])
     assert built["rows"]["H1_PACKAGE_DIGEST"]["pass"] and built["rows"]["DRY_RUN"]["pass"]
 
 
