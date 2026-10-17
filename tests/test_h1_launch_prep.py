@@ -327,10 +327,43 @@ def test_the_window_amendment_is_operational_only_and_leaves_the_package_frozen(
     assert sha((REPO / gate.PACKAGE_MANIFEST).read_bytes()) == gate.H1_PACKAGE_DIGEST
 
 
-def test_an_unmerged_window_amendment_is_not_adopted():
-    built = card.build_card("HEAD", None, None, None)
-    row = built["rows"]["H1_WINDOW_AMENDMENT"]
-    assert row["value"] == "NOT_ADOPTED" and not row["pass"] and "H1_WINDOW_AMENDMENT" in built["not_pass"]
+# These run in a scratch repository: in this checkout the answer depends on where the
+# tests run (a PR's synthetic merge ref introduces the record through a merge, and so
+# does main once the Owner merges it), so HEAD here proves nothing either way.
+
+
+def test_an_unmerged_window_amendment_is_not_adopted(repo):
+    repo.write({card.WINDOW_AMENDMENT: (REPO / card.WINDOW_AMENDMENT).read_bytes()}, merge=False)
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["sha256_ok"] and not row["merged"]
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"]
+
+
+def test_an_absent_window_amendment_is_not_adopted(repo):
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"] and not row["sha256_ok"]
+
+
+def test_a_merged_window_amendment_is_adopted(repo):
+    repo.write({card.WINDOW_AMENDMENT: (REPO / card.WINDOW_AMENDMENT).read_bytes()})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["value"] == "ADOPTED" and row["pass"] and row["merged"] and row["sha256_ok"]
+
+
+def test_a_merged_but_altered_window_record_is_not_adopted(repo):
+    data = (REPO / card.WINDOW_AMENDMENT).read_bytes().replace(b"10 days", b"11 days")
+    repo.write({card.WINDOW_AMENDMENT: data})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["merged"] and not row["sha256_ok"]
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"]
+
+
+def test_a_pending_window_record_is_not_adopted_even_if_merged(repo, monkeypatch):
+    data = (REPO / card.WINDOW_AMENDMENT).read_bytes() + b"\nDECISION    PENDING\n"
+    monkeypatch.setattr(card, "WINDOW_AMENDMENT_SHA256", sha(data))
+    repo.write({card.WINDOW_AMENDMENT: data})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["merged"] and row["sha256_ok"] and not row["pass"]
 
 
 # -- host placement -----------------------------------------------------------
@@ -374,7 +407,7 @@ def test_the_card_defaults_to_deny_here():
     assert built["OWNER_DECISION_DEFAULT"] == "DENY"
     assert built["REAL_MONEY_AUTHORIZED"] == "NO"
     assert {"P2_TERMINAL_STATUS", "SOURCE_SHA256_STATUS", "MATERIALISATION_PREFLIGHT",
-            "SECOND_EVIDENCE_STORE", "H1_WINDOW_AMENDMENT"} <= set(built["not_pass"])
+            "SECOND_EVIDENCE_STORE"} <= set(built["not_pass"])
     assert built["rows"]["H1_PACKAGE_DIGEST"]["pass"] and built["rows"]["DRY_RUN"]["pass"]
 
 

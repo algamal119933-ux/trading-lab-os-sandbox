@@ -81,6 +81,16 @@ def same_device(a: Path, b: Path) -> bool:
     return os.stat(probe_a).st_dev == os.stat(b).st_dev
 
 
+def window_amendment_row(ref: str, repo: Path = REPO) -> dict:
+    """ADOPTED only when the pinned window record is on ref through a two-parent merge."""
+    blob = gate.show(ref, WINDOW_AMENDMENT, repo=repo)
+    sha_ok = blob is not None and hashlib.sha256(blob).hexdigest() == WINDOW_AMENDMENT_SHA256
+    adopted = sha_ok and b"DECISION    PENDING" not in blob
+    merged = blob is not None and gate.first_parent_merge_introducing(ref, WINDOW_AMENDMENT, repo=repo) is not None
+    return {"value": "ADOPTED" if adopted and merged else "NOT_ADOPTED",
+            "sha256_ok": sha_ok, "merged": merged, "pass": adopted and merged}
+
+
 def build_card(ref: str, record_path: Path | None, lane_dir: Path | None, second_store: Path | None,
                *, entry: dict | None = None, host: dict | None = None) -> dict:
     rows: dict[str, dict] = {}
@@ -100,12 +110,7 @@ def build_card(ref: str, record_path: Path | None, lane_dir: Path | None, second
                                      else "NOT_MERGED", "records": g11}
     rows["G11_RECORDS_PR_STATUS"]["pass"] = rows["G11_RECORDS_PR_STATUS"]["value"] == "MERGED"
 
-    blob = gate.show(ref, WINDOW_AMENDMENT)
-    sha_ok = blob is not None and hashlib.sha256(blob).hexdigest() == WINDOW_AMENDMENT_SHA256
-    adopted = sha_ok and b"DECISION    PENDING" not in blob
-    merged = blob is not None and gate.first_parent_merge_introducing(ref, WINDOW_AMENDMENT) is not None
-    rows["H1_WINDOW_AMENDMENT"] = {"value": "ADOPTED" if adopted and merged else "NOT_ADOPTED",
-                                   "sha256_ok": sha_ok, "merged": merged, "pass": adopted and merged}
+    rows["H1_WINDOW_AMENDMENT"] = window_amendment_row(ref)
 
     ok, text = run_h1_paper("verify")
     digest = hashlib.sha256((PACKAGE / "PACKAGE_MANIFEST.sha256").read_bytes()).hexdigest()
