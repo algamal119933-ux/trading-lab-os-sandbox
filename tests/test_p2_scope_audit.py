@@ -1203,6 +1203,15 @@ BRANCH_SCOPE: dict[str, str] = {
     # merge; the card denies until then. The frozen package and P2 are untouched.
     "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
         "H1 window amendment — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
+    # The vanished-upstream pin gate (Owner directive, 2026-10-17T21:39:21Z: fix only this, without weakening
+    # hash, identity, provenance or security). upstream_pins.json is byte-identical; a 404 is excused only
+    # while the G5 and G6 records above are present with their pinned sha256, and no bytes are cached for it.
+    "research/external/upstream_vanished.json":
+        "vanished-upstream pin gate — btc_strategy_lab listed VANISHED; upstream_pins.json byte-identical",
+    "research/external/pin_upstream.py":
+        "vanished-upstream pin gate — a pinned 404 is recorded, not failed; reappearing bytes must still match",
+    "tests/test_upstream_vanished.py":
+        "vanished-upstream pin gate — every way past the gate the pins would not allow is refused",
 }
 
 
