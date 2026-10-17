@@ -1184,6 +1184,20 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p2_scope_audit.py":
         "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling (PR #66) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
+    # Stacked on the G11 records: H1 pre-launch preparation (the same directive, items 3 to 8). Tools and
+    # a binder only. Nothing starts H1, sets a T0, writes the frozen package, or touches P2.
+    "research/paper/h1/launch/h1_materialise.py":
+        "H1 pre-launch preparation — G.2-b credential-free, hash-verified materialisation [item 3]",
+    "research/paper/h1/launch/h1_p2_entry_gate.py":
+        "H1 pre-launch preparation — H1_P2_ENTRY_GATE: ELIGIBLE / WAITING / BLOCKED from the git ref [item 5]",
+    "research/paper/h1/launch/h1_host_placement.py":
+        "H1 pre-launch preparation — no running P2 cohort on the H1 host; no automatic exception [item 6]",
+    "research/paper/h1/launch/h1_launch_card.py":
+        "H1 pre-launch preparation — the H1_LAUNCH_AUTHORIZATION card, default DENY [item 8]",
+    "research/paper/h1/launch/H1_LAUNCH_BINDER.md":
+        "H1 pre-launch preparation — the launch binder; templates only, no T0 [item 4]",
+    "tests/test_h1_launch_prep.py":
+        "H1 pre-launch preparation — every refusal of the four tools, on synthetic inputs",
 }
 
 
