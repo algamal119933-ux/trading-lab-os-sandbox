@@ -20,6 +20,13 @@ Two digests are recorded per file:
                   file's blob SHA. Recorded so a pin can be checked against what a
                   human read in the GitHub UI without downloading anything.
 
+A source whose upstream has gone away is listed in upstream_vanished.json, which
+leaves upstream_pins.json byte-identical. Its pins stay the identity: a 404 on one
+of its files is recorded rather than failed, but only while the records the entry
+names are present with their pinned sha256, and any bytes that are fetched must
+still match exactly. Nothing is cached for a vanished file, so --materialize
+refuses it.
+
 Usage:
     python3 research/external/pin_upstream.py --verify        # gate: fetch, check every pin
     python3 research/external/pin_upstream.py --refresh       # fill in empty hashes
@@ -41,6 +48,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PINS_PATH = REPO_ROOT / "research" / "external" / "upstream_pins.json"
+VANISHED_PATH = REPO_ROOT / "research" / "external" / "upstream_vanished.json"
 RAW_BASE = "https://raw.githubusercontent.com"
 TIMEOUT_SECONDS = 60
 
@@ -69,7 +77,30 @@ def load_pins() -> dict:
 
 
 def save_pins(pins: dict) -> None:
-    PINS_PATH.write_text(json.dumps(pins, indent=2) + "\n")
+    # The vanished entries live in their own file; they never leak into the pins.
+    clean = json.loads(json.dumps(pins))
+    for source in clean["sources"].values():
+        source.pop("upstream_vanished", None)
+    PINS_PATH.write_text(json.dumps(clean, indent=2) + "\n")
+
+
+def attach_vanished(pins: dict, path: Path | None = None) -> list[str]:
+    """Attach each upstream_vanished.json entry to its pinned source. Returns failures.
+
+    An entry for a source that is not pinned is a failure, not a no-op: a list of
+    excuses that names nothing it excuses is a list nobody is checking.
+    """
+    path = VANISHED_PATH if path is None else path
+    if not path.exists():
+        return []
+    vanished = json.loads(path.read_text(encoding="utf-8"))
+    failures = []
+    for key, entry in vanished.get("sources", {}).items():
+        if key not in pins["sources"]:
+            failures.append(f"{key}: listed in {path.name} but not pinned")
+            continue
+        pins["sources"][key]["upstream_vanished"] = dict(entry, authority=vanished.get("authority"))
+    return failures
 
 
 def iter_files(pins: dict):
@@ -79,10 +110,52 @@ def iter_files(pins: dict):
             yield key, source, entry
 
 
+def vanished_problems(key: str, source: dict, repo_root: Path | None = None) -> list[str]:
+    """Why a source's ``upstream_vanished`` block cannot excuse a 404. Empty when it can.
+
+    The block must say VANISHED, name an authority, and name at least one record
+    that is in this repository with exactly its pinned sha256: the evidence that
+    the upstream is gone has to be as pinned as the bytes were. Every file of the
+    source must keep a full pin, because the pin is all that is left of its identity.
+    """
+    repo_root = REPO_ROOT if repo_root is None else repo_root
+    block = source.get("upstream_vanished")
+    if block is None:
+        return [f"{key}: no upstream_vanished block"]
+    problems = []
+    if (block.get("repo"), block.get("commit")) != (source.get("repo"), source.get("commit")):
+        problems.append(f"{key}: upstream_vanished names {block.get('repo')}@{block.get('commit')}, "
+                        f"not the pinned {source.get('repo')}@{source.get('commit')}")
+    if block.get("state") != "VANISHED":
+        problems.append(f"{key}: upstream_vanished.state is {block.get('state')!r}, not 'VANISHED'")
+    if not block.get("authority"):
+        problems.append(f"{key}: upstream_vanished names no authority")
+    records = block.get("records") or {}
+    if not records:
+        problems.append(f"{key}: upstream_vanished names no record")
+    for rel, want in records.items():
+        raw = repo_root / rel
+        path = raw.resolve()
+        if raw.is_symlink() or repo_root.resolve() not in path.parents or not path.is_file():
+            problems.append(f"{key}: vanished record {rel} is not a file in this repository")
+        elif sha256(path.read_bytes()) != want:
+            problems.append(f"{key}: vanished record {rel} does not match its pinned sha256")
+    for entry in source.get("files", []):
+        if entry.get("expect_missing"):
+            problems.append(f"{key}:{entry['path']}: expect_missing cannot be combined with upstream_vanished")
+        elif not (entry.get("sha256") and entry.get("git_blob_sha1") and entry.get("size_bytes")):
+            problems.append(f"{key}:{entry['path']}: a vanished source keeps a full pin (sha256, blob sha1, size)")
+    return problems
+
+
 def process(pins: dict, cache_dir: Path, refresh: bool) -> tuple[list[str], list[str]]:
     """Fetch every pinned file. Returns (failures, changes)."""
     failures: list[str] = []
     changes: list[str] = []
+    vanished = {key: vanished_problems(key, source)
+                for key, source in pins["sources"].items() if "upstream_vanished" in source}
+    for problems in vanished.values():
+        failures.extend(problems)
 
     for key, source, entry in iter_files(pins):
         repo, commit, path = source["repo"], source["commit"], entry["path"]
@@ -95,6 +168,10 @@ def process(pins: dict, cache_dir: Path, refresh: bool) -> tuple[list[str], list
         except urllib.error.HTTPError as exc:
             if exc.code == 404 and expect_missing:
                 print(f"  OK   {label}: absent upstream, as pinned (404)")
+                continue
+            if exc.code == 404 and key in vanished and not vanished[key]:
+                print(f"  VANISHED {label}: upstream gone (404); identity = pinned sha256 "
+                      f"{entry['sha256'][:16]}..., nothing cached")
                 continue
             failures.append(f"{label}: HTTP {exc.code} fetching {url}")
             continue
@@ -189,6 +266,11 @@ def materialize(pins: dict, cache_dir: Path, workspace: Path) -> list[Path]:
         if entry.get("expect_missing"):
             continue
         source = cache_dir / key / entry["path"]
+        if not source.exists() and "upstream_vanished" in pins["sources"][key]:
+            raise SystemExit(
+                f"refusing to materialise {key}:{entry['path']}: the upstream has vanished and no "
+                "verified bytes exist in the cache. Use a recovered copy verified against the pins "
+                "(H1-MATERIALISATION-AMENDMENT-1); never a repin or a reconstruction.")
         if not source.exists():
             raise SystemExit(f"not in cache: {source}. Run --verify first.")
         destination = workspace / key / entry["path"]
@@ -212,11 +294,13 @@ def main() -> int:
         parser.error("pass --verify or --refresh")
 
     pins = load_pins()
+    attach_failures = attach_vanished(pins)
     cache_dir = Path(args.cache_dir) if args.cache_dir else REPO_ROOT / ".upstream-cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Pinned sources: {len(pins['sources'])}   cache: {cache_dir}")
     failures, changes = process(pins, cache_dir, refresh=args.refresh)
+    failures = attach_failures + failures
 
     if changes:
         save_pins(pins)
@@ -228,7 +312,8 @@ def main() -> int:
             print(f"  - {failure}", file=sys.stderr)
         return 1
 
-    print("\nUPSTREAM_PIN_GATE = PASS")
+    gone = sorted(key for key, source in pins["sources"].items() if "upstream_vanished" in source)
+    print("\nUPSTREAM_PIN_GATE = PASS" + (f" (upstream VANISHED, pins retained: {', '.join(gone)})" if gone else ""))
 
     if args.materialize:
         leaked = credential_env_present()

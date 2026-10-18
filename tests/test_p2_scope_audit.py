@@ -1067,6 +1067,56 @@ AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE: dict[str, str] = {
 }
 
 
+# PR #66, merged. Two parents: a80733f6 (main before, AUTH_2_OD_C4_OPERATOR_REFUSAL) + 4271e201
+# (the claude/auth-2-successor-readiness-tooling branch).
+AUTH_2Q2_READINESS_TOOLING_MERGE = "ecfec8295c89d45fe683d3fc31c5d766341de077"
+
+# AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 successor readiness tooling (Owner decision "AUTH-2
+# CLOSURE AND SUCCESSOR READINESS", 2026-10-12, Gate 2: OD-S1 to OD-S8; carried out on the Owner's
+# instruction of 2026-10-13). The infrastructure the readiness runs RT-0 to RT-11 need, built and
+# tested offline: nothing is dispatched. No hypothesis, strategy, risk setting, threshold, window,
+# DAG, dataset science, preregistration or trial id changes; research/auth2/ and the trial ledger
+# untouched; the successor law is not written. Only the snapshot release job may write.
+# These entries were BRANCH_SCOPE while it was in flight.
+_Q2 = "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling"
+AUTH_2Q2_READINESS_TOOLING_SCOPE: dict[str, str] = {
+    "research/auth2q2/__init__.py": f"{_Q2} — the successor's readiness package, its id [OD-S1]",
+    "research/auth2q2/snapshot.py":
+        f"{_Q2} — deterministic content-addressed snapshot and manifest; strict, verified restore [OD-S2]",
+    "research/auth2q2/listing.py": f"{_Q2} — the archive listing replayed offline; any other request refused",
+    "research/auth2q2/offline.py": f"{_Q2} — the science phase without network: namespace probe, socket guard",
+    "research/auth2q2/prepare.py":
+        f"{_Q2} — checksum-verified parallel preparation bound to the Dataset V3 lock (RT-1, RT-2)",
+    "research/auth2q2/release.py":
+        f"{_Q2} — the immutable-release publication path and its RT-3 probes [OD-S2, OD-S3]",
+    "research/auth2q2/attempts.py":
+        f"{_Q2} — ADMISSION/INFRA/SCIENCE/RESULT, bounded INFRA retries, TECHNICAL_EXHAUSTION [OD-S5, OD-S6]",
+    "research/auth2q2/compute.py":
+        f"{_Q2} — the guarded 4,000-minute compute proof, timeout + 1, closure reserve [OD-S7]",
+    "research/auth2q2/plan.py": f"{_Q2} — RT-1 to RT-11 as jobs and timeouts; the 300-minute ledger [OD-S4]",
+    "research/auth2q2/harness.py":
+        f"{_Q2} — the readiness jobs' steps: restore, verify, offline science, classifiers, verdicts",
+    "research/auth2q2/record.py": f"{_Q2} — the INFRA_READINESS record, rebuilt and verified offline [OD-S8]",
+    ".github/gates/auth2q2_readiness.py":
+        f"{_Q2} — the readiness gate: Owner billing evidence, serial, 300-minute cap, R_m; RT-8, RT-9 [OD-S4]",
+    ".github/gates/protected_paths.txt": f"{_Q2} — the successor's tooling and its tests are protected paths",
+    ".github/workflows/auth2q2-prepare.yml":
+        f"{_Q2} — RT-1 to RT-3, Owner-dispatched; the only contents: write job [OD-S3, OD-S4]",
+    ".github/workflows/auth2q2-readiness.yml": f"{_Q2} — RT-4 to RT-11, Owner-dispatched, read-only [OD-S3, OD-S4]",
+    "tests/fixtures/auth2q2_jobs_api.json": f"{_Q2} — the jobs API shapes of AUTH-2's two D0 runs",
+    "tests/test_auth2q2_snapshot.py": f"{_Q2} — RT-0: manifest determinism, canonical tar, hostile restores",
+    "tests/test_auth2q2_prepare.py": f"{_Q2} — RT-0: preparation, listing replay, offline guard",
+    "tests/test_auth2q2_release.py": f"{_Q2} — RT-0: publish, immutability, download, RT-3 probes",
+    "tests/test_auth2q2_attempts.py": f"{_Q2} — RT-0: attempt classes, TECHNICAL_EXHAUSTION, compute proof",
+    "tests/test_auth2q2_readiness.py": f"{_Q2} — RT-0: the gate's refusals, ledger, reserve, RT-8, RT-9",
+    "tests/test_auth2q2_harness.py": f"{_Q2} — RT-0: restore and cache fallback, offline science, classifiers",
+    "tests/test_auth2q2_record.py": f"{_Q2} — RT-0: the readiness record, every shortfall a FAIL",
+    "tests/test_auth2q2_workflows.py": f"{_Q2} — RT-0: the two workflows hold to the plan and OD-S3",
+    "tests/test_p2_scope_audit.py": "AUTH-2 OD-C4 operator refusal (PR #65) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1112,6 +1162,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2_NODE_CHECKOUT_HISTORY": (AUTH_2_NODE_CHECKOUT_HISTORY_MERGE, AUTH_2_NODE_CHECKOUT_HISTORY_SCOPE),
     "AUTH2_GOVERNANCE_CLOSURE_1": (AUTH2_GOVERNANCE_CLOSURE_1_MERGE, AUTH2_GOVERNANCE_CLOSURE_1_SCOPE),
     "AUTH_2_OD_C4_OPERATOR_REFUSAL": (AUTH_2_OD_C4_OPERATOR_REFUSAL_MERGE, AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE),
+    "AUTH_2Q2_READINESS_TOOLING": (AUTH_2Q2_READINESS_TOOLING_MERGE, AUTH_2Q2_READINESS_TOOLING_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1119,48 +1170,29 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# AUTH-2-DISCOVERY-QUALIFICATION-2, Gate 2 successor readiness tooling (Owner decision "AUTH-2
-# CLOSURE AND SUCCESSOR READINESS", 2026-10-12, Gate 2: OD-S1 to OD-S8; carried out on the Owner's
-# instruction of 2026-10-13). The infrastructure the readiness runs RT-0 to RT-11 need, built and
-# tested offline: nothing is dispatched. No hypothesis, strategy, risk setting, threshold, window,
-# DAG, dataset science, preregistration or trial id changes; research/auth2/ and the trial ledger
-# untouched; the successor law is not written. Only the snapshot release job may write.
-_Q2 = "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling"
+# H1 G11 records (Owner decisions G5 "host check", 2026-10-17T14:39Z, and G6 "both",
+# 2026-10-17T17:59Z; Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z, item 2).
+# Records only: the G5 host-check result and the two H1 amendments, beside AUTH-3. The frozen H1
+# package, every P2 file, the registry, the trial ledger and every runtime file are untouched, and
+# no GPL-3.0 source is committed.
+_G11 = "H1 G11 records (G5 RECOVERED, G6 amendments)"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/auth2q2/__init__.py": f"{_Q2} — the successor's readiness package, its id [OD-S1]",
-    "research/auth2q2/snapshot.py":
-        f"{_Q2} — deterministic content-addressed snapshot and manifest; strict, verified restore [OD-S2]",
-    "research/auth2q2/listing.py": f"{_Q2} — the archive listing replayed offline; any other request refused",
-    "research/auth2q2/offline.py": f"{_Q2} — the science phase without network: namespace probe, socket guard",
-    "research/auth2q2/prepare.py":
-        f"{_Q2} — checksum-verified parallel preparation bound to the Dataset V3 lock (RT-1, RT-2)",
-    "research/auth2q2/release.py":
-        f"{_Q2} — the immutable-release publication path and its RT-3 probes [OD-S2, OD-S3]",
-    "research/auth2q2/attempts.py":
-        f"{_Q2} — ADMISSION/INFRA/SCIENCE/RESULT, bounded INFRA retries, TECHNICAL_EXHAUSTION [OD-S5, OD-S6]",
-    "research/auth2q2/compute.py":
-        f"{_Q2} — the guarded 4,000-minute compute proof, timeout + 1, closure reserve [OD-S7]",
-    "research/auth2q2/plan.py": f"{_Q2} — RT-1 to RT-11 as jobs and timeouts; the 300-minute ledger [OD-S4]",
-    "research/auth2q2/harness.py":
-        f"{_Q2} — the readiness jobs' steps: restore, verify, offline science, classifiers, verdicts",
-    "research/auth2q2/record.py": f"{_Q2} — the INFRA_READINESS record, rebuilt and verified offline [OD-S8]",
-    ".github/gates/auth2q2_readiness.py":
-        f"{_Q2} — the readiness gate: Owner billing evidence, serial, 300-minute cap, R_m; RT-8, RT-9 [OD-S4]",
-    ".github/gates/protected_paths.txt": f"{_Q2} — the successor's tooling and its tests are protected paths",
-    ".github/workflows/auth2q2-prepare.yml":
-        f"{_Q2} — RT-1 to RT-3, Owner-dispatched; the only contents: write job [OD-S3, OD-S4]",
-    ".github/workflows/auth2q2-readiness.yml": f"{_Q2} — RT-4 to RT-11, Owner-dispatched, read-only [OD-S3, OD-S4]",
-    "tests/fixtures/auth2q2_jobs_api.json": f"{_Q2} — the jobs API shapes of AUTH-2's two D0 runs",
-    "tests/test_auth2q2_snapshot.py": f"{_Q2} — RT-0: manifest determinism, canonical tar, hostile restores",
-    "tests/test_auth2q2_prepare.py": f"{_Q2} — RT-0: preparation, listing replay, offline guard",
-    "tests/test_auth2q2_release.py": f"{_Q2} — RT-0: publish, immutability, download, RT-3 probes",
-    "tests/test_auth2q2_attempts.py": f"{_Q2} — RT-0: attempt classes, TECHNICAL_EXHAUSTION, compute proof",
-    "tests/test_auth2q2_readiness.py": f"{_Q2} — RT-0: the gate's refusals, ledger, reserve, RT-8, RT-9",
-    "tests/test_auth2q2_harness.py": f"{_Q2} — RT-0: restore and cache fallback, offline science, classifiers",
-    "tests/test_auth2q2_record.py": f"{_Q2} — RT-0: the readiness record, every shortfall a FAIL",
-    "tests/test_auth2q2_workflows.py": f"{_Q2} — RT-0: the two workflows hold to the plan and OD-S3",
-    "tests/test_p2_scope_audit.py": "AUTH-2 OD-C4 operator refusal (PR #65) pinned to its merge; this branch's scope",
+    "research/paper/h1/amendments/G5_HOST_CHECK.md":
+        f"{_G11} — the Owner-host byte check: all five pinned sha256 found [G5]",
+    "research/paper/h1/amendments/H1_AMENDMENTS_G6.md":
+        f"{_G11} — H1-P2-CONDITION-AMENDMENT-1 and H1-MATERIALISATION-AMENDMENT-1 [G6]",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling (PR #66) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
+    # The vanished-upstream pin gate (Owner directive, 2026-10-17T21:39:21Z: fix only this, without weakening
+    # hash, identity, provenance or security). upstream_pins.json is byte-identical; a 404 is excused only
+    # while the G5 and G6 records above are present with their pinned sha256, and no bytes are cached for it.
+    "research/external/upstream_vanished.json":
+        "vanished-upstream pin gate — btc_strategy_lab listed VANISHED; upstream_pins.json byte-identical",
+    "research/external/pin_upstream.py":
+        "vanished-upstream pin gate — a pinned 404 is recorded, not failed; reappearing bytes must still match",
+    "tests/test_upstream_vanished.py":
+        "vanished-upstream pin gate — every way past the gate the pins would not allow is refused",
 }
 
 
