@@ -316,6 +316,54 @@ def test_the_gate_pins_the_merged_records():
     assert sha((REPO / gate.AMENDMENTS).read_bytes()) == gate.G6_AMENDMENTS_SHA256
     for path, digest in card.G11_RECORDS.items():
         assert sha((REPO / path).read_bytes()) == digest, path
+    assert sha((REPO / card.WINDOW_AMENDMENT).read_bytes()) == card.WINDOW_AMENDMENT_SHA256
+
+
+def test_the_window_amendment_is_operational_only_and_leaves_the_package_frozen():
+    text = (REPO / card.WINDOW_AMENDMENT).read_text()
+    assert "END_UTC              = ACTIVATION_UTC + 10 days" in text
+    assert "EDGE_EVIDENCE is\n                              NOT_EVALUATED" in text
+    assert gate.H1_PACKAGE_DIGEST in text and "REAL_MONEY_AUTHORIZED = NO" in text
+    assert sha((REPO / gate.PACKAGE_MANIFEST).read_bytes()) == gate.H1_PACKAGE_DIGEST
+
+
+# These run in a scratch repository: in this checkout the answer depends on where the
+# tests run (a PR's synthetic merge ref introduces the record through a merge, and so
+# does main once the Owner merges it), so HEAD here proves nothing either way.
+
+
+def test_an_unmerged_window_amendment_is_not_adopted(repo):
+    repo.write({card.WINDOW_AMENDMENT: (REPO / card.WINDOW_AMENDMENT).read_bytes()}, merge=False)
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["sha256_ok"] and not row["merged"]
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"]
+
+
+def test_an_absent_window_amendment_is_not_adopted(repo):
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"] and not row["sha256_ok"]
+
+
+def test_a_merged_window_amendment_is_adopted(repo):
+    repo.write({card.WINDOW_AMENDMENT: (REPO / card.WINDOW_AMENDMENT).read_bytes()})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["value"] == "ADOPTED" and row["pass"] and row["merged"] and row["sha256_ok"]
+
+
+def test_a_merged_but_altered_window_record_is_not_adopted(repo):
+    data = (REPO / card.WINDOW_AMENDMENT).read_bytes().replace(b"10 days", b"11 days")
+    repo.write({card.WINDOW_AMENDMENT: data})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["merged"] and not row["sha256_ok"]
+    assert row["value"] == "NOT_ADOPTED" and not row["pass"]
+
+
+def test_a_pending_window_record_is_not_adopted_even_if_merged(repo, monkeypatch):
+    data = (REPO / card.WINDOW_AMENDMENT).read_bytes() + b"\nDECISION    PENDING\n"
+    monkeypatch.setattr(card, "WINDOW_AMENDMENT_SHA256", sha(data))
+    repo.write({card.WINDOW_AMENDMENT: data})
+    row = card.window_amendment_row("main", repo=repo.path)
+    assert row["merged"] and row["sha256_ok"] and not row["pass"]
 
 
 # -- host placement -----------------------------------------------------------

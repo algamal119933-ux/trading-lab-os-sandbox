@@ -12,6 +12,7 @@ never sets T0, and never writes outside ``--json``. Each row is PASS or not PASS
 
     P2_TERMINAL_STATUS / P2_CLOSURE_DIGEST   H1_P2_ENTRY_GATE = H1_ENTRY_ELIGIBLE
     G11_RECORDS_PR_STATUS                    G5 and G6 records on the ref through a two-parent merge
+    H1_WINDOW_AMENDMENT                      the 10-day window record, adopted, on the ref through a merge
     H1_PACKAGE_DIGEST                        h1_paper.py verify = PASS and digest = ef9a3d0c…bc43c
     SOURCE_SHA256_STATUS                     the materialised files equal the three pins
     MATERIALISATION_PREFLIGHT                h1_paper.py preflight = PASS on the materialised dir and the lane
@@ -48,6 +49,8 @@ G11_RECORDS = {
     "research/paper/h1/amendments/G5_HOST_CHECK.md": "2870d7dc6ca812342b040e3864dfdf0b5151c9cf876483eeaa7f79ed909159f9",
     gate.AMENDMENTS: gate.G6_AMENDMENTS_SHA256,
 }
+WINDOW_AMENDMENT = "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md"
+WINDOW_AMENDMENT_SHA256 = "9283a848f5a8205ff8a811b3ae8d1c4635ed0ef8c7e986955b8bf0f24aa35f4b"
 COMPOSE_REL = "research/paper/h1/package/docker-compose.h1-paper.yml"
 API_ENV_FILE = "<operator-local env file, outside git: H1_PAPER_API_USER, H1_PAPER_API_PASSWORD, " \
                "H1_PAPER_JWT_SECRET, H1_PAPER_WS_TOKEN — API-server login only, never an exchange key>"
@@ -78,6 +81,16 @@ def same_device(a: Path, b: Path) -> bool:
     return os.stat(probe_a).st_dev == os.stat(b).st_dev
 
 
+def window_amendment_row(ref: str, repo: Path = REPO) -> dict:
+    """ADOPTED only when the pinned window record is on ref through a two-parent merge."""
+    blob = gate.show(ref, WINDOW_AMENDMENT, repo=repo)
+    sha_ok = blob is not None and hashlib.sha256(blob).hexdigest() == WINDOW_AMENDMENT_SHA256
+    adopted = sha_ok and b"DECISION    PENDING" not in blob
+    merged = blob is not None and gate.first_parent_merge_introducing(ref, WINDOW_AMENDMENT, repo=repo) is not None
+    return {"value": "ADOPTED" if adopted and merged else "NOT_ADOPTED",
+            "sha256_ok": sha_ok, "merged": merged, "pass": adopted and merged}
+
+
 def build_card(ref: str, record_path: Path | None, lane_dir: Path | None, second_store: Path | None,
                *, entry: dict | None = None, host: dict | None = None) -> dict:
     rows: dict[str, dict] = {}
@@ -96,6 +109,8 @@ def build_card(ref: str, record_path: Path | None, lane_dir: Path | None, second
     rows["G11_RECORDS_PR_STATUS"] = {"value": "MERGED" if all(v["sha256_ok"] and v["merged"] for v in g11.values())
                                      else "NOT_MERGED", "records": g11}
     rows["G11_RECORDS_PR_STATUS"]["pass"] = rows["G11_RECORDS_PR_STATUS"]["value"] == "MERGED"
+
+    rows["H1_WINDOW_AMENDMENT"] = window_amendment_row(ref)
 
     ok, text = run_h1_paper("verify")
     digest = hashlib.sha256((PACKAGE / "PACKAGE_MANIFEST.sha256").read_bytes()).hexdigest()
@@ -156,8 +171,8 @@ def build_card(ref: str, record_path: Path | None, lane_dir: Path | None, second
         "EXPECTED_T0_EFFECT": (
             "one container tlos-h1-paper-cohort-1-freqtrade starts in dry-run on Binance spot BTC/USDT 1h with a "
             "100 USDT simulated wallet; the COHORT_START incident's recorded_utc becomes PAPER_T0; the frozen "
-            "180-day window runs from the close of the first processed 1h candle (ACTIVATION_UTC); the freeze "
-            "law (PREREGISTRATION.md §6) binds from T0; no real order, key or money is involved"),
+            "10-day operational window (H1-WINDOW-AMENDMENT-1) runs from the close of the first processed 1h "
+            "candle (ACTIVATION_UTC); no edge verdict is drawn from it; the freeze law (PREREGISTRATION.md §6) binds from T0; no real order, key or money is involved"),
         "REAL_MONEY_AUTHORIZED": "NO",
         "OWNER_DECISION_DEFAULT": "READY_FOR_OWNER_AUTHORIZATION" if all_pass else "DENY",
         "not_pass": [k for k, r in rows.items() if not r["pass"]],
