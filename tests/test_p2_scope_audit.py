@@ -1146,6 +1146,33 @@ H1_G11_RECORDS_SCOPE: dict[str, str] = {
 }
 
 
+# PR #68, merged. Two parents: 1078c2f6 (main before, H1_G11_RECORDS) + 50ed3181
+# (the claude/p2-h1-prelaunch-prep branch).
+H1_PRELAUNCH_PREP_MERGE = "4fec17693347adaf74d7112e6cb304691161f6b8"
+
+# H1 pre-launch preparation (Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z,
+# items 3 to 8). Tools and a binder only. Nothing starts H1, sets a T0, writes the frozen package,
+# or touches P2.
+# These entries were BRANCH_SCOPE while it was in flight.
+_PREP = "H1 pre-launch preparation"
+H1_PRELAUNCH_PREP_SCOPE: dict[str, str] = {
+    "research/paper/h1/launch/h1_materialise.py":
+        f"{_PREP} — G.2-b credential-free, hash-verified materialisation [item 3]",
+    "research/paper/h1/launch/h1_p2_entry_gate.py":
+        f"{_PREP} — H1_P2_ENTRY_GATE: ELIGIBLE / WAITING / BLOCKED from the git ref [item 5]",
+    "research/paper/h1/launch/h1_host_placement.py":
+        f"{_PREP} — no running P2 cohort on the H1 host; no automatic exception [item 6]",
+    "research/paper/h1/launch/h1_launch_card.py":
+        f"{_PREP} — the H1_LAUNCH_AUTHORIZATION card, default DENY [item 8]",
+    "research/paper/h1/launch/H1_LAUNCH_BINDER.md":
+        f"{_PREP} — the launch binder; templates only, no T0 [item 4]",
+    "tests/test_h1_launch_prep.py":
+        f"{_PREP} — every refusal of the four tools, on synthetic inputs",
+    "tests/test_p2_scope_audit.py": "H1 G11 records (PR #67) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1193,6 +1220,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2_OD_C4_OPERATOR_REFUSAL": (AUTH_2_OD_C4_OPERATOR_REFUSAL_MERGE, AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE),
     "AUTH_2Q2_READINESS_TOOLING": (AUTH_2Q2_READINESS_TOOLING_MERGE, AUTH_2Q2_READINESS_TOOLING_SCOPE),
     "H1_G11_RECORDS": (H1_G11_RECORDS_MERGE, H1_G11_RECORDS_SCOPE),
+    "H1_PRELAUNCH_PREP": (H1_PRELAUNCH_PREP_MERGE, H1_PRELAUNCH_PREP_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1200,29 +1228,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# H1 pre-launch preparation (Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z,
-# items 3 to 8). Tools and a binder only. Nothing starts H1, sets a T0, writes the frozen package,
-# or touches P2.
-_PREP = "H1 pre-launch preparation"
+# H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to 180 days; 20:29Z: run the plan;
+# 20:44Z: 10 days). A record beside the package, effective only on the Owner's merge; the card denies
+# until then. The frozen package and P2 are untouched.
+_WIN = "H1 window amendment"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/paper/h1/launch/h1_materialise.py":
-        f"{_PREP} — G.2-b credential-free, hash-verified materialisation [item 3]",
-    "research/paper/h1/launch/h1_p2_entry_gate.py":
-        f"{_PREP} — H1_P2_ENTRY_GATE: ELIGIBLE / WAITING / BLOCKED from the git ref [item 5]",
-    "research/paper/h1/launch/h1_host_placement.py":
-        f"{_PREP} — no running P2 cohort on the H1 host; no automatic exception [item 6]",
-    "research/paper/h1/launch/h1_launch_card.py":
-        f"{_PREP} — the H1_LAUNCH_AUTHORIZATION card, default DENY [item 8]",
-    "research/paper/h1/launch/H1_LAUNCH_BINDER.md":
-        f"{_PREP} — the launch binder; templates only, no T0 [item 4]",
-    "tests/test_h1_launch_prep.py":
-        f"{_PREP} — every refusal of the four tools, on synthetic inputs",
-    # Stacked on the pre-launch preparation: H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to
-    # 180 days; 20:29Z: run the plan; 20:44Z: 10 days). A record beside the package, effective only on the Owner's
-    # merge; the card denies until then. The frozen package and P2 are untouched.
     "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
-        "H1 window amendment — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
-    "tests/test_p2_scope_audit.py": "H1 G11 records (PR #67) pinned to its merge; this branch's scope",
+        f"{_WIN} — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
+    "research/paper/h1/launch/h1_launch_card.py":
+        f"{_WIN} — the H1_WINDOW_AMENDMENT row: adopted only at its sha256, through a merge",
+    "research/paper/h1/launch/H1_LAUNCH_BINDER.md": f"{_WIN} — the closure schedule names the 10-day END_UTC",
+    "tests/test_h1_launch_prep.py": f"{_WIN} — the record is pinned; adoption tested in a scratch repository",
+    "tests/test_p2_scope_audit.py": "H1 pre-launch preparation (PR #68) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
