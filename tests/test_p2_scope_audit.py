@@ -1117,6 +1117,35 @@ AUTH_2Q2_READINESS_TOOLING_SCOPE: dict[str, str] = {
 }
 
 
+# PR #67, merged. Two parents: ecfec829 (main before, AUTH_2Q2_READINESS_TOOLING) + 757edee9
+# (the claude/p2-h1-g11-records branch).
+H1_G11_RECORDS_MERGE = "1078c2f69120acb6f10f05e8b18dccc39349342b"
+
+# H1 G11 records (Owner decisions G5 "host check", 2026-10-17T14:39Z, and G6 "both",
+# 2026-10-17T17:59Z; Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z, item 2), with
+# the vanished-upstream pin gate (Owner directive, 2026-10-17T21:39:21Z: fix only this, without
+# weakening hash, identity, provenance or security). Records and the gate only: the frozen H1
+# package, every P2 file, the registry, the trial ledger and every runtime file are untouched;
+# upstream_pins.json is byte-identical and no GPL-3.0 source is committed.
+# These entries were BRANCH_SCOPE while it was in flight.
+_G11 = "H1 G11 records (G5 RECOVERED, G6 amendments)"
+H1_G11_RECORDS_SCOPE: dict[str, str] = {
+    "research/paper/h1/amendments/G5_HOST_CHECK.md":
+        f"{_G11} — the Owner-host byte check: all five pinned sha256 found [G5]",
+    "research/paper/h1/amendments/H1_AMENDMENTS_G6.md":
+        f"{_G11} — H1-P2-CONDITION-AMENDMENT-1 and H1-MATERIALISATION-AMENDMENT-1 [G6]",
+    "research/external/upstream_vanished.json":
+        "vanished-upstream pin gate — btc_strategy_lab listed VANISHED; upstream_pins.json byte-identical",
+    "research/external/pin_upstream.py":
+        "vanished-upstream pin gate — a pinned 404 is recorded, not failed; reappearing bytes must still match",
+    "tests/test_upstream_vanished.py":
+        "vanished-upstream pin gate — every way past the gate the pins would not allow is refused",
+    "tests/test_p2_scope_audit.py":
+        "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling (PR #66) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1163,6 +1192,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH2_GOVERNANCE_CLOSURE_1": (AUTH2_GOVERNANCE_CLOSURE_1_MERGE, AUTH2_GOVERNANCE_CLOSURE_1_SCOPE),
     "AUTH_2_OD_C4_OPERATOR_REFUSAL": (AUTH_2_OD_C4_OPERATOR_REFUSAL_MERGE, AUTH_2_OD_C4_OPERATOR_REFUSAL_SCOPE),
     "AUTH_2Q2_READINESS_TOOLING": (AUTH_2Q2_READINESS_TOOLING_MERGE, AUTH_2Q2_READINESS_TOOLING_SCOPE),
+    "H1_G11_RECORDS": (H1_G11_RECORDS_MERGE, H1_G11_RECORDS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1170,48 +1200,30 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# H1 G11 records (Owner decisions G5 "host check", 2026-10-17T14:39Z, and G6 "both",
-# 2026-10-17T17:59Z; Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z, item 2).
-# Records only: the G5 host-check result and the two H1 amendments, beside AUTH-3. The frozen H1
-# package, every P2 file, the registry, the trial ledger and every runtime file are untouched, and
-# no GPL-3.0 source is committed.
-_G11 = "H1 G11 records (G5 RECOVERED, G6 amendments)"
+# H1 pre-launch preparation (Owner directive "PREPARE NEXT H1 PHASE NOW", 2026-10-17T18:09Z,
+# items 3 to 8). Tools and a binder only. Nothing starts H1, sets a T0, writes the frozen package,
+# or touches P2.
+_PREP = "H1 pre-launch preparation"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/paper/h1/amendments/G5_HOST_CHECK.md":
-        f"{_G11} — the Owner-host byte check: all five pinned sha256 found [G5]",
-    "research/paper/h1/amendments/H1_AMENDMENTS_G6.md":
-        f"{_G11} — H1-P2-CONDITION-AMENDMENT-1 and H1-MATERIALISATION-AMENDMENT-1 [G6]",
-    "tests/test_p2_scope_audit.py":
-        "AUTH-2-DISCOVERY-QUALIFICATION-2 readiness tooling (PR #66) pinned to its merge; this branch's scope",
-    "MANIFEST.txt": "repository integrity — regenerated after staging",
-    # Stacked on the G11 records: H1 pre-launch preparation (the same directive, items 3 to 8). Tools and
-    # a binder only. Nothing starts H1, sets a T0, writes the frozen package, or touches P2.
     "research/paper/h1/launch/h1_materialise.py":
-        "H1 pre-launch preparation — G.2-b credential-free, hash-verified materialisation [item 3]",
+        f"{_PREP} — G.2-b credential-free, hash-verified materialisation [item 3]",
     "research/paper/h1/launch/h1_p2_entry_gate.py":
-        "H1 pre-launch preparation — H1_P2_ENTRY_GATE: ELIGIBLE / WAITING / BLOCKED from the git ref [item 5]",
+        f"{_PREP} — H1_P2_ENTRY_GATE: ELIGIBLE / WAITING / BLOCKED from the git ref [item 5]",
     "research/paper/h1/launch/h1_host_placement.py":
-        "H1 pre-launch preparation — no running P2 cohort on the H1 host; no automatic exception [item 6]",
+        f"{_PREP} — no running P2 cohort on the H1 host; no automatic exception [item 6]",
     "research/paper/h1/launch/h1_launch_card.py":
-        "H1 pre-launch preparation — the H1_LAUNCH_AUTHORIZATION card, default DENY [item 8]",
+        f"{_PREP} — the H1_LAUNCH_AUTHORIZATION card, default DENY [item 8]",
     "research/paper/h1/launch/H1_LAUNCH_BINDER.md":
-        "H1 pre-launch preparation — the launch binder; templates only, no T0 [item 4]",
+        f"{_PREP} — the launch binder; templates only, no T0 [item 4]",
     "tests/test_h1_launch_prep.py":
-        "H1 pre-launch preparation — every refusal of the four tools, on synthetic inputs",
+        f"{_PREP} — every refusal of the four tools, on synthetic inputs",
     # Stacked on the pre-launch preparation: H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to
     # 180 days; 20:29Z: run the plan; 20:44Z: 10 days). A record beside the package, effective only on the Owner's
     # merge; the card denies until then. The frozen package and P2 are untouched.
     "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
         "H1 window amendment — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
-    # The vanished-upstream pin gate (Owner directive, 2026-10-17T21:39:21Z: fix only this, without weakening
-    # hash, identity, provenance or security). upstream_pins.json is byte-identical; a 404 is excused only
-    # while the G5 and G6 records above are present with their pinned sha256, and no bytes are cached for it.
-    "research/external/upstream_vanished.json":
-        "vanished-upstream pin gate — btc_strategy_lab listed VANISHED; upstream_pins.json byte-identical",
-    "research/external/pin_upstream.py":
-        "vanished-upstream pin gate — a pinned 404 is recorded, not failed; reappearing bytes must still match",
-    "tests/test_upstream_vanished.py":
-        "vanished-upstream pin gate — every way past the gate the pins would not allow is refused",
+    "tests/test_p2_scope_audit.py": "H1 G11 records (PR #67) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
 
