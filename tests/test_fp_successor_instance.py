@@ -390,6 +390,8 @@ def test_ci_selects_an_instance_before_rendering_the_overlay():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "scripts/fp_instance.py FP-CONTROL-3" in workflow
     assert "An unselected FP overlay render must fail closed" in workflow
+    # Once the cohort is CLOSED, CI must first prove the resolver refuses it.
+    assert 'grep -q "is CLOSED" /tmp/fp-selection.err' in workflow
 
 
 def test_preflight_refuses_an_unbound_runtime():

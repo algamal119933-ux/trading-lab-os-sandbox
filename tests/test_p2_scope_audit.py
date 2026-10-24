@@ -1272,6 +1272,9 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_fp_successor_instance.py":
         f"{_CLOSE} — the CLOSED lawful state; new negatives: a committed CLOSED cohort cannot be "
         "selected, resolved or rendered",
+    ".github/workflows/ci.yml":
+        f"{_CLOSE} — the overlay render asserts the CLOSED cohort is refused, then renders it in a "
+        "disposable executable copy",
     "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
