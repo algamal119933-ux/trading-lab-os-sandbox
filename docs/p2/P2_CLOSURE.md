@@ -3,8 +3,9 @@
 **Stage:** `P2 — PROSPECTIVE PAPER PROOF`.
 **Authority:** [`P2_CONTRACT.md`](P2_CONTRACT.md) §7 (the window law, NORMAL END) and §12
 (the closure law). This record does not restate the contract and does not extend it.
-**Owner authorizations:** GO 1R 2026-10-24T21:37:14Z · GO 2 21:42:04Z · GO 3 21:46:34Z ·
-closure preparation 21:54:01Z. P2 is closed only when this record reaches `main` through the
+**Owner authorizations:** GO 1 (the governed shutdown, executed 2026-10-24T18:52:04Z) ·
+GO 1R 21:37:14Z · GO 2 21:42:04Z · GO 3 21:46:34Z · closure preparation 21:54:01Z ·
+closure corrections 22:14:40Z. P2 is closed only when this record reaches `main` through the
 Owner's normal two-parent merge.
 
 ```text
@@ -31,7 +32,9 @@ T0              2026-09-24T12:00:00Z          immutable, never moved
 ACTIVATION_UTC  2026-09-24T12:01:14Z
 HARD_CAP        2026-10-24T12:01:14Z          not the trigger: the lifecycle completed first
 NORMAL END      2026-10-22T23:00:01Z          BTC/USDT trade 1 closed
-SHUTDOWN        2026-10-24T21:37:57Z          scripts/stop_fp_control.sh, rc 0 (GO 1R)
+GO 1            2026-10-24T18:52:04Z          Owner-authorized governed shutdown of the stack
+AUTO RESTART    2026-10-24T19:10:18Z          host monitor timer, restart_counter 9 (F-3)
+SHUTDOWN        2026-10-24T21:37:57Z          GO 1R: timer disabled, then scripts/stop_fp_control.sh, rc 0
 SEALED          2026-10-24T21:42:51Z          l2-cohort-20260924T120000Z (GO 2)
 M1 (declared)   83c49414cc9eaba9a4e25809672d65d032669616
 M2 (stamped)    3191285a28823907f62c6eb915327599cd6ed90b   on every record
@@ -152,25 +155,35 @@ fidelity. Replay over the captured inputs matches 1597/1597 on each pair.
 
 ## 5. Findings
 
-**F-1 — the runtime ran past the hard cap.** Nothing stops a cohort at `HARD_CAP`. The original
-run kept deciding until a stack stop at 18:52:04Z, about 6h51m after the cap. Records after the
-cap are `input 20 · decision 20` (10 hourly bars × 2 pairs, 12:04:26Z to 21:01:42Z) and
-`incident 2`. They are kept in the sealed archive and **not credited**. No trade event occurred
-after the cap. The window law forbids extending a window, and none was claimed.
+> The finding labels and their order follow the Owner's closure review. The canonical wording
+> of F-1 to F-5 is to be confirmed by the Owner before this record is merged.
 
-**F-2 — an unattributed stack stop at 18:52:04Z.** The six `tradinglab-fp-control-3-*` containers
-were stopped and removed and their compose network deleted. The host did not reboot (one
-continuous boot since 2026-10-23T21:49Z), and the other containers on the host kept running. The
-pattern matches a `docker compose … down` on this stack. No log names who or what issued it. It
-is recorded as unattributed and is not guessed.
+**F-1 — the runtime ran past the hard cap.** Nothing stops a cohort at `HARD_CAP`. The original
+run kept deciding until the Owner-authorized GO 1 shutdown at 18:52:04Z, about 6h51m after the
+cap. Records after the cap are `input 20 · decision 20` (10 hourly bars × 2 pairs, 12:04:26Z to
+21:01:42Z) and `incident 2`. They are kept in the sealed archive and **not credited**. No trade
+event occurred after the cap. The window law forbids extending a window, and none was claimed.
+
+**F-2 — the shutdown could not be verified from the system's own records (unresolved
+verification-tool weakness, carried to P3).** The 18:52:04Z stop was the Owner-authorized GO 1
+governed shutdown. Afterwards, though, nothing on the host or in the repository could
+independently confirm what performed it. The evidence lane records no stop event: a stop
+writes nothing into it, and the next record is the 19:10Z `run_started`. Docker keeps no
+durable event history. The host journal shows only the daemon stopping the containers (SIGTERM,
+then a forced kill after 10 s) and removing the stack's network, with no command or actor. The
+attribution therefore rests on the Owner's statement, not on a verifiable record. This is a
+weakness of the verification tooling, not of the cohort's evidence or identity: the chains, the
+restart counters and reconciliation are unaffected. It is **unresolved** and is carried to P3
+operational hardening as a requirement: governed stops and starts must leave a verifiable,
+attributable record. It does **not** invalidate the cohort.
 
 **F-3 — an automatic restart after the cap.** At 19:10:18Z the host-side user timer
-`tlos-p2-window-fp-control-3.timer` saw "registry RUNNING, 0 containers" and ran its class-A
-recovery, `scripts/start_fp_control.sh FP-CONTROL-3` (restart_counter 9, incidents seq 3333–3334).
-The monitor logged `HARD_CAP_REACHED … NEEDS JUDGEMENT` every hour from 16:10Z, but its restart
-path has no hard-cap guard. Under GO 1R the timer was disabled and stopped (21:37Z) **before**
-the governed shutdown. The monitor's unit files and script live outside the repository and are
-kept unchanged.
+`tlos-p2-window-fp-control-3.timer` saw "registry RUNNING, 0 containers" after GO 1 and ran its
+class-A recovery, `scripts/start_fp_control.sh FP-CONTROL-3` (restart_counter 9, incidents seq
+3333–3334). The monitor logged `HARD_CAP_REACHED … NEEDS JUDGEMENT` every hour from 16:10Z, but
+its restart path has no hard-cap guard, and GO 1 did not disable it. Under GO 1R the timer was
+disabled and stopped (21:37Z) **before** the second governed shutdown. The monitor's unit files
+and script live outside the repository and are kept unchanged.
 
 **F-4 — coverage and signal completeness.** These are the gaps in §4. The 74 unexplained
 bar-hours all fall inside unclean host-down intervals consistent with power loss. The capture
@@ -182,11 +195,20 @@ cross falls at different hours from the public one. Replay over what was capture
 signalled for, so it passes on ETH. The per-execution check that separates credited from
 contextual was made by hand for this record. ETH is reported and not credited.
 
-None of F-1 to F-5 is an integrity defect. The chains are intact, every record is attributable,
-reconciliation passes, and paper-only authority held throughout. None needs a runtime repair to
-close this cohort, so `UNRESOLVED_INTEGRITY_DEFECTS = NONE` and `UNRESOLVED_TECHNICAL_DEFECTS =
-NONE` stand. The tooling gaps behind F-1, F-3 and F-5 are inputs for a later stage. They are not
-open defects of this cohort.
+### How the machine block reads these findings
+
+`UNRESOLVED_INTEGRITY_DEFECTS = NONE`. Every chain verifies from genesis, every record is
+attributable, reconciliation passes on all fourteen findings, and paper-only authority held.
+
+`UNRESOLVED_TECHNICAL_DEFECTS = NONE` is stated under the contract's own definition and no wider
+one. P2_CONTRACT §11 says "A cohort is invalidated ONLY by a technical defect in its evidence or
+identity", and its classes B to E name those defects: a tracked runtime repair, corrupted or
+missing evidence, a strategy or risk change, a Dataset authority change. The registry schema
+defines no other meaning. None of F-1 to F-5 is such a defect in this cohort's evidence or
+identity, and none needed a runtime repair to close it. F-2 stays visible as an **unresolved
+verification-tool weakness** carried to P3. F-1, F-3 and F-5 are tooling gaps carried as inputs
+to a later stage. If the Owner reads "technical defect" more widely than §11, this field must
+not read NONE, and this record must be revised before it is merged.
 
 ## 6. What this closure proves, and does not
 

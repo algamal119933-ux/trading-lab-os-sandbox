@@ -33,6 +33,34 @@ SUCCESSOR = "FP-CONTROL-3"
 HOST_USER_DATA = lane.HOST_USER_DATA
 
 
+@pytest.fixture(autouse=True)
+def _an_executable_registry(executable_registry_file):
+    """Every test here drives the runtime, which only executes an open row.
+
+    The committed registry has no open row once the stage is closed, so these
+    tests run against an isolated temporary registry in which the cohort under
+    test is executable (``conftest.executable_registry``). The committed file is
+    never written; that a CLOSED row is refused is proved in
+    tests/test_fp_successor_instance.py against the committed registry itself.
+    """
+    return executable_registry_file
+
+
+# Subprocess proofs run in a disposable copy of the tracked tree whose registry
+# holds the cohort under test in an executable state, for the same reason: the
+# committed file has no open row, and a refusal for being CLOSED would mask the
+# specific gate each of these proofs exists to exercise.
+_EXECUTABLE_REPO: Path | None = None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _an_executable_repository(tmp_path_factory):
+    global _EXECUTABLE_REPO
+    _EXECUTABLE_REPO = repo_copy(tmp_path_factory.mktemp("executable"))
+    yield _EXECUTABLE_REPO
+    _EXECUTABLE_REPO = None
+
+
 @pytest.fixture(scope="module")
 def registry() -> dict:
     return conftest.pre_t0_registry(SUCCESSOR)
@@ -48,7 +76,7 @@ def rendered_overlay() -> dict:
     env = dict(os.environ)
     resolved = subprocess.run(
         [sys.executable, "scripts/fp_instance.py", SUCCESSOR],
-        capture_output=True, text=True, timeout=60, check=True,
+        capture_output=True, text=True, timeout=60, check=True, cwd=_EXECUTABLE_REPO,
     ).stdout
     for line in resolved.strip().splitlines():
         key, value = line.split("=", 1)
@@ -807,6 +835,7 @@ def repo_copy(tmp_path: Path) -> Path:
     runtime = destination / "freqtrade/user_data/config.json"
     if not runtime.exists():
         runtime.write_bytes((destination / "freqtrade/user_data/config.paper.json.example").read_bytes())
+    conftest.write_executable_registry(destination, SUCCESSOR)
     return destination
 
 
@@ -894,7 +923,7 @@ def test_the_runtime_config_identity_cannot_be_overridden():
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
          "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", "freqtrade/user_data/config.paper.json.example", "--cycles", "1"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=120, cwd=_EXECUTABLE_REPO,
     )
     assert result.returncode != 0
     assert "runtime configuration" in result.stderr, result.stderr
@@ -996,7 +1025,7 @@ def test_capture_requires_the_declared_runtime_config_path(tmp_path):
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
          "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", str(decoy), "--cycles", "1"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=120, cwd=_EXECUTABLE_REPO,
     )
     assert result.returncode != 0, result.stdout
     assert "declared runtime configuration" in result.stderr, result.stderr
@@ -1089,7 +1118,7 @@ def test_a_decoy_config_path_is_refused(tmp_path):
         [sys.executable, "research/fp/capture.py", "--role", SUCCESSOR,
          "--evidence-dir", "/freqtrade/user_data/fp-control-3/evidence",
          "--config", str(decoy / "config.json"), "--cycles", "1"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=120, cwd=_EXECUTABLE_REPO,
     )
     assert result.returncode != 0
     assert "declared runtime configuration" in result.stderr, result.stderr

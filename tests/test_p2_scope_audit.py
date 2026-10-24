@@ -1261,7 +1261,17 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/fp/records/evidence_digest_publication.json":
         f"{_CLOSE} — Tier 2 digest of the sealed FP-CONTROL-3 cohort lane l2-cohort-20260924T120000Z",
     "tests/conftest.py":
-        f"{_CLOSE} — with every row CLOSED, the live role is the most recently frozen cohort, read from the file",
+        f"{_CLOSE} — live role after closure; executable_registry: isolated temporary fixtures for tests "
+        "that must drive an open row",
+    "tests/test_fp_capture.py": f"{_CLOSE} — the capture loop runs against the isolated executable registry",
+    "tests/test_fp_lane_adversarial.py":
+        f"{_CLOSE} — lane proofs run against the isolated executable registry and a disposable copy",
+    "tests/test_fp_lane_io_adversarial.py":
+        f"{_CLOSE} — lane I/O and launcher proofs run against the isolated executable registry",
+    "tests/test_fp_overlay.py": f"{_CLOSE} — the overlay guard runs against the isolated executable registry",
+    "tests/test_fp_successor_instance.py":
+        f"{_CLOSE} — the CLOSED lawful state; new negatives: a committed CLOSED cohort cannot be "
+        "selected, resolved or rendered",
     "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
@@ -1820,9 +1830,22 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
     registry = json.loads(Path("research/fp/records/forward_paper_cohort_registry.json")
                           .read_text(encoding="utf-8"))
     open_roles = {row["role"] for row in registry["instances"] if row.get("status") != "CLOSED"}
-    assert binding["role"] in open_roles, (
-        f"the authorization and binding name {binding['role']}, which is not an open row"
-    )
+    if open_roles:
+        assert binding["role"] in open_roles, (
+            f"the authorization and binding name {binding['role']}, which is not an open row"
+        )
+    else:
+        # Every row is CLOSED: the stage has closed and no successor is registered.
+        # The grant has then been spent on exactly one freeze, so it must name the
+        # cohort frozen most recently, and that row must carry a frozen T0 and its
+        # closure. A grant naming any other row, or a never-frozen one, still fails.
+        import conftest
+
+        spent = next(r for r in registry["instances"] if r["role"] == binding["role"])
+        assert binding["role"] == conftest.live_role(), (
+            f"the authorization and binding name {binding['role']}, which is not the cohort "
+            "frozen most recently")
+        assert spent["t0_utc"] and spent["cohort_id"] and spent["closed_utc"], spent["role"]
     assert granted["QUALIFICATION_COMMIT"][0] == binding["qualification_commit"]
     assert granted["QUALIFICATION_CERTIFICATE_SHA256"][0] == binding["certificate_sha256"]
     assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"

@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pytest
 
+import conftest
+
 from fp import capture, lane, ledger as fp_ledger, preflight
 from fp.lane_io import LaneDurabilityUnproven, LaneHandle, LaneIdentity, LaneIOError
 
@@ -113,9 +115,13 @@ def victim(tmp_path) -> Path:
 
 
 @pytest.fixture
-def registry_pinned(monkeypatch):
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
-    monkeypatch.setattr(lane, "COHORT_REGISTRY", REGISTRY_PATH.resolve())
+def registry_pinned(monkeypatch, executable_registry_file):
+    # An isolated registry in which the cohort under test is executable: the
+    # committed file has no open row once the stage is closed (conftest
+    # ``executable_registry``). The committed registry is still the one the
+    # truncation proof below watches, byte for byte.
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", executable_registry_file)
+    monkeypatch.setattr(lane, "COHORT_REGISTRY", executable_registry_file)
     monkeypatch.setattr(capture, "assert_evidence_dir_is_declared", lambda *a, **k: None)
 
 
@@ -676,6 +682,7 @@ def _disposable_repo(tmp_path: Path) -> Path:
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(relative, target)
+    conftest.write_executable_registry(repo, SUCCESSOR)
     return repo
 
 
@@ -723,6 +730,10 @@ def _launcher_repo(tmp_path: Path) -> Path:
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(relative, target)
+    # The cohort under test is executable in this copy (conftest
+    # ``executable_registry``), committed with everything else so the tree the
+    # launcher sees is clean against its own HEAD.
+    conftest.write_executable_registry(repo, SUCCESSOR)
     for command in (["git", "init", "-q"],
                     ["git", "add", "-A"],
                     ["git", "-c", "user.email=t@t", "-c", "user.name=t",
