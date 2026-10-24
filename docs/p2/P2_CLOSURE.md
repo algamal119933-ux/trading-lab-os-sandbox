@@ -155,8 +155,10 @@ fidelity. Replay over the captured inputs matches 1597/1597 on each pair.
 
 ## 5. Findings
 
-> The finding labels and their order follow the Owner's closure review. The canonical wording
-> of F-1 to F-5 is to be confirmed by the Owner before this record is merged.
+> The labels F-1 to F-5 and their wording are this record's own. The Owner's closure review
+> (2026-10-24T22:14:40Z) set the GO 1 attribution and the classification of F-2. The Owner's
+> master authorization (2026-10-24T22:40:53Z) approved publishing and merging this record as
+> reviewed. No separate canonical text of F-1 to F-5 was supplied, and none is claimed.
 
 **F-1 — the runtime ran past the hard cap.** Nothing stops a cohort at `HARD_CAP`. The original
 run kept deciding until the Owner-authorized GO 1 shutdown at 18:52:04Z, about 6h51m after the
