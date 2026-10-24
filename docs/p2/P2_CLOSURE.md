@@ -155,9 +155,11 @@ fidelity. Replay over the captured inputs matches 1597/1597 on each pair.
 
 ## 5. Findings
 
-F-1 to F-5 below are the canonical findings of the Owner's closure review
-(2026-10-24T22:14:40Z), reproduced verbatim. The supporting record under each one is this
-record's own detail. It cites evidence and does not change the finding.
+F-1 to F-5 below are the canonical findings of the A15 closure review. The Owner's closure
+decision (2026-10-24T22:14:40Z) adopted them, set the GO 1 attribution and classified F-2. The
+text is reproduced verbatim, re-wrapped only, from the copy posted to the Owner in the closure
+thread at 22:14:50Z. The supporting record under each one is this record's own detail. It cites
+evidence and does not change the finding.
 
 ```text
 F-1 ETH runtime/lane divergence: runtime entry on the 19:00 signal and exit on the 10:00 signal
