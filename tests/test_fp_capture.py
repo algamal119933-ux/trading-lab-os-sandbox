@@ -27,6 +27,19 @@ from fp import capture as fp_capture
 QUALIFYING_ROLE = "FP-CONTROL-3"
 
 
+@pytest.fixture(autouse=True)
+def _an_executable_registry(executable_registry_file):
+    """Every test here drives the runtime, which only executes an open row.
+
+    The committed registry has no open row once the stage is closed, so these
+    tests run against an isolated temporary registry in which the cohort under
+    test is executable (``conftest.executable_registry``). The committed file is
+    never written; that a CLOSED row is refused is proved in
+    tests/test_fp_successor_instance.py against the committed registry itself.
+    """
+    return executable_registry_file
+
+
 def make_loop(*args, **kwargs):
     kwargs.setdefault("role", QUALIFYING_ROLE)
     # The lane is created explicitly, the way capture's own entry point creates

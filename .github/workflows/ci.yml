@@ -356,6 +356,36 @@ jobs:
           # The overlay is rendered for the instance the registry says may run,
           # resolved the same fail-closed way the launcher resolves it. Rendering
           # without a selection is now a hard failure rather than an empty lane.
+          ROLE=FP-CONTROL-3
+          STATUS="$(python3 -c "import json; r=json.load(open('research/fp/records/forward_paper_cohort_registry.json')); print(next(i['status'] for i in r['instances'] if i['role']=='$ROLE'))")"
+          if [ "$STATUS" = "CLOSED" ]; then
+            # P2 is closed: no committed row may run, and the resolver must refuse
+            # the closed cohort. That refusal is asserted here first.
+            if python3 scripts/fp_instance.py FP-CONTROL-3 > /dev/null 2> /tmp/fp-selection.err; then
+              echo "FP_OVERLAY_FAIL: the CLOSED cohort $ROLE was selectable" >&2
+              exit 1
+            fi
+            grep -q "is CLOSED" /tmp/fp-selection.err
+            echo "FP_SELECTION_REFUSED: $ROLE is CLOSED"
+            # The overlay template is still rendered and guarded, for that cohort in
+            # its pre-closure executable state, written only into a disposable copy
+            # of the tracked tree (the view tests/conftest.py executable_registry builds).
+            COPY="$RUNNER_TEMP/fp-executable"
+            mkdir -p "$COPY"
+            git ls-files -z | xargs -0 -I{} cp --parents {} "$COPY/"
+            python3 - "$COPY" "$ROLE" <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path(sys.argv[1]) / "research/fp/records/forward_paper_cohort_registry.json"
+          registry = json.loads(path.read_text(encoding="utf-8"))
+          for row in registry["instances"]:
+              if row["role"] == sys.argv[2] and row["status"] == "CLOSED":
+                  row.update(status="RUNNING", closed_utc=None, closure_reason=None)
+                  row.pop("outcome", None)
+                  registry["fp_run_active"] = True
+          path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+          PY
+            cd "$COPY"
+          fi
           eval "$(python3 scripts/fp_instance.py FP-CONTROL-3)"
           export FP_ROLE FP_INSTANCE_DIR FP_BOT_NAME FP_DB_PATH FP_LOG_PATH FP_EVIDENCE_DIR
           docker compose -f docker-compose.yml -f docker-compose.fp.yml config > /tmp/fp-rendered.yml

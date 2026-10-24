@@ -406,8 +406,13 @@ def test_the_card_defaults_to_deny_here():
     built = card.build_card("HEAD", None, None, None)
     assert built["OWNER_DECISION_DEFAULT"] == "DENY"
     assert built["REAL_MONEY_AUTHORIZED"] == "NO"
-    assert {"P2_TERMINAL_STATUS", "SOURCE_SHA256_STATUS", "MATERIALISATION_PREFLIGHT",
+    assert {"SOURCE_SHA256_STATUS", "MATERIALISATION_PREFLIGHT",
             "SECOND_EVIDENCE_STORE"} <= set(built["not_pass"])
+    # The P2 rows mirror the entry gate at the same ref, in whichever state it is in:
+    # NOT PASS until a P2 closure record reaches the ref through a merge, PASS after.
+    eligible = gate.evaluate("HEAD")["verdict"] == gate.ELIGIBLE
+    assert ("P2_TERMINAL_STATUS" in built["not_pass"]) is not eligible
+    assert ("P2_CLOSURE_DIGEST" in built["not_pass"]) is not eligible
     assert built["rows"]["H1_PACKAGE_DIGEST"]["pass"] and built["rows"]["DRY_RUN"]["pass"]
 
 

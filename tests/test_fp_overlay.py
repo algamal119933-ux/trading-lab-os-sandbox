@@ -58,7 +58,12 @@ SAFE = {
 
 
 @pytest.fixture
-def rendered() -> dict:
+def rendered(executable_registry_file) -> dict:
+    # The guard resolves the role's lane from the registry and refuses a CLOSED
+    # row before it looks at the stack. These tests are about the stack, so they
+    # run against an isolated registry in which the role is executable
+    # (conftest ``executable_registry``); the refusal of the committed, closed
+    # row is proved in tests/test_fp_successor_instance.py.
     return copy.deepcopy(SAFE)
 
 
@@ -141,14 +146,13 @@ def test_the_overlay_paths_match_the_frozen_registry(repo_root):
     describe, and preflight's hash and isolation checks are comparing against a
     declaration that no longer refers to the running instance.
     """
-    import json
+    import conftest
 
     overlay = yaml.safe_load((repo_root / "docker-compose.fp.yml").read_text(encoding="utf-8"))
-    registry = json.loads(
-        (repo_root / "research" / "fp" / "records" / "forward_paper_cohort_registry.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    # The committed registry, with the role in its executable state: the paths
+    # and identity are exactly as committed; only a CLOSED status is wound back
+    # to the RUNNING it held before its closure (conftest ``executable_registry``).
+    registry = conftest.executable_registry(ROLE)
     # The overlay is parameterised by the instance the launcher selects, so the
     # check is that it *renders* onto the selected instance's declared paths —
     # a template that drifted would land the runtime somewhere the registry

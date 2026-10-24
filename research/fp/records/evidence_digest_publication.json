@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "publication_version": "FP_EVIDENCE_DIGEST_V1",
-  "published_utc": "2026-09-22T18:02:56Z",
+  "published_utc": "2026-10-24T21:48:02Z",
   "durability_tier": 2,
   "tier_2_claim": "Surviving evidence is provably the evidence that was sealed, and a loss and its exact extent are provable rather than reconstructed.",
   "tier_2_disclaimer": "A digest is not a backup. Nothing here is recoverable from these values; they convert an unbounded loss into a bounded, documented one. Only a Tier-3 independent-host snapshot may claim host-loss redundancy.",
@@ -236,6 +236,55 @@
           "incident": 3,
           "input": 2000,
           "trade": 0
+        },
+        "chain_problems": []
+      }
+    },
+    {
+      "archive_name": "l2-cohort-20260924T120000Z",
+      "role": "FP-CONTROL-3",
+      "cohort_id": "FP-CONTROL-3-20260924T120000Z",
+      "lane_status_at_archival": "RUNNING",
+      "reason": "FP-CONTROL-3 cohort lane, T0 2026-09-24T12:00:00Z, sealed at P2 normal end (trigger A): first naturally completed paper trade lifecycle, BTC/USDT trade 1 closed 2026-10-22T23:00:01Z, before the hard cap 2026-10-24T12:01:14Z; governed shutdown 2026-10-24T21:37:57Z; post-cap records and the 19:10Z automatic-restart incident retained uncredited",
+      "archived_utc": "2026-10-24T21:42:51Z",
+      "verified_utc": "2026-10-24T21:48:02Z",
+      "source_lane": "/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data/fp-control-3",
+      "file_count": 18,
+      "total_bytes": 125901115,
+      "files": {
+        "evidence/.fp_capture.lock": "466a93ac5660ce06754d241d597a8cb340a19480eff2db7fde1424767e37e1b9",
+        "evidence/capture_runtime.json": "0929355f001b72311d020cba7323ba5e5ac6127c64d245b030a34b22e99b62eb",
+        "evidence/paper_decision_ledger.jsonl": "6e624ef4d6c03593a4312c7d219ec2d8d4702f39686263924a44de72a8468ed1",
+        "evidence/paper_incident_ledger.jsonl": "ad4bfefe73c8107ab961b889a723ca51d8d8157ac494c5ad023d5404c34ea257",
+        "evidence/paper_input_ledger.jsonl": "93414b0a1ab304eb5ec2368a8363af2e56471c881b617407d4abb7bdd3189035",
+        "evidence/paper_trade_ledger.jsonl": "45994809a049ec4f90074a2905f40d89e7af60e211f6357e86fabdbace0809dd",
+        "logs/freqtrade.log": "ad52093018fe7d166fd5d4fed72b18fce29cd8389ed4fc31c35077a04c1ce632",
+        "logs/freqtrade.log.1": "956a91a1c882e85730a5ca163d00abe1604f68bb75375a9c6ce5f06c29b5f111",
+        "logs/freqtrade.log.10": "ac373d917779f4db0ec0fa499b6d7b260799c6ff89d332d33ff4539888b4fa07",
+        "logs/freqtrade.log.2": "8b570c5df4d5cc8baf36d142be247f97d5adce14d0d10dd86aab5cc080b7dc3c",
+        "logs/freqtrade.log.3": "b6164ddd18148de926830f529c1950f3f006b3c79f6ca9be28533fa83c42a198",
+        "logs/freqtrade.log.4": "5149cb90f4bd301d5c5dda60078cf9c145366b39bbe1d8911a9a9f2409ca0624",
+        "logs/freqtrade.log.5": "de09087e835cfed6bdef078d7378910c7eabe889bbbb5d692f920c3a9305b89c",
+        "logs/freqtrade.log.6": "5d6c34cd54b7231c7e06a5cb8d9354f48bcae9e0ebf867cd99839ed4d0025d0a",
+        "logs/freqtrade.log.7": "48b2decbf3f824c6958d60241fdeed093db36cb6dc506c7c33b79c26cec60a69",
+        "logs/freqtrade.log.8": "74269eab09410de3e3db53196c18d94cc8dbecd1c81af830db215e7cabd5df1b",
+        "logs/freqtrade.log.9": "fdb4718f1c19bcb381e220f88310ceceb735f0aaecdff26aecb3ef8edf80f64a",
+        "tradesv3.sqlite": "a46544fb557d3b745aa025aa30b550f49bc61c0b272a267734e4a4dbd1b90c7b"
+      },
+      "evidence": {
+        "present": true,
+        "ledger_tips": {
+          "decision": "35148ec664df114338fb424b40aaf7fcbdb3da3445e08869cda3c965c77344e2",
+          "incident": "a3411a93d0e51c6f49ec6c31706a896567dc0aa05f06bb577093887d14751c35",
+          "input": "4f73fea548e1babe9989f92683728421ee5d4f25e38ec2e0e7fb5a7e708d8e40",
+          "trade": "050099ed7239d0521c4077aecbacf50a174fd15a133f84d37c173878adfc2a17"
+        },
+        "daily_pack_digest": "6ab601940e3e62018eedfb63d4f879d6c9a7fa863af8d6f33bea97c2add32e1c",
+        "counts": {
+          "decision": 3194,
+          "incident": 3335,
+          "input": 3194,
+          "trade": 4
         },
         "chain_problems": []
       }

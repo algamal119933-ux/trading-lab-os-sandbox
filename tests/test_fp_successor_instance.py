@@ -133,9 +133,9 @@ def test_an_ambiguous_role_fails_closed(registry):
     assert "ambiguous" in str(excinfo.value)
 
 
-def test_there_is_no_first_row_fallback(registry, tmp_path, monkeypatch):
+def test_there_is_no_first_row_fallback(registry, tmp_path, monkeypatch, executable_registry_file):
     """Behavioural, not textual: an unknown role must raise, never return row 0."""
-    monkeypatch.setattr(capture, "COHORT_REGISTRY", Path(REGISTRY_PATH).resolve())
+    monkeypatch.setattr(capture, "COHORT_REGISTRY", executable_registry_file)
     with pytest.raises(capture.InstanceSelectionError):
         capture.build_identity(tmp_path, role="FP-CONTROL-404")
     # And the successor's identity is the successor's, not whichever row is first.
@@ -201,8 +201,9 @@ def test_the_committed_successor_is_pre_t0_or_a_lawfully_frozen_cohort():
     registry = conftest.committed_registry()
     successor = next(i for i in registry["instances"] if i["role"] == SUCCESSOR)
     frozen = successor["status"] == "RUNNING"
+    closed = successor["status"] == "CLOSED"
 
-    if frozen:
+    if frozen or closed:
         assert successor["t0_utc"] and successor["cohort_id"]
         assert successor["cohort_id"].startswith(SUCCESSOR + "-")
         assert successor["runtime_identity"]["source_commit"]
@@ -210,6 +211,15 @@ def test_the_committed_successor_is_pre_t0_or_a_lawfully_frozen_cohort():
         assert successor["status"] == "NOT_STARTED"
         assert successor["t0_utc"] is None and successor["cohort_id"] is None
         assert successor["runtime_identity"]["source_commit"] is None
+    if closed:
+        # The third lawful state: the frozen cohort, closed. Its frozen identity
+        # stays, it carries its closure and its outcome, and nothing runs.
+        assert successor["closed_utc"] and successor["closure_reason"]
+        assert successor["outcome"]["paper_trading_operational_capability"] in ("PROVEN", "NOT_PROVEN")
+        assert successor["outcome"]["prospective_paper_edge"] == "NOT_EVALUATED"
+    else:
+        assert successor["closed_utc"] is None and successor["closure_reason"] is None
+        assert "outcome" not in successor
     assert registry["fp_run_active"] is frozen
 
     # Neither state promotes a control, and neither admits a candidate.
@@ -380,6 +390,8 @@ def test_ci_selects_an_instance_before_rendering_the_overlay():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "scripts/fp_instance.py FP-CONTROL-3" in workflow
     assert "An unselected FP overlay render must fail closed" in workflow
+    # Once the cohort is CLOSED, CI must first prove the resolver refuses it.
+    assert 'grep -q "is CLOSED" /tmp/fp-selection.err' in workflow
 
 
 def test_preflight_refuses_an_unbound_runtime():
@@ -478,7 +490,7 @@ def test_the_registry_schema_enforces_role_uniqueness_and_started_state(request,
     )
 
 
-def test_the_overlay_guard_requires_the_declared_paths_and_role():
+def test_the_overlay_guard_requires_the_declared_paths_and_role(executable_registry_file):
     import check_fp_overlay
 
     # Selected by ROLE, never by index: the registry gained a third row when
@@ -536,13 +548,17 @@ def test_the_overlay_guard_requires_the_declared_paths_and_role():
     assert check_fp_overlay.check(wrong_bot, SUCCESSOR)
 
 
-def test_the_resolver_quotes_every_value_it_emits():
+def test_the_resolver_quotes_every_value_it_emits(tmp_path):
     """The launchers eval this output; an unquoted registry string would be code."""
     import subprocess
 
+    # Run in a disposable copy whose registry holds the role executable
+    # (conftest ``executable_registry``): the resolver rightly refuses the
+    # committed, closed row, which is proved separately below.
+    repo = conftest.executable_repo_copy(tmp_path / "repo", SUCCESSOR)
     result = subprocess.run(
         [sys.executable, "scripts/fp_instance.py", SUCCESSOR],
-        capture_output=True, text=True, timeout=60,
+        capture_output=True, text=True, timeout=60, cwd=repo,
     )
     assert result.returncode == 0
     emitted = dict(line.split("=", 1) for line in result.stdout.strip().splitlines())
@@ -562,3 +578,41 @@ def test_reconciliation_requires_every_identity_field_it_claims():
     source = Path("research/fp/reconcile.py").read_text(encoding="utf-8")
     assert '"run_id", "runtime_id", "source_commit", "role"' in source
     assert hasattr(reconcile, "reconcile")
+
+
+# -- a CLOSED cohort cannot be restarted, proved against the committed file ----
+
+
+def _committed_closed_roles() -> list[str]:
+    return [r["role"] for r in conftest.committed_registry()["instances"] if r.get("status") == "CLOSED"]
+
+
+@pytest.mark.parametrize("role", _committed_closed_roles())
+def test_a_committed_closed_cohort_is_refused_by_selection(role):
+    """Every CLOSED row in the committed registry is refused — no fixture involved."""
+    with pytest.raises(capture.InstanceSelectionError) as excinfo:
+        capture.select_instance(role, conftest.committed_registry())
+    assert "CLOSED" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("role", _committed_closed_roles())
+def test_a_committed_closed_cohort_cannot_be_resolved_for_a_launch(role):
+    """The resolver the launcher evals refuses a CLOSED row, so nothing can start it."""
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, "scripts/fp_instance.py", role],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode != 0, result.stdout
+    assert "CLOSED" in result.stderr, result.stderr
+    assert "FP_ROLE=" not in result.stdout
+
+
+@pytest.mark.parametrize("role", _committed_closed_roles())
+def test_a_committed_closed_cohort_is_refused_by_the_overlay_guard(role):
+    import check_fp_overlay
+
+    problems = check_fp_overlay.check({"services": {}}, role)
+    assert problems and "CLOSED" in problems[0], problems
+

@@ -1173,6 +1173,27 @@ H1_PRELAUNCH_PREP_SCOPE: dict[str, str] = {
 }
 
 
+# PR #69, merged. Two parents: 4fec1769 (main before, H1_PRELAUNCH_PREP) + 29ec7b98
+# (the claude/p2-h1-window-30d branch).
+H1_WINDOW_AMENDMENT_MERGE = "f6628477d9e7241e60e0aea2896133d8cb32ab4e"
+
+# H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to 180 days; 20:29Z: run the plan;
+# 20:44Z: 10 days). A record beside the package, effective only on the Owner's merge; the card denies
+# until then. The frozen package and P2 are untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_WIN = "H1 window amendment"
+H1_WINDOW_AMENDMENT_SCOPE: dict[str, str] = {
+    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
+        f"{_WIN} — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
+    "research/paper/h1/launch/h1_launch_card.py":
+        f"{_WIN} — the H1_WINDOW_AMENDMENT row: adopted only at its sha256, through a merge",
+    "research/paper/h1/launch/H1_LAUNCH_BINDER.md": f"{_WIN} — the closure schedule names the 10-day END_UTC",
+    "tests/test_h1_launch_prep.py": f"{_WIN} — the record is pinned; adoption tested in a scratch repository",
+    "tests/test_p2_scope_audit.py": "H1 pre-launch preparation (PR #68) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1221,6 +1242,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2Q2_READINESS_TOOLING": (AUTH_2Q2_READINESS_TOOLING_MERGE, AUTH_2Q2_READINESS_TOOLING_SCOPE),
     "H1_G11_RECORDS": (H1_G11_RECORDS_MERGE, H1_G11_RECORDS_SCOPE),
     "H1_PRELAUNCH_PREP": (H1_PRELAUNCH_PREP_MERGE, H1_PRELAUNCH_PREP_SCOPE),
+    "H1_WINDOW_AMENDMENT": (H1_WINDOW_AMENDMENT_MERGE, H1_WINDOW_AMENDMENT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1228,18 +1250,34 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to 180 days; 20:29Z: run the plan;
-# 20:44Z: 10 days). A record beside the package, effective only on the Owner's merge; the card denies
-# until then. The frozen package and P2 are untouched.
-_WIN = "H1 window amendment"
+# P2 CLOSURE (Owner GO 1R 2026-10-24T21:37Z, GO 2 21:42Z, GO 3 21:46Z, closure preparation 21:54Z).
+# FP-CONTROL-3 closes under trigger A, the contract section 7 NORMAL END. Records only: no
+# runtime, strategy, risk or dataset file changes, and the frozen identity of every row is kept.
+_CLOSE = "P2 closure"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
-        f"{_WIN} — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
-    "research/paper/h1/launch/h1_launch_card.py":
-        f"{_WIN} — the H1_WINDOW_AMENDMENT row: adopted only at its sha256, through a merge",
-    "research/paper/h1/launch/H1_LAUNCH_BINDER.md": f"{_WIN} — the closure schedule names the 10-day END_UTC",
-    "tests/test_h1_launch_prep.py": f"{_WIN} — the record is pinned; adoption tested in a scratch repository",
-    "tests/test_p2_scope_audit.py": "H1 pre-launch preparation (PR #68) pinned to its merge; this branch's scope",
+    "docs/p2/P2_CLOSURE.md": f"{_CLOSE} — the stage closure record and its machine block (contract section 12)",
+    "research/fp/records/forward_paper_cohort_registry.json":
+        f"{_CLOSE} — FP-CONTROL-3 CLOSED with its outcome; fp_run_active false; frozen identity unchanged",
+    "research/fp/records/evidence_digest_publication.json":
+        f"{_CLOSE} — Tier 2 digest of the sealed FP-CONTROL-3 cohort lane l2-cohort-20260924T120000Z",
+    "tests/conftest.py":
+        f"{_CLOSE} — live role after closure; executable_registry: isolated temporary fixtures for tests "
+        "that must drive an open row",
+    "tests/test_fp_capture.py": f"{_CLOSE} — the capture loop runs against the isolated executable registry",
+    "tests/test_fp_lane_adversarial.py":
+        f"{_CLOSE} — lane proofs run against the isolated executable registry and a disposable copy",
+    "tests/test_fp_lane_io_adversarial.py":
+        f"{_CLOSE} — lane I/O and launcher proofs run against the isolated executable registry",
+    "tests/test_fp_overlay.py": f"{_CLOSE} — the overlay guard runs against the isolated executable registry",
+    "tests/test_fp_successor_instance.py":
+        f"{_CLOSE} — the CLOSED lawful state; new negatives: a committed CLOSED cohort cannot be "
+        "selected, resolved or rendered",
+    ".github/workflows/ci.yml":
+        f"{_CLOSE} — the overlay render asserts the CLOSED cohort is refused, then renders it in a "
+        "disposable executable copy",
+    "tests/test_h1_launch_prep.py":
+        f"{_CLOSE} — the card's P2 rows mirror the entry gate at the ref, before and after the closure merge",
+    "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1797,9 +1835,22 @@ def test_an_owner_authorization_if_it_exists_is_lawful_and_freezes_nothing():
     registry = json.loads(Path("research/fp/records/forward_paper_cohort_registry.json")
                           .read_text(encoding="utf-8"))
     open_roles = {row["role"] for row in registry["instances"] if row.get("status") != "CLOSED"}
-    assert binding["role"] in open_roles, (
-        f"the authorization and binding name {binding['role']}, which is not an open row"
-    )
+    if open_roles:
+        assert binding["role"] in open_roles, (
+            f"the authorization and binding name {binding['role']}, which is not an open row"
+        )
+    else:
+        # Every row is CLOSED: the stage has closed and no successor is registered.
+        # The grant has then been spent on exactly one freeze, so it must name the
+        # cohort frozen most recently, and that row must carry a frozen T0 and its
+        # closure. A grant naming any other row, or a never-frozen one, still fails.
+        import conftest
+
+        spent = next(r for r in registry["instances"] if r["role"] == binding["role"])
+        assert binding["role"] == conftest.live_role(), (
+            f"the authorization and binding name {binding['role']}, which is not the cohort "
+            "frozen most recently")
+        assert spent["t0_utc"] and spent["cohort_id"] and spent["closed_utc"], spent["role"]
     assert granted["QUALIFICATION_COMMIT"][0] == binding["qualification_commit"]
     assert granted["QUALIFICATION_CERTIFICATE_SHA256"][0] == binding["certificate_sha256"]
     assert granted["REAL_MONEY_AUTHORIZED"][0].strip().upper() == "NO"

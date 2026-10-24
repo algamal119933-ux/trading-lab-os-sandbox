@@ -68,6 +68,11 @@ def live_role() -> str:
     still NOT_STARTED, which is the row a freeze would target next. Both states
     resolve to the cohort in question, and neither needs editing when the next
     successor arrives.
+
+    When every row is CLOSED — the stage closure, where no successor has been
+    registered — the cohort this repository "has frozen" is the one frozen most
+    recently: the CLOSED row with the latest ``t0_utc``. That is still read from
+    the file, never named, and a tie is refused rather than broken.
     """
     instances = committed_registry()["instances"]
     running = [row["role"] for row in instances if row.get("status") == "RUNNING"]
@@ -76,6 +81,12 @@ def live_role() -> str:
     not_started = [row["role"] for row in instances if row.get("status") == "NOT_STARTED"]
     if len(not_started) == 1:
         return not_started[0]
+    if not running and not not_started:
+        frozen = [row for row in instances if row.get("status") == "CLOSED" and row.get("t0_utc")]
+        latest = max((row["t0_utc"] for row in frozen), default=None)
+        newest = [row["role"] for row in frozen if row["t0_utc"] == latest]
+        if len(newest) == 1:
+            return newest[0]
     raise RuntimeError(
         f"cannot resolve the live role: RUNNING={running}, NOT_STARTED={not_started}. "
         "The suite will not guess which cohort a fixture meant"
@@ -120,6 +131,76 @@ def pre_t0_registry(role: str | None = None) -> dict:
 @pytest.fixture
 def pre_t0_registry_dict() -> dict:
     return pre_t0_registry()
+
+
+def executable_registry(role: str | None = None) -> dict:
+    """The committed registry, with ``role`` in the state the runtime may execute.
+
+    A closed cohort cannot be started, and the runtime is right to refuse it —
+    that refusal has its own negative tests. But the machinery those refusals
+    protect (selection, lanes, capture, the overlay guard, the launcher) still
+    needs a row it may drive, and once the stage closes the committed file holds
+    none. So a test that drives that machinery asks for an executable row by
+    name, the way :func:`pre_t0_registry` asks for a pre-freeze one.
+
+    Only a CLOSED ``role`` is changed, and only back to the state it was in
+    immediately before its closure: RUNNING, with its frozen T0, cohort id and
+    source identity exactly as committed, no closure fields and no outcome, and
+    ``fp_run_active`` true. Every other row — including every other CLOSED row —
+    is left exactly as committed, so a closed cohort is still refused. This view
+    is only ever handed to the code under test through a temporary file or a
+    disposable copy; the committed registry is never written.
+    """
+    role = role if role is not None else live_role()
+    registry = committed_registry()
+    for row in registry["instances"]:
+        if row.get("role") != role or row.get("status") != "CLOSED":
+            continue
+        row["status"] = "RUNNING"
+        row["closed_utc"] = None
+        row["closure_reason"] = None
+        row.pop("outcome", None)
+        registry["fp_run_active"] = True
+    return registry
+
+
+def write_executable_registry(repo: Path, role: str | None = None) -> Path:
+    """Write :func:`executable_registry` into a DISPOSABLE repository copy."""
+    repo = Path(repo).resolve()
+    if repo == REPO_ROOT.resolve():
+        raise RuntimeError("refusing to write the executable view into the real repository")
+    path = repo / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
+    path.write_text(json.dumps(executable_registry(role), indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def executable_repo_copy(destination: Path, role: str | None = None) -> Path:
+    """The tracked working tree copied to ``destination``, with an executable row."""
+    import shutil
+    import subprocess
+
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    for relative in subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                                   check=True, cwd=REPO_ROOT).stdout.split():
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / relative, target)
+    write_executable_registry(destination, role)
+    return destination
+
+
+@pytest.fixture
+def executable_registry_file(tmp_path, monkeypatch) -> Path:
+    """An isolated registry file with an executable row, wired into the runtime modules."""
+    from fp import admission, capture, lane, preflight, registry_law
+
+    path = tmp_path / "executable-registry" / "forward_paper_cohort_registry.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(executable_registry(), indent=2) + "\n", encoding="utf-8")
+    for module in (admission, capture, lane, preflight, registry_law):
+        monkeypatch.setattr(module, "COHORT_REGISTRY", path)
+    return path
 
 
 @pytest.fixture(scope="session")
