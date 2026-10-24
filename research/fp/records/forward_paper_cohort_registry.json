@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0.0",
   "spec_version": "FP-BOOT-1/FP-RUN v1.1 FINAL 2026-09-07",
-  "registry_updated_utc": "2026-09-23T18:51:56Z",
+  "registry_updated_utc": "2026-10-24T21:54:01Z",
   "entry_state": "C",
   "paper_alpha_cohort": "NONE",
-  "fp_run_active": true,
+  "fp_run_active": false,
   "adopted_prior_t0": false,
   "instances": [
     {
@@ -176,10 +176,10 @@
     {
       "role": "FP-CONTROL-3",
       "cohort_id": "FP-CONTROL-3-20260924T120000Z",
-      "status": "RUNNING",
+      "status": "CLOSED",
       "t0_utc": "2026-09-24T12:00:00Z",
-      "closed_utc": null,
-      "closure_reason": null,
+      "closed_utc": "2026-10-24T21:37:57Z",
+      "closure_reason": "NORMAL_END_FIRST_NATURALLY_COMPLETED_LIFECYCLE",
       "runtime_identity": {
         "candidate_family": "BASELINE-1 operational control (BaselineEmaRegimeV1)",
         "source_commit": "83c49414cc9eaba9a4e25809672d65d032669616",
@@ -241,7 +241,15 @@
           "description": "T0 frozen for FP-CONTROL-3 under the P2 contract. Authority is the Owner-merged docs/p2/OWNER_T0_AUTHORIZATION.md read from git at 83c49414cc9e, naming qualification commit 909bf5fa551e and certificate sha256 b339c9959436, which matches the merged S3b binding. SEMANTIC_IDENTITY(909bf5fa) == SEMANTIC_IDENTITY(83c49414) == 04578497dc51, so the declared source commit and the commit the runtime will stamp run the same system. The lane was verified empty before this entry was written. This entry records the freeze; it changes no trading semantics.",
           "replay_parity_before_after": null
         }
-      ]
+      ],
+      "outcome": {
+        "paper_trading_operational_capability": "PROVEN",
+        "full_trade_lifecycle": "OBSERVED",
+        "prospective_paper_edge": "NOT_EVALUATED",
+        "measurable_post_t0_evidence": "AVAILABLE",
+        "trading_semantics_changed": false,
+        "detail": "P2 contract section 7 NORMAL END, trigger A. The credited lifecycle is BTC/USDT trade 1: entry decided on the 2026-10-21T02:00Z candle (POST_T0, LIVE, ADMITTED), paper fill 2026-10-21 03:00:02 at 82804.23, exit decided on the 2026-10-22T22:00Z candle (POST_T0, LIVE, ADMITTED), paper close 2026-10-22 23:00:01 at 81355.63, exit_reason ema_regime_down, realised PnL -0.19353118 USDT, before the hard cap 2026-10-24T12:01:14Z. The nine pre-T0 properties are the S3 certificate at Mq 909bf5fa (p2_qualification_binding.json); paper order/fill, position state and no duplicate execution are evidenced by the credited BTC lifecycle and reconcile, so 12/12. The ETH/USDT trade 2 lifecycle is CONTEXTUAL and not credited: freqtrade filled it at 2026-10-21 20:00:01 while the lane's recorded entry decision on the 21:00Z candle was BLOCKED (open_position_count 2). Reconciliation PASS on all fourteen findings; all four chains verify from genesis (input 3194, decision 3194, trade 4, incident 3335, runs 10). Records after the hard cap (20 input, 20 decision, and incidents seq 3333-3334 from the 19:10:18Z automatic restart) are retained in the sealed archive l2-cohort-20260924T120000Z, pack digest 6ab601940e3e6201, and are not credited. Archive replicated and re-verified on the second device (SAME_HOST_SECOND_DEVICE = YES, HOST_LOSS_REDUNDANCY = NOT_PROVEN). P&L decides nothing; edge is not evaluated. The record of this closure is docs/p2/P2_CLOSURE.md."
+      }
     }
   ],
   "real_money_authorized": false,

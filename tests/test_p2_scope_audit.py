@@ -1173,6 +1173,27 @@ H1_PRELAUNCH_PREP_SCOPE: dict[str, str] = {
 }
 
 
+# PR #69, merged. Two parents: 4fec1769 (main before, H1_PRELAUNCH_PREP) + 29ec7b98
+# (the claude/p2-h1-window-30d branch).
+H1_WINDOW_AMENDMENT_MERGE = "f6628477d9e7241e60e0aea2896133d8cb32ab4e"
+
+# H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to 180 days; 20:29Z: run the plan;
+# 20:44Z: 10 days). A record beside the package, effective only on the Owner's merge; the card denies
+# until then. The frozen package and P2 are untouched.
+# These entries were BRANCH_SCOPE while it was in flight.
+_WIN = "H1 window amendment"
+H1_WINDOW_AMENDMENT_SCOPE: dict[str, str] = {
+    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
+        f"{_WIN} — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
+    "research/paper/h1/launch/h1_launch_card.py":
+        f"{_WIN} — the H1_WINDOW_AMENDMENT row: adopted only at its sha256, through a merge",
+    "research/paper/h1/launch/H1_LAUNCH_BINDER.md": f"{_WIN} — the closure schedule names the 10-day END_UTC",
+    "tests/test_h1_launch_prep.py": f"{_WIN} — the record is pinned; adoption tested in a scratch repository",
+    "tests/test_p2_scope_audit.py": "H1 pre-launch preparation (PR #68) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1221,6 +1242,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "AUTH_2Q2_READINESS_TOOLING": (AUTH_2Q2_READINESS_TOOLING_MERGE, AUTH_2Q2_READINESS_TOOLING_SCOPE),
     "H1_G11_RECORDS": (H1_G11_RECORDS_MERGE, H1_G11_RECORDS_SCOPE),
     "H1_PRELAUNCH_PREP": (H1_PRELAUNCH_PREP_MERGE, H1_PRELAUNCH_PREP_SCOPE),
+    "H1_WINDOW_AMENDMENT": (H1_WINDOW_AMENDMENT_MERGE, H1_WINDOW_AMENDMENT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1228,18 +1250,19 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# H1-WINDOW-AMENDMENT-1 (Owner, 2026-10-17T19:30Z: did not agree to 180 days; 20:29Z: run the plan;
-# 20:44Z: 10 days). A record beside the package, effective only on the Owner's merge; the card denies
-# until then. The frozen package and P2 are untouched.
-_WIN = "H1 window amendment"
+# P2 CLOSURE (Owner GO 1R 2026-10-24T21:37Z, GO 2 21:42Z, GO 3 21:46Z, closure preparation 21:54Z).
+# FP-CONTROL-3 closes under trigger A, the contract section 7 NORMAL END. Records only: no
+# runtime, strategy, risk or dataset file changes, and the frozen identity of every row is kept.
+_CLOSE = "P2 closure"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/paper/h1/amendments/H1_WINDOW_AMENDMENT_10D.md":
-        f"{_WIN} — 10-day operational window (Owner, 2026-10-17T20:44Z), B2 reported only, EDGE_EVIDENCE not evaluated",
-    "research/paper/h1/launch/h1_launch_card.py":
-        f"{_WIN} — the H1_WINDOW_AMENDMENT row: adopted only at its sha256, through a merge",
-    "research/paper/h1/launch/H1_LAUNCH_BINDER.md": f"{_WIN} — the closure schedule names the 10-day END_UTC",
-    "tests/test_h1_launch_prep.py": f"{_WIN} — the record is pinned; adoption tested in a scratch repository",
-    "tests/test_p2_scope_audit.py": "H1 pre-launch preparation (PR #68) pinned to its merge; this branch's scope",
+    "docs/p2/P2_CLOSURE.md": f"{_CLOSE} — the stage closure record and its machine block (contract section 12)",
+    "research/fp/records/forward_paper_cohort_registry.json":
+        f"{_CLOSE} — FP-CONTROL-3 CLOSED with its outcome; fp_run_active false; frozen identity unchanged",
+    "research/fp/records/evidence_digest_publication.json":
+        f"{_CLOSE} — Tier 2 digest of the sealed FP-CONTROL-3 cohort lane l2-cohort-20260924T120000Z",
+    "tests/conftest.py":
+        f"{_CLOSE} — with every row CLOSED, the live role is the most recently frozen cohort, read from the file",
+    "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

@@ -68,6 +68,11 @@ def live_role() -> str:
     still NOT_STARTED, which is the row a freeze would target next. Both states
     resolve to the cohort in question, and neither needs editing when the next
     successor arrives.
+
+    When every row is CLOSED — the stage closure, where no successor has been
+    registered — the cohort this repository "has frozen" is the one frozen most
+    recently: the CLOSED row with the latest ``t0_utc``. That is still read from
+    the file, never named, and a tie is refused rather than broken.
     """
     instances = committed_registry()["instances"]
     running = [row["role"] for row in instances if row.get("status") == "RUNNING"]
@@ -76,6 +81,12 @@ def live_role() -> str:
     not_started = [row["role"] for row in instances if row.get("status") == "NOT_STARTED"]
     if len(not_started) == 1:
         return not_started[0]
+    if not running and not not_started:
+        frozen = [row for row in instances if row.get("status") == "CLOSED" and row.get("t0_utc")]
+        latest = max((row["t0_utc"] for row in frozen), default=None)
+        newest = [row["role"] for row in frozen if row["t0_utc"] == latest]
+        if len(newest) == 1:
+            return newest[0]
     raise RuntimeError(
         f"cannot resolve the live role: RUNNING={running}, NOT_STARTED={not_started}. "
         "The suite will not guess which cohort a fixture meant"
