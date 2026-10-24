@@ -1275,6 +1275,8 @@ BRANCH_SCOPE: dict[str, str] = {
     ".github/workflows/ci.yml":
         f"{_CLOSE} — the overlay render asserts the CLOSED cohort is refused, then renders it in a "
         "disposable executable copy",
+    "tests/test_h1_launch_prep.py":
+        f"{_CLOSE} — the card's P2 rows mirror the entry gate at the ref, before and after the closure merge",
     "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
