@@ -1231,6 +1231,22 @@ P2_CLOSURE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #71, merged. Two parents: 0ce72358 (main before, P2_CLOSURE) + b9cbf91d
+# (the claude/p3-pln-00-reconciliation branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_00_MERGE = "f597041a1f813c27a03e90b1659aea60a7065044"
+
+# P3-PLN-00 — Final P2 → P3 Reconciliation (master plan §17.1). Planning only: no P3 execution,
+# no runtime, strategy, risk, dataset, registry or evidence change.
+_PLN00 = "P3-PLN-00 reconciliation"
+P3_PLN_00_SCOPE: dict[str, str] = {
+    "docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md":
+        f"{_PLN00} — P2 outcome reviewed, findings placed in existing P3 workstreams, entry truth inputs",
+    "CLAUDE.md": f"{_PLN00} — the stage pointer: P2 closed, P3 planning only (P3_STARTED = NO)",
+    "tests/test_p2_scope_audit.py": "P2 closure (PR #70) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1281,6 +1297,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "H1_PRELAUNCH_PREP": (H1_PRELAUNCH_PREP_MERGE, H1_PRELAUNCH_PREP_SCOPE),
     "H1_WINDOW_AMENDMENT": (H1_WINDOW_AMENDMENT_MERGE, H1_WINDOW_AMENDMENT_SCOPE),
     "P2_CLOSURE": (P2_CLOSURE_MERGE, P2_CLOSURE_SCOPE),
+    "P3_PLN_00": (P3_PLN_00_MERGE, P3_PLN_00_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1288,14 +1305,13 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-00 — Final P2 → P3 Reconciliation (master plan §17.1). Planning only: no P3 execution,
-# no runtime, strategy, risk, dataset, registry or evidence change.
-_PLN00 = "P3-PLN-00 reconciliation"
+# P3-PLN-01 — Contract & Acceptance (master plan §17). A draft stage contract for Owner review and
+# freeze. Planning only: P3_STARTED stays NO, and execution needs a separate Owner authorization record.
+_PLN01 = "P3-PLN-01 contract"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md":
-        f"{_PLN00} — P2 outcome reviewed, findings placed in existing P3 workstreams, entry truth inputs",
-    "CLAUDE.md": f"{_PLN00} — the stage pointer: P2 closed, P3 planning only (P3_STARTED = NO)",
-    "tests/test_p2_scope_audit.py": "P2 closure (PR #70) pinned to its merge; this branch's scope",
+    "docs/p3/P3_CONTRACT.md":
+        f"{_PLN01} — the P3 stage contract draft: 12 workstreams, acceptance, priorities, authorization package",
+    "tests/test_p2_scope_audit.py": "P3-PLN-00 (PR #71) pinned to its merge; docs/p3/ admitted; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1416,7 +1432,8 @@ MERGED_STAGES = sorted(MERGED_STAGE_SCOPES)
 # The AUTH-2 governance closure record is admitted by its own folder, not by docs/governance/
 # (Owner decision OD-C1, 2026-10-12): the record, its evidence, its generator and any
 # append-only errata.
-ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/",
+# docs/p3/ holds the P3 stage records (contract, authorization, closure), as docs/p2/ does for P2.
+ALLOWED_PREFIXES = ("research/", "scripts/", "tests/", "docs/p2/", "docs/p3/",
                     ".github/workflows/", ".github/gates/", "charters/", "verification/",
                     "docs/governance/records/AUTH2-GOVERNANCE-CLOSURE-1/")
 # The master planning SSOT is admitted by its exact path, not by a docs/governance/
