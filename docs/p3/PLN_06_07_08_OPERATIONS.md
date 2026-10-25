@@ -76,3 +76,13 @@ The only warning is the uninstalled backup timer. That is an Owner action from P
 - `SuccessExitStatus=1 2`, so an alert never masquerades as a unit failure.
 - **Proven by one manual run (19:48Z):** journal line `rc=1 HEALTH = WARNING`, textfile updated (`tlos_p3_health_overall 1`), notification raised.
 - The units are **prepared, not installed**. Host installation was refused by this session's permission system, so it is an Owner action. Wiring the textfile into Prometheus additionally needs `prometheus-node-exporter` (a package install, Owner).
+
+## Update 2026-10-25T21:2xZ — health timer installed (Owner)
+- `tlos-p3-health.timer` is enabled and hourly. The Owner's manual start succeeded: Result=success, journal `tlos-p3-health rc=0 HEALTH = INFO`.
+- The textfile `/home/hamza/tlos-paper/p3-evidence/tlos_p3_health.prom` is rewritten with every check at 0 and `tlos_p3_health_overall 0`.
+- Delivery on WARNING (journal plus `notify-send`) was proven at 22:48 and 22:55 local time, before the backup timer existed. An INFO run correctly sends no notification.
+- The retired P2 timer `tlos-p2-window-fp-control-3.timer` is disabled, and the check reads 0 (F-5).
+
+PLN-06 acceptance status:
+- **Met:** normal-end detection (F-3), capacity and RPO alerts, scheduled hourly execution, journal record, and desktop notification.
+- **Remaining:** the §19 Prometheus/Grafana leg. It needs `prometheus-node-exporter` with the textfile collector pointed at `p3-evidence/` (a package install, an Owner action), then a scrape target and an alert rule. Without that, **PLN-06 = PARTIAL**, not PASS.

@@ -76,3 +76,19 @@ Rollback: `systemctl --user disable --now tlos-p3-backup.timer`. The backup sets
 ## Acceptance update (2026-10-25T18:51Z)
 Second set `20261025T185052Z` (verify PASS, 3 volumes included). Its restore drill passes every check, with 8 archives ARCHIVE_VERIFIED and the runtime config load passing.
 Still open: **the scheduled execution**. The timer is not installed (Owner action). After installation, the first unattended set, its verify and its drill complete PLN-03.
+
+## Scheduled acceptance (2026-10-25T21:2xZ)
+The Owner installed `tlos-p3-backup.timer` and `tlos-p3-health.timer` as user units: enabled, linger on, ExecStart from the clean tools checkout `~/projects/trading/tlos-p3` at main 253dbf29. The Owner then started both services once.
+
+The first set **written by systemd** is `20261025T211956Z`:
+- `tlos-p3-backup.service`: Result=success, ExecMainStatus=0.
+- 699 MB. Roots: trading 5,666 files, tlos-paper 2,431, tlos-ar-render 343, tlos-evidence-docs 517, claude-memory 6. Two bundles; three volumes.
+- `verify`: PASS.
+- Restore drill into the empty scratch `/home/hamza/tlos-restore-drill-20261025T211956Z`: every check PASS. That covers byte identity on all five roots, 8 sealed archives ARCHIVE_VERIFIED, config load of `trading/trading_lab_os_final` (pinned engine, `--network none`, read-only), and the git bundles with HEAD present and fsck clean. **PLN_03_RESTORE_DRILL = PASS.**
+
+PLN-02 re-run against this set: PASS on runtime, the 10 worktrees, the tools checkout, tlos-ar-render, the evidence docs and memory. tlos-paper differed by a single STALE file, `p3-evidence/tlos_p3_health.prom`, which the health timer rewrites hourly, so it will always be newer than the last backup. It is now classified **derived** in the operator profile, and the rest of `p3-evidence/` stays operator state.
+
+```text
+PLN_03_ACCEPTANCE = PASS (the scheduled execution under systemd: verify PASS, drill PASS)
+```
+The next run is the timer's own unattended 03:30 UTC run. The health check's `backup_recency` (RPO 26 h) alerts if any later run is missed.

@@ -162,6 +162,17 @@ def test_the_committed_declared_classes_load(profile):
     assert classes and all(c.recovery in inv.RECOVERY_KINDS for c in classes)
 
 
+def test_the_hourly_health_textfile_is_derived_but_other_evidence_is_not():
+    # The health timer rewrites p3-evidence/*.prom hourly, after every backup; it is regenerable output.
+    # The rest of p3-evidence (e.g. the pre-reboot snapshot) stays operator state with a cold backup.
+    classes = inv.load_classes(REPO / "research" / "p3" / "records" / "state_classes.json", "operator")
+    files = ["p3-evidence/tlos_p3_health.prom", "p3-evidence/pre_reboot_snapshot.json"]
+    assigned, unclassified = inv.classify(files, set(), classes, set())
+    assert unclassified == []
+    assert assigned["derived"] == ["p3-evidence/tlos_p3_health.prom"]
+    assert assigned["operator_workspace"] == ["p3-evidence/pre_reboot_snapshot.json"]
+
+
 def test_an_unknown_recovery_kind_or_profile_is_refused(tmp_path):
     with pytest.raises(ValueError):
         inv.StateClass(id="x", authority="A", recovery="HOPE")
