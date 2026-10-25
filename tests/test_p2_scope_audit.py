@@ -1460,12 +1460,23 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # PLN-06 (hourly health under systemd), plus classifying the hourly-rewritten health textfile as derived
 # so the operator inventory is not perpetually STALE. No runtime, strategy, risk, dataset or evidence change.
 _ACC = "P3-PLN-03/06 scheduled acceptance"
+# P3-PLN-09 product-shape authority: the Owner-identified frozen sources, byte for byte, with digests,
+# and the identification + reconciliation record. Documents only; no runtime, strategy, risk, dataset,
+# registry or evidence change. Stacked on the PLN-03/06 acceptance branch (PR #79), whose scope follows.
+_P09A = "P3-PLN-09 product-shape authority"
 BRANCH_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_09_PRODUCT_SHAPE_AUTHORITY.md": f"{_P09A} — identification, hash verification, contract reconciliation",
+    "docs/p3/product_shape/Trading_Lab_OS_Prototype_v0.2.5_FINAL.html": f"{_P09A} — frozen prototype, sha256 e17d50dc…",
+    "docs/p3/product_shape/Trading_Lab_OS_LEVEL_A_FREEZE_RECORD_v1.0.md": f"{_P09A} — Level-A freeze record v1.0",
+    "docs/p3/product_shape/TLOS_Control_Room_Approved_Design.md": f"{_P09A} — approved visual direction 2026-09-24",
+    "docs/p3/product_shape/Trading_Lab_OS_CLAUDE_NEW_SESSION_PACK_v1.0.md": f"{_P09A} — carries Shape Lock v1.2 as Appendix A",
+    "docs/p3/product_shape/SOURCES.sha256": f"{_P09A} — the digests of the four sources",
+    "tests/test_p3_product_shape_authority.py": f"{_P09A} — digests, prototype identity, 12 screens, offline CSP",
     "research/p3/records/state_classes.json": f"{_ACC} — operator profile: p3-evidence/*.prom is derived (rewritten hourly)",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_ACC} — scheduled set 20261025T211956Z verify + drill PASS",
     "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_ACC} — health timer installed and running; remaining PLN-06 condition",
     "tests/test_p3_state_inventory.py": f"{_ACC} — the health textfile is classified derived in the operator profile",
-    "tests/test_p2_scope_audit.py": "P3-PLN-05/06 (PR #78) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05/06 (PR #78) pinned; PR #79 and PR #80 branch scopes",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
