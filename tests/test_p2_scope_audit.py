@@ -1194,6 +1194,43 @@ H1_WINDOW_AMENDMENT_SCOPE: dict[str, str] = {
 }
 
 
+# PR #70, merged. Two parents: f6628477 (main before, H1_WINDOW_AMENDMENT) + 95571275
+# (the claude/p2-closure branch).
+P2_CLOSURE_MERGE = "0ce72358c3cf10ac97428ff7b721c45b02353d49"
+
+# P2 CLOSURE (Owner GO 1R 2026-10-24T21:37Z, GO 2 21:42Z, GO 3 21:46Z, closure preparation 21:54Z).
+# FP-CONTROL-3 closes under trigger A, the contract section 7 NORMAL END. Records only: no
+# runtime, strategy, risk or dataset file changes, and the frozen identity of every row is kept.
+# These entries were BRANCH_SCOPE while it was in flight.
+_CLOSE = "P2 closure"
+P2_CLOSURE_SCOPE: dict[str, str] = {
+    "docs/p2/P2_CLOSURE.md": f"{_CLOSE} — the stage closure record and its machine block (contract section 12)",
+    "research/fp/records/forward_paper_cohort_registry.json":
+        f"{_CLOSE} — FP-CONTROL-3 CLOSED with its outcome; fp_run_active false; frozen identity unchanged",
+    "research/fp/records/evidence_digest_publication.json":
+        f"{_CLOSE} — Tier 2 digest of the sealed FP-CONTROL-3 cohort lane l2-cohort-20260924T120000Z",
+    "tests/conftest.py":
+        f"{_CLOSE} — live role after closure; executable_registry: isolated temporary fixtures for tests "
+        "that must drive an open row",
+    "tests/test_fp_capture.py": f"{_CLOSE} — the capture loop runs against the isolated executable registry",
+    "tests/test_fp_lane_adversarial.py":
+        f"{_CLOSE} — lane proofs run against the isolated executable registry and a disposable copy",
+    "tests/test_fp_lane_io_adversarial.py":
+        f"{_CLOSE} — lane I/O and launcher proofs run against the isolated executable registry",
+    "tests/test_fp_overlay.py": f"{_CLOSE} — the overlay guard runs against the isolated executable registry",
+    "tests/test_fp_successor_instance.py":
+        f"{_CLOSE} — the CLOSED lawful state; new negatives: a committed CLOSED cohort cannot be "
+        "selected, resolved or rendered",
+    ".github/workflows/ci.yml":
+        f"{_CLOSE} — the overlay render asserts the CLOSED cohort is refused, then renders it in a "
+        "disposable executable copy",
+    "tests/test_h1_launch_prep.py":
+        f"{_CLOSE} — the card's P2 rows mirror the entry gate at the ref, before and after the closure merge",
+    "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1243,6 +1280,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "H1_G11_RECORDS": (H1_G11_RECORDS_MERGE, H1_G11_RECORDS_SCOPE),
     "H1_PRELAUNCH_PREP": (H1_PRELAUNCH_PREP_MERGE, H1_PRELAUNCH_PREP_SCOPE),
     "H1_WINDOW_AMENDMENT": (H1_WINDOW_AMENDMENT_MERGE, H1_WINDOW_AMENDMENT_SCOPE),
+    "P2_CLOSURE": (P2_CLOSURE_MERGE, P2_CLOSURE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1250,34 +1288,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P2 CLOSURE (Owner GO 1R 2026-10-24T21:37Z, GO 2 21:42Z, GO 3 21:46Z, closure preparation 21:54Z).
-# FP-CONTROL-3 closes under trigger A, the contract section 7 NORMAL END. Records only: no
-# runtime, strategy, risk or dataset file changes, and the frozen identity of every row is kept.
-_CLOSE = "P2 closure"
+# P3-PLN-00 — Final P2 → P3 Reconciliation (master plan §17.1). Planning only: no P3 execution,
+# no runtime, strategy, risk, dataset, registry or evidence change.
+_PLN00 = "P3-PLN-00 reconciliation"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p2/P2_CLOSURE.md": f"{_CLOSE} — the stage closure record and its machine block (contract section 12)",
-    "research/fp/records/forward_paper_cohort_registry.json":
-        f"{_CLOSE} — FP-CONTROL-3 CLOSED with its outcome; fp_run_active false; frozen identity unchanged",
-    "research/fp/records/evidence_digest_publication.json":
-        f"{_CLOSE} — Tier 2 digest of the sealed FP-CONTROL-3 cohort lane l2-cohort-20260924T120000Z",
-    "tests/conftest.py":
-        f"{_CLOSE} — live role after closure; executable_registry: isolated temporary fixtures for tests "
-        "that must drive an open row",
-    "tests/test_fp_capture.py": f"{_CLOSE} — the capture loop runs against the isolated executable registry",
-    "tests/test_fp_lane_adversarial.py":
-        f"{_CLOSE} — lane proofs run against the isolated executable registry and a disposable copy",
-    "tests/test_fp_lane_io_adversarial.py":
-        f"{_CLOSE} — lane I/O and launcher proofs run against the isolated executable registry",
-    "tests/test_fp_overlay.py": f"{_CLOSE} — the overlay guard runs against the isolated executable registry",
-    "tests/test_fp_successor_instance.py":
-        f"{_CLOSE} — the CLOSED lawful state; new negatives: a committed CLOSED cohort cannot be "
-        "selected, resolved or rendered",
-    ".github/workflows/ci.yml":
-        f"{_CLOSE} — the overlay render asserts the CLOSED cohort is refused, then renders it in a "
-        "disposable executable copy",
-    "tests/test_h1_launch_prep.py":
-        f"{_CLOSE} — the card's P2 rows mirror the entry gate at the ref, before and after the closure merge",
-    "tests/test_p2_scope_audit.py": "H1 window amendment (PR #69) pinned to its merge; this branch's scope",
+    "docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md":
+        f"{_PLN00} — P2 outcome reviewed, findings placed in existing P3 workstreams, entry truth inputs",
+    "CLAUDE.md": f"{_PLN00} — the stage pointer: P2 closed, P3 planning only (P3_STARTED = NO)",
+    "tests/test_p2_scope_audit.py": "P2 closure (PR #70) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
