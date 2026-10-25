@@ -1,0 +1,33 @@
+{
+  "record": "P3_WORKSTREAMS_V1",
+  "authority": "docs/p3/P3_CONTRACT.md §3 (frozen fcd06b21); execution authorized by docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md (7b1b1fa1)",
+  "note": "Governed status record read by the Control Room projection. It changes only through a merged PR; the Control Room never writes it. Each status cites its evidence.",
+  "updated_utc": "2026-10-25T22:30:00Z",
+  "workstreams": [
+    {"id": "PLN-00", "status": "ACCEPTED", "en": "P2→P3 reconciliation", "ar": "مطابقة P2→P3", "evidence": "PR #71 merge f597041a"},
+    {"id": "PLN-01", "status": "ACCEPTED", "en": "Contract freeze", "ar": "تجميد العقد", "evidence": "PR #72 merge fcd06b21"},
+    {"id": "PLN-02", "status": "ACCEPTED", "en": "State & recovery inventory", "ar": "جرد الحالة والتعافي", "evidence": "docs/p3/PLN_02_STATE_INVENTORY.md; 14 roots PASS"},
+    {"id": "PLN-03", "status": "ACCEPTED", "en": "Backup & restore", "ar": "النسخ الاحتياطي والاستعادة", "evidence": "scheduled set 20261025T211956Z verify + drill PASS (PR #79)"},
+    {"id": "PLN-04", "status": "PARTIAL", "en": "Restart / reboot / host recovery", "ar": "إعادة التشغيل والإقلاع وتعافي الخادم", "evidence": "restart guard + drill PASS; reboot test needs an Owner window"},
+    {"id": "PLN-05", "status": "PARTIAL", "en": "Evidence durability", "ar": "متانة الأدلة", "evidence": "offsite tool ready; Tier 3 needs an independent host"},
+    {"id": "PLN-06", "status": "PARTIAL", "en": "Monitoring & hardening", "ar": "المراقبة والتقوية", "evidence": "hourly health + journal + notification; Prometheus scrape needs node-exporter"},
+    {"id": "PLN-07", "status": "PARTIAL", "en": "Verification", "ar": "التحقق", "evidence": "per-execution audit + failure matrix PASS except the reboot row"},
+    {"id": "PLN-08", "status": "ACCEPTED", "en": "Operator controls", "ar": "تحكم المشغّل", "evidence": "kill switch drill 0.162 s; ledger PASS"},
+    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "authority PR #80; Command Center slice"},
+    {"id": "PLN-10", "status": "PENDING", "en": "Paper Beta acceptance", "ar": "قبول النسخة التجريبية الورقية", "evidence": "needs PLN-02..PLN-09"},
+    {"id": "PLN-11", "status": "PENDING", "en": "Freeze & execution pack", "ar": "التجميد وحزمة التنفيذ", "evidence": "after PLN-10"}
+  ],
+  "owner": {
+    "state": "req",
+    "en": "Merge PR #79 (PLN-03/06 acceptance), then PR #80 (product-shape authority). Open host gates: a reboot window (PLN-04), an independent host (PLN-05), prometheus-node-exporter (PLN-06).",
+    "ar": "ادمج طلب الدمج #79 (قبول PLN-03/06) ثم #80 (مرجعية شكل المنتج). بوابات الخادم المفتوحة: نافذة إعادة إقلاع (PLN-04)، خادم مستقل (PLN-05)، prometheus-node-exporter (PLN-06)."
+  },
+  "claude": {
+    "en": "Build the PLN-09 Command Center over verified evidence, then the remaining screens. No runtime, strategy or risk change.",
+    "ar": "بناء مركز التحكم لـ PLN-09 فوق الأدلة المتحقق منها، ثم بقية الشاشات. لا تغيير في التشغيل أو الاستراتيجية أو المخاطر."
+  },
+  "next": {
+    "en": "Owner merges #79 and #80; PLN-09 then proceeds on main.",
+    "ar": "يدمج المالك #79 و#80؛ ثم يتقدم PLN-09 على الفرع الرئيسي."
+  }
+}
