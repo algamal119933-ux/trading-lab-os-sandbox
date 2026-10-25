@@ -178,3 +178,14 @@ def test_the_cli_reports_and_exits_by_verdict(repo, tmp_path):
     report = json.loads(out.read_text())
     assert report["PLN_02_STATE_INVENTORY"] == "NOT_PASS"
     assert "PLN_02_STATE_INVENTORY = NOT_PASS" in result.stdout
+
+
+def test_a_symlink_is_verified_by_its_target_text(repo):
+    (repo / "artifacts" / "run1" / "link").symlink_to("elsewhere")
+    digest = hashlib.sha256(b"symlink\0elsewhere").hexdigest()
+    manifest = {".env": sha(repo / ".env"), "artifacts/run1/out.txt": sha(repo / "artifacts/run1/out.txt"),
+                "artifacts/run1/link": digest}
+    assert next(c for c in run(repo, manifest=manifest)["classes"] if c["id"] == "artifacts")["recovery"]["status"] == "PASS"
+    manifest["artifacts/run1/link"] = "0" * 64
+    assert next(c for c in run(repo, manifest=manifest)["classes"] if c["id"] == "artifacts")["recovery"]["status"] == "STALE"
+

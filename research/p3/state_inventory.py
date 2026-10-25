@@ -71,6 +71,13 @@ def load_classes(path: Path, profile: str = "runtime") -> list[StateClass]:
     return classes
 
 
+def _entry_digest(path: Path) -> str:
+    # Same rule as research/p3/backup.py entry_digest: a symlink is recorded by its target text.
+    if os.path.islink(path):
+        return hashlib.sha256(b"symlink\0" + os.readlink(path).encode()).hexdigest()
+    return sha256_file(path)
+
+
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
 
@@ -204,7 +211,7 @@ def verify_cold(root: Path, files: list[str], manifest: dict[str, str] | None) -
         recorded = manifest.get(rel)
         if recorded is None:
             state = MISSING
-        elif os.path.islink(root / rel) or recorded == sha256_file(root / rel):
+        elif recorded == _entry_digest(root / rel):
             state = PASS
         else:
             state = STALE
