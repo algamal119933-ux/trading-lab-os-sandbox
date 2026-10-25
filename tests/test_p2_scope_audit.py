@@ -1368,6 +1368,29 @@ P3_PLN_04_SCOPE: dict[str, str] = {
 }
 
 
+# PR #78, merged. Two parents: 9d984f4d (main before, P3_PLN_04) + c45f0042
+# (the claude/p3-pln-03-06-schedule branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_SCHED_MERGE = "253dbf29e3c5e6e69068d642248fd0fac185c254"
+
+# P3-PLN-06 alert delivery (scheduled health with journal + desktop notification and the Prometheus
+# textfile) and P3-PLN-05 offsite push with destination verification. Units prepared, not installed.
+# Outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
+_SCHED = "P3-PLN-05/06 durability and alerts"
+P3_SCHED_SCOPE: dict[str, str] = {
+    "scripts/p3/scheduled_health.sh": f"{_SCHED} — hourly health: textfile, journal, notify-send on WARNING/CRITICAL",
+    "scripts/p3/units/tlos-p3-health.service": f"{_SCHED} — systemd user service; SuccessExitStatus=1 2",
+    "scripts/p3/units/tlos-p3-health.timer": f"{_SCHED} — hourly systemd user timer (installed by the Owner)",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_SCHED} — Documentation path points at the tools checkout",
+    "research/p3/offsite.py": f"{_SCHED} — push a verified set, verify on the destination, append-only",
+    "scripts/p3/offsite.py": f"{_SCHED} — offsite CLI",
+    "tests/test_p3_offsite_and_units.py": f"{_SCHED} — offsite refusals and unit invariants, synthetic only",
+    "docs/p3/PLN_05_EVIDENCE_DURABILITY.md": f"{_SCHED} — PLN-05 record: tiers today, Tier 3 pending a host",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_SCHED} — PLN-06 alert delivery update",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04 (PR #77) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1425,6 +1448,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_03": (P3_PLN_03_MERGE, P3_PLN_03_SCOPE),
     "P3_OPS": (P3_OPS_MERGE, P3_OPS_SCOPE),
     "P3_PLN_04": (P3_PLN_04_MERGE, P3_PLN_04_SCOPE),
+    "P3_SCHED": (P3_SCHED_MERGE, P3_SCHED_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1432,21 +1456,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-06 alert delivery (scheduled health with journal + desktop notification and the Prometheus
-# textfile) and P3-PLN-05 offsite push with destination verification. Units prepared, not installed.
-# Outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
-_SCHED = "P3-PLN-05/06 durability and alerts"
+# P3 acceptance record for PLN-03 (first scheduled set under systemd: verify + restore drill PASS) and
+# PLN-06 (hourly health under systemd), plus classifying the hourly-rewritten health textfile as derived
+# so the operator inventory is not perpetually STALE. No runtime, strategy, risk, dataset or evidence change.
+_ACC = "P3-PLN-03/06 scheduled acceptance"
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/p3/scheduled_health.sh": f"{_SCHED} — hourly health: textfile, journal, notify-send on WARNING/CRITICAL",
-    "scripts/p3/units/tlos-p3-health.service": f"{_SCHED} — systemd user service; SuccessExitStatus=1 2",
-    "scripts/p3/units/tlos-p3-health.timer": f"{_SCHED} — hourly systemd user timer (installed by the Owner)",
-    "scripts/p3/units/tlos-p3-backup.service": f"{_SCHED} — Documentation path points at the tools checkout",
-    "research/p3/offsite.py": f"{_SCHED} — push a verified set, verify on the destination, append-only",
-    "scripts/p3/offsite.py": f"{_SCHED} — offsite CLI",
-    "tests/test_p3_offsite_and_units.py": f"{_SCHED} — offsite refusals and unit invariants, synthetic only",
-    "docs/p3/PLN_05_EVIDENCE_DURABILITY.md": f"{_SCHED} — PLN-05 record: tiers today, Tier 3 pending a host",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_SCHED} — PLN-06 alert delivery update",
-    "tests/test_p2_scope_audit.py": "P3-PLN-04 (PR #77) pinned to its merge; this branch's scope",
+    "research/p3/records/state_classes.json": f"{_ACC} — operator profile: p3-evidence/*.prom is derived (rewritten hourly)",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_ACC} — scheduled set 20261025T211956Z verify + drill PASS",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_ACC} — health timer installed and running; remaining PLN-06 condition",
+    "tests/test_p3_state_inventory.py": f"{_ACC} — the health textfile is classified derived in the operator profile",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05/06 (PR #78) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

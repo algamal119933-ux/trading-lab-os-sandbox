@@ -146,7 +146,8 @@
           ".ruff_cache/*",
           ".mypy_cache/*",
           "research/records/scratch/*",
-          "*/.venv/*"
+          "*/.venv/*",
+          "p3-evidence/*.prom"
         ]
       },
       {
