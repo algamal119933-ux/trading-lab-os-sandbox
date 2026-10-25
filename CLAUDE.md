@@ -146,18 +146,17 @@ Do not call reduced exposure "alpha" without exposure-adjusted analysis.
 
 # CURRENT AUTHORIZED STAGE
 
-`P3 — PAPER BETA RELEASE` — **planning only** (P3-PLN-00, P3-PLN-01). `P3_STARTED = NO`.
+`P3 — PAPER BETA RELEASE` — **executing** (`P3_STARTED = YES`).
 
-P2 is closed (`CLOSED / PASS`, [`docs/p2/P2_CLOSURE.md`](docs/p2/P2_CLOSURE.md),
-Owner-merged as PR #70, `0ce72358`). The P2→P3 entry sequence and the twelve
-locked workstreams are in the master plan
-([`docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md`](docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md) §17);
-the entry reconciliation is
-[`docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md`](docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md).
-P3 production implementation starts only after the PLN-01 contract freeze and
-`OWNER_AUTHORIZES_P3_EXECUTION`. H1-PAPER-COHORT-1 is a separate held cohort
-that starts only under its own `H1_LAUNCH_AUTHORIZATION`. No FP cohort runs;
-do not restart FP-CONTROL-3.
+The stage contract is [`docs/p3/P3_CONTRACT.md`](docs/p3/P3_CONTRACT.md), frozen at
+`fcd06b21` (sha256 `2c057cb5…487f4d`). Execution is authorized by the Owner record
+[`docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md`](docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md)
+(merged `7b1b1fa1`; scope PLN-02..PLN-11; expires 2027-01-31T23:59:59Z;
+`REAL_MONEY_AUTHORIZED = NO`; `H1_LAUNCH_AUTHORIZED = NO`). The contract is the
+P3 single source of truth and is not restated here. P2 is closed
+([`docs/p2/P2_CLOSURE.md`](docs/p2/P2_CLOSURE.md)); no FP cohort runs; do not
+restart FP-CONTROL-3. H1-PAPER-COHORT-1 starts only under its own
+`H1_LAUNCH_AUTHORIZATION`. Workstream records live in `docs/p3/`.
 
 Do **not** jump directly to FreqAI, RD-Agent, Hyperopt, Hummingbot, Condor,
 NautilusTrader, Qlib, or live trading.
@@ -305,10 +304,9 @@ OWNER_DECISION_REQUIRED = YES/NO
 
 ## Immediate first action
 
-Read the master plan §17 and
-[`docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md`](docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md),
-then re-ground on merged `main` and continue P3 **planning** at the first of
-PLN-00 / PLN-01 that is not yet merged. P3 execution is not authorized.
+Read [`docs/p3/P3_CONTRACT.md`](docs/p3/P3_CONTRACT.md), then re-ground on merged
+`main` and continue P3 at the first workstream of its §5 sequence whose
+acceptance is not yet evidenced in `docs/p3/`.
 
 Proceed autonomously within that contract.
 

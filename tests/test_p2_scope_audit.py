@@ -1262,6 +1262,21 @@ P3_PLN_01_SCOPE: dict[str, str] = {
 }
 
 
+# PR #73, merged. Two parents: fcd06b21 (main before, P3_PLN_01) + 5cbb6f87
+# (the owner/p3-execution-authorization branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_AUTHORIZATION_MERGE = "7b1b1fa190405dd5dee1266fdf3975a994a7c171"
+
+# OWNER_AUTHORIZES_P3_EXECUTION (master plan §17.1, P3_CONTRACT.md §9). The Owner's own record;
+# paper-only; names the frozen contract by sha256 and freeze merge.
+_P3AUTH = "Owner P3 execution authorization"
+P3_AUTHORIZATION_SCOPE: dict[str, str] = {
+    "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md":
+        f"{_P3AUTH} — the record P3_CONTRACT.md §9 requires, created by an Owner-merged PR",
+    "tests/test_p2_scope_audit.py": "P3-PLN-01 (PR #72) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1314,6 +1329,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P2_CLOSURE": (P2_CLOSURE_MERGE, P2_CLOSURE_SCOPE),
     "P3_PLN_00": (P3_PLN_00_MERGE, P3_PLN_00_SCOPE),
     "P3_PLN_01": (P3_PLN_01_MERGE, P3_PLN_01_SCOPE),
+    "P3_AUTHORIZATION": (P3_AUTHORIZATION_MERGE, P3_AUTHORIZATION_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1321,13 +1337,21 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# OWNER_AUTHORIZES_P3_EXECUTION (master plan §17.1, P3_CONTRACT.md §9). The Owner's own record;
-# paper-only; names the frozen contract by sha256 and freeze merge.
-_P3AUTH = "Owner P3 execution authorization"
+# P3-PLN-02 — State & Recovery Inventory (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
+# A read-only classifier and recovery verifier over existing tooling; no runtime, strategy, risk,
+# dataset, registry or evidence change.
+_PLN02 = "P3-PLN-02 state inventory"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md":
-        f"{_P3AUTH} — the record P3_CONTRACT.md §9 requires, created by an Owner-merged PR",
-    "tests/test_p2_scope_audit.py": "P3-PLN-01 (PR #72) pinned to its merge; this branch's scope",
+    "research/p3/__init__.py": f"{_PLN02} — package marker",
+    "research/p3/state_inventory.py": f"{_PLN02} — classify every stateful file and verify its recovery source",
+    "research/p3/records/state_classes.json": f"{_PLN02} — the declared state classes (runtime, worktree, operator)",
+    "scripts/p3/state_inventory.py":
+        f"{_PLN02} — CLI over the library, reusing verify_archive; in scripts/p3/ so it stays outside the "
+        "FP runtime tree (scripts/*.py) that the frozen P2 semantic identity covers",
+    "tests/test_p3_state_inventory.py": f"{_PLN02} — every refusal produced on synthetic repositories",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN02} — the execution record and verdict on this host",
+    "CLAUDE.md": f"{_PLN02} — the stage pointer: P3 executing under its frozen contract and Owner authorization",
+    "tests/test_p2_scope_audit.py": "Owner P3 authorization (PR #73) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
