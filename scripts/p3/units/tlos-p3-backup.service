@@ -1,6 +1,6 @@
 [Unit]
 Description=Trading Lab OS P3-PLN-03 scheduled backup (append-only, verified)
-Documentation=file:///home/hamza/projects/trading/docs/p3/PLN_03_BACKUP_RESTORE.md
+Documentation=file:///home/hamza/projects/trading/tlos-p3/docs/p3/PLN_03_BACKUP_RESTORE.md
 RequiresMountsFor=/mnt/tlos-wdc
 
 [Service]

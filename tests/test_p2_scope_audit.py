@@ -1345,6 +1345,29 @@ P3_OPS_SCOPE: dict[str, str] = {
 }
 
 
+# PR #77, merged. Two parents: 21612777 (main before, P3_OPS) + f25c3f85
+# (the claude/p3-pln-04-recovery branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_MERGE = "9d984f4db4024a54e0d208aacb18a0ea8b13c991"
+
+# P3-PLN-04 — restart / reboot / host recovery (P3_CONTRACT.md §3): the terminal-state restart guard (F-5),
+# resume authorization and the reboot snapshot/verify; the PLN-07 failure/recovery matrix; the PLN-06
+# Prometheus textfile; PLN-02/03 acceptance updates. Outside the FP runtime tree; no runtime, strategy,
+# risk, dataset, registry or evidence change.
+_PLN04 = "P3-PLN-04 recovery"
+P3_PLN_04_SCOPE: dict[str, str] = {
+    "research/p3/recovery.py": f"{_PLN04} — may_restart guard, authorize_resume, reboot snapshot and verify",
+    "scripts/p3/recovery.py": f"{_PLN04} — CLI may-restart (exit 0/3), authorize-resume, snapshot, verify-boot",
+    "research/p3/health.py": f"{_PLN04} — PLN-06 Prometheus text exposition, written atomically",
+    "scripts/p3/health_check.py": f"{_PLN04} — PLN-06 --prom-textfile",
+    "tests/test_p3_recovery.py": f"{_PLN04} — every negative control produced, synthetic only",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_PLN04} — the execution record and the PLN-07 failure/recovery matrix",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN04} — PLN-02 acceptance update: all 14 roots PASS",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN04} — PLN-03 acceptance update: second set and drill PASS",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06/07/08 (PR #76) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1401,6 +1424,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_02": (P3_PLN_02_MERGE, P3_PLN_02_SCOPE),
     "P3_PLN_03": (P3_PLN_03_MERGE, P3_PLN_03_SCOPE),
     "P3_OPS": (P3_OPS_MERGE, P3_OPS_SCOPE),
+    "P3_PLN_04": (P3_PLN_04_MERGE, P3_PLN_04_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1408,21 +1432,21 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-04 — restart / reboot / host recovery (P3_CONTRACT.md §3): the terminal-state restart guard (F-5),
-# resume authorization and the reboot snapshot/verify; the PLN-07 failure/recovery matrix; the PLN-06
-# Prometheus textfile; PLN-02/03 acceptance updates. Outside the FP runtime tree; no runtime, strategy,
-# risk, dataset, registry or evidence change.
-_PLN04 = "P3-PLN-04 recovery"
+# P3-PLN-06 alert delivery (scheduled health with journal + desktop notification and the Prometheus
+# textfile) and P3-PLN-05 offsite push with destination verification. Units prepared, not installed.
+# Outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
+_SCHED = "P3-PLN-05/06 durability and alerts"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/recovery.py": f"{_PLN04} — may_restart guard, authorize_resume, reboot snapshot and verify",
-    "scripts/p3/recovery.py": f"{_PLN04} — CLI may-restart (exit 0/3), authorize-resume, snapshot, verify-boot",
-    "research/p3/health.py": f"{_PLN04} — PLN-06 Prometheus text exposition, written atomically",
-    "scripts/p3/health_check.py": f"{_PLN04} — PLN-06 --prom-textfile",
-    "tests/test_p3_recovery.py": f"{_PLN04} — every negative control produced, synthetic only",
-    "docs/p3/PLN_04_RECOVERY.md": f"{_PLN04} — the execution record and the PLN-07 failure/recovery matrix",
-    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN04} — PLN-02 acceptance update: all 14 roots PASS",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN04} — PLN-03 acceptance update: second set and drill PASS",
-    "tests/test_p2_scope_audit.py": "P3-PLN-06/07/08 (PR #76) pinned to its merge; this branch's scope",
+    "scripts/p3/scheduled_health.sh": f"{_SCHED} — hourly health: textfile, journal, notify-send on WARNING/CRITICAL",
+    "scripts/p3/units/tlos-p3-health.service": f"{_SCHED} — systemd user service; SuccessExitStatus=1 2",
+    "scripts/p3/units/tlos-p3-health.timer": f"{_SCHED} — hourly systemd user timer (installed by the Owner)",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_SCHED} — Documentation path points at the tools checkout",
+    "research/p3/offsite.py": f"{_SCHED} — push a verified set, verify on the destination, append-only",
+    "scripts/p3/offsite.py": f"{_SCHED} — offsite CLI",
+    "tests/test_p3_offsite_and_units.py": f"{_SCHED} — offsite refusals and unit invariants, synthetic only",
+    "docs/p3/PLN_05_EVIDENCE_DURABILITY.md": f"{_SCHED} — PLN-05 record: tiers today, Tier 3 pending a host",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_SCHED} — PLN-06 alert delivery update",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04 (PR #77) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
