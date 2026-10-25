@@ -1345,7 +1345,9 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/p3/__init__.py": f"{_PLN02} — package marker",
     "research/p3/state_inventory.py": f"{_PLN02} — classify every stateful file and verify its recovery source",
     "research/p3/records/state_classes.json": f"{_PLN02} — the declared state classes (runtime, worktree, operator)",
-    "scripts/p3_state_inventory.py": f"{_PLN02} — CLI over the library, reusing verify_archive",
+    "scripts/p3/state_inventory.py":
+        f"{_PLN02} — CLI over the library, reusing verify_archive; in scripts/p3/ so it stays outside the "
+        "FP runtime tree (scripts/*.py) that the frozen P2 semantic identity covers",
     "tests/test_p3_state_inventory.py": f"{_PLN02} — every refusal produced on synthetic repositories",
     "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN02} — the execution record and verdict on this host",
     "CLAUDE.md": f"{_PLN02} — the stage pointer: P3 executing under its frozen contract and Owner authorization",

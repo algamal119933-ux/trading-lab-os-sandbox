@@ -171,7 +171,7 @@ def test_an_unknown_recovery_kind_or_profile_is_refused(tmp_path):
 
 def test_the_cli_reports_and_exits_by_verdict(repo, tmp_path):
     out = tmp_path / "r.json"
-    result = subprocess.run([sys.executable, str(REPO / "scripts" / "p3_state_inventory.py"),
+    result = subprocess.run([sys.executable, str(REPO / "scripts" / "p3" / "state_inventory.py"),
                              "--root", str(repo), "--profile", "operator", "--json", str(out)],
                             capture_output=True, text=True, timeout=120)
     assert result.returncode == 1, result.stdout + result.stderr  # no cold manifest: UNVERIFIED

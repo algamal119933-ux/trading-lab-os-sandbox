@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P3-PLN-02: inventory every stateful file under a root and verify its recovery source.
 
-    scripts/p3_state_inventory.py --root /home/hamza/projects/trading/trading_lab_os_final \\
+    scripts/p3/state_inventory.py --root /home/hamza/projects/trading/trading_lab_os_final \\
         [--cold-manifest <sha256sum file> --cold-prefix projects/trading/trading_lab_os_final/] \\
         [--profile runtime|worktree|operator] [--json report.json]
 
@@ -18,7 +18,7 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)

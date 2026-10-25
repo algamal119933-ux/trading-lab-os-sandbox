@@ -9,7 +9,7 @@ PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCHED = NO
 |---|---|---|
 | Inventory library | `research/p3/state_inventory.py` | BUILD_SMALL_MISSING_LAYER. It classifies and verifies only, and delegates all verification to existing tools |
 | Declared state classes (runtime / worktree / operator profiles) | `research/p3/records/state_classes.json` | record |
-| CLI | `scripts/p3_state_inventory.py` | wraps `scripts/publish_evidence_digest.py verify_archive` (REUSE_EXISTING) |
+| CLI | `scripts/p3/state_inventory.py` (outside the P2-era FP runtime tree `scripts/*.py`) | wraps `scripts/publish_evidence_digest.py verify_archive` (REUSE_EXISTING) |
 | Tests | `tests/test_p3_state_inventory.py`: 15 tests, synthetic repositories only. Each refusal is produced: unclassified file, unreadable directory, dirty tree, unreachable HEAD, stale or missing cold entry, dataset mismatch, failing sealed archive | — |
 
 Recovery kinds and the existing authority each delegates to:
