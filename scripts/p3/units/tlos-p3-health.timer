@@ -1,0 +1,11 @@
+[Unit]
+Description=Trading Lab OS P3-PLN-06 hourly health check
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=tlos-p3-health.service
+
+[Install]
+WantedBy=timers.target

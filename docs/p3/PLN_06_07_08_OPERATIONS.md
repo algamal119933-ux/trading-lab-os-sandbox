@@ -69,3 +69,10 @@ The only warning is the uninstalled backup timer. That is an Owner action from P
 | PLN-06 | health check, normal-end detection, capacity and RPO alerts | 17 tests + real run | **PARTIAL**. The §19 alert *delivery* (to Prometheus/Grafana) is not done yet. The exporter is in the FP runtime tree; a safe path is a node-exporter textfile or a P3 exporter, to be decided |
 | PLN-07 | per-execution audit (F-2) | tests + real run on sealed P2 evidence | **PARTIAL**. The failure/recovery matrix and F-4 fill-timing verification remain, and depend on PLN-04 |
 | PLN-08 | kill switch + operator ledger (O-1) | tests + real drill on Docker | **PASS** for the kill switch (bounded stop, attributable record, scope limited). The operator runbook is folded into this record |
+
+## Update 2026-10-25T19:5xZ — PLN-06 alert delivery
+- `scripts/p3/scheduled_health.sh` and `scripts/p3/units/tlos-p3-health.{service,timer}` run hourly from the clean tools checkout `~/projects/trading/tlos-p3`.
+- Each run writes the Prometheus textfile (for a node-exporter textfile collector when one is installed), journals `tlos-p3-health rc=… HEALTH = …`, and on WARNING or CRITICAL raises a desktop notification (`notify-send`, urgency critical for CRITICAL).
+- `SuccessExitStatus=1 2`, so an alert never masquerades as a unit failure.
+- **Proven by one manual run (19:48Z):** journal line `rc=1 HEALTH = WARNING`, textfile updated (`tlos_p3_health_overall 1`), notification raised.
+- The units are **prepared, not installed**. Host installation was refused by this session's permission system, so it is an Owner action. Wiring the textfile into Prometheus additionally needs `prometheus-node-exporter` (a package install, Owner).
