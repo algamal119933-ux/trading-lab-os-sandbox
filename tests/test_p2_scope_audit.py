@@ -1300,6 +1300,29 @@ P3_PLN_02_SCOPE: dict[str, str] = {
 }
 
 
+# PR #75, merged. Two parents: 652f06f7 (main before, P3_PLN_02) + 330a0812
+# (the claude/p3-pln-03-backup-restore branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_03_MERGE = "71b9f3025718e2c36d47687afef077042ad7a2c8"
+
+# P3-PLN-03 — Backup & Restore (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
+# Append-only backup sets and a restore drill over existing tools; the host timer is prepared, not
+# installed. No runtime, strategy, risk, dataset, registry or evidence change.
+_PLN03 = "P3-PLN-03 backup"
+P3_PLN_03_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_PLN03} — append-only sets, verify, restore drill (wraps tar/zstd, git bundle)",
+    "research/p3/state_inventory.py": f"{_PLN03} — symlinks verified by target text, the same rule as backup.py",
+    "scripts/p3/backup.py": f"{_PLN03} — CLI create/verify/drill; config load via the pinned engine, no trading",
+    "scripts/p3/scheduled_backup.sh": f"{_PLN03} — the scheduled wrapper; append-only, never deletes",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_PLN03} — systemd user service (installed by the Owner)",
+    "scripts/p3/units/tlos-p3-backup.timer": f"{_PLN03} — daily systemd user timer (installed by the Owner)",
+    "tests/test_p3_backup.py": f"{_PLN03} — every refusal produced on synthetic roots",
+    "tests/test_p3_state_inventory.py": f"{_PLN03} — a symlink is verified by its target text",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN03} — the execution record: a real set and a passing drill",
+    "tests/test_p2_scope_audit.py": "P3-PLN-02 (PR #74) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1354,6 +1377,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_01": (P3_PLN_01_MERGE, P3_PLN_01_SCOPE),
     "P3_AUTHORIZATION": (P3_AUTHORIZATION_MERGE, P3_AUTHORIZATION_SCOPE),
     "P3_PLN_02": (P3_PLN_02_MERGE, P3_PLN_02_SCOPE),
+    "P3_PLN_03": (P3_PLN_03_MERGE, P3_PLN_03_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1361,21 +1385,20 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-03 — Backup & Restore (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
-# Append-only backup sets and a restore drill over existing tools; the host timer is prepared, not
-# installed. No runtime, strategy, risk, dataset, registry or evidence change.
-_PLN03 = "P3-PLN-03 backup"
+# P3-PLN-06/07/08 — operational tooling that does not depend on PLN-04 (P3_CONTRACT.md §3, §5): a health
+# check, a per-execution audit (F-2) and a kill switch with an attributable operator ledger (O-1).
+# All of it outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
+_OPS = "P3-PLN-06/07/08 operations"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_PLN03} — append-only sets, verify, restore drill (wraps tar/zstd, git bundle)",
-    "research/p3/state_inventory.py": f"{_PLN03} — symlinks verified by target text, the same rule as backup.py",
-    "scripts/p3/backup.py": f"{_PLN03} — CLI create/verify/drill; config load via the pinned engine, no trading",
-    "scripts/p3/scheduled_backup.sh": f"{_PLN03} — the scheduled wrapper; append-only, never deletes",
-    "scripts/p3/units/tlos-p3-backup.service": f"{_PLN03} — systemd user service (installed by the Owner)",
-    "scripts/p3/units/tlos-p3-backup.timer": f"{_PLN03} — daily systemd user timer (installed by the Owner)",
-    "tests/test_p3_backup.py": f"{_PLN03} — every refusal produced on synthetic roots",
-    "tests/test_p3_state_inventory.py": f"{_PLN03} — a symlink is verified by its target text",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN03} — the execution record: a real set and a passing drill",
-    "tests/test_p2_scope_audit.py": "P3-PLN-02 (PR #74) pinned to its merge; this branch's scope",
+    "research/p3/health.py": f"{_OPS} — PLN-06 health: capacity, RPO, timers, normal-end detection (F-3)",
+    "scripts/p3/health_check.py": f"{_OPS} — PLN-06 health CLI, §19 severities, read-only",
+    "research/p3/execution_audit.py": f"{_OPS} — PLN-07 every fill backed by an admitted decision (F-2)",
+    "scripts/p3/execution_audit.py": f"{_OPS} — PLN-07 audit CLI, read-only",
+    "research/p3/kill_switch.py": f"{_OPS} — PLN-08 stop every paper runtime, hash-chained operator ledger (O-1)",
+    "scripts/p3/kill_switch.py": f"{_OPS} — PLN-08 kill switch CLI; docker stop only, reason required",
+    "tests/test_p3_operations.py": f"{_OPS} — every refusal produced with injected docker/systemctl",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_OPS} — the execution record: real drill, real audit, real health run",
+    "tests/test_p2_scope_audit.py": "P3-PLN-03 (PR #75) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
