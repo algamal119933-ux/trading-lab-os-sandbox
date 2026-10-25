@@ -146,12 +146,18 @@ Do not call reduced exposure "alpha" without exposure-adjusted analysis.
 
 # CURRENT AUTHORIZED STAGE
 
-`P2 — PROSPECTIVE PAPER PROOF`
+`P3 — PAPER BETA RELEASE` — **planning only** (P3-PLN-00, P3-PLN-01). `P3_STARTED = NO`.
 
-**The stage contract is [`docs/p2/P2_CONTRACT.md`](docs/p2/P2_CONTRACT.md).** It
-is the P2 single source of truth: purpose, lane model, source-commit model, the
-T0 transaction, crediting law, durability tiers, authority and closure law all
-live there and are deliberately not restated here.
+P2 is closed (`CLOSED / PASS`, [`docs/p2/P2_CLOSURE.md`](docs/p2/P2_CLOSURE.md),
+Owner-merged as PR #70, `0ce72358`). The P2→P3 entry sequence and the twelve
+locked workstreams are in the master plan
+([`docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md`](docs/governance/TRADING_LAB_OS_MASTER_EXECUTION_AND_MONITORING_PLAN.md) §17);
+the entry reconciliation is
+[`docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md`](docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md).
+P3 production implementation starts only after the PLN-01 contract freeze and
+`OWNER_AUTHORIZES_P3_EXECUTION`. H1-PAPER-COHORT-1 is a separate held cohort
+that starts only under its own `H1_LAUNCH_AUTHORIZATION`. No FP cohort runs;
+do not restart FP-CONTROL-3.
 
 Do **not** jump directly to FreqAI, RD-Agent, Hyperopt, Hummingbot, Condor,
 NautilusTrader, Qlib, or live trading.
@@ -179,6 +185,9 @@ BASELINE-1  simple deterministic active benchmark — both protocol windows run
 FP-BOOT-1   forward-paper scaffold, admission, preflight, ledgers, capture loop
             docs/fp-boot-1/
 P1          host reconstitution — docs/p1/P1_CLOSURE.md — CLOSED / PASS
+P2          prospective paper proof — docs/p2/P2_CONTRACT.md (contract),
+            docs/p2/P2_CLOSURE.md — CLOSED / PASS, trigger A, 12/12 ·
+            PROSPECTIVE_PAPER_EDGE = NOT_EVALUATED
 ```
 
 ## Execution model
@@ -296,8 +305,10 @@ OWNER_DECISION_REQUIRED = YES/NO
 
 ## Immediate first action
 
-Read [`docs/p2/P2_CONTRACT.md`](docs/p2/P2_CONTRACT.md), then re-ground on merged
-`main` and resume P2 at the first stage of §13 that is not yet merged.
+Read the master plan §17 and
+[`docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md`](docs/p2/P3_PLN_00_P2_TO_P3_RECONCILIATION.md),
+then re-ground on merged `main` and continue P3 **planning** at the first of
+PLN-00 / PLN-01 that is not yet merged. P3 execution is not authorized.
 
 Proceed autonomously within that contract.
 
