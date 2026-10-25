@@ -1247,6 +1247,21 @@ P3_PLN_00_SCOPE: dict[str, str] = {
 }
 
 
+# PR #72, merged. Two parents: f597041a (main before, P3_PLN_00) + 2ef29735
+# (the claude/p3-pln-01-contract branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_01_MERGE = "fcd06b2124445c12808aa259f070d9e9a39999aa"
+
+# P3-PLN-01 — Contract & Acceptance (master plan §17). A draft stage contract for Owner review and
+# freeze. Planning only: P3_STARTED stays NO, and execution needs a separate Owner authorization record.
+_PLN01 = "P3-PLN-01 contract"
+P3_PLN_01_SCOPE: dict[str, str] = {
+    "docs/p3/P3_CONTRACT.md":
+        f"{_PLN01} — the P3 stage contract draft: 12 workstreams, acceptance, priorities, authorization package",
+    "tests/test_p2_scope_audit.py": "P3-PLN-00 (PR #71) pinned to its merge; docs/p3/ admitted; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1298,6 +1313,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "H1_WINDOW_AMENDMENT": (H1_WINDOW_AMENDMENT_MERGE, H1_WINDOW_AMENDMENT_SCOPE),
     "P2_CLOSURE": (P2_CLOSURE_MERGE, P2_CLOSURE_SCOPE),
     "P3_PLN_00": (P3_PLN_00_MERGE, P3_PLN_00_SCOPE),
+    "P3_PLN_01": (P3_PLN_01_MERGE, P3_PLN_01_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1305,13 +1321,13 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-01 — Contract & Acceptance (master plan §17). A draft stage contract for Owner review and
-# freeze. Planning only: P3_STARTED stays NO, and execution needs a separate Owner authorization record.
-_PLN01 = "P3-PLN-01 contract"
+# OWNER_AUTHORIZES_P3_EXECUTION (master plan §17.1, P3_CONTRACT.md §9). The Owner's own record;
+# paper-only; names the frozen contract by sha256 and freeze merge.
+_P3AUTH = "Owner P3 execution authorization"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/P3_CONTRACT.md":
-        f"{_PLN01} — the P3 stage contract draft: 12 workstreams, acceptance, priorities, authorization package",
-    "tests/test_p2_scope_audit.py": "P3-PLN-00 (PR #71) pinned to its merge; docs/p3/ admitted; this branch's scope",
+    "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md":
+        f"{_P3AUTH} — the record P3_CONTRACT.md §9 requires, created by an Owner-merged PR",
+    "tests/test_p2_scope_audit.py": "P3-PLN-01 (PR #72) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
