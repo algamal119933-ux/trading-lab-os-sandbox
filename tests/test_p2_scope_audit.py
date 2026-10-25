@@ -1323,6 +1323,28 @@ P3_PLN_03_SCOPE: dict[str, str] = {
 }
 
 
+# PR #76, merged. Two parents: 71b9f302 (main before, P3_PLN_03) + 5bc6c698
+# (the claude/p3-pln-06-07-08-ops branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_OPS_MERGE = "2161277792c6c72deac9db01989f7a91c66e7ec7"
+
+# P3-PLN-06/07/08 — operational tooling that does not depend on PLN-04 (P3_CONTRACT.md §3, §5): a health
+# check, a per-execution audit (F-2) and a kill switch with an attributable operator ledger (O-1).
+# All of it outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
+_OPS = "P3-PLN-06/07/08 operations"
+P3_OPS_SCOPE: dict[str, str] = {
+    "research/p3/health.py": f"{_OPS} — PLN-06 health: capacity, RPO, timers, normal-end detection (F-3)",
+    "scripts/p3/health_check.py": f"{_OPS} — PLN-06 health CLI, §19 severities, read-only",
+    "research/p3/execution_audit.py": f"{_OPS} — PLN-07 every fill backed by an admitted decision (F-2)",
+    "scripts/p3/execution_audit.py": f"{_OPS} — PLN-07 audit CLI, read-only",
+    "research/p3/kill_switch.py": f"{_OPS} — PLN-08 stop every paper runtime, hash-chained operator ledger (O-1)",
+    "scripts/p3/kill_switch.py": f"{_OPS} — PLN-08 kill switch CLI; docker stop only, reason required",
+    "tests/test_p3_operations.py": f"{_OPS} — every refusal produced with injected docker/systemctl",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_OPS} — the execution record: real drill, real audit, real health run",
+    "tests/test_p2_scope_audit.py": "P3-PLN-03 (PR #75) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1378,6 +1400,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_AUTHORIZATION": (P3_AUTHORIZATION_MERGE, P3_AUTHORIZATION_SCOPE),
     "P3_PLN_02": (P3_PLN_02_MERGE, P3_PLN_02_SCOPE),
     "P3_PLN_03": (P3_PLN_03_MERGE, P3_PLN_03_SCOPE),
+    "P3_OPS": (P3_OPS_MERGE, P3_OPS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1385,20 +1408,21 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-06/07/08 — operational tooling that does not depend on PLN-04 (P3_CONTRACT.md §3, §5): a health
-# check, a per-execution audit (F-2) and a kill switch with an attributable operator ledger (O-1).
-# All of it outside the FP runtime tree; no runtime, strategy, risk, dataset, registry or evidence change.
-_OPS = "P3-PLN-06/07/08 operations"
+# P3-PLN-04 — restart / reboot / host recovery (P3_CONTRACT.md §3): the terminal-state restart guard (F-5),
+# resume authorization and the reboot snapshot/verify; the PLN-07 failure/recovery matrix; the PLN-06
+# Prometheus textfile; PLN-02/03 acceptance updates. Outside the FP runtime tree; no runtime, strategy,
+# risk, dataset, registry or evidence change.
+_PLN04 = "P3-PLN-04 recovery"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/health.py": f"{_OPS} — PLN-06 health: capacity, RPO, timers, normal-end detection (F-3)",
-    "scripts/p3/health_check.py": f"{_OPS} — PLN-06 health CLI, §19 severities, read-only",
-    "research/p3/execution_audit.py": f"{_OPS} — PLN-07 every fill backed by an admitted decision (F-2)",
-    "scripts/p3/execution_audit.py": f"{_OPS} — PLN-07 audit CLI, read-only",
-    "research/p3/kill_switch.py": f"{_OPS} — PLN-08 stop every paper runtime, hash-chained operator ledger (O-1)",
-    "scripts/p3/kill_switch.py": f"{_OPS} — PLN-08 kill switch CLI; docker stop only, reason required",
-    "tests/test_p3_operations.py": f"{_OPS} — every refusal produced with injected docker/systemctl",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_OPS} — the execution record: real drill, real audit, real health run",
-    "tests/test_p2_scope_audit.py": "P3-PLN-03 (PR #75) pinned to its merge; this branch's scope",
+    "research/p3/recovery.py": f"{_PLN04} — may_restart guard, authorize_resume, reboot snapshot and verify",
+    "scripts/p3/recovery.py": f"{_PLN04} — CLI may-restart (exit 0/3), authorize-resume, snapshot, verify-boot",
+    "research/p3/health.py": f"{_PLN04} — PLN-06 Prometheus text exposition, written atomically",
+    "scripts/p3/health_check.py": f"{_PLN04} — PLN-06 --prom-textfile",
+    "tests/test_p3_recovery.py": f"{_PLN04} — every negative control produced, synthetic only",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_PLN04} — the execution record and the PLN-07 failure/recovery matrix",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN04} — PLN-02 acceptance update: all 14 roots PASS",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN04} — PLN-03 acceptance update: second set and drill PASS",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06/07/08 (PR #76) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

@@ -104,3 +104,31 @@ def overall(findings: list[dict]) -> str:
 
 def default_runner(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+
+SEVERITY_VALUE = {INFO: 0, WARNING: 1, CRITICAL: 2}
+
+
+def prometheus_text(findings: list[dict]) -> str:
+    """Prometheus text exposition: one gauge per check (0 INFO, 1 WARNING, 2 CRITICAL) and the overall.
+
+    Written as a node-exporter textfile (or scraped through any file-based collector), so alert
+    delivery reuses the existing Prometheus/Grafana stack (§10) without touching the FP exporter.
+    """
+    lines = ["# HELP tlos_p3_health_check Trading Lab OS P3 health check severity (0 INFO, 1 WARNING, 2 CRITICAL)",
+             "# TYPE tlos_p3_health_check gauge"]
+    for f in findings:
+        check = f["check"].replace("\\", "\\\\").replace('"', "'")
+        lines.append(f'tlos_p3_health_check{{check="{check}"}} {SEVERITY_VALUE[f["severity"]]}')
+    lines += ["# HELP tlos_p3_health_overall Worst severity across all checks",
+              "# TYPE tlos_p3_health_overall gauge", f"tlos_p3_health_overall {SEVERITY_VALUE[overall(findings)]}"]
+    return "\n".join(lines) + "\n"
+
+
+def write_textfile(findings: list[dict], path: Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(prometheus_text(findings), encoding="utf-8")
+    os.replace(tmp, path)  # atomic: a scraper never reads a half-written file
+
