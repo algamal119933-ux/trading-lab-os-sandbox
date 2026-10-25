@@ -1,0 +1,162 @@
+{
+  "record": "P3_STATE_CLASSES_V1",
+  "authority": "docs/p3/P3_CONTRACT.md §3 PLN-02 (frozen, sha256 2c057cb5…487f4d); executed under docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md",
+  "root": "a declared root of Trading Lab OS state; the profile selects its classes; first matching class wins",
+  "profiles": {
+    "runtime": [
+      {
+        "id": "source",
+        "authority": "SOURCE",
+        "recovery": "GIT_REMOTE",
+        "tracked": true
+      },
+      {
+        "id": "sealed_archives",
+        "authority": "CANONICAL_EVIDENCE",
+        "recovery": "SEALED_ARCHIVE",
+        "sealed_archives": true
+      },
+      {
+        "id": "derived",
+        "authority": "DERIVED",
+        "recovery": "DISPOSABLE",
+        "globs": [
+          ".venv/*",
+          "*/__pycache__/*",
+          "__pycache__/*",
+          ".pytest_cache/*",
+          ".ruff_cache/*",
+          ".mypy_cache/*",
+          "research/records/scratch/*"
+        ]
+      },
+      {
+        "id": "datasets",
+        "authority": "DATASET",
+        "recovery": "DATASET_LOCK",
+        "globs": [
+          "dataset-cache/*",
+          "freqtrade/user_data/data/*"
+        ]
+      },
+      {
+        "id": "secrets",
+        "authority": "CONFIG_SECRET",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          ".env",
+          ".env.*"
+        ]
+      },
+      {
+        "id": "runtime_config",
+        "authority": "CONFIG",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          "freqtrade/user_data/config.json",
+          "freqtrade/user_data/config.local.json",
+          "freqtrade/user_data/config.research.json"
+        ]
+      },
+      {
+        "id": "lanes",
+        "authority": "RUNTIME_STATE",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          "freqtrade/user_data/fp-control-*/*",
+          "freqtrade/user_data/fp-testlane-*/*",
+          "freqtrade/user_data/logs/*",
+          "freqtrade/user_data/*.sqlite*"
+        ]
+      },
+      {
+        "id": "verification_artifacts",
+        "authority": "EVIDENCE_NONCANONICAL",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          "artifacts/*"
+        ]
+      }
+    ],
+    "worktree": [
+      {
+        "id": "source",
+        "authority": "SOURCE",
+        "recovery": "GIT_REMOTE",
+        "tracked": true
+      },
+      {
+        "id": "sealed_archives",
+        "authority": "CANONICAL_EVIDENCE",
+        "recovery": "SEALED_ARCHIVE",
+        "sealed_archives": true
+      },
+      {
+        "id": "derived",
+        "authority": "DERIVED",
+        "recovery": "DISPOSABLE",
+        "globs": [
+          ".venv/*",
+          "*/__pycache__/*",
+          "__pycache__/*",
+          ".pytest_cache/*",
+          "*/.pytest_cache/*",
+          ".ruff_cache/*",
+          ".mypy_cache/*",
+          "research/records/scratch/*"
+        ]
+      },
+      {
+        "id": "datasets",
+        "authority": "DATASET",
+        "recovery": "DATASET_LOCK",
+        "globs": [
+          "dataset-cache/*",
+          "freqtrade/user_data/data/*"
+        ]
+      },
+      {
+        "id": "upstream_cache",
+        "authority": "PINNED_UPSTREAM_SOURCE",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          ".upstream-cache/*"
+        ]
+      },
+      {
+        "id": "local_untracked",
+        "authority": "WORKTREE_LOCAL",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          "*"
+        ]
+      }
+    ],
+    "operator": [
+      {
+        "id": "derived",
+        "authority": "DERIVED",
+        "recovery": "DISPOSABLE",
+        "globs": [
+          ".venv/*",
+          "*/__pycache__/*",
+          "__pycache__/*",
+          ".pytest_cache/*",
+          "*/.pytest_cache/*",
+          ".ruff_cache/*",
+          ".mypy_cache/*",
+          "research/records/scratch/*",
+          "*/.venv/*"
+        ]
+      },
+      {
+        "id": "operator_workspace",
+        "authority": "OPERATOR_RECORDS",
+        "recovery": "COLD_BACKUP",
+        "globs": [
+          "*"
+        ]
+      }
+    ]
+  }
+}
