@@ -1,0 +1,11 @@
+[Unit]
+Description=Trading Lab OS P3-PLN-03 daily backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=tlos-p3-backup.service
+
+[Install]
+WantedBy=timers.target

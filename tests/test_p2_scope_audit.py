@@ -1277,6 +1277,29 @@ P3_AUTHORIZATION_SCOPE: dict[str, str] = {
 }
 
 
+# PR #74, merged. Two parents: 7b1b1fa1 (main before, P3_AUTHORIZATION) + 0112a81e
+# (the claude/p3-pln-02-state-inventory branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_02_MERGE = "652f06f71a2ff5876c4d6dab84345696e6339fab"
+
+# P3-PLN-02 — State & Recovery Inventory (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
+# A read-only classifier and recovery verifier over existing tooling; no runtime, strategy, risk,
+# dataset, registry or evidence change.
+_PLN02 = "P3-PLN-02 state inventory"
+P3_PLN_02_SCOPE: dict[str, str] = {
+    "research/p3/__init__.py": f"{_PLN02} — package marker",
+    "research/p3/state_inventory.py": f"{_PLN02} — classify every stateful file and verify its recovery source",
+    "research/p3/records/state_classes.json": f"{_PLN02} — the declared state classes (runtime, worktree, operator)",
+    "scripts/p3/state_inventory.py":
+        f"{_PLN02} — CLI over the library, reusing verify_archive; in scripts/p3/ so it stays outside the "
+        "FP runtime tree (scripts/*.py) that the frozen P2 semantic identity covers",
+    "tests/test_p3_state_inventory.py": f"{_PLN02} — every refusal produced on synthetic repositories",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN02} — the execution record and verdict on this host",
+    "CLAUDE.md": f"{_PLN02} — the stage pointer: P3 executing under its frozen contract and Owner authorization",
+    "tests/test_p2_scope_audit.py": "Owner P3 authorization (PR #73) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1330,6 +1353,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_00": (P3_PLN_00_MERGE, P3_PLN_00_SCOPE),
     "P3_PLN_01": (P3_PLN_01_MERGE, P3_PLN_01_SCOPE),
     "P3_AUTHORIZATION": (P3_AUTHORIZATION_MERGE, P3_AUTHORIZATION_SCOPE),
+    "P3_PLN_02": (P3_PLN_02_MERGE, P3_PLN_02_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1337,21 +1361,21 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-02 — State & Recovery Inventory (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
-# A read-only classifier and recovery verifier over existing tooling; no runtime, strategy, risk,
-# dataset, registry or evidence change.
-_PLN02 = "P3-PLN-02 state inventory"
+# P3-PLN-03 — Backup & Restore (P3_CONTRACT.md §3), executed under the Owner P3 authorization.
+# Append-only backup sets and a restore drill over existing tools; the host timer is prepared, not
+# installed. No runtime, strategy, risk, dataset, registry or evidence change.
+_PLN03 = "P3-PLN-03 backup"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/__init__.py": f"{_PLN02} — package marker",
-    "research/p3/state_inventory.py": f"{_PLN02} — classify every stateful file and verify its recovery source",
-    "research/p3/records/state_classes.json": f"{_PLN02} — the declared state classes (runtime, worktree, operator)",
-    "scripts/p3/state_inventory.py":
-        f"{_PLN02} — CLI over the library, reusing verify_archive; in scripts/p3/ so it stays outside the "
-        "FP runtime tree (scripts/*.py) that the frozen P2 semantic identity covers",
-    "tests/test_p3_state_inventory.py": f"{_PLN02} — every refusal produced on synthetic repositories",
-    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_PLN02} — the execution record and verdict on this host",
-    "CLAUDE.md": f"{_PLN02} — the stage pointer: P3 executing under its frozen contract and Owner authorization",
-    "tests/test_p2_scope_audit.py": "Owner P3 authorization (PR #73) pinned to its merge; this branch's scope",
+    "research/p3/backup.py": f"{_PLN03} — append-only sets, verify, restore drill (wraps tar/zstd, git bundle)",
+    "research/p3/state_inventory.py": f"{_PLN03} — symlinks verified by target text, the same rule as backup.py",
+    "scripts/p3/backup.py": f"{_PLN03} — CLI create/verify/drill; config load via the pinned engine, no trading",
+    "scripts/p3/scheduled_backup.sh": f"{_PLN03} — the scheduled wrapper; append-only, never deletes",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_PLN03} — systemd user service (installed by the Owner)",
+    "scripts/p3/units/tlos-p3-backup.timer": f"{_PLN03} — daily systemd user timer (installed by the Owner)",
+    "tests/test_p3_backup.py": f"{_PLN03} — every refusal produced on synthetic roots",
+    "tests/test_p3_state_inventory.py": f"{_PLN03} — a symlink is verified by its target text",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_PLN03} — the execution record: a real set and a passing drill",
+    "tests/test_p2_scope_audit.py": "P3-PLN-02 (PR #74) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
