@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fp-lane-root", type=Path,
                         default=Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"))
     parser.add_argument("--json", type=Path)
+    parser.add_argument("--prom-textfile", type=Path, help="also write Prometheus text exposition, atomically")
     args = parser.parse_args(argv)
     run = health.default_runner
     findings = [
@@ -49,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     verdict = health.overall(findings)
     if args.json:
         args.json.write_text(json.dumps({"findings": findings, "HEALTH": verdict}, indent=2) + "\n", encoding="utf-8")
+    if args.prom_textfile:
+        health.write_textfile(findings, args.prom_textfile)
     for f in findings:
         print(f"  {f['severity']:8} {f['check']:42} {f['detail']}")
     print(f"HEALTH = {verdict}")

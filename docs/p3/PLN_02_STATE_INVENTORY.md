@@ -53,3 +53,7 @@ PLN_02_ACCEPTANCE          = PENDING. "Each item has a verified recovery source"
 - Backups must run on a schedule, with an RPO shorter than the operator workspace's change rate. A one-off copy is not enough.
 - The three Docker monitoring volumes must be exported. They are non-authoritative, but they are state.
 - Storage: root has about 9.0 GiB free. The WDC NTFS volume is the backup target (noexec is fine for archives). Independent-host (Tier 3) copies are PLN-05.
+
+## Acceptance update (2026-10-25T18:51Z)
+Re-run against backup set `20261025T185052Z` (`scripts/p3/backup.py` through `scripts/p3/scheduled_backup.sh`): **all 14 roots PASS**. That is runtime, tlos-control plus 9 worktrees, the operator workspace, tlos-ar-render, the evidence docs and memory, with 0 unclassified, 0 unreadable and every class verified. The Docker volumes are in the set.
+**PLN-02 ACCEPTANCE = PASS** as of that set. It is re-checked after each scheduled backup.

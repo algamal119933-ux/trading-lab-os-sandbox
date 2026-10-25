@@ -72,3 +72,7 @@ Rollback: `systemctl --user disable --now tlos-p3-backup.timer`. The backup sets
 ## Hand-off
 - PLN-04 (restart, reboot and host recovery) uses these sets as its restore source.
 - PLN-05 needs a **Tier-3 independent-host** copy. These sets are same-host (WDC), so HOST_LOSS_REDUNDANCY = NOT_PROVEN.
+
+## Acceptance update (2026-10-25T18:51Z)
+Second set `20261025T185052Z` (verify PASS, 3 volumes included). Its restore drill passes every check, with 8 archives ARCHIVE_VERIFIED and the runtime config load passing.
+Still open: **the scheduled execution**. The timer is not installed (Owner action). After installation, the first unattended set, its verify and its drill complete PLN-03.
