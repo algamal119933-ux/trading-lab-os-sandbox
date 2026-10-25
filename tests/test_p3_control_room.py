@@ -184,3 +184,49 @@ def test_collect_reads_only_through_injected_runners(tmp_path):
     assert all(c[0] in ("git", "cat", "timedatectl", "systemctl", "docker") for c in calls)
     assert not any(word in " ".join(c) for c in calls for word in (" stop", " rm", " start", " restart", "push"))
     cr.project(obs)
+
+
+def test_a_non_info_finding_opens_an_incident_and_nothing_else_does():
+    assert cr.project(_obs())["scenario"]["incidents"] == []
+    obs = _obs()
+    obs["health"] = {"findings": obs["health"]["findings"] + [
+        {"check": "mount:/mnt/tlos-wdc", "severity": "CRITICAL", "detail": "not mounted"}], "overall": "CRITICAL"}
+    live = cr.project(obs)
+    (inc,) = live["scenario"]["incidents"]
+    assert inc["id"] == "HEALTH-mount:/mnt/tlos-wdc" and inc["s"] == "open" and live["scenario"]["signal"] == "incident"
+
+
+def test_restore_readiness_comes_only_from_a_persisted_drill_record():
+    assert cr.project(_obs())["ops"]["restore"] == ["unk", "notRecorded"]
+    passed = {"backup_set": "S", "PLN_03_RESTORE_DRILL": "PASS", "_file": "d.json", "_mtime": 1_792_960_000.0,
+              "checks": {"sealed:x": {"status": "PASS", "archives": [["a", "ARCHIVE_VERIFIED"], ["b", "ARCHIVE_VERIFIED"]]}}}
+    failed = dict(passed, PLN_03_RESTORE_DRILL="FAIL")
+    live = cr.project(_obs(drills=[passed]))
+    assert live["ops"]["restore"][0] == "ok"
+    sealed_row = next(r for r in live["evidence_rows"] if r[0]["en"].startswith("Sealed archives"))
+    assert "2 ARCHIVE_VERIFIED" in sealed_row[1][1]["en"]
+    assert cr.project(_obs(drills=[failed]))["ops"]["restore"] == ["fail", "fail"]
+
+
+def test_an_unbacked_execution_audit_is_shown_as_a_finding_not_hidden():
+    audit = {"evidence_dir": "/x/l2-cohort-T/evidence", "unbacked": 2, "EXECUTION_BACKED_BY_ADMITTED_DECISION": "FAIL",
+             "_file": "a.json", "_mtime": 1_792_960_000.0}
+    rows = cr.project(_obs(audits=[audit]))["evidence_rows"]
+    row = next(r for r in rows if "l2-cohort-T" in r[0]["en"])
+    assert row[1][0] == "warn" and "2 unbacked" in row[1][1]["en"]
+
+
+def test_history_carries_ledger_backup_and_governance_events_in_time_order():
+    ledger = [{"utc": "2026-10-25T18:37:26Z", "outcome": "STOPPED", "reason": "drill"}]
+    events = cr.project(_obs(ledger_tail=ledger))["scenario"]["events"]
+    kinds = {e["c"] for e in events}
+    assert {"stage", "system"} <= kinds
+    times = [e["t"] for e in events[:-1]]
+    assert times == sorted(times) and "Health check" in events[-1]["d"]["en"]
+
+
+def test_the_resume_brief_and_capability_rows_are_live_not_demo():
+    live = cr.project(_obs())
+    assert "DEMO" not in live["brief"] and "LIVE PROJECTION" in live["brief"]
+    assert all("pre" in c and "since" in c for c in live["caps"])
+    assert [r[0] for r in live["stages"]] == ["P1", "P2", "P3", "POST-BETA"]

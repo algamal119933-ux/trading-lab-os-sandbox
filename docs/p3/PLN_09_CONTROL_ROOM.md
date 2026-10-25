@@ -12,7 +12,7 @@ PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO
 | Governed workstream status (changes only by merged PR; the view never writes it) | `research/p3/records/p3_workstreams.json` | record |
 | CLI `build` | `scripts/p3/control_room.py` | — |
 | Hourly regeneration inside the existing health run (a failed build never changes the health verdict) | `scripts/p3/scheduled_health.sh` | REUSE (the existing timer) |
-| Tests: 17, synthetic only | `tests/test_p3_control_room.py` | — |
+| Tests: 22, synthetic only | `tests/test_p3_control_room.py` | — |
 
 Properties:
 - **NEW_CONTROL_PLANE = NO.** The page is a static file with the prototype's CSP (`connect-src 'none'`). There is no server, no network and no write, and it has no control.
@@ -37,6 +37,28 @@ Properties:
 - **System:** runtime, feed, API and clock; host uptime and boot ID; disk and mounts; timers; runtime pin 3191285a (clean) against main; Owner awareness (local notification implemented, off-host not).
 - **The other 10 screens** keep their frozen bodies under the prototype's own info banner: "not yet bound to live evidence; values tagged DEMO are the prototype reference". Nothing is passed off as live.
 
+## Slice 2 delivered: six more screens (verified 2026-10-25T22:1xZ, EN + AR/RTL, 0 DEMO values, no console errors)
+- **Project & Continuity:**
+  - resume block and resume brief (the live brief, copyable);
+  - P2 terminal law, with its source cited;
+  - checkpoints;
+  - stage map: P1/P2 closed with their closure records, P3 executing under 7b1b1fa1, POST-BETA not authorized.
+- **Incidents:** each non-INFO health finding opens an incident; nothing else does. Today there are none. The incident page keeps the frozen field set.
+- **Operations:**
+  - backup health and newest set from the health check;
+  - restore readiness from the **persisted** drill record `p3-evidence/drills/<set>.json`. A fresh drill of `20261025T211956Z` passed, with 8 archives ARCHIVE_VERIFIED;
+  - host-reboot recovery shown as "not yet exercised";
+  - the actions are listed as operator CLIs ("not in this view"). The Kill Switch button is never live in the view.
+- **Risk & Authority:** no cohort, so exposure is 0 % and the other metrics are not applicable. Shown with the governed limits of the last cohort and the capability matrix with preconditions.
+- **Evidence & Reconciliation:** real checks with their sources:
+  - the P2 final reconciliation, 14/14;
+  - sealed archives re-verified on restore, 8;
+  - backup verify;
+  - restore drill;
+  - ledger chain;
+  - the PLN-07 execution audit of the sealed P2 archive: **2 unbacked, contextual (F-2)**, shown as a finding, not hidden. Record: `p3-evidence/audits/l2-cohort-20260924T120000Z.json`.
+- **History:** governance merges, backup sets, operator ledger records, drills and audits on one filtered timeline.
+
 ## Remaining screens: binding plan and estimate
 | Screen | Live source (existing) | Effort |
 |---|---|---|
@@ -51,4 +73,4 @@ Properties:
 | Settings | per-viewer settings only (return threshold, language), held in the browser | 0.25 d |
 | Mobile (4 tabs + details) | the same scenario; the prototype's mobile components | 0.5 d |
 
-**Total about 6–7 working days** for all 12 screens bound, plus Owner review rounds. Each PR binds one or two screens, and the `LIVE_BOUND` list grows.
+**Total about 6–7 working days** for all 12 screens bound, plus Owner review rounds. After slice 2, **8 of 12 screens are bound**. The remainder is Decisions, Trades & Positions, Market Workspace, Settings and Mobile, **about 3 working days**.

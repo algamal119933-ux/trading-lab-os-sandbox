@@ -44,6 +44,7 @@ P2_CLOSURE = REPO_ROOT / "docs" / "p2" / "P2_CLOSURE.md"
 RUNTIME_ROOT = Path("/home/hamza/projects/trading/trading_lab_os_final")
 LEDGER = Path("/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl")
 BACKUP_TARGET = Path("/mnt/tlos-wdc/tlos-backups")
+EVIDENCE_DIR = Path("/home/hamza/tlos-paper/p3-evidence")  # drills/ and audits/ hold persisted proof records
 # The view is regenerated hourly with the health timer; past this age it is shown as stale.
 FRESHNESS_BUDGET_S = 2 * 3600
 
@@ -78,7 +79,7 @@ def b(en: str, ar: str) -> dict:
 def collect(*, runner: Runner = _run, now: float | None = None, registry_path: Path = REGISTRY,
             workstreams_path: Path = WORKSTREAMS, authorization_path: Path = AUTHORIZATION,
             p2_closure_path: Path = P2_CLOSURE, ledger_path: Path = LEDGER, repo_root: Path = REPO_ROOT,
-            runtime_root: Path = RUNTIME_ROOT, backup_target: Path = BACKUP_TARGET, findings: list[dict] | None = None,
+            runtime_root: Path = RUNTIME_ROOT, backup_target: Path = BACKUP_TARGET, evidence_dir: Path = EVIDENCE_DIR, findings: list[dict] | None = None,
             docker: Runner | None = None) -> dict:
     """Observe the host. Read-only; each value records where it came from."""
     now = time.time() if now is None else now
@@ -106,8 +107,20 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
     health_timer = health.timer_expected("tlos-p3-health.timer", want_active=True, runner=runner)
     sets = sorted(p.name for p in Path(backup_target).glob("*") if (p / "BACKUP_RECORD.json").is_file()) \
         if Path(backup_target).is_dir() else []
+    drills, audits = [], []
+    for kind, out in (("drills", drills), ("audits", audits)):
+        for f in sorted(Path(evidence_dir, kind).glob("*.json"), key=lambda q: q.stat().st_mtime):
+            try:
+                rec = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                rec = {"unreadable": True}
+            rec["_file"], rec["_mtime"] = str(f), f.stat().st_mtime
+            out.append(rec)
     return {
         "observation_version": "P3_CONTROL_ROOM_OBSERVATION_V1",
+        "drills": drills,
+        "audits": audits,
+        "ledger_tail": ledger_records[-20:],
         "observed_epoch": now,
         "observed_utc": _utc(now),
         "hostname": socket.gethostname(),
@@ -336,7 +349,7 @@ def project(obs: dict) -> dict:
         ["ok", b("P2 closed · PASS", "P2 مغلقة · ناجحة")],
         ["info", b("P3 executing", "P3 قيد التنفيذ")],
     ]
-    return {
+    live = {
         "live_version": "P3_CONTROL_ROOM_LIVE_V1",
         "observed_utc": now, "observed_epoch": obs["observed_epoch"], "budget_s": FRESHNESS_BUDGET_S,
         "hostname": obs["hostname"],
@@ -375,6 +388,156 @@ def project(obs: dict) -> dict:
         "caps": caps,
         "real_money_authorized": False,
     }
+    _bind_screens(obs, live)
+    return live
+
+
+def _sevc(severity: str) -> str:
+    return {health.INFO: "ok", health.WARNING: "warn"}.get(severity, "inc")
+
+
+def _bind_screens(obs: dict, live: dict) -> None:
+    """Data for the screens bound after the Command Center: Project & Continuity, Incidents, Operations,
+    Risk & Authority, Evidence & Reconciliation and History. Pure; adds keys to ``live``."""
+    sc = live["scenario"]
+    now = obs["observed_utc"]
+    findings = obs["health"]["findings"]
+    backup_f = _finding(obs, "backup_recency")
+    sets = obs["backup_sets"]
+    drill = next((d for d in reversed(obs.get("drills", [])) if not d.get("unreadable")), None)
+    drill_ok = bool(drill) and drill.get("PLN_03_RESTORE_DRILL") == "PASS"
+    sealed = [a for k, v in (drill or {}).get("checks", {}).items() if k.startswith("sealed:") for a in v.get("archives", [])]
+
+    # Incidents: every non-INFO health finding is an open incident; nothing is invented.
+    incidents = []
+    for f in findings:
+        if f["severity"] == health.INFO:
+            continue
+        incidents.append({
+            "id": f"HEALTH-{f['check']}", "s": "open", "when": now,
+            "title": b(f"Health check {f['severity']}: {f['check']}", f"فحص الصحة {f['severity']}: {f['check']}"),
+            "f": {"known": b(f["detail"], f["detail"]),
+                  "detect": b("Scheduled P3 health check (hourly)", "فحص صحة P3 المجدول (كل ساعة)"),
+                  "unknown": b("Cause, until an operator investigates.", "السبب، حتى يتحقق المشغّل."),
+                  "next": b("Investigate on the host; the health check re-evaluates every hour.",
+                            "التحقق على الخادم؛ يعيد فحص الصحة التقييم كل ساعة."),
+                  "state": b("Open", "مفتوح"), "owner": b("Informed", "للعلم"),
+                  "evidence": b("research/p3/health.py · journal tlos-p3-health", "research/p3/health.py · سجل tlos-p3-health")}})
+    sc["incidents"] = incidents
+    if incidents:
+        sc["signal"] = "incident"
+
+    # History: governance merges, backup sets, operator ledger, drills and audits on one timeline.
+    events = [e for e in sc["events"] if e["c"] == "stage"]
+    for name in sets:
+        events.append({"t": f"{name[:4]}-{name[4:6]}-{name[6:8]} {name[9:11]}:{name[11:13]}Z", "s": "ok", "c": "system",
+                       "d": b(f"Backup set {name} written", f"كُتبت مجموعة النسخ {name}"), "src": b("backup record", "سجل النسخ")})
+    for r in obs.get("ledger_tail", []):
+        t = (r.get("utc") or "")[:16].replace("T", " ") + "Z"
+        events.append({"t": t, "s": "ok" if r.get("outcome") in ("STOPPED", "DRY_RUN", None) else "warn", "c": "system",
+                       "d": b(f"Operator ledger: {r.get('record_type', 'kill switch')} · {r.get('outcome', '')} · {r.get('reason', '')}",
+                              f"سجل المشغّل: {r.get('record_type', 'مفتاح الإيقاف')} · {r.get('outcome', '')} · {r.get('reason', '')}"),
+                       "src": b("operator ledger", "سجل المشغّل")})
+    for d in obs.get("drills", []):
+        events.append({"t": _utc(d["_mtime"]), "s": "ok" if d.get("PLN_03_RESTORE_DRILL") == "PASS" else "fail", "c": "recon",
+                       "d": b(f"Restore drill {d.get('backup_set', '?')}: {d.get('PLN_03_RESTORE_DRILL', 'unreadable')}",
+                              f"تمرين الاستعادة {d.get('backup_set', '?')}: {d.get('PLN_03_RESTORE_DRILL', 'غير مقروء')}"),
+                       "src": b("drill record", "سجل التمرين")})
+    for a in obs.get("audits", []):
+        events.append({"t": _utc(a["_mtime"]), "s": "warn" if a.get("unbacked") else "ok", "c": "recon",
+                       "d": b(f"Execution audit {Path(a.get('evidence_dir', '?')).parent.name}: {a.get('EXECUTION_BACKED_BY_ADMITTED_DECISION')} "
+                              f"({a.get('unbacked', '?')} unbacked)",
+                              f"تدقيق التنفيذ {Path(a.get('evidence_dir', '?')).parent.name}: {a.get('EXECUTION_BACKED_BY_ADMITTED_DECISION')} "
+                              f"({a.get('unbacked', '?')} غير مدعوم)"),
+                       "src": b("audit record", "سجل التدقيق")})
+    events.sort(key=lambda e: e["t"])
+    events.append(sc["events"][-1])  # the current health check, last
+    sc["events"] = events
+
+    # Operations: backup, restore and recovery from records; actions are operator CLIs, not view buttons.
+    live["ops"] = {
+        "backup": [_sevc(backup_f["severity"]), b(backup_f["detail"], backup_f["detail"])] if backup_f else ["unk", "unknown"],
+        "last_set": sets[-1] if sets else None,
+        "retention": b("Append-only; no pruning (deleting sets needs an Owner decision)",
+                       "إضافة فقط؛ لا حذف (حذف المجموعات يحتاج قرار المالك)"),
+        "restore": ["ok", b(f"Drill PASS · {drill.get('backup_set')}", f"التمرين ناجح · {drill.get('backup_set')}")] if drill_ok
+        else (["fail", "fail"] if drill else ["unk", "notRecorded"]),
+        "restore_when": _utc(drill["_mtime"]) if drill else None,
+        "points": len(sets),
+        "reboot": ["wait", b("Not yet exercised · Owner window", "لم يُختبر بعد · نافذة المالك")],
+        "acts": [
+            [b("Kill switch (stop paper runtimes)", "مفتاح الإيقاف (إيقاف التشغيل الورقي)"), "scripts/p3/kill_switch.py --reason …",
+             b("Hash-chained operator ledger; bounded docker stop", "سجل مشغّل متسلسل بالبصمة؛ إيقاف docker محدود")],
+            [b("Restart guard / resume authorization", "حارس إعادة التشغيل / تفويض الاستئناف"), "scripts/p3/recovery.py may-restart | authorize-resume",
+             b("Refuses CLOSED cohorts and standing stops", "يرفض المجموعات المغلقة والإيقافات القائمة")],
+            [b("Verify latest backup", "التحقق من آخر نسخة"), "scripts/p3/backup.py verify --set …", b("Read-only", "قراءة فقط")],
+            [b("Restore drill into empty scratch", "تمرين استعادة في مجلد فارغ"), "scripts/p3/backup.py drill --set … --scratch … --json …",
+             b("Never restores over live state", "لا يستعيد فوق الحالة الحية")],
+            [b("Offsite push + verify", "نسخ خارجي + تحقق"), "scripts/p3/offsite.py --set … --dest …",
+             b("Append-only; needs an independent host", "إضافة فقط؛ يحتاج خادمًا مستقلًا")],
+        ],
+    }
+
+    # Evidence & Reconciliation: real checks with their sources.
+    rows = []
+    rec = obs.get("p2_reconcile")
+    rows.append([b("P2 final reconciliation (sealed)", "مطابقة P2 النهائية (مختومة)"),
+                 ["ok", b(f"PASS · {rec['passed']}/{rec['total']}", f"ناجحة · {rec['passed']}/{rec['total']}")] if rec else ["unk", "unknown"],
+                 "docs/p2/P2_CLOSURE.md"])
+    rows.append([b("Sealed archives re-verified on restore", "الأرشيفات المختومة أُعيد التحقق منها عند الاستعادة"),
+                 ["ok", b(f"{len(sealed)} ARCHIVE_VERIFIED", f"{len(sealed)} ARCHIVE_VERIFIED")]
+                 if sealed and all(v == "ARCHIVE_VERIFIED" for _, v in sealed) else ["unk", "notRecorded"],
+                 drill["_file"] if drill else "—"])
+    rows.append([b("Newest backup set verifies", "أحدث مجموعة نسخ تتحقق"),
+                 [_sevc(backup_f["severity"]), "pass" if backup_f["severity"] == health.INFO else "fail"] if backup_f else ["unk", "unknown"],
+                 "research/p3/backup.py verify_backup"])
+    rows.append([b("Restore drill", "تمرين الاستعادة"), live["ops"]["restore"], drill["_file"] if drill else "—"])
+    rows.append([b("Operator ledger hash chain", "سلسلة بصمات سجل المشغّل"),
+                 ["ok", "pass"] if not obs["ledger"]["problems"] else ["fail", "fail"], "research/p3/kill_switch.py verify_ledger"])
+    for a in obs.get("audits", []):
+        backed = a.get("EXECUTION_BACKED_BY_ADMITTED_DECISION") == "PASS"
+        rows.append([b(f"Executions backed by admitted decisions · {Path(a.get('evidence_dir', '?')).parent.name}",
+                       f"تنفيذات مدعومة بقرارات مقبولة · {Path(a.get('evidence_dir', '?')).parent.name}"),
+                     ["ok", "pass"] if backed else ["warn", b(f"{a.get('unbacked')} unbacked · contextual (F-2)",
+                                                              f"{a.get('unbacked')} غير مدعوم · سياقي (F-2)")],
+                     a["_file"]])
+    live["evidence_rows"] = rows
+
+    # Risk & Authority: the governed configuration of the last cohort, and capability preconditions.
+    live["risk_cfg"] = {"limits": b("stoploss -0.25 · max_open_trades 2 (FP-CONTROL-3 runtime identity)",
+                                    "stoploss -0.25 · max_open_trades 2 (هوية تشغيل FP-CONTROL-3)"),
+                        "src": "research/fp/records/forward_paper_cohort_registry.json"}
+    pre = {"Paper trading": b("A governed cohort with Owner authorization; none running", "مجموعة محكومة بتفويض المالك؛ لا شيء يعمل"),
+           "Long entries": b("Within a running paper cohort only", "داخل مجموعة ورقية عاملة فقط"),
+           "Real money": b("POST-BETA and a separate Owner authorization", "ما بعد البيتا وتفويض منفصل من المالك")}
+    for c in live["caps"]:
+        c["since"] = "—"
+        c["pre"] = pre.get(c["k"]["en"], b("Not authorized in P3", "غير مصرّح في P3"))
+
+    # Project & Continuity: the stage map with its real evidence sources, and the resume brief.
+    live["stages"] = [
+        ["P1", ["ok", b("Closed · PASS", "مغلقة · ناجحة")], b("Merged P1 closure (CLAUDE.md stage law)", "إغلاق P1 المدمج (قانون المراحل)")],
+        ["P2", ["ok", b("Closed · PASS · FP-CONTROL-3", "مغلقة · ناجحة · FP-CONTROL-3")], b("docs/p2/P2_CLOSURE.md · PR #70 0ce72358", "docs/p2/P2_CLOSURE.md · PR #70 0ce72358")],
+        ["P3", ["info", b("Paper Beta Release · executing", "إصدار البيتا الورقي · قيد التنفيذ")],
+         b("docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md · 7b1b1fa1", "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md · 7b1b1fa1")],
+        ["POST-BETA", ["na", b("Controlled-Live Readiness · not authorized", "جاهزية التشغيل الحي المضبوط · غير مصرّح")],
+         b("Separate future Owner authorization required", "يتطلب تفويضًا مستقبليًا منفصلًا من المالك")],
+    ]
+    E = lambda v: v["en"] if isinstance(v, dict) else str(v)  # noqa: E731
+    J = lambda a: "; ".join(E(v) for v in a) if a else "none"  # noqa: E731
+    live["brief"] = "\n".join([
+        "TRADING LAB OS — RESUME BRIEF · LIVE PROJECTION · READ-ONLY · NOT EVIDENCE AUTHORITY",
+        f"DERIVED: {now} on {obs['hostname']}",
+        f"STAGE: P3 Paper Beta executing · authorization 7b1b1fa1 (expires {obs['authorization']['expires_utc']}) · "
+        f"main {(obs['governance']['main'] or '?')[:12]} · runtime pin {(obs['runtime']['pin'] or '?')[:12]}",
+        f"LAST GOVERNED CHECKPOINT: {E(sc['lgc'])}",
+        f"LAST HEALTHY OBSERVATION: {E(sc['lho'])}",
+        f"KNOWN: {J(sc['known'])}", f"UNKNOWN: {J(sc['unknown'])}", f"AFFECTED: {J(sc['affected'])}",
+        f"UNVERIFIED: {J(sc['unverified'])}",
+        f"OWNER: {E(sc['owner'][1])}", f"CLAUDE: {E(sc['claude'])}", f"SYSTEM: {E(sc['system'])}",
+        f"NEXT GOVERNED STEP (derived from contract): {E(sc['next'])}",
+        "FORBIDDEN: real money; H1 launch; restarting FP-CONTROL-3; strategy, risk or dataset change; reopening the product shape",
+    ])
 
 
 # ---------------------------------------------------------------- build
