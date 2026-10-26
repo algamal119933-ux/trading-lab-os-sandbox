@@ -2,7 +2,7 @@
    Appended after the prototype's own script by research/p3/control_room.py. It adds no screen, slot,
    navigation item or style. It supplies the live scenario (LIVE, built from verified evidence) and
    re-declares only data-bearing components, with the prototype's markup and classes. Bound: all 12
-   screens. Slice 3 (Decisions, Trades & Positions, Market Workspace, Settings) reads the sealed cohort
+   screens and the four mobile tabs. Slice 3 (Decisions, Trades & Positions, Market Workspace, Settings) reads the sealed cohort
    named by the newest PLN-07 execution-audit record; when it is absent or unreadable those screens say
    unknown, never healthy. Read-only: no network, no write, no control. */
 "use strict";
@@ -11,6 +11,7 @@ const LD=t=>tm(t);
 /* the live scenario rides on the prototype's closed-family scenario, overridden field by field */
 SC.live=Object.assign({},SC.closed,LIVE.scenario);
 CAPS.splice(0,CAPS.length,...LIVE.caps);
+FORBID.splice(0,FORBID.length,...LIVE.forbid);
 Object.keys(LIVE.prov).forEach(k=>{PROV[k]=LIVE.prov[k]});
 S.scenario='live';
 document.title='Trading Lab OS — Control Room (live projection, read-only)';
@@ -108,7 +109,7 @@ function continuity(){const s=sc();
 /* ---------- Incidents ---------- */
 function incidents(){const s=sc();
  if(S.inc){const i=s.incidents.find(v=>v.id===S.inc)||s.incidents[0];if(i)return incidentPage(i)}
- return `${bannerHTML()}<section class="band c1"><div class="col twrap"><table><thead><tr><th>ID</th><th>${x('Title','العنوان')}</th><th>${x('State','الحالة')}</th><th>${x('Opened','فُتحت')}</th></tr></thead><tbody>${s.incidents.length?s.incidents.map(i=>`<tr class="click" data-inc="${i.id}" tabindex="0"><td>${id(i.id)}</td><td>${L(i.title)}</td><td>${chip(...ISTATE[i.s])}</td><td>${LD(i.when)}</td></tr>`).join(''):`<tr><td colspan="4" class="quiet">${gl('ok')} ${x('None open. Incidents are raised from non-INFO health findings; none at this observation.','لا حوادث مفتوحة. تُفتح الحوادث من نتائج الصحة غير INFO؛ لا شيء في هذا الرصد.')}</td></tr>`}</tbody></table></div></section>`}
+ return `${bannerHTML()}<section class="band c1"><div class="col twrap"><table><thead><tr><th>ID</th><th>${x('Title','العنوان')}</th><th>${x('State','الحالة')}</th><th>${x('Opened','فُتحت')}</th></tr></thead><tbody>${LIVE.incidents_state&&LIVE.incidents_state.state!=='bound'?`<tr><td colspan="4" class="quiet">${chip('unk','unknown')} ${L(LIVE.incidents_state.why)}</td></tr>`:s.incidents.length?s.incidents.map(i=>`<tr class="click" data-inc="${i.id}" tabindex="0"><td>${id(i.id)}</td><td>${L(i.title)}</td><td>${chip(...ISTATE[i.s])}</td><td>${LD(i.when)}</td></tr>`).join(''):`<tr><td colspan="4" class="quiet">${gl('ok')} ${x('None open. Incidents are raised from non-INFO health findings; none at this observation.','لا حوادث مفتوحة. تُفتح الحوادث من نتائج الصحة غير INFO؛ لا شيء في هذا الرصد.')}</td></tr>`}</tbody></table></div></section>`}
 /* the prototype's incident page, with live dates (a wrapper would capture this hoisted declaration) */
 function incidentPage(i){const f=i.f;
  const F=[[chip('ok',b('Known','معروف')),f.known],[x('Detected by','طريقة الرصد'),f.detect],[chip('unk',b('Unknown','غير معروف')),f.unknown],[chip('warn',b('Affected','متأثر')),f.affected],[chip('unver',b('Unverified','غير متحقق')),f.unverified],[x('What remained safe','ما بقي آمنًا'),f.safe],[x('Recovery','التعافي'),f.recovery],[x('Reconciliation required?','هل تلزم المطابقة؟'),f.reconReq],[`${x('Next action','الإجراء التالي')} <span class="fc">${x('derived from contract','مستمد من العقد')}</span>`,f.next],[x('Current state','الحالة الحالية'),f.state],[x('Owner','المالك'),f.owner],['Claude',f.claude],[x('Evidence','الأدلة'),f.evidence]].filter(r=>r[1]);
@@ -199,6 +200,57 @@ function settings(){const T=LIVE.settings;
  const na=chip('off',b('Not active · a static view keeps no viewer state','غير مفعّل · العرض الثابت لا يحفظ حالة العارض'));
  return `${shead('settings')}<section class="band c2"><div class="col"><div class="ptitle"><span>${x('Return detection','رصد العودة')}</span><span class="asof">${x('viewer preference · UI only','تفضيل العارض · الواجهة فقط')}</span></div>${sig.map(v=>row(L(v),na)).join('')}${row(x('Absence threshold','حد الغياب'),na)}<p class="cd">${x('These settings decide only whether Resume opens first. They never change what Resume says.','تحدد هذه الإعدادات فقط ما إذا كان الاستئناف يُفتح أولًا. ولا تغيّر أبدًا ما يقوله.')}</p></div>
  <div class="col"><div class="ptitle"><span>${x('Display','العرض')}</span></div>${row(x('Language','اللغة'),x('English','العربية'))}${row(x('Theme','السمة'),x('Dark','داكنة'))}${row(x('Time display','عرض الوقت'),L(T.time))}${row(x('Density','الكثافة'),x('Comfortable','مريحة'))}${row(x('Inspector','المُفتِّش'),x('Auto: dock on wide screens','تلقائي: مثبّت على الشاشات العريضة'))}${row(x('Notifications','التنبيهات'),`${chip('ok',T.notify)} <span class="a">${id(T.notify_src)}</span>`)}${row(x('Remote access','الوصول عن بُعد'),chip('off',b('Not implemented · P3-PLN-06','غير منفّذ · P3-PLN-06')))}<p class="cd">${x('Settings never change risk, mode or authority.','الإعدادات لا تغيّر المخاطر أو الوضع أو الصلاحيات أبدًا.')}</p></div></section>`}
+
+/* ---------- Mobile: Status / Resume / Incidents / More (monitoring and continuity only) ----------
+   The frozen mobile components, re-declared only where they carry data: the stage label and project
+   line come from the live identity and the governed workstream record, Operations from the persisted
+   backup and drill records, Decisions and Trades from the sealed cohort. Nothing on mobile acts: no
+   action, no acknowledgement, no Kill Switch. Incidents is re-declared below (explicit empty and UNKNOWN
+   states). Resume keeps the prototype's own body: every field it shows (step, verdict, outcome, lifecycle,
+   checkpoint, known/unknown, responsibility, forbidden list) is projected from evidence by control_room.py.
+   Risk, Evidence, History, System and Market keep the prototype's own bodies over the live scenario. */
+function mStatus(){const s=sc();const exc=Object.keys(s.dims).filter(k=>s.dims[k][0]!=='ok');const o=openIncs();
+ return `${bannerHTML()}<p class="vs">${L(s.verdict)}</p>${mResp()}<div class="mcard small">${x('Project','المشروع')}: ${L(LIVE.ident.stage)}<br>${LIVE.project.chips.map(c=>chip(c[0],c[1])).join(' ')}<br>${x('Next Owner gate','بوابة المالك التالية')}: ${L(LIVE.project.gate)}</div>
+ <div class="mcard small">${s.dec.none?L(s.dec.none):`${x('Last decision','آخر قرار')} ${chip('unk','unknown')}`}<br>${x('Exposure','الانكشاف')} ${expoTxt()} · ${s.pos.length?chip('unk','unknown'):x('no open positions','لا مراكز مفتوحة')}<br>${x('Open incidents','حوادث مفتوحة')}: ${tm(String(o.length))}</div>
+ ${exc.length?`<div class="mcard">${exc.map(k=>`<div class="mrow"><span class="k">${gl(s.dims[k][0])} ${L(DIMN[k])}</span><span>${L(s.exc[k]||'')}</span></div>`).join('')}</div>`:''}`}
+function mDetail(k){const s=sc();
+ if(k.startsWith('inc:')){const i=s.incidents.find(v=>v.id===k.slice(4));if(!i)return `<div class="mcard small">${chip('unk','unknown')}</div>`;const f=i.f;return `<div class="mcard"><b>${id(i.id)}</b> ${chip(...ISTATE[i.s])}<br>${L(i.title)}</div><div class="mcard small">${[['ok','Known','معروف',f.known],['ok','Remained safe','بقي آمنًا',f.safe],['unk','Unknown','غير معروف',f.unknown],['warn','Affected','متأثر',f.affected],['unver','Unverified','غير متحقق',f.unverified]].filter(r=>r[3]).map(r=>`<div class="mrow"><span class="k">${gl(r[0])} ${x(r[1],r[2])}</span><span>${L(r[3])}</span></div>`).join('')}${f.next?`<div class="mrow"><span class="k">${x('Next','التالي')}</span><span>${L(f.next)} <span class="fc">${x('from contract','من العقد')}</span></span></div>`:''}</div><p class="cd">${x('Acknowledge: not in this view; the operator CLI records it.','الإقرار: ليس في هذا العرض؛ يسجّله سطر أوامر المشغّل.')}</p>`}
+ if(k==='operations'){const o=s.ops,P=LIVE.ops;return `<div class="mcard small">${[[x('Runtime','التشغيل'),chip(...o.runtime)],[x('Safe state','الحالة الآمنة'),chip(...o.safe)],[x('Recovery','التعافي'),chip(...o.recovery)],[x('Backup','النسخ الاحتياطي'),chip(...P.backup)],[x('Restore','الاستعادة'),chip(...P.restore)],[x('Host reboot recovery','تعافي إعادة إقلاع الخادم'),chip(...P.reboot)]].map(r=>`<div class="mrow"><span class="k">${r[0]}</span><span>${r[1]}</span></div>`).join('')}</div><p class="cd">${x('Actions are operator CLI only. The Kill Switch is never in this view and never on mobile.','الإجراءات عبر سطر أوامر المشغّل فقط. مفتاح الإيقاف الكلي ليس في هذا العرض أبدًا ولا على الجوال.')}</p>`}
+ if(k==='market')return `<div class="mcard small">${x('Charts are intentionally not shown on mobile.','الرسوم البيانية لا تُعرض على الجوال عمدًا.')}<br>${x('Data age','عمر البيانات')} ${chip(...s.sys.feed)}</div>`;
+ if(k==='decisions'){const D3=LIVE.decisions,V=D3.rows;
+  if(D3.state!=='bound'||!V.length)return `<div class="mcard small">${L(s.dec.none)}<br>${chip('unk','unknown')} ${D3.why?L(D3.why):''}</div>`;
+  const d=V[V.length-1];
+  return `<div class="mcard small">${L(s.dec.none)}<br>${x('Last sealed decision','آخر قرار مختوم')} ${chip(...d.o)} ${id(d.p)} · ${LD(d.t)} ${chip('unver',b('Sealed record','سجل مختوم'))}</div>${PIPE.map((p,i)=>`<div class="mrow"><span class="k">${L(p)}</span><span>${gl(d.tr[i][0])} ${L(d.tr[i][1])}</span></div>`).join('')}`}
+ if(k==='trades'){const T=LIVE.trades_closed;
+  const open=`<div class="mcard small">${s.pos.length?chip('unk','unknown'):`${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}`}</div>`;
+  const closed=T.state!=='bound'?`<div class="mcard small">${chip('unk','unknown')} ${T.why?L(T.why):''}</div>`:T.rows.length?T.rows.map(r=>`<div class="mcard small">${id(r.pair)} <span class="muted">#${r.trade_id}</span> · ${chip(...r.recon)} · ${r.pnl===null?chip('unk','unknown'):tm(r.pnl)}</div>`).join(''):`<div class="mcard small">${chip('off','noData')} ${x('No completed trade lifecycle in the sealed record.','لا توجد دورة صفقة مكتملة في السجل المختوم.')}</div>`;
+  return open+closed}
+ if(k==='risk')return `<div class="mcard small">${CAPS.map(c=>`<div class="mrow"><span class="k">${typeof c.k==='string'?id(c.k):L(c.k)}</span><span>${chip(...c.st)}</span></div>`).join('')}</div>`;
+ if(k==='evidencep')return `<div class="mcard small">${x('Reconciliation','المطابقة')} ${chip(...s.dims.recon)}<br>${x('Evidence','الأدلة')} ${chip(...s.dims.evidence)}</div>`;
+ if(k==='history')return `<div class="mcard">${timeline(s.events,true)}</div>`;
+ if(k==='system')return `<div class="mcard small">${[['host','Host','الخادم'],['containers','Containers','الحاويات'],['feed','Feed','التغذية'],['clock','Clock','الساعة']].map(r=>`<div class="mrow"><span class="k">${x(r[1],r[2])}</span><span>${chip(...s.sys[r[0]])}</span></div>`).join('')}</div>`;
+ return `<div class="mcard small">${x('Settings are viewer preferences on desktop. They never change risk, mode or authority.','الإعدادات تفضيلات للعارض على سطح المكتب. لا تغيّر المخاطر أو الوضع أو الصلاحيات أبدًا.')}</div>`}
+/* Mobile Incidents: the prototype's list, plus an explicit empty state (the prototype renders nothing)
+   and UNKNOWN when the health run gave no findings. Navigation only: rows open the read-only detail. */
+function mInc(){const s=sc();const st=LIVE.incidents_state||{state:'unknown',why:b('Incident source not observed.','مصدر الحوادث غير مرصود.')};
+ if(st.state!=='bound')return `<div class="mcard small">${chip('unk','unknown')} ${L(st.why)}</div>`;
+ if(!s.incidents.length)return `<div class="mcard small">${gl('ok')} ${x('None open.','لا حوادث مفتوحة.')} <span class="muted">${x('Incidents are raised from non-INFO health findings, §19 checks included; none at this observation.','تُفتح الحوادث من نتائج الصحة غير INFO، ومنها فحوص §19؛ لا شيء في هذا الرصد.')}</span></div>`;
+ return `<div class="mlist">${s.incidents.map(i=>`<button data-mdet="inc:${i.id}"><span>${id(i.id)}<br><span class="sec small">${L(i.title)}</span></span>${chip(...ISTATE[i.s])}</button>`).join('')}</div>`}
+function mobile(){const s=sc();const d=s.dims;
+ const tabs=[['status',b('Status','الحالة'),'◧'],['resume',b('Resume','استئناف'),'↺'],['incidents',b('Incidents','الحوادث'),'■'],['more',b('More','المزيد'),'⋯']];
+ const body=S.mdetail?`<button class="btn2" data-mdet="">${S.lang==='ar'?'→':'←'} ${x('Back','رجوع')}</button><div style="margin-top:10px">${mDetail(S.mdetail)}</div>`:S.mtab==='status'?mStatus():S.mtab==='resume'?mResume():S.mtab==='incidents'?mInc():mMore();
+ const allok=Object.values(d).every(v=>v[0]==='ok');
+ return `<div class="phone" dir="${S.lang==='ar'?'rtl':'ltr'}" lang="${S.lang}">${pban()}
+ <div class="mbar"><b>TLOS</b><span class="sec">${L(LIVE.ident.stage)}</span><span class="mode">${x('PAPER','ورقي')}</span><span class="lock" title="${x('Real money blocked','المال الحقيقي محظور')}">${LOCK}</span><span class="grow"></span><span class="heart ${s.viewStale?'st':''}" id="heart"></span></div>
+ <div class="mglyph">${Object.keys(d).map(k=>`<span title="${esc(L(DIMN[k]))}" class="gl s-${d[k][0]}">${G[d[k][0]]}</span>`).join('')}<span class="sec" style="font-size:12px">${allok?x('all 6 ok','الستة سليمة'):x(`${Object.values(d).filter(v=>v[0]!=='ok').length} need attention`,`${Object.values(d).filter(v=>v[0]!=='ok').length} تحتاج انتباهًا`)}</span></div>
+ <div class="mscroll ${s.viewStale?'viewstale':''}">${body}</div>
+ <nav class="mtabs" aria-label="${x('Mobile','الجوال')}">${tabs.map(([k,l,ic])=>`<button data-mtab="${k}" ${S.mtab===k&&!S.mdetail?'aria-current="page"':''}><span aria-hidden="true">${ic}</span>${L(l)}${k==='incidents'&&openIncs().length?` <span class="badge">${openIncs().length}</span>`:''}</button>`).join('')}</nav></div>`}
+/* device: the prototype's device toggle sits in the hidden prototype panel; a narrow viewport opens the
+   mobile view, and #mobile / #desktop in the address override it (view state only, nothing stored) */
+function liveDevice(){const h=(location.hash||'').toLowerCase();if(h==='#mobile')return 'mobile';if(h==='#desktop')return 'desktop';
+ return window.matchMedia&&window.matchMedia('(max-width: 720px)').matches?'mobile':'desktop'}
+S.device=liveDevice();
+window.addEventListener('hashchange',()=>{S.device=liveDevice();S.mdetail=null;render()});
 
 /* ---------- route: bound screens live, unbound screens keep their body under the notice ---------- */
 Object.keys(SCREENS).forEach(k=>{if(LIVE_BOUND.includes(k))return;const f=SCREENS[k];SCREENS[k]=()=>unboundNotice()+f()});
