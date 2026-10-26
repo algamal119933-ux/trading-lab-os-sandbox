@@ -47,7 +47,7 @@ def test_every_required_field_is_present(spec):
                 "declared_changes_from_a1", "universe", "rebalance_rule", "open_inputs", "costs", "wallets",
                 "variants", "baselines", "data", "windows_utc", "gates", "multiple_testing", "terminal_states",
                 "stop_rules", "caps", "selection_debt_disclosure", "drawdown_note", "citations",
-                "code_sha256", "non_claims"}
+                "code_sha256", "non_claims", "prospective_plan"}
     assert required <= set(spec), sorted(required - set(spec))
     for gate in ("E0_DATA", "E1_CAUSALITY", "E2_PARITY", "E3_FEASIBILITY", "E4_PAPER_GUARD", "E5_SCREEN",
                  "E6_ROBUSTNESS", "E7_PBO", "E8_DSR", "E9_EXPOSURE", "E10_SAMPLE_PERIOD", "E11_HOLDOUT"):
@@ -117,7 +117,7 @@ def test_the_windows_are_ordered_contiguous_and_the_holdout_is_after_dataset_v3(
 
 def test_the_thresholds_are_at_least_as_strict_as_the_research_plan(spec):
     g = spec["gates"]
-    assert "PBO <= 0.10" in g["E7_PBO"]
+    assert "PBO <= 0.05" in g["E7_PBO"] and "hard gate" in g["E7_PBO"]
     assert "deflated sharpe" in g["E8_DSR"].lower() and ">= 0.95" in g["E8_DSR"]
     assert "N = max(39" in g["E8_DSR"]
     assert ">= 95%" in g["E3_FEASIBILITY"]
@@ -130,3 +130,16 @@ def test_the_document_points_at_the_frozen_digest_and_the_authority():
     assert "PROFITABILITY_VERIFICATION_LAW_1.md" in doc
     assert "REAL_MONEY_AUTHORIZED = NO" in doc and "PAPER_LAUNCH_AUTHORIZED = NO" in doc
 
+
+
+def test_the_prospective_plan_follows_the_owner_decisions(spec):
+    plan = spec["prospective_plan"]
+    assert plan["alpha"] == 0.05 and plan["beta"] == 0.2 and plan["burn_in_units_min"] >= 20
+    assert "[0.50, 0.75]" in plan["alternative_s"] and "DSR-deflated" in plan["alternative_s"]
+    for model in ("Gaussian", "Student-t(3)", "GARCH(1,1)-t(3)", "block bootstrap"):
+        assert model in plan["calibration"], model
+    assert "never below Wald" in plan["calibration"]
+    assert "NOT REFUTED" in plan["verdicts"] and "never live authorization" in plan["verdicts"]
+    assert "no real-money, live or scaling authority follows automatically" in plan["verdicts"]
+    assert "authorizes no paper or live step" in plan["binding_on"]
+    assert spec["windows_utc"]["locked_holdout"] == ["2026-09-01T00:00:00Z", "2027-01-01T00:00:00Z"]

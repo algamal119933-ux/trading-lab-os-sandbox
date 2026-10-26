@@ -1572,7 +1572,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/a1b/A1B_PREREGISTRATION_1.md": f"{_BR} — frozen A1b preregistration and evaluation plan (no execution)",
     "research/a1b/a1b_prereg.json": f"{_BR} — machine-readable frozen spec",
     "research/a1b/SHA256SUMS": f"{_BR} — the spec's frozen sha256",
-    "tests/test_a1b_preregistration.py": f"{_BR} — digest, boundary and completeness checks, offline",
+    "tests/test_a1b_preregistration.py": f"{_BR} — digest, boundary, completeness, PBO hard gate and prospective-plan checks, offline",
     "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

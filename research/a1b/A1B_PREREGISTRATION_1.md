@@ -10,9 +10,11 @@ to be fixed before any evaluation.
 program charter at `charters/programs/A1B-QUALIFICATION-1.json` that binds this spec's sha256 (CEA-1 §12). This
 preregistration does not create that charter.
 
-**Verification law:** [`research/PROFITABILITY_VERIFICATION_LAW_1.md`](../PROFITABILITY_VERIFICATION_LAW_1.md), prepared in
-parallel on branch `claude/research-verification-law-1`. The law as merged on `main` governs. Where the law and this file give
-different numbers for the same test, the stricter applies. No evaluation may run before the law is merged.
+**Verification law:** [`research/PROFITABILITY_VERIFICATION_LAW_1.md`](../PROFITABILITY_VERIFICATION_LAW_1.md) (PR #82, with the
+Owner's decisions OD-1, OD-2 and OD-3 applied). The law as merged on `main` governs. Where the law and this file give different
+numbers for the same test, the stricter applies. No evaluation may run before the law is merged.
+
+**Merge order:** #82 (law) → #83 (Owner research authority) → #84 (this preregistration) → the A1B-QUALIFICATION-1 charter.
 
 PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO · PAPER_LAUNCH_AUTHORIZED = NO ·
 dry_run = true · hyperopt = 0 · no leverage, margin, futures, shorts or exchange keys.
@@ -120,7 +122,7 @@ Every gate below is **material** unless marked report-only.
 | E4 Paper guard | `engine_io.guard_config` passes and `dry_run = true` |
 | E5 Screen | Development, V1: R1 net > 0 and Sharpe > 0; R2 net > 0 at x2; R3 net > 0 at +1 bar; R4 Sharpe − A1B_BENCH Sharpe > 0; R5 max DD ≤ 0.50. R6, on validation and reject-only: NOT (net ≤ 0 AND ΔSharpe ≤ 0) |
 | E6 Robustness | Reject V1 if 2 or more of V2–V4 have development Sharpe ≤ 0 or ΔSharpe against their own matched bench ≤ 0 |
-| E7 Overfitting | PBO by CSCV (S = 16) over daily net returns, development plus validation, for {A1 primary, A1 P1–P5, V1–V4}: **PBO ≤ 0.10** |
+| E7 Overfitting | PBO by CSCV (S = 16) over daily net returns, development plus validation, for {A1 primary, A1 P1–P5, V1–V4}: **PBO ≤ 0.05**, a hard gate (law §4.1, OD-1: A1b is a new program). NOT_EVALUABLE is never PASS |
 | E8 Deflated Sharpe | V1 daily net returns, development plus validation: **DSR ≥ 0.95** with N = max(39, the law's N_eff). 39 is lifetime TLOS 35 (OD-C5) plus the 4 A1b variants |
 | E9 Exposure | ΔSharpe against A1B_BENCH > 0 (material). Sharpe, CAGR and max DD against BTC_HOLD, NO_TRADE and EXPOSURE_MATCHED_PASSIVE are reported. Reduced exposure is never called alpha |
 | E10 Sample period and drawdown | ΔSharpe against A1B_BENCH > 0 in ≥ 4 of the 7 calendar years 2019–2025, and no single year contributes > 60% of summed yearly log return. Realised vol and max-DD/vol are reported. **TOO_GOOD flag**: max DD < 0.5 × bench max DD and CAGR ≥ bench CAGR → Owner review before any paper step |
@@ -138,6 +140,32 @@ assume it.
 - A1's results were seen before this file.
 - The band and the rank cap respond to G3, which is a post-result choice. That is why development and validation are exploratory
   and the DSR uses N ≥ 39.
+
+## 5a. Prospective plan (binding on any later paper preregistration; authorizes nothing now)
+
+This section fixes how a forward test of V1 would be judged, so it cannot be chosen after results. Any paper step still needs
+its own separate Owner authority.
+
+- **Evidence class:** PROSPECTIVE_PAPER only, from a T0 merged before the first included bar (law §2).
+- **Test:** Wald SPRT on standardized net daily returns (law §6.1). If daily units are autocorrelated, weekly aggregation is
+  declared at the paper preregistration (law §6.4 item 6).
+- **Defaults (OD-3):** α = 0.05, β = 0.20, burn-in ≥ 20 units. The alternative s is chosen once in [0.50, 0.75] × V1's
+  DSR-deflated historical Sharpe (N = max(39, N_eff)).
+- **Calibration (law §6.4):** A* is the maximum over four models, each with ≥ 2,000 paths and recorded seeds:
+  - Gaussian i.i.d.;
+  - Student-t(3) i.i.d.;
+  - GARCH(1,1)-t(3) with a = 0.12, b = 0.85;
+  - a stationary block bootstrap (mean block ≥ 20) of V1's own development returns.
+
+  On a fresh seed, false acceptance must be ≤ α + 0.015 and power ≥ 1 − β − 0.03, or the truncation horizon is lengthened.
+  A* is never below Wald's A.
+- **Multiple testing:** α/m, with m fixed at the paper preregistration. Holm applies across concurrent candidates (law §8).
+- **Kill rules:** law §7. These are the SPRT lower bound, the triple-penance drawdown and time-under-water bounds, and the
+  operational kill.
+- **Verdicts (OD-2):**
+  - Level A = NOT REFUTED. It is not proof of profitability and never grants live authorization.
+  - Level B = prospective statistical evidence under the frozen law.
+  - No real-money, live or scaling authority follows automatically from either level.
 
 ## 6. Terminal states, kill rules and stop rules
 

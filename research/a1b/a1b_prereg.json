@@ -1,9 +1,10 @@
 {
  "authority": {
   "evaluation_requires": "an Owner-merged program charter at charters/programs/A1B-QUALIFICATION-1.json (CEA-1 section 12) binding this file's sha256; not created by this preregistration",
+  "merge_order": "#82 verification law -> #83 Owner research authority -> #84 this preregistration -> A1B-QUALIFICATION-1 charter",
   "owner_record": "research/OWNER_RESEARCH_AUTHORIZATION_A1B_1.md",
   "owner_record_branch": "owner/research-authorization-a1b",
-  "verification_law": "research/PROFITABILITY_VERIFICATION_LAW_1.md",
+  "verification_law": "research/PROFITABILITY_VERIFICATION_LAW_1.md (PR #82, Owner decisions OD-1..OD-3 applied)",
   "verification_law_precedence": "the law as merged on main governs; where it and this file state different numbers for the same test, the stricter applies; the law must be merged before any evaluation"
  },
  "baselines": {
@@ -73,7 +74,7 @@
   "E4_PAPER_GUARD": "engine config passes engine_io.guard_config; dry_run = true",
   "E5_SCREEN": "development, V1: R1 net > 0 and Sharpe > 0 at base; R2 net > 0 at x2; R3 net > 0 at +1 bar; R4 Sharpe(V1) - Sharpe(A1B_BENCH) > 0; R5 max drawdown <= 0.50; R6 validation reject-only: NOT (net <= 0 AND delta Sharpe <= 0)",
   "E6_ROBUSTNESS": "reject V1 if 2 or more of V2-V4 have development Sharpe <= 0 or delta Sharpe vs their own matched bench <= 0",
-  "E7_PBO": "CSCV with S = 16 blocks over the daily net returns (development + validation) of the matrix {A1 primary, A1 P1-P5, V1-V4} (10 columns): PBO <= 0.10",
+  "E7_PBO": "CSCV with S = 16 blocks over the daily net returns (development + validation) of the matrix {A1 primary, A1 P1-P5, V1-V4} (10 columns): PBO <= 0.05 (hard gate; PROFITABILITY-VERIFICATION-LAW-1 section 4.1, Owner decision OD-1: A1b is a new research program); NOT_EVALUABLE is never PASS",
   "E8_DSR": "deflated Sharpe ratio of V1 daily net returns (development + validation) >= 0.95 with N = max(39, the law's N_eff); 39 = lifetime TLOS configurations 35 (OD-C5) + 4 A1b variants",
   "E9_EXPOSURE": "delta Sharpe vs A1B_BENCH > 0 (material); Sharpe, CAGR, max drawdown vs BTC_HOLD, NO_TRADE and EXPOSURE_MATCHED_PASSIVE reported; reduced exposure is never called alpha"
  },
@@ -108,6 +109,19 @@
  },
  "paper_launch_authorized": false,
  "prereg_id": "A1B-PREREGISTRATION-1",
+ "prospective_plan": {
+  "alpha": 0.05,
+  "alternative_s": "chosen once in [0.50, 0.75] x V1's DSR-deflated historical Sharpe (N = max(39, N_eff)), declared at the paper preregistration",
+  "beta": 0.2,
+  "binding_on": "any later, separately authorized A1b paper preregistration; this file authorizes no paper or live step",
+  "burn_in_units_min": 20,
+  "calibration": "law section 6.4: A* = max over iid Gaussian, iid Student-t(3), GARCH(1,1)-t(3) (a 0.12, b 0.85) and a stationary block bootstrap (mean block >= 20) of V1's own development daily returns, >= 2000 paths each, recorded seeds; fresh-seed false acceptance <= alpha + 0.015; power >= 1 - beta - 0.03 or a longer truncation horizon; A* never below Wald's A",
+  "evidence_class": "PROSPECTIVE_PAPER only, from a T0 merged before the first included bar (law section 2)",
+  "kill_rules": "law section 7: SPRT lower bound, triple-penance drawdown / time-under-water bounds, operational kill",
+  "multiple_testing": "alpha / m with m fixed at the paper preregistration; Holm across concurrent candidates (law section 8)",
+  "test": "Wald SPRT on standardized net daily returns (law section 6.1); weekly aggregation declared if daily units are autocorrelated (law section 6.4 item 6)",
+  "verdicts": "law section 9 (Owner decision OD-2): Level A = NOT REFUTED, not proof of profitability, never live authorization; Level B = prospective statistical evidence under the frozen law; no real-money, live or scaling authority follows automatically from either level"
+ },
  "real_money_authorized": false,
  "rebalance_rule": {
   "band_fraction": 0.25,
