@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Trading Lab OS — Prototype v0.2.5 (static mock data, offline)</title>
+<style>
+:root{
+  --bg:#0D131F;--panel:#131B2A;--raised:#1A2437;--line:#222D42;--line2:#33415C;
+  --tx:#E7EBF3;--tx2:#A5B0C4;--tx3:#6E7A91;
+  --ok:#3DBE82;--info:#5A9CF2;--warn:#E8A93A;--inc:#EF5A52;--stale:#B89A63;--unk:#9AA4B8;--off:#5B667C;
+  --proto:#2A2413;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --ar:"Noto Sans Arabic","Segoe UI","Geeza Pro",Tahoma,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
+}
+/* The product is dark by Owner-approved direction; tokens are identical across viewer themes. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0D131F;--panel:#131B2A}}
+:root[data-theme="dark"]{--bg:#0D131F;--panel:#131B2A}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--tx);font-family:var(--sans);font-size:14px;line-height:20px;-webkit-font-smoothing:antialiased}
+[dir=rtl] body,[dir=rtl] .app,[dir=rtl] .phone{font-family:var(--ar);font-size:15px;line-height:24px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--info);outline-offset:2px;border-radius:4px}
+.id{font-family:var(--mono);font-size:13px;unicode-bidi:isolate;direction:ltr}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--tx3)} .sec{color:var(--tx2)}
+
+/* prototype controls — visually NOT product */
+#proto{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:8px 16px;background:var(--proto);border-bottom:1px dashed var(--stale);font-family:var(--sans);font-size:12px;line-height:16px;color:#E9DDBF;direction:ltr}
+#proto b{font-weight:600}
+#proto label{display:flex;gap:6px;align-items:center}
+#proto select,#proto .pbtn{background:#3A321B;color:#F4EAD0;border:1px solid #6B5B30;border-radius:4px;padding:4px 8px;font:inherit}
+#proto .pbtn:hover{background:#4A4024}
+#proto .seg{display:inline-flex;border:1px solid #6B5B30;border-radius:4px;overflow:hidden}
+#proto .seg button{padding:4px 10px;background:#3A321B}
+#proto .seg button[aria-pressed=true]{background:#E9DDBF;color:#2A2413;font-weight:600}
+#proto .note{margin-inline-start:auto;opacity:.8}
+
+/* app shell */
+.app{display:flex;flex-direction:column;height:calc(100% - 41px);min-height:600px}
+.idbar{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;border-bottom:1px solid var(--line);background:rgba(19,27,42,.88);backdrop-filter:blur(12px);flex-shrink:0}
+.brand{font-weight:600;letter-spacing:.01em;white-space:nowrap}
+.sep{width:1px;height:20px;background:var(--line2)}
+.stagechip{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.stagechip:hover{color:var(--info)}
+.mode{border:1px solid var(--info);color:var(--info);border-radius:2px;padding:0 6px;font-size:12px;font-weight:600;letter-spacing:.04em}
+.lock{display:flex;gap:6px;align-items:center;color:var(--tx);white-space:nowrap}
+.lock svg{color:var(--inc)}
+.grow{flex:1}
+.ownerind{white-space:nowrap}
+.ownerind.req{color:var(--warn);font-weight:600}
+.heart{font-size:12px;color:var(--tx3);white-space:nowrap}
+.heart.st{color:var(--stale)}
+.langt{display:inline-flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden;font-size:12px}
+.langt button{padding:2px 8px}.langt button[aria-pressed=true]{background:var(--raised);color:var(--tx)}
+.truth{display:flex;height:36px;border-bottom:1px solid var(--line);background:rgba(19,27,42,.88);flex-shrink:0;overflow-x:auto}
+.truth button{display:flex;align-items:center;gap:8px;padding:0 16px;border-inline-end:1px solid var(--line);white-space:nowrap;font-size:13px}
+.truth button:hover{background:var(--raised)}
+.truth .dl{color:var(--tx2)}
+.body{display:flex;flex:1;min-height:0}
+nav.side{width:232px;flex-shrink:0;border-inline-end:1px solid var(--line);padding:12px 8px;overflow-y:auto;display:flex;flex-direction:column}
+.ng{margin:12px 8px 4px;font-size:12px;color:var(--tx3)}
+.ni{display:flex;align-items:center;justify-content:space-between;width:100%;padding:6px 10px;border-radius:6px;color:var(--tx2);text-align:start}
+.ni:hover{background:var(--panel);color:var(--tx)}
+.ni[aria-current=page]{background:var(--raised);color:var(--tx);box-shadow:inset 2px 0 0 var(--info)}
+[dir=rtl] .ni[aria-current=page]{box-shadow:inset -2px 0 0 var(--info)}
+.badge{font-size:11px;min-width:18px;text-align:center;border-radius:9px;padding:0 5px;background:var(--inc);color:#fff}
+.badge.w{background:var(--warn);color:#1a1405}
+.side .spacer{flex:1}
+main{flex:1;overflow-y:auto;padding:20px 24px 48px;min-width:0}
+.content.viewstale{filter:saturate(.35);opacity:.85}
+.shead{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.shead h1{font-size:20px;line-height:28px;font-weight:600;margin:0}
+[dir=rtl] .shead h1{font-size:22px;line-height:32px}
+.asof{font-size:12px;color:var(--tx3)}
+.mocktag{font-size:11px;border:1px dashed var(--stale);color:var(--stale);padding:0 6px;border-radius:2px}
+
+/* chips & glyphs */
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:2px;font-size:12px;font-weight:500;white-space:nowrap;border:1px solid transparent}
+.chip .age{font-weight:400;opacity:.85}
+.g{font-size:11px;line-height:1}
+.s-ok{color:var(--ok);background:rgba(61,190,130,.12);border-color:rgba(61,190,130,.35)}
+.s-info,.s-rec,.s-act{color:var(--info);background:rgba(90,156,242,.12);border-color:rgba(90,156,242,.35)}
+.s-warn,.s-owner{color:var(--warn);background:rgba(232,169,58,.12);border-color:rgba(232,169,58,.4)}
+.s-inc,.s-fail,.s-fc,.s-blocked{color:var(--inc);background:rgba(239,90,82,.12);border-color:rgba(239,90,82,.4)}
+.s-stale{color:var(--stale);background:rgba(184,154,99,.12);border-color:rgba(184,154,99,.4)}
+.s-unk,.s-unver{color:var(--unk);background:transparent;border:1px dashed var(--unk)}
+.s-off,.s-na,.s-wait{color:var(--tx2);background:transparent;border-color:var(--line2)}
+.gl{display:inline-block;width:14px;text-align:center}
+.gl.s-ok,.gl.s-info,.gl.s-rec,.gl.s-warn,.gl.s-inc,.gl.s-fail,.gl.s-stale,.gl.s-unk,.gl.s-unver,.gl.s-off,.gl.s-na,.gl.s-blocked,.gl.s-fc,.gl.s-owner,.gl.s-act,.gl.s-wait{background:none;border:0}
+
+/* banners */
+.banner{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-radius:10px;margin-bottom:16px;border:1px solid}
+.banner .bg{font-size:14px;line-height:20px;padding-top:1px}
+.banner p{margin:0}
+.banner .bl{margin-inline-start:auto;white-space:nowrap;color:var(--tx);text-decoration:underline;text-underline-offset:3px}
+.b-inc,.b-fc{background:rgba(239,90,82,.16);border-color:rgba(239,90,82,.5)}
+.b-warn,.b-owner{background:rgba(232,169,58,.14);border-color:rgba(232,169,58,.5)}
+.b-stale{background:rgba(184,154,99,.16);border-color:rgba(184,154,99,.55)}
+.b-info{background:rgba(90,156,242,.12);border-color:rgba(90,156,242,.45)}
+.b-inc .bg,.b-fc .bg{color:var(--inc)}.b-warn .bg,.b-owner .bg{color:var(--warn)}.b-stale .bg{color:var(--stale)}.b-info .bg{color:var(--info)}
+.notice{display:flex;gap:12px;align-items:center;padding:8px 12px;border:1px solid var(--line2);border-radius:6px;margin-bottom:16px;font-size:13px;color:var(--tx2)}
+.notice button{margin-inline-start:auto;color:var(--info);text-decoration:underline;text-underline-offset:3px}
+
+/* surfaces */
+.verdict{display:grid;grid-template-columns:1fr 360px;background:var(--raised);border:1px solid var(--line2);border-radius:6px;margin-bottom:16px}
+.verdict .vl{padding:18px 20px}
+.vs{font-size:22px;line-height:30px;font-weight:500;margin:0 0 8px}
+[dir=rtl] .vs{font-size:24px;line-height:36px}
+.vn{color:var(--tx2);margin:0 0 6px}
+.slots{border-inline-start:1px solid var(--line2);display:flex;flex-direction:column}
+.slot{padding:12px 16px;flex:1}
+.slot+.slot{border-top:1px solid var(--line2)}
+.slot .sl{font-size:12px;color:var(--tx3);margin-bottom:2px}
+.slot.req{background:rgba(232,169,58,.16)}
+.slot.req .sl{color:var(--warn);font-weight:600}
+.slot.inf{box-shadow:inset 0 0 0 1px rgba(90,156,242,.45)}
+.band{display:grid;gap:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:16px}
+.band.c3{grid-template-columns:1fr 1fr 1fr}
+.band.c32{grid-template-columns:1.5fr 1fr .8fr}
+.band.c2{grid-template-columns:1fr 1fr}
+.band.c1{grid-template-columns:1fr}
+.col{padding:14px 16px;min-width:0}
+.col+.col{border-inline-start:1px solid var(--line)}
+.ptitle{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:600;font-size:14px}
+.ptitle button{font-weight:600}
+.ptitle button:hover{color:var(--info)}
+.ptitle .asof{font-weight:400}
+.row{display:grid;grid-template-columns:minmax(90px,38%) 1fr;align-items:center;gap:8px;min-height:30px;padding:2px 6px;margin:0 -6px;border-radius:4px;width:calc(100% + 12px);text-align:start}
+button.row:hover{background:var(--raised)}
+.row .k{color:var(--tx2);font-size:13px}
+.row .v{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.row .v .a{color:var(--tx3);font-size:12px}
+.row.unv .v{outline:1px dashed var(--unk);outline-offset:2px;border-radius:2px}
+.row.stl .v{opacity:.65}
+.bandlabel{font-size:12px;color:var(--tx3);margin:4px 2px 6px}
+.pipe{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.ps{flex:1;min-width:76px;border:1px solid var(--line2);border-radius:4px;padding:6px 8px;font-size:12px}
+.ps .pn{color:var(--tx3)}
+.ps.nr{border-style:dashed;opacity:.6}
+.ps.vt{border-color:rgba(239,90,82,.5)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:4px;position:relative}
+.bar i{display:block;height:100%;background:var(--tx2)}
+.bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn)}
+.big{font-size:22px;font-weight:500}
+.perf{opacity:.8}
+.perf .cap{font-size:12px;color:var(--tx3)}
+
+/* ribbon & continuity */
+.ribbon{display:flex;gap:0;align-items:stretch;margin-bottom:16px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel)}
+.ribbon button{flex:1;padding:10px 14px;text-align:start;border-inline-end:1px solid var(--line)}
+.ribbon button:last-child{border:0}
+.ribbon button:hover{background:var(--raised)}
+.ribbon .rt{font-weight:600}
+.ribbon .rs{font-size:12px;color:var(--tx2);margin-top:2px}
+.ribbon .cur{background:var(--raised);box-shadow:inset 0 -2px 0 var(--info)}
+.resume{background:var(--raised);border:1px solid var(--line2);border-radius:6px;margin-bottom:16px}
+.resume .rh{padding:14px 20px 4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.resume .rh h2{font-size:14px;margin:0;color:var(--tx2);font-weight:600}
+.resume .rv{padding:0 20px 12px}
+.rgrid{display:grid;grid-template-columns:180px 1fr;gap:6px 16px;padding:0 20px 14px}
+[dir=rtl] .rgrid{grid-template-columns:200px 1fr}
+.rgrid .k{color:var(--tx2);font-size:13px}
+.rslots{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line2)}
+.rslots .slot+.slot{border-top:0;border-inline-start:1px solid var(--line2)}
+.forb{padding:12px 20px;border-top:1px solid var(--line2);display:grid;grid-template-columns:180px 1fr;gap:16px}
+[dir=rtl] .forb{grid-template-columns:200px 1fr}
+.forb ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.forb li{font-size:12px;border:1px solid rgba(239,90,82,.35);color:var(--tx);padding:1px 8px;border-radius:2px}
+.forb li::before{content:"⊘ ";color:var(--inc)}
+.ract{display:flex;justify-content:flex-end;gap:12px;align-items:center;padding:10px 20px;border-top:1px solid var(--line2)}
+.btn2{border:1px solid var(--line2);border-radius:4px;padding:6px 12px;background:var(--panel)}
+.btn2:hover{border-color:var(--info)}
+.cps .col .big{font-size:15px;font-weight:500;margin:4px 0}
+.tl{list-style:none;margin:0;padding:0;position:relative}
+.tl li{display:grid;grid-template-columns:120px 20px 1fr auto;gap:8px;align-items:center;padding:5px 0}
+.tl li .t{font-family:var(--mono);font-size:12px;color:var(--tx2);direction:ltr;unicode-bidi:isolate;text-align:start}
+.tl li .src{font-size:12px;color:var(--tx3)}
+.tl li.gap{display:block;margin:4px 0;padding:8px 12px;border-radius:4px;color:var(--stale);background:repeating-linear-gradient(45deg,rgba(184,154,99,.14) 0 8px,transparent 8px 16px);border:1px dashed rgba(184,154,99,.5);font-size:13px}
+table{width:100%;border-collapse:collapse}
+th{font-weight:500;color:var(--tx3);font-size:12px;text-align:start;padding:6px 8px;border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--raised)}
+td.r,th.r{text-align:end}
+.twrap{overflow-x:auto}
+
+/* inspector */
+aside.insp{width:420px;flex-shrink:0;border-inline-start:1px solid var(--line2);background:var(--raised);overflow-y:auto;padding:16px 20px}
+.ihead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.ihead h2{font-size:16px;margin:0}
+.ihead button{font-size:18px;color:var(--tx2);width:32px;height:32px}
+.prov{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;padding:12px 0;border-top:1px solid var(--line2)}
+.prov .k{color:var(--tx3)}
+.itag{font-size:12px;color:var(--tx3);margin-top:12px}
+
+/* ops */
+.op{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.op .od{font-size:13px;color:var(--tx2)}
+.emerg{margin-top:28px;border:1px solid rgba(239,90,82,.5);border-radius:10px;padding:16px}
+.emerg h2{font-size:15px;margin:0 0 6px;color:var(--inc)}
+.board .brow{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.board .brow .bn{font-weight:500}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.filters button{border:1px solid var(--line2);border-radius:14px;padding:2px 10px;font-size:12px;color:var(--tx2)}
+.filters button[aria-pressed=true]{background:var(--raised);color:var(--tx);border-color:var(--info)}
+.nb{padding:28px;border:1px dashed var(--line2);border-radius:6px;color:var(--tx2)}
+svg.chart{width:100%;height:auto;display:block}
+
+/* phone */
+.devwrap{display:flex;justify-content:center;padding:24px;overflow:auto;height:calc(100% - 41px)}
+.phone{width:390px;height:844px;flex-shrink:0;border:1px solid var(--line2);border-radius:28px;overflow:hidden;display:flex;flex-direction:column;background:var(--bg);box-shadow:0 0 0 8px #070b13}
+.mbar{display:flex;align-items:center;gap:8px;padding:10px 14px 6px;font-size:13px}
+.mglyph{display:flex;gap:10px;align-items:center;padding:4px 14px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.mscroll{flex:1;overflow-y:auto;padding:12px 14px}
+.mtabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line2);background:var(--panel)}
+.mtabs button{padding:10px 0 12px;font-size:12px;color:var(--tx2);display:flex;flex-direction:column;align-items:center;gap:2px;min-height:52px}
+.mtabs button[aria-current=page]{color:var(--tx);box-shadow:inset 0 2px 0 var(--info)}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:10px}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:10px}
+.mgrid>div{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:13px;border-bottom:1px solid var(--line)}
+.mgrid>div:nth-child(odd){border-inline-end:1px solid var(--line)}
+.mlist button{display:flex;justify-content:space-between;width:100%;padding:12px 4px;border-bottom:1px solid var(--line);text-align:start}
+.phone .banner{padding:10px 12px;font-size:13px;line-height:18px}
+.phone .vs{font-size:18px;line-height:26px}
+.toast{position:fixed;bottom:20px;inset-inline-start:50%;transform:translateX(-50%);background:var(--raised);border:1px solid var(--line2);padding:8px 14px;border-radius:6px;font-size:13px}
+
+@media (max-width:1100px){nav.side{width:64px}nav.side .ng,nav.side .lbl{display:none}.band.c3,.band.c32{grid-template-columns:1fr 1fr}.verdict{grid-template-columns:1fr}.slots{border-inline-start:0;border-top:1px solid var(--line2)}}
+@media (max-width:760px){.band.c3,.band.c32,.band.c2{grid-template-columns:1fr}.col+.col{border-inline-start:0;border-top:1px solid var(--line)}.rgrid,.forb{grid-template-columns:1fr}.rslots{grid-template-columns:1fr}.ribbon{flex-direction:column}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== v0.2 consolidation additions ===== */
+html,body{height:100%}
+body{display:flex;flex-direction:column}
+#proto{flex-shrink:0}
+#root{flex:1;min-height:0}
+.app{height:100%;min-height:600px;position:relative}
+.devwrap{height:100%}
+.pban{flex-shrink:0;padding:4px 16px;font-size:11px;line-height:16px;letter-spacing:.06em;font-weight:600;color:#E9DDBF;background:repeating-linear-gradient(135deg,#2A2413 0 10px,#231E10 10px 20px);border-bottom:1px dashed var(--stale);text-align:center}
+[dir=rtl] .pban{letter-spacing:0;font-size:12px}
+.phone .pban{font-size:10px;line-height:14px;padding:4px 10px}
+.sit{background:var(--raised);border:1px solid var(--line2);border-radius:6px;margin-bottom:16px}
+.sit .vl{padding:18px 20px 14px}
+.slots4{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line2)}
+.slots4 .slot+.slot{border-top:0;border-inline-start:1px solid var(--line2)}
+.slot.nx{background:rgba(90,156,242,.06)}
+.fc{font-size:11px;color:var(--info);border:1px solid rgba(90,156,242,.4);padding:0 5px;border-radius:2px;margin-inline-start:4px;font-weight:400}
+.lad{list-style:none;margin:12px 0 0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.lad li{display:flex;flex-direction:column;gap:2px;padding:6px 8px 0;border-top:2px solid var(--line2);font-size:12px;line-height:16px;color:var(--tx3)}
+.lad li.done{border-top-color:var(--tx3);color:var(--tx2)}
+.lad li.cur{border-top-color:var(--info);color:var(--tx);font-weight:600}
+.lad li.cur.own{border-top-color:var(--warn)}
+.lad .lg{font-size:11px}
+.lad.full{margin:0 0 16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px 10px}
+.lad.full li{font-size:13px;line-height:18px;padding:10px 10px 0}
+.lad .obs{font-weight:400;font-size:12px;color:var(--tx2)}
+.exrow{display:grid;grid-template-columns:16px auto 1fr auto;gap:8px;align-items:baseline;width:100%;text-align:start;padding:8px 6px;border-radius:4px;border-bottom:1px solid var(--line);font-size:13px}
+.exrow:hover{background:var(--raised)}
+.exrow .ol{color:var(--info);font-size:12px}
+.quiet{color:var(--tx2);margin:0;font-size:13px}
+.vchip{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--tx3);border:1px dashed var(--line2);border-radius:4px;padding:6px 10px;margin:0 0 16px;width:fit-content;max-width:100%}
+.small{font-size:13px}
+.kl{margin:0;padding-inline-start:18px}
+.kl li{margin:0 0 2px}
+.b-unk{background:rgba(154,164,184,.08);border-color:var(--unk);border-style:dashed}.b-unk .bg{color:var(--unk)}
+.why{border-color:rgba(90,156,242,.45)}
+.ovl{display:flex;flex-wrap:wrap;gap:8px 24px;padding:12px 16px;background:var(--raised);border:1px solid var(--line2);border-radius:6px;margin-bottom:16px;font-size:13px}
+.ovl .k{color:var(--tx2);margin-inline-end:6px}
+.band.opsg{grid-template-columns:1fr 1fr}
+.opsg .col:nth-child(n+3){border-top:1px solid var(--line)}
+.opsg .col:nth-child(3){border-inline-start:0}
+.btn2[aria-disabled=true]{opacity:.55;cursor:not-allowed}
+.emerg ul{margin:8px 0 12px;padding-inline-start:18px;color:var(--tx2);font-size:13px}
+.ackz .col{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.capstrip{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;font-size:13px}
+.tfs{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap}
+.tfs button{border:1px solid var(--line2);border-radius:4px;padding:2px 8px;font-size:12px}
+.tfs button[aria-pressed=true]{background:var(--raised);border-color:var(--info)}
+.scrim{position:fixed;inset:0;background:rgba(5,8,14,.55);z-index:19}
+.app.drawer aside.insp{position:fixed;top:0;bottom:0;inset-inline-end:0;z-index:20;max-width:92vw;box-shadow:0 0 40px rgba(0,0,0,.45)}
+.app.dock aside.insp{position:static}
+.tl li{grid-template-columns:136px 20px 1fr auto}
+.tl li.ck{box-shadow:inset 2px 0 0 var(--info);padding-inline-start:6px}
+[dir=rtl] .tl li.ck{box-shadow:inset -2px 0 0 var(--info)}
+.mrow{display:grid;grid-template-columns:76px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:18px}
+.mrow:last-child{border-bottom:0}
+.mrow .k{color:var(--tx3)}
+.mrow.req{background:rgba(232,169,58,.14);margin:0 -12px;padding:6px 12px}
+.mstep{font-size:13px;color:var(--tx2);margin-bottom:8px}
+.cd{font-size:11px;color:var(--tx3)}
+h2.bandlabel{font-weight:400}
+@media (max-width:1100px){.slots4{grid-template-columns:1fr 1fr}.slots4 .slot:nth-child(3){border-inline-start:0}.slots4 .slot:nth-child(n+3){border-top:1px solid var(--line2)}.lad{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:760px){.slots4{grid-template-columns:1fr}.slots4 .slot+.slot{border-inline-start:0;border-top:1px solid var(--line2)}.band.opsg{grid-template-columns:1fr}.opsg .col+.col{border-inline-start:0}.lad{grid-template-columns:1fr 1fr}}
+.id{white-space:nowrap}
+.pipe{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+.pipe .ps{min-width:72px;flex:1 0 72px}
+.subs{list-style:none;margin:6px 0 0;padding:0;font-weight:400;font-size:12px;line-height:18px;color:var(--tx3)}
+.subs li.done{color:var(--tx2)}.subs li.cur{color:var(--tx);font-weight:600}
+.lad .subs li{border-top:0;padding:0;display:block;font-size:12px;line-height:18px}
+.upstream{margin:4px 0 2px}
+.pnow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:13px}
+.lnk{color:var(--info);font-size:12px;text-decoration:underline;text-underline-offset:2px}
+.capb{display:inline-flex;gap:6px;align-items:center;font-size:13px;border-radius:4px;padding:2px 4px}
+.capb:hover{background:var(--raised)}
+.brief{white-space:pre-wrap;font-family:var(--mono);font-size:12px;line-height:18px;padding:12px 16px;margin:0;border-top:1px solid var(--line2);direction:ltr;text-align:left;user-select:all;color:var(--tx2)}
+.chartwrap{position:relative;direction:ltr}
+.chartov{position:absolute;top:8px;right:8px;max-width:60%;padding:6px 10px;border-radius:4px;font-size:12px;line-height:16px;background:rgba(10,14,22,.88);border:1px dashed var(--stale);color:var(--tx)}
+.chartov.s-unk{border-color:var(--unk)}
+.unkchart svg{opacity:.55}
+
+/* ===== v0.2.5 — ARABIC DESKTOP UX PATCH (bounded) =====================
+   Every rule below is scoped to [dir=rtl]. English LTR renders byte-identically
+   to v0.2.4. No screen added or removed, no navigation change, no information
+   architecture change, no visual-family change, no new component.
+   ---------------------------------------------------------------------- */
+
+/* 4 — Arabic typography floor. Only the smallest tiers are raised; the
+       interface is NOT globally enlarged. */
+[dir=rtl] .cd{font-size:12.5px;line-height:20px}
+[dir=rtl] .asof{font-size:12.5px;line-height:20px}
+[dir=rtl] .perf .cap{font-size:12.5px;line-height:20px}
+[dir=rtl] .ribbon .rs{font-size:12.5px;line-height:20px}
+[dir=rtl] .quiet,[dir=rtl] .small{font-size:13.5px;line-height:21px}
+[dir=rtl] .chip{font-size:12.5px;height:24px}
+/* technical identifiers and numerals stay LTR, isolated, and metrically
+   stable — they do NOT inherit the Arabic size bump */
+[dir=rtl] .id,[dir=rtl] .num{font-size:13px;line-height:20px;direction:ltr;unicode-bidi:isolate}
+
+/* 3 — Truth Strip. Horizontal breathing room between the six dimensions.
+       Same semantic order, same truth states, no card redesign. */
+[dir=rtl] .truth button{padding:0 20px;gap:10px;font-size:13.5px}
+[dir=rtl] .truth .dl{letter-spacing:0}
+
+/* 1 — Decision pipeline. Arabic labels stop being compressed multi-line:
+       wider minimum step, controlled vertical spacing, and a reserved
+       two-line name box so steps align instead of crowding.
+       All nine stages and their order are untouched; RTL flow preserved. */
+[dir=rtl] .pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;overflow-x:visible;margin:10px 0}
+[dir=rtl] .pipe .ps{min-width:0;padding:8px 10px;font-size:12.5px;line-height:19px}
+[dir=rtl] .pipe .ps .pn{min-height:38px;margin-bottom:4px;line-height:19px}
+
+/* 2 — Project now. The Owner gate moves to its own settled secondary row so
+       it reads clearly instead of competing with the P1/P2/P3 chips.
+       Spacing and a controlled line break only — same text, same data. */
+[dir=rtl] .pnow{gap:10px 16px}
+[dir=rtl] .pnow .gate{flex:1 0 100%;margin-top:2px;padding-top:9px;border-top:1px solid var(--line);font-size:13.5px;line-height:22px;color:var(--tx2)}
+[dir=rtl] .pnow .gate b{color:var(--tx);font-weight:600}
+/* ===== end v0.2.5 Arabic desktop UX patch ============================= */
+</style>
+</head>
+<body>
+<div id="proto" role="region" aria-label="Prototype controls"></div>
+<div id="root"></div>
+<div id="toast" class="toast" hidden></div>
+<script>
+"use strict";
+/* Trading Lab OS — prototype v0.2 (consolidation pass). STATIC MOCK DATA ONLY. Nothing here reads or writes any system. */
+const S={scenario:'normal',lang:'en',device:'desktop',screen:'command',mtab:'status',mdetail:null,returned:false,insp:null,inc:null,dec:'d1',hist:'all',inspMode:'auto',tf:'1h',pair:'DEMO-PAIR-A'};
+const L=o=>o==null?'':(typeof o==='string'?o:(o[S.lang]!=null?o[S.lang]:o.en));
+const x=(en,ar)=>S.lang==='ar'?ar:en;
+const b=(en,ar)=>({en,ar});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const id=s=>`<bdi dir="ltr" class="id">${s}</bdi>`;
+const tm=s=>`<bdi dir="ltr" class="num">${s}</bdi>`;
+const D=t=>tm('DEMO-DATE '+t);
+const strip=h=>String(h).replace(/<[^>]+>/g,'');
+
+/* ---------- vocabulary ---------- */
+const G={ok:'●',info:'ⓘ',rec:'↻',warn:'▲',owner:'▲',inc:'■',fail:'■',blocked:'⊘',na:'⊘',stale:'◐',unk:'◌',unver:'◌',off:'○',wait:'○',done:'✓'};
+const W={healthy:b('Healthy','سليم'),valid:b('Valid','صالحة'),pass:b('Pass','ناجح'),fresh:b('Fresh','حديثة'),running:b('Running','يعمل'),degraded:b('Degraded','متدهور'),stale:b('Stale','قديم'),unknown:b('Unknown','غير معروف'),unverified:b('Unverified','غير متحقق'),recovering:b('Recovering','يتعافى'),fail:b('Fail','فشل'),blocked:b('Blocked','محظور'),allowed:b('Allowed · paper','مسموح · ورقي'),na:b('Not authorized','غير مصرّح'),done:b('Verified','متحقق'),waiting:b('Waiting','بانتظار'),pending:b('Pending','قيد الانتظار'),stopped:b('Stopped · observed','متوقف · مرصود'),proposed:b('Proposed · not authorized','مقترح · غير مصرّح'),open:b('Open','مفتوح'),resolved:b('Resolved','تم الحل'),inprog:b('In progress','جارٍ'),notEngaged:b('Not engaged','غير مُفعّل'),none:b('None','لا يوجد'),unkBlocked:b('Unknown — treat as blocked','غير معروف — يُعامل كمحظور'),available:b('Available','متاح'),notProvided:b('Not provided','غير متوفر'),unkInv:b('Unknown until source inventory','غير معروف حتى جرد المصادر'),notRecorded:b('Never recorded','لم يُسجَّل قط'),noneListed:b('None listed','لا شيء مدرج')};
+function gl(c){return `<span class="gl s-${c}" aria-hidden="true">${G[c]||'•'}</span>`}
+function chip(c,w,age){const word=typeof w==='string'?(W[w]?L(W[w]):w):L(w);return `<span class="chip s-${c}"><span class="g" aria-hidden="true">${G[c]||''}</span>${word}${age?` <span class="age">${L(age)}</span>`:''}</span>`}
+const LOCK=`<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+
+const NAME={command:b('Command Center','مركز التحكم'),continuity:b('Project & Continuity','المشروع والاستمرارية'),incidents:b('Incidents','الحوادث'),market:b('Market Workspace','مساحة السوق'),decisions:b('Decisions','القرارات'),trades:b('Trades & Positions','الصفقات والمراكز'),risk:b('Risk & Authority','المخاطر والصلاحيات'),evidencep:b('Evidence & Reconciliation','الأدلة والمطابقة'),history:b('History','السجل التاريخي'),operations:b('Operations','العمليات'),system:b('System','النظام'),settings:b('Settings','الإعدادات')};
+const GROUPS=[[b('Now','الآن'),['command','continuity','incidents']],[b('Trading','التداول'),['market','decisions','trades']],[b('Governance','الحوكمة'),['risk','evidencep','history']],[b('Platform','المنصة'),['operations','system']]];
+const ICON={command:'◧',continuity:'↺',incidents:'■',market:'⌇',decisions:'◇',trades:'≡',risk:'⊘',evidencep:'✓',history:'⋮',operations:'⏻',system:'▦',settings:'⚙'};
+const DIMN={health:b('Health','الصحة'),authority:b('Authority','الصلاحية'),evidence:b('Evidence','الأدلة'),freshness:b('Freshness','الحداثة'),runtime:b('Runtime','التشغيل'),recon:b('Reconciliation','المطابقة')};
+const LAD=[b('Running','جارية'),b('Terminal condition detected','رُصد شرط الإنهاء'),b('Closure due','الإغلاق مستحق'),b('Closure transaction in progress','معاملة الإغلاق جارية'),b('Owner merge required','مطلوب دمج المالك'),b('Merged-main verification','التحقق من الفرع الرئيسي بعد الدمج'),b('P2 closed','أُغلقت P2')];
+const STAGELBL=[b('P2 Running','P2 جارية'),b('P2 Terminal detected','P2 رُصد الإنهاء'),b('P2 Closure due','P2 الإغلاق مستحق'),b('P2 Closing','P2 قيد الإغلاق'),b('P2 Owner merge','P2 دمج المالك'),b('P2 Verifying','P2 قيد التحقق'),b('P2 Closed','P2 مغلقة')];
+const FORBID=[b('Changing P2 runtime, strategy, risk, dataset or T0','تغيير تشغيل P2 أو الاستراتيجية أو المخاطر أو مجموعة البيانات أو T0'),b('P3 code or runtime action','كود P3 أو أي إجراء على التشغيل'),b('Real money','المال الحقيقي')];
+
+/* ---------- capability truth (rows are data, not layout) ---------- */
+const CAPS=[
+ {k:b('Paper trading','التداول الورقي'),st:['ok','allowed'],scope:b(`${id('DEMO-COHORT-001')} only`,`${id('DEMO-COHORT-001')} فقط`),src:'DEMO-AUTH-RECORD-01',chg:b('Governed stage contract','عقد مرحلة محكوم')},
+ {k:b('Long entries','صفقات الشراء'),st:['ok','allowed'],scope:b('Paper only','ورقي فقط'),src:'DEMO-AUTH-RECORD-01',chg:b('Governed stage contract','عقد مرحلة محكوم'),exec:true},
+ {k:b('Shorts','البيع على المكشوف'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null,exec:true},
+ {k:b('Leverage','الرافعة المالية'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null,exec:true},
+ {k:b('Margin','الهامش'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null},
+ {k:b('Futures','العقود الآجلة'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null},
+ {k:b('Real money','المال الحقيقي'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null},
+ {k:b('Withdrawals','السحب'),st:['blocked','blocked'],scope:b('All','الكل'),src:'DEMO-AUTH-RECORD-01',chg:null},
+ {k:'DEMO-CAPABILITY-X',st:['unk','unkBlocked'],scope:b('—','—'),src:b('unreadable','غير مقروء'),chg:b('—','—')}
+];
+const MKT={pairs:['DEMO-PAIR-A','DEMO-PAIR-B','DEMO-PAIR-C'],timeframes:['15m','1h','4h'],
+ caps:[[b('Candles (OHLCV)','الشموع (OHLCV)'),'ok','available'],[b('Order book depth','عمق دفتر الأوامر'),'na','notProvided'],[b('Regime / higher-timeframe context','نظام السوق / سياق الإطار الأعلى'),'unk','unkInv']]};
+
+const PIPE=[b('Spotter','الراصد'),b('Verifier','المُتحقق'),b('Prior / Regime','الاحتمال المسبق / نظام السوق'),b('Risk Sizer','مُحدِّد المخاطر'),b('Exit Contract','عقد الخروج'),b('One Core','النواة الموحدة'),b('Paper Execution','التنفيذ الورقي'),b('Reconciliation','المطابقة'),b('Verified Outcome','النتيجة المتحقق منها')];
+const DECS=[
+ {id:'d1',t:'01:05',p:'DEMO-PAIR-A',o:['warn',b('HOLD','انتظار')],r:b('Regime below prior threshold','نظام السوق أدنى من عتبة الاحتمال المسبق'),tr:[['ok','✓'],['ok','✓'],['warn',b('range','نطاق')],['off','—'],['off','—'],['warn',b('HOLD','انتظار')],['off','—'],['off','—'],['off','—']]},
+ {id:'d2',t:'00:40',p:'DEMO-PAIR-C',o:['inc',b('VETO','اعتراض')],r:b('Risk Sizer: exposure cap','مُحدِّد المخاطر: حد الانكشاف'),tr:[['ok','✓'],['ok','✓'],['ok',b('trend','اتجاه')],['inc',b('VETO cap','اعتراض الحد')],['off','—'],['inc',b('VETO','اعتراض')],['off','—'],['off','—'],['off','—']]},
+ {id:'d3',t:'23:40',p:'DEMO-PAIR-B',o:['ok',b('ENTER','دخول')],r:b('Verified breakout in trend regime','اختراق متحقق في نظام اتجاه'),tr:[['ok','✓'],['ok','✓'],['ok',b('trend','اتجاه')],['ok','0.5%'],['ok',b('stop / target / time','وقف / هدف / زمن')],['ok',b('ENTER','دخول')],['ok',b('filled','نُفّذ')],['ok','14/14'],['ok',b('verified','متحقق')]]}
+];
+const CHECKS=[b('Input chain integrity','سلامة سلسلة المدخلات'),b('Decision chain integrity','سلامة سلسلة القرارات'),b('Trade chain integrity','سلامة سلسلة الصفقات'),b('Incident chain integrity','سلامة سلسلة الحوادث'),b('Dataset lock matches','تطابق قفل مجموعة البيانات'),b('Runtime source = pin','مصدر التشغيل = التثبيت'),b('Orders ↔ fills','الأوامر ↔ التنفيذات'),b('Fills ↔ positions','التنفيذات ↔ المراكز'),b('Positions ↔ balance','المراكز ↔ الرصيد'),b('Fees recomputed','إعادة احتساب الرسوم'),b('PnL recomputed','إعادة احتساب الربح/الخسارة'),b('Evidence gaps accounted for','الفجوات في الأدلة موثقة'),b('Archive integrity','سلامة الأرشيف'),b('Authority unchanged','الصلاحية دون تغيير')];
+
+/* ---------- provenance ---------- */
+const PROV={
+ health:{kind:b('Derived','مشتقة'),src:b('State Resolution Layer over host, containers, runtime, feed, monitor, clock','طبقة حل الحالة عبر الخادم والحاويات والتشغيل والتغذية والمراقبة والساعة'),auth:b('Operating-system observation','رصد نظام التشغيل'),ref:'—'},
+ authority:{kind:b('Governed record','سجل محكوم'),src:b('Registry / merged contract','السجل / العقد المدمج'),auth:b('Governance','الحوكمة'),ref:'DEMO-AUTH-RECORD-01@DEMO-MAIN-D4E5F6'},
+ evidence:{kind:b('Direct observation','رصد مباشر'),src:b('Chain verifier','مدقق السلاسل'),auth:b('Evidence ledger','سجل الأدلة'),ref:'DEMO-EV-CHAINS'},
+ freshness:{kind:b('Derived (client)','مشتقة (في الواجهة)'),src:b('Client-side ageing of every field','حساب عمر كل حقل في الواجهة'),auth:b('UI only','الواجهة فقط'),ref:'—'},
+ runtime:{kind:b('Direct observation','رصد مباشر'),src:b('Runtime stamp','ختم التشغيل'),auth:b('Runtime observation','رصد التشغيل'),ref:'DEMO-RUNTIME-A1B2C3'},
+ recon:{kind:b('Direct observation','رصد مباشر'),src:b('Reconciliation record','سجل المطابقة'),auth:b('Evidence ledger','سجل الأدلة'),ref:'DEMO-RECON-RUN-07'}
+};
+
+/* ---------- events ---------- */
+const src=(en,ar)=>b(en,ar);
+const EV=[
+ {t:'21:00',s:'ok',c:'recon',d:b('Scheduled reconciliation 14/14 PASS','المطابقة المجدولة 14/14 ناجحة'),src:src('reconciliation record','سجل المطابقة')},
+ {t:'22:15',s:'ok',c:'stage',ck:true,d:b(`Governed checkpoint ${id('DEMO-CHECKPOINT-07')} recorded`,`سُجّلت نقطة التحقق المحكومة ${id('DEMO-CHECKPOINT-07')}`),src:src('governance record','سجل الحوكمة')},
+ {t:'23:40',s:'ok',c:'decision',d:b(`ENTER · ${id('DEMO-PAIR-B')} · long`,`دخول · ${id('DEMO-PAIR-B')} · شراء`),src:src('decision record','سجل القرار')},
+ {t:'00:40',s:'inc',c:'decision',d:b(`VETO · ${id('DEMO-PAIR-C')} · exposure cap`,`اعتراض · ${id('DEMO-PAIR-C')} · حد الانكشاف`),src:src('decision record','سجل القرار')},
+ {t:'01:05',s:'warn',c:'decision',d:b(`HOLD · ${id('DEMO-PAIR-A')}`,`انتظار · ${id('DEMO-PAIR-A')}`),src:src('decision record','سجل القرار')}
+];
+const ev=(t,s,c,en,ar,sen,sar)=>({t,s,c,d:b(en,ar),src:src(sen,sar)});
+const gap=(a,z,en,ar)=>({gap:b(`${en} ${tm(a)} → ${tm(z)}`,`${ar} ${tm(a)} ← ${tm(z)}`)});
+
+/* ---------- incidents ---------- */
+const INC_OLD={id:'DEMO-INC-011',s:'resolved',title:b('Market feed exceeded its freshness budget','تجاوزت تغذية السوق ميزانية الحداثة'),when:'14:20',
+ f:{known:b('Feed age exceeded budget for 11 minutes; returned within budget at 14:31.','تجاوز عمر التغذية الميزانية لمدة 11 دقيقة؛ وعاد ضمنها الساعة 14:31.'),state:b('Resolved · reconciliation PASS afterwards','تم الحل · المطابقة ناجحة بعدها')}};
+
+/* ---------- scenarios ---------- */
+const BASE={
+ label:'1 · Normal / healthy',now:'01:10',step:0,
+ dims:{health:['ok','healthy'],authority:['ok','valid'],evidence:['ok','pass'],freshness:['ok','fresh'],runtime:['ok','running'],recon:['ok',b('14/14','14/14')]},
+ banner:null,exc:{},
+ verdict:b('Paper proof is running. Nothing needs the Owner.','إثبات التداول الورقي يعمل. لا شيء يحتاج إلى المالك.'),
+ owner:['none',b('No action needed.','لا يلزم أي إجراء.')],
+ claude:b('Observe only. No P3 code.','المراقبة فقط. لا كود لـ P3.'),
+ system:b('Paper runtime running; reconciliation on schedule.','التشغيل الورقي يعمل؛ المطابقة وفق الجدول.'),
+ next:b(`Wait for the terminal condition or ${id('DEMO-HARD-CAP')}.`,`انتظار شرط الإنهاء أو ${id('DEMO-HARD-CAP')}.`),fromContract:false,
+ lgc:b(`${id('DEMO-CHECKPOINT-07')} · ${D('22:15')}`,`${id('DEMO-CHECKPOINT-07')} · ${D('22:15')}`),
+ lho:b(`${D('01:10')} · all six dimensions healthy`,`${D('01:10')} · الأبعاد الستة سليمة`),
+ nowObs:b('All six dimensions healthy · observed 4s ago','الأبعاد الستة سليمة · رُصدت قبل 4 ث'),
+ known:[b('Runtime running (observed 4s ago)','التشغيل يعمل (رُصد قبل 4 ث)'),b('Reconciliation 14/14 PASS','المطابقة 14/14 ناجحة'),b('Authority valid: paper only','الصلاحية صالحة: ورقي فقط')],
+ unknown:[],affected:[],unverified:[],
+ events:EV,incidents:[INC_OLD],signal:'events',viewerNew:2,viewStale:false,extraForbid:[],
+ dec:{unv:false,stale:false,none:null},pos:['p1'],posUnv:false,risk:{stale:false},
+ ops:{runtime:['ok','running'],safe:['off','notEngaged'],recovery:['off','none'],rec:null,unresolved:0,hist:b(`Last recovery closed ${D('03:31')} (${id('DEMO-REC-002')})`,`أُغلق آخر تعافٍ ${D('03:31')} (${id('DEMO-REC-002')})`)},
+ checks:{fail:0,pending:0},
+ sys:{host:['ok',b('Up','يعمل')],containers:['ok',b('6/6 running','6/6 تعمل')],feed:['ok','fresh','3s'],api:['ok',b('OK','سليم')],monitor:['ok',b('OK','سليم')],clock:['ok',b('Synced','متزامنة')],boot:'DEMO-DATE−9d'}
+};
+const mk=o=>Object.assign({},BASE,o);
+const RESTART_EVENTS=EV.concat([gap('03:12','03:19','Gap · no observations','فجوة · لا أرصاد'),ev('03:18','warn','system','Host uptime reset (boot ID changed)','إعادة ضبط زمن تشغيل الخادم (تغيّر معرّف الإقلاع)','boot record','سجل الإقلاع'),ev('03:19','rec','system','Runtime process running again','عملية التشغيل تعمل مجددًا','runtime stamp','ختم التشغيل')]);
+const INC_RESTART={id:'DEMO-INC-015',s:'open',title:b('Unexpected host restart','إعادة تشغيل غير متوقعة للخادم'),when:'03:18',f:{
+ known:b('Host uptime reset at 03:18; boot ID changed. Runtime process running again since 03:19. No observations 03:12 → 03:19.','أُعيد ضبط زمن تشغيل الخادم الساعة 03:18 وتغيّر معرّف الإقلاع. عملية التشغيل تعمل مجددًا منذ 03:19. لا أرصاد من 03:12 إلى 03:19.'),
+ detect:b('Boot ID change + evidence gap','تغيّر معرّف الإقلاع + فجوة في الأدلة'),
+ unknown:b('Cause of the restart (power, kernel, manual — not proven). Whether decisions were attempted during the gap.','سبب إعادة التشغيل (كهرباء أو نواة أو يدوي — غير مثبت). وهل جرت محاولة قرارات أثناء الفجوة.'),
+ affected:b('Timeline 03:12 → 03:19. Position opened before the gap.','الخط الزمني 03:12 ← 03:19. المركز المفتوح قبل الفجوة.'),
+ unverified:b('Positions and decisions since restart, until reconciliation passes.','المراكز والقرارات منذ إعادة التشغيل حتى تنجح المطابقة.'),
+ next:b('Run the reconciliation the contract prescribes after a restart.','تشغيل المطابقة التي يحددها العقد بعد إعادة التشغيل.'),
+ state:b('Open · recovering','مفتوح · يتعافى'),owner:b('Informed. Action only if the contract requires it.','للعلم. لا إجراء إلا إذا اشترطه العقد.'),
+ evidence:b(`${id('DEMO-BOOT-RECORD')} · ${id('DEMO-EV-GAP-03')} · ${id('DEMO-RUNTIME-A1B2C3')}`,`${id('DEMO-BOOT-RECORD')} · ${id('DEMO-EV-GAP-03')} · ${id('DEMO-RUNTIME-A1B2C3')}`)}};
+
+const SC={
+ normal:mk({}),
+ viewStale:mk({label:'2 · Control Room stale',viewStale:true,signal:'absence',viewerNew:0,
+  dims:{health:['stale','healthy','38m'],authority:['ok','valid'],evidence:['stale','pass','38m'],freshness:['unk','unknown'],runtime:['stale','running','38m'],recon:['stale',b('14/14','14/14'),'38m']},
+  exc:{health:b('Last seen healthy 38 minutes ago; not current.','آخر رصد سليم قبل 38 دقيقة؛ ليس حاليًا.'),evidence:b('Last seen passing 38 minutes ago.','آخر رصد ناجح قبل 38 دقيقة.'),freshness:b('This view has no current data.','لا توجد بيانات حالية في هذه الشاشة.'),runtime:b('Last seen running 38 minutes ago; may have changed.','آخر رصد يعمل قبل 38 دقيقة؛ ربما تغيّر.'),recon:b('Last seen 14/14 38 minutes ago.','آخر رصد 14/14 قبل 38 دقيقة.')},
+  banner:['stale',b('This view stopped updating 38 minutes ago. What you see may no longer be true. The trading system may still be running normally — this view cannot tell.','توقف تحديث هذه الشاشة منذ 38 دقيقة. قد لا يكون ما تراه صحيحًا الآن. قد يكون نظام التداول يعمل طبيعيًا — هذه الشاشة لا تستطيع التأكد.'),null],
+  verdict:b(`Status unknown since ${D('00:32')}.`,`الحالة غير معروفة منذ ${D('00:32')}.`),
+  owner:['info',b('Check that the host is reachable, or wait for this view to reconnect.','تحقق من إمكانية الوصول إلى الخادم، أو انتظر إعادة اتصال هذه الشاشة.')],
+  claude:b('Verify reachability from the terminal before assuming anything.','التحقق من الوصول من الطرفية قبل افتراض أي شيء.'),
+  system:b('Unknown — this view has no current observation.','غير معروف — لا يوجد رصد حالي في هذه الشاشة.'),
+  next:b('Restore contact with the system, then re-read Resume.','استعادة الاتصال بالنظام، ثم إعادة قراءة الاستئناف.'),
+  lho:b(`${D('00:32')} · 38m ago · stale`,`${D('00:32')} · قبل 38 د · قديم`),nowObs:b('No current observation','لا يوجد رصد حالي'),
+  known:[b(`Governed checkpoint ${id('DEMO-CHECKPOINT-07')} still valid (governance does not go stale)`,`نقطة التحقق المحكومة ${id('DEMO-CHECKPOINT-07')} ما زالت صالحة (الحوكمة لا تتقادم)`),b('At 00:32 all six dimensions were healthy','في 00:32 كانت الأبعاد الستة سليمة')],
+  unknown:[b('Everything operational after 00:32','كل ما هو تشغيلي بعد 00:32')],affected:[b('This view only','هذه الشاشة فقط')],
+  dec:{unv:false,stale:true,none:null},posUnv:false,risk:{stale:true},
+  ops:Object.assign({},BASE.ops,{runtime:['stale','running','38m'],safe:['unk','unknown'],recovery:['unk','unknown']}),
+  sys:Object.assign({},BASE.sys,{host:['stale',b('Up','يعمل'),'38m'],containers:['stale',b('6/6','6/6'),'38m'],feed:['stale','fresh','38m'],api:['unk','unknown'],monitor:['stale',b('OK','سليم'),'38m'],clock:['stale',b('Synced','متزامنة'),'38m']})}),
+ degraded:mk({label:'3 · Network / data degraded',signal:'incident',now:'01:10',
+  dims:{health:['warn','degraded'],authority:['ok','valid'],evidence:['ok','pass'],freshness:['stale','stale','14m'],runtime:['ok','running'],recon:['ok',b('14/14','14/14')]},
+  exc:{health:b('Monitor observes exchange API errors.','المراقبة ترصد أخطاء في واجهة البورصة.'),freshness:b('Market feed 14 min old, beyond its budget. Decisions since 00:56 are unverified.','عمر تغذية السوق 14 دقيقة، أكبر من ميزانيتها. القرارات منذ 00:56 غير متحقق منها.')},
+  banner:['warn',b('Market data is 14 minutes old, beyond its freshness budget. Decisions made on it are unverified.','بيانات السوق عمرها 14 دقيقة، أكبر من ميزانية الحداثة. القرارات المبنية عليها غير متحقق منها.'),'DEMO-INC-014'],
+  verdict:b('Paper runtime is running on stale market data.','التشغيل الورقي يعمل على بيانات سوق قديمة.'),
+  owner:['info',b('Informed. No action unless the contract requires one.','للعلم. لا إجراء ما لم يشترطه العقد.')],
+  claude:b('Treat decisions after 00:56 as unverified; check feed and API status read-only.','اعتبار القرارات بعد 00:56 غير متحقق منها؛ فحص التغذية والواجهة للقراءة فقط.'),
+  system:b('Runtime running; feed stale; API errors observed.','التشغيل يعمل؛ التغذية قديمة؛ رُصدت أخطاء في الواجهة.'),
+  next:b('Apply the contract’s data-freshness rule once the feed recovers or the budget expires.','تطبيق قاعدة حداثة البيانات في العقد عند تعافي التغذية أو انتهاء الميزانية.'),fromContract:true,
+  lho:b(`${D('00:56')} · 14m ago`,`${D('00:56')} · قبل 14 د`),nowObs:b('Runtime running · feed 14m old · API errors','التشغيل يعمل · التغذية عمرها 14 د · أخطاء في الواجهة'),
+  known:[b('Feed age 14 min, beyond budget','عمر التغذية 14 دقيقة، أكبر من الميزانية'),b('Monitor records exchange API errors since 00:57','المراقبة تسجل أخطاء واجهة البورصة منذ 00:57'),b('Runtime process running','عملية التشغيل تعمل')],
+  unknown:[b('Whether the runtime paused decisions on its own','هل أوقف التشغيل القرارات من تلقاء نفسه'),b('Market moves since 00:56','حركة السوق منذ 00:56')],
+  affected:[b('Market feed; decision inputs since 00:56','تغذية السوق؛ مدخلات القرارات منذ 00:56')],
+  unverified:[b('2 decisions since 00:56','قراران منذ 00:56'),b('Open position valuation','تقييم المركز المفتوح')],
+  events:EV.concat([ev('00:56','stale','system','Market feed exceeded freshness budget','تجاوزت تغذية السوق ميزانية الحداثة','monitor','المراقبة'),ev('00:57','warn','system','Exchange API errors observed','رُصدت أخطاء في واجهة البورصة','monitor','المراقبة')]),
+  incidents:[{id:'DEMO-INC-014',s:'open',title:b('Market data degraded','تدهور بيانات السوق'),when:'00:56',f:{
+   known:b('Feed age exceeds budget since 00:56. Monitor records exchange API errors since 00:57. Runtime process running.','عمر التغذية أكبر من الميزانية منذ 00:56. المراقبة تسجل أخطاء واجهة البورصة منذ 00:57. عملية التشغيل تعمل.'),
+   detect:b('Freshness budget breach','تجاوز ميزانية الحداثة'),
+   unknown:b('Cause (network, provider or host). Whether the runtime paused decisions. Whether positions would differ with fresh data.','السبب (الشبكة أو المزوّد أو الخادم). هل أوقف التشغيل القرارات. هل ستختلف المراكز مع بيانات حديثة.'),
+   affected:b('Decision inputs since 00:56.','مدخلات القرارات منذ 00:56.'),unverified:b('Decisions since 00:56; open position valuation.','القرارات منذ 00:56؛ تقييم المركز المفتوح.'),
+   next:b('Apply the contract’s data-freshness rule.','تطبيق قاعدة حداثة البيانات في العقد.'),state:b('Open','مفتوح'),owner:b('Informed. No action unless the contract requires one.','للعلم. لا إجراء ما لم يشترطه العقد.'),
+   evidence:b(`${id('DEMO-MONITOR-ALERT-22')}`,`${id('DEMO-MONITOR-ALERT-22')}`)}},INC_OLD],
+  dec:{unv:true,stale:false,none:null},posUnv:true,
+  sys:Object.assign({},BASE.sys,{feed:['stale','stale','14m'],api:['warn',b('Errors','أخطاء')]})}),
+ restart:mk({label:'4 · Unexpected host restart',signal:'restart',now:'03:24',
+  dims:{health:['rec','recovering'],authority:['ok','valid'],evidence:['unver','pending'],freshness:['ok','fresh'],runtime:['rec','running',b('since 03:19','منذ 03:19')],recon:['unver','pending']},
+  exc:{health:b('Host restarted; recovering, not yet verified.','أُعيد تشغيل الخادم؛ يتعافى ولم يُتحقق بعد.'),evidence:b('Evidence gap 03:12 → 03:19 recorded; chains not yet re-verified.','سُجلت فجوة أدلة 03:12 ← 03:19؛ لم يُعد التحقق من السلاسل بعد.'),runtime:b('Running again since 03:19; results unverified.','يعمل مجددًا منذ 03:19؛ النتائج غير متحقق منها.'),recon:b('Post-restart reconciliation not yet run.','لم تُشغّل مطابقة ما بعد إعادة التشغيل بعد.')},
+  banner:['warn',b('The host restarted since the last healthy observation. Cause unknown. New results are unverified until reconciliation passes.','أُعيد تشغيل الخادم منذ آخر رصد سليم. السبب غير معروف. النتائج الجديدة غير متحقق منها حتى تنجح المطابقة.'),'DEMO-INC-015'],
+  verdict:b('The system restarted. Treat new results as unverified.','أُعيد تشغيل النظام. اعتبر النتائج الجديدة غير متحقق منها.'),
+  owner:['info',b('Informed. Action only if the contract requires it.','للعلم. لا إجراء إلا إذا اشترطه العقد.')],
+  claude:b('Do not treat new results as verified. No P2 changes.','عدم اعتبار النتائج الجديدة متحققًا منها. لا تغييرات على P2.'),
+  system:b('Runtime running again since 03:19; reconciliation pending.','التشغيل يعمل مجددًا منذ 03:19؛ المطابقة معلّقة.'),
+  next:b('Run the reconciliation the contract prescribes after a restart.','تشغيل المطابقة التي يحددها العقد بعد إعادة التشغيل.'),fromContract:true,
+  lho:b(`${D('03:12')} · before the gap`,`${D('03:12')} · قبل الفجوة`),nowObs:b('Runtime running since 03:19 · reconciliation pending','التشغيل يعمل منذ 03:19 · المطابقة معلّقة'),
+  known:[b('Host uptime reset at 03:18 (boot ID changed)','أُعيد ضبط زمن تشغيل الخادم الساعة 03:18 (تغيّر معرّف الإقلاع)'),b('Runtime process running again since 03:19','عملية التشغيل تعمل مجددًا منذ 03:19'),b('No observations 03:12 → 03:19','لا أرصاد من 03:12 إلى 03:19')],
+  unknown:[b('Cause of the restart','سبب إعادة التشغيل'),b('Whether decisions were attempted during the gap','هل جرت محاولة قرارات أثناء الفجوة')],
+  affected:[b('Timeline 03:12 → 03:19','الخط الزمني 03:12 ← 03:19'),b(`Position ${id('DEMO-PAIR-B')} opened before the gap`,`المركز ${id('DEMO-PAIR-B')} المفتوح قبل الفجوة`)],
+  unverified:[b('Positions and decisions since restart','المراكز والقرارات منذ إعادة التشغيل')],
+  events:RESTART_EVENTS,incidents:[INC_RESTART,INC_OLD],extraForbid:[b('Treating post-restart results as verified','اعتبار نتائج ما بعد إعادة التشغيل متحققًا منها')],
+  dec:{unv:true,stale:false,none:null},posUnv:true,checks:{fail:0,pending:14},
+  ops:{runtime:['rec','recovering'],safe:['unk','unknown'],recovery:['rec',b(`Open · ${id('DEMO-REC-003')}`,`مفتوح · ${id('DEMO-REC-003')}`)],rec:{host:['ok','done'],runtime:['rec','recovering'],evidence:['unver','unverified'],recon:['wait','waiting']},unresolved:3,hist:BASE.ops.hist},
+  sys:Object.assign({},BASE.sys,{host:['rec',b('Up since 03:18','يعمل منذ 03:18')],boot:'DEMO-DATE 03:18'})}),
+ recovering:mk({label:'5 · Recovering',signal:'restart',now:'03:27',
+  dims:{health:['rec','recovering'],authority:['ok','valid'],evidence:['ok','pass'],freshness:['ok','fresh'],runtime:['ok','running'],recon:['rec',b('running 9/14','جارية 9/14')]},
+  exc:{health:b('Recovery open until reconciliation completes.','التعافي مفتوح حتى تكتمل المطابقة.'),recon:b('Post-restart reconciliation running: 9 of 14 checks done.','مطابقة ما بعد إعادة التشغيل جارية: 9 من 14 فحصًا.')},
+  banner:['info',b('Recovery in progress: host and runtime verified, evidence gap recorded, reconciliation running (9 of 14).','التعافي جارٍ: تحقق الخادم والتشغيل، وسُجلت فجوة الأدلة، والمطابقة جارية (9 من 14).'),'DEMO-INC-015'],
+  verdict:b('Recovering. Reconciliation after the restart is running.','يتعافى. مطابقة ما بعد إعادة التشغيل جارية.'),
+  owner:['none',b('No action needed.','لا يلزم أي إجراء.')],
+  claude:b('Wait for the reconciliation result; do not pre-judge it.','انتظار نتيجة المطابقة؛ دون استباقها.'),
+  system:b('Reconciliation after recovery: 9 of 14 checks done.','مطابقة ما بعد التعافي: 9 من 14 فحصًا.'),
+  next:b('If reconciliation passes, recovery closes; if it fails, follow the contract’s failure procedure.','إذا نجحت المطابقة يُغلق التعافي؛ وإن فشلت يُتبع إجراء الفشل في العقد.'),fromContract:true,
+  lho:b(`${D('03:12')} · before the gap`,`${D('03:12')} · قبل الفجوة`),nowObs:b('Host, runtime verified · reconciliation running','الخادم والتشغيل متحقق منهما · المطابقة جارية'),
+  known:[b('Host and runtime verified after restart','تحقق الخادم والتشغيل بعد إعادة التشغيل'),b('Evidence gap 03:12 → 03:19 recorded','سُجلت فجوة الأدلة 03:12 ← 03:19'),b('9 of 14 reconciliation checks passed so far','نجح 9 من 14 فحصًا حتى الآن')],
+  unknown:[b('Result of the remaining 5 checks','نتيجة الفحوص الخمسة المتبقية')],affected:[b('Timeline 03:12 → 03:19','الخط الزمني 03:12 ← 03:19')],
+  unverified:[b('Decisions since 03:19 until reconciliation completes','القرارات منذ 03:19 حتى تكتمل المطابقة')],
+  events:RESTART_EVENTS.concat([ev('03:25','rec','recon','Post-restart reconciliation started','بدأت مطابقة ما بعد إعادة التشغيل','reconciliation record','سجل المطابقة')]),
+  incidents:[Object.assign({},INC_RESTART,{s:'recovering',f:Object.assign({},INC_RESTART.f,{state:b('Recovering · reconciliation 9/14','يتعافى · المطابقة 9/14')})}),INC_OLD],
+  dec:{unv:true,stale:false,none:null},posUnv:true,checks:{fail:0,pending:5},
+  ops:{runtime:['ok','running'],safe:['off','notEngaged'],recovery:['rec',b(`Open · ${id('DEMO-REC-003')}`,`مفتوح · ${id('DEMO-REC-003')}`)],rec:{host:['ok','done'],runtime:['ok','done'],evidence:['ok','done'],recon:['rec',b('9/14','9/14')]},unresolved:1,hist:BASE.ops.hist},
+  sys:Object.assign({},BASE.sys,{boot:'DEMO-DATE 03:18'})}),
+ reconFail:mk({label:'6 · Reconciliation failed',signal:'incident',now:'02:20',
+  dims:{health:['warn','degraded'],authority:['ok','valid'],evidence:['fail',b('3/4 chains','3/4 سلاسل')],freshness:['ok','fresh'],runtime:['ok','running'],recon:['fail',b('13/14','13/14')]},
+  exc:{health:b('Degraded by the failed reconciliation.','متدهور بسبب فشل المطابقة.'),evidence:b(`Decision chain breaks at ${id('DEMO-REC-1284')}.`,`تنقطع سلسلة القرارات عند ${id('DEMO-REC-1284')}.`),recon:b('13 of 14 checks passed; results after 02:00 are unverified.','نجح 13 من 14 فحصًا؛ النتائج بعد 02:00 غير متحقق منها.')},
+  banner:['inc',b(`Reconciliation failed: 13 of 14 checks passed; the decision chain breaks at ${id('DEMO-REC-1284')}. Results after 02:00 are unverified.`,`فشلت المطابقة: نجح 13 من 14 فحصًا؛ تنقطع سلسلة القرارات عند ${id('DEMO-REC-1284')}. النتائج بعد 02:00 غير متحقق منها.`),'DEMO-INC-016'],
+  verdict:b('Reconciliation failed. Results after 02:00 are unverified.','فشلت المطابقة. النتائج بعد 02:00 غير متحقق منها.'),
+  owner:['info',b('Informed. Whether your review is required depends on the contract, which is not frozen.','للعلم. هل مراجعتك مطلوبة؟ يحدد ذلك العقد، وهو غير مجمّد بعد.')],
+  claude:b('Investigate read-only; do not re-run reconciliation without review.','التحقيق للقراءة فقط؛ دون إعادة المطابقة بلا مراجعة.'),
+  system:b('Runtime running as observed; failing chain recorded.','التشغيل يعمل كما رُصد؛ سُجلت السلسلة الفاشلة.'),
+  next:b('Follow the contract’s reconciliation-failure procedure (not yet frozen).','اتباع إجراء فشل المطابقة في العقد (غير مجمّد بعد).'),fromContract:true,
+  lho:b(`${D('02:00')} · all six healthy`,`${D('02:00')} · الستة سليمة`),nowObs:b('Runtime running · reconciliation 13/14 FAIL','التشغيل يعمل · المطابقة 13/14 فشل'),
+  known:[b('13 of 14 checks passed','نجح 13 من 14 فحصًا'),b(`Decision chain breaks at ${id('DEMO-REC-1284')}`,`تنقطع سلسلة القرارات عند ${id('DEMO-REC-1284')}`),b('Trade, input and incident chains valid','سلاسل الصفقات والمدخلات والحوادث صالحة')],
+  unknown:[b('Cause of the break','سبب الانقطاع'),b('Whether other records are affected','هل تأثرت سجلات أخرى')],
+  affected:[b('Trust in decisions after 02:00','الثقة في القرارات بعد 02:00')],unverified:[b('Decisions and PnL after 02:00','القرارات والربح/الخسارة بعد 02:00')],
+  events:EV.concat([ev('02:15','fail','recon','Reconciliation 13/14 — decision chain FAIL','المطابقة 13/14 — فشل سلسلة القرارات','reconciliation record','سجل المطابقة')]),
+  incidents:[{id:'DEMO-INC-016',s:'open',title:b('Reconciliation failure','فشل المطابقة'),when:'02:15',f:{
+   known:b(`13 of 14 checks passed. Decision chain breaks at ${id('DEMO-REC-1284')}. Trade, input and incident chains valid.`,`نجح 13 من 14 فحصًا. تنقطع سلسلة القرارات عند ${id('DEMO-REC-1284')}. سلاسل الصفقات والمدخلات والحوادث صالحة.`),
+   detect:b('Scheduled reconciliation, check 2 of 14','المطابقة المجدولة، الفحص 2 من 14'),
+   unknown:b('Cause of the break. Whether other records are affected.','سبب الانقطاع. هل تأثرت سجلات أخرى.'),
+   affected:b('Trust in decisions after 02:00.','الثقة في القرارات بعد 02:00.'),unverified:b('Decisions and PnL after 02:00.','القرارات والربح/الخسارة بعد 02:00.'),
+   next:b('Follow the contract’s reconciliation-failure procedure (not yet frozen).','اتباع إجراء فشل المطابقة في العقد (غير مجمّد بعد).'),state:b('Open','مفتوح'),
+   owner:b('Informed. Review requirement set by the contract.','للعلم. متطلب المراجعة يحدده العقد.'),evidence:b(`${id('DEMO-RECON-RUN-08')} · ${id('DEMO-REC-1284')}`,`${id('DEMO-RECON-RUN-08')} · ${id('DEMO-REC-1284')}`)}},INC_OLD],
+  extraForbid:[b('Re-running reconciliation without review','إعادة المطابقة دون مراجعة')],
+  dec:{unv:true,stale:false,none:null},posUnv:true,checks:{fail:1,pending:0}}),
+ unknown:mk({label:'7 · Unknown current state',signal:'incident',now:'01:10',
+  dims:{health:['unk','unknown'],authority:['ok','valid'],evidence:['unk','unknown'],freshness:['unk','unknown'],runtime:['unk','unknown',b('no answer 9m','لا رد منذ 9 د')],recon:['unk','unknown']},
+  exc:{health:b('Cannot be derived without the runtime.','لا يمكن اشتقاقها بدون التشغيل.'),evidence:b('Chain verifier not reachable.','مدقق السلاسل غير قابل للوصول.'),freshness:b('Runtime-derived values have no current observation.','القيم المشتقة من التشغيل بلا رصد حالي.'),runtime:b('Runtime has not answered for 9 minutes. Running or stopped: unknown.','لم يرد التشغيل منذ 9 دقائق. يعمل أم متوقف: غير معروف.'),recon:b('Cannot be read.','لا يمكن قراءتها.')},
+  banner:['unk',b('The runtime has not answered for 9 minutes. This view is live but cannot see the trading system. Current state is unknown.','لم يرد التشغيل منذ 9 دقائق. هذه الشاشة مباشرة لكنها لا ترى نظام التداول. الحالة الحالية غير معروفة.'),'DEMO-INC-017'],
+  verdict:b('Current trading state is unknown.','حالة التداول الحالية غير معروفة.'),
+  owner:['info',b('Informed. No action is known to be required yet.','للعلم. لا يُعرف بعد أن إجراءً مطلوبًا.')],
+  claude:b('Establish what is true first: check runtime reachability read-only.','تحديد ما هو صحيح أولًا: فحص الوصول إلى التشغيل للقراءة فقط.'),
+  system:b('Unknown.','غير معروف.'),
+  next:b('Restore observation of the runtime, then re-derive state.','استعادة رصد التشغيل، ثم إعادة اشتقاق الحالة.'),fromContract:false,
+  lho:b(`${D('01:01')} · 9m ago`,`${D('01:01')} · قبل 9 د`),nowObs:b('Host answers · runtime silent','الخادم يرد · التشغيل صامت'),
+  known:[b('This view is live','هذه الشاشة مباشرة'),b('Host answers','الخادم يرد'),b('Governance record valid','سجل الحوكمة صالح'),b('Last runtime observation 01:01','آخر رصد للتشغيل 01:01')],
+  unknown:[b('Whether the runtime is running or stopped','هل التشغيل يعمل أم متوقف'),b('Positions and decisions since 01:01','المراكز والقرارات منذ 01:01')],
+  affected:[b('Every runtime-derived panel','كل لوحة مشتقة من التشغيل')],unverified:[b('Everything after 01:01','كل ما بعد 01:01')],
+  events:EV.concat([ev('01:01','unk','system','Last runtime observation','آخر رصد للتشغيل','runtime stamp','ختم التشغيل')]),
+  incidents:[{id:'DEMO-INC-017',s:'open',title:b('Runtime not observable','التشغيل غير قابل للرصد'),when:'01:04',f:{
+   known:b('Runtime has not answered since 01:01. Host answers. This view is live.','لم يرد التشغيل منذ 01:01. الخادم يرد. هذه الشاشة مباشرة.'),
+   detect:b('Runtime observation exceeded its budget','تجاوز رصد التشغيل ميزانيته'),
+   unknown:b('Whether the runtime is running. Positions and decisions since 01:01.','هل التشغيل يعمل. المراكز والقرارات منذ 01:01.'),
+   affected:b('Every runtime-derived panel.','كل لوحة مشتقة من التشغيل.'),unverified:b('Everything after 01:01.','كل ما بعد 01:01.'),
+   next:b('Restore observation, then re-derive state.','استعادة الرصد ثم إعادة اشتقاق الحالة.'),state:b('Open','مفتوح'),owner:b('Informed.','للعلم.'),evidence:b(id('DEMO-OBS-TIMEOUT-01'),id('DEMO-OBS-TIMEOUT-01'))}},INC_OLD],
+  dec:{unv:true,stale:true,none:null},posUnv:true,risk:{stale:true},
+  ops:Object.assign({},BASE.ops,{runtime:['unk','unknown'],safe:['unk','unknown'],recovery:['unk','unknown']}),
+  sys:Object.assign({},BASE.sys,{containers:['unk','unknown'],feed:['unk','unknown'],monitor:['ok',b('OK','سليم')]})}),
+ terminal:mk({label:'8 · Terminal condition detected',step:1,signal:'events',now:'11:52',
+  banner:['info',b(`Terminal condition detected at 11:40 (${id('DEMO-HARD-CAP')}). Runtime state is shown as observed; detection does not mean it stopped.`,`رُصد شرط الإنهاء الساعة 11:40 (${id('DEMO-HARD-CAP')}). تُعرض حالة التشغيل كما رُصدت؛ الرصد لا يعني أنه توقف.`),null],
+  verdict:b('P2 reached its terminal condition. Closure is next.','بلغت P2 شرط الإنهاء. الإغلاق هو التالي.'),
+  owner:['info',b('Informed. No action yet.','للعلم. لا إجراء بعد.')],
+  claude:b('Check the detection against the terminal rule.','مطابقة الرصد مع قاعدة الإنهاء.'),
+  system:b('Detection recorded. Runtime running (observed).','سُجل الرصد. التشغيل يعمل (مرصود).'),
+  next:b('Closure becomes due per contract.','يصبح الإغلاق مستحقًا وفق العقد.'),fromContract:true,
+  known:[b('Terminal condition recorded at 11:40','سُجل شرط الإنهاء الساعة 11:40'),b('Runtime running (observed 4s ago)','التشغيل يعمل (رُصد قبل 4 ث)'),b('Reconciliation 14/14 PASS','المطابقة 14/14 ناجحة')],
+  events:EV.concat([ev('11:40','owner','stage',`Terminal condition detected (${id('DEMO-HARD-CAP')})`,`رُصد شرط الإنهاء (${id('DEMO-HARD-CAP')})`,'terminal record','سجل الإنهاء')])}),
+ due:mk({label:'8b · Closure due',step:2,signal:'events',now:'12:05',
+  banner:['info',b('Closure is due. Runtime state is shown as observed, not assumed.','الإغلاق مستحق. تُعرض حالة التشغيل كما رُصدت، لا كما يُفترض.'),null],
+  verdict:b('P2 closure is due.','إغلاق P2 مستحق.'),owner:['none',b('No action yet.','لا إجراء بعد.')],
+  claude:b('Prepare the closure evidence.','تجهيز أدلة الإغلاق.'),system:b('As the contract defines; runtime running (observed).','وفق ما يحدده العقد؛ التشغيل يعمل (مرصود).'),
+  next:b('Begin the closure transaction.','بدء معاملة الإغلاق.'),fromContract:true,
+  events:EV.concat([ev('11:40','owner','stage','Terminal condition detected','رُصد شرط الإنهاء','terminal record','سجل الإنهاء'),ev('12:00','owner','stage','Closure due','الإغلاق مستحق','stage contract','عقد المرحلة')])}),
+ closing:mk({label:'9 · Closure transaction in progress',step:3,signal:'events',now:'12:40',
+  dims:Object.assign({},BASE.dims,{recon:['rec',b('final run','التشغيل النهائي')]}),
+  exc:{recon:b('Final reconciliation for closure is running.','المطابقة النهائية للإغلاق جارية.')},
+  banner:['info',b('Closure transaction in progress: final reconciliation and closure record are being assembled.','معاملة الإغلاق جارية: تُجمع المطابقة النهائية وسجل الإغلاق.'),null],
+  verdict:b('P2 closure is in progress.','إغلاق P2 جارٍ.'),owner:['none',b('No action yet. A merge will be requested.','لا إجراء بعد. سيُطلب منك الدمج.')],
+  claude:b('Assemble the closure record; open the closure PR.','تجميع سجل الإغلاق؛ فتح طلب دمج الإغلاق.'),
+  system:b('Final reconciliation per contract; runtime state as observed.','المطابقة النهائية وفق العقد؛ حالة التشغيل كما رُصدت.'),
+  next:b('Owner merge of the closure PR.','دمج المالك لطلب دمج الإغلاق.'),fromContract:true,
+  events:EV.concat([ev('11:40','owner','stage','Terminal condition detected','رُصد شرط الإنهاء','terminal record','سجل الإنهاء'),ev('12:00','owner','stage','Closure due','الإغلاق مستحق','stage contract','عقد المرحلة'),ev('12:20','rec','stage','Closure transaction started','بدأت معاملة الإغلاق','governance record','سجل الحوكمة')])}),
+ ownerMerge:mk({label:'10 · OWNER_MERGE_REQUIRED',step:4,signal:'owner',now:'13:05',
+  banner:['owner',b(`Owner action required: merge the closure PR ${id('DEMO-PR-42')}. Only you can merge it; this app never merges.`,`مطلوب إجراء من المالك: دمج طلب الإغلاق ${id('DEMO-PR-42')}. أنت وحدك من يدمجه؛ هذا التطبيق لا يدمج أبدًا.`),null],
+  verdict:b('P2 closure is waiting for the Owner’s merge.','إغلاق P2 بانتظار دمج المالك.'),
+  owner:['req',b(`Merge ${id('DEMO-PR-42')} on GitHub. Blocked until then: merged-main verification and P2 closed.`,`ادمج ${id('DEMO-PR-42')} على GitHub. متوقف حتى ذلك: التحقق من الفرع الرئيسي وإغلاق P2.`)],
+  claude:b('Wait. Must not merge.','الانتظار. يُمنع الدمج.'),system:b('Holds.','في وضع الانتظار.'),
+  next:b('Merged-main verification.','التحقق من الفرع الرئيسي بعد الدمج.'),fromContract:true,
+  known:[b(`Closure record complete in ${id('DEMO-PR-42')}`,`سجل الإغلاق مكتمل في ${id('DEMO-PR-42')}`),b('Final reconciliation 14/14 PASS','المطابقة النهائية 14/14 ناجحة')],
+  extraForbid:[b('Claude merging the closure PR','دمج Claude لطلب الإغلاق')],
+  events:EV.concat([ev('11:40','owner','stage','Terminal condition detected','رُصد شرط الإنهاء','terminal record','سجل الإنهاء'),ev('12:20','rec','stage','Closure transaction started','بدأت معاملة الإغلاق','governance record','سجل الحوكمة'),ev('12:58','owner','stage',`Closure PR ${id('DEMO-PR-42')} opened`,`فُتح طلب الإغلاق ${id('DEMO-PR-42')}`,'repository','المستودع')])}),
+ verify:mk({label:'10b · Merged-main verification',step:5,signal:'events',now:'13:30',
+  banner:['info',b('Closure PR merged. Verifying that main carries the closure record.','دُمج طلب الإغلاق. يجري التحقق من أن الفرع الرئيسي يحمل سجل الإغلاق.'),null],
+  verdict:b('Verifying the merged closure record.','التحقق من سجل الإغلاق المدمج.'),owner:['none',b('No action needed.','لا يلزم أي إجراء.')],
+  claude:b('Verify main carries the closure record and checks pass.','التحقق من أن الفرع الرئيسي يحمل سجل الإغلاق وأن الفحوص ناجحة.'),system:b('—','—'),
+  next:b('Declare P2 closed.','إعلان إغلاق P2.'),fromContract:true,
+  events:EV.concat([ev('12:58','owner','stage',`Closure PR ${id('DEMO-PR-42')} opened`,`فُتح طلب الإغلاق ${id('DEMO-PR-42')}`,'repository','المستودع'),ev('13:22','ok','stage','Owner merged closure PR','دمج المالك طلب الإغلاق','repository','المستودع')])}),
+ closed:mk({label:'11 · P2 CLOSED / P3 NOT AUTHORIZED',step:6,signal:'owner',now:'14:00',
+  dims:Object.assign({},BASE.dims,{runtime:['off','stopped']}),
+  banner:['owner',b('P2 is closed. P3 is not authorized. Nothing proceeds until the Owner decides.','أُغلقت P2. لم يُصرَّح بـ P3. لا شيء يتقدم حتى يقرر المالك.'),null],
+  verdict:b('P2 is closed. P3 is not authorized.','أُغلقت P2. لم يُصرَّح بـ P3.'),
+  owner:['req',b('Decide whether to authorize P3.','قرر ما إذا كنت ستصرّح بـ P3.')],
+  claude:b('Nothing. P3 code remains not authorized.','لا شيء. كود P3 ما زال غير مصرّح به.'),
+  system:b(`Runtime stopped (observed at ${D('12:30')}).`,`التشغيل متوقف (رُصد ${D('12:30')}).`),
+  next:b('Owner P3 authorization decision.','قرار المالك بشأن تفويض P3.'),fromContract:true,
+  lgc:b(`P2 closure record · ${D('13:30')}`,`سجل إغلاق P2 · ${D('13:30')}`),
+  known:[b('Closure record on main, verified','سجل الإغلاق على الفرع الرئيسي، متحقق منه'),b(`Runtime stopped (observed ${D('12:30')})`,`التشغيل متوقف (رُصد ${D('12:30')})`)],
+  extraForbid:[b('Starting P3 work before authorization','بدء عمل P3 قبل التفويض')],
+  dec:{unv:false,stale:false,none:b('No decisions since closure.','لا قرارات منذ الإغلاق.')},pos:[],
+  ops:Object.assign({},BASE.ops,{runtime:['off','stopped']}),
+  events:EV.concat([ev('13:22','ok','stage','Owner merged closure PR','دمج المالك طلب الإغلاق','repository','المستودع'),ev('13:30','ok','stage','Merged-main verification PASS · P2 closed','التحقق من الفرع الرئيسي ناجح · أُغلقت P2','governance record','سجل الحوكمة')]),
+  sys:Object.assign({},BASE.sys,{containers:['off',b('runtime stopped','التشغيل متوقف')]})})
+};
+const ORDER=['normal','viewStale','degraded','restart','recovering','reconFail','unknown','terminal','due','closing','ownerMerge','verify','closed'];
+const sc=()=>SC[S.scenario];
+const POS={p1:{pair:'DEMO-PAIR-B',side:b('Long','شراء'),size:'DEMO-SIZE',entry:'DEMO-PRICE',risk:'0.5%',exit:b('stop / target / time','وقف / هدف / زمن'),pnl:'+0.6%'}};
+function sigText(s){const n=s.viewerNew;const inc=(s.incidents.find(i=>i.s!=='resolved')||{}).id;
+ return L({absence:b('Shown because you have been away longer than your return setting.','ظهرت لأنك غبت أطول من إعداد العودة لديك.'),
+  events:b(`Shown because ${n||3} governed events happened since you last looked.`,`ظهرت لأن ${n||3} أحداث محكومة وقعت منذ آخر مشاهدة.`),
+  incident:b(`Shown because incident ${id(inc||'—')} opened.`,`ظهرت لأن الحادثة ${id(inc||'—')} فُتحت.`),
+  restart:b('Shown because the host restarted since the last healthy observation.','ظهرت لأن الخادم أُعيد تشغيله منذ آخر رصد سليم.'),
+  owner:b('Shown because an Owner action is now required.','ظهرت لأن إجراءً من المالك مطلوب الآن.')}[s.signal])}
+/* closure-family scenarios: last healthy observation is "now" */
+['terminal','due','closing','ownerMerge','verify','closed'].forEach(k=>{const s=SC[k];s.lho=b(`${D(s.now)} · all six dimensions healthy`,`${D(s.now)} · الأبعاد الستة سليمة`)});
+/* ===== v0.2.1 — whole-project review corrections ===== */
+const SUBS=[b('Final closure evidence','أدلة الإغلاق النهائية'),b('Governed shutdown','إيقاف محكوم'),b('Archive / seal / digest','الأرشفة / الختم / البصمة'),b('Closure record / registry','سجل الإغلاق / السجل المرجعي'),b('Gates','البوابات'),b('Closure PR + CI','طلب دمج الإغلاق + التكامل المستمر')];
+const STOPPED=['off','stopped'];
+const LAW_BASE={capProps:['ok',b('DEMO 12/12','DEMO 12/12')],lifecycle:['wait',b('Not yet observed','لم تُرصد بعد')],recon:['ok','pass'],integrity:['ok','pass'],identity:['ok',b('Matches','متطابقة')],safe:['wait',b('Not yet','ليس بعد')],records:['wait',b('Not yet','ليس بعد')]};
+Object.keys(SC).forEach(k=>{SC[k].law=LAW_BASE;SC[k].sub=-1;SC[k].outcome=null});
+SC.reconFail.law=Object.assign({},LAW_BASE,{recon:['fail','fail'],integrity:['fail',b('Decision chain','سلسلة القرارات')]});
+SC.restart.law=Object.assign({},LAW_BASE,{recon:['unver','pending'],integrity:['unver','pending']});
+SC.recovering.law=SC.restart.law;
+SC.unknown.law=Object.assign({},LAW_BASE,{recon:['unk','unknown'],integrity:['unk','unknown'],identity:['unk','unknown']});
+SC.viewStale.law=Object.assign({},LAW_BASE,{recon:['stale','pass'],integrity:['stale','pass']});
+const LAW_DONE=Object.assign({},LAW_BASE,{lifecycle:['ok',b('Observed · DEMO','رُصدت · DEMO')],safe:['ok','done'],records:['ok','done']});
+['terminal','due'].forEach(k=>SC[k].law=Object.assign({},LAW_BASE,{lifecycle:['ok',b('Observed · DEMO','رُصدت · DEMO')]}));
+SC.closing.sub=2;SC.closing.law=Object.assign({},LAW_DONE,{safe:['ok','done'],records:['rec','inprog']});
+SC.closing.dims=Object.assign({},BASE.dims,{runtime:STOPPED});
+SC.closing.exc={runtime:b('Stopped by the governed shutdown step (observed).','متوقف بخطوة الإيقاف المحكوم (مرصود).')};
+SC.closing.banner=['info',b('Closure transaction in progress: final evidence done, governed shutdown done, archive and digest in progress.','معاملة الإغلاق جارية: اكتملت الأدلة النهائية والإيقاف المحكوم، والأرشفة والبصمة قيد التنفيذ.'),null];
+SC.closing.system=b('Governed shutdown done; runtime stopped (observed). Archive and digest in progress.','اكتمل الإيقاف المحكوم؛ التشغيل متوقف (مرصود). الأرشفة والبصمة جاريتان.');
+SC.closing.ops=Object.assign({},BASE.ops,{runtime:STOPPED});
+['ownerMerge','verify'].forEach(k=>{const s=SC[k];s.sub=6;s.law=LAW_DONE;s.dims=Object.assign({},BASE.dims,{runtime:STOPPED});s.exc={runtime:b('Stopped by the governed shutdown step (observed).','متوقف بخطوة الإيقاف المحكوم (مرصود).')};s.ops=Object.assign({},BASE.ops,{runtime:STOPPED});s.dec={unv:false,stale:false,none:b('No decisions since the governed shutdown.','لا قرارات منذ الإيقاف المحكوم.')};s.pos=[]});
+SC.ownerMerge.system=b('Holds. Runtime stopped after governed shutdown (observed).','في وضع الانتظار. التشغيل متوقف بعد الإيقاف المحكوم (مرصود).');
+SC.closed.sub=6;SC.closed.law=LAW_DONE;SC.closed.outcome=['ok',b('PASS · DEMO','ناجحة · DEMO')];SC.closed.exc={runtime:b('Stopped by the governed shutdown step (observed).','متوقف بخطوة الإيقاف المحكوم (مرصود).')};
+SC.closed.verdict=b('P2 is closed with outcome PASS (DEMO). P3 is not authorized.','أُغلقت P2 بنتيجة ناجحة (DEMO). لم يُصرَّح بـ P3.');
+SC.closedInc=Object.assign({},SC.closed,{label:'11b · P2 CLOSED — INCONCLUSIVE',
+ outcome:['warn',b('INCONCLUSIVE / INSUFFICIENT · DEMO','غير حاسمة / غير كافية · DEMO')],
+ law:Object.assign({},LAW_DONE,{lifecycle:['warn',b('Not observed by the hard cap','لم تُرصد حتى الحد الأقصى')]}),
+ verdict:b('P2 is closed with outcome INCONCLUSIVE / INSUFFICIENT (DEMO). This is a truthful result, not a system failure. P3 is not authorized.','أُغلقت P2 بنتيجة غير حاسمة / غير كافية (DEMO). هذه نتيجة صادقة وليست عطلًا في النظام. لم يُصرَّح بـ P3.'),
+ banner:['owner',b('P2 is closed as INCONCLUSIVE / INSUFFICIENT: the hard cap arrived without a natural completed trade lifecycle. Nothing proceeds until the Owner decides.','أُغلقت P2 كنتيجة غير حاسمة / غير كافية: بلغ الحد الأقصى دون دورة صفقة مكتملة طبيعيًا. لا شيء يتقدم حتى يقرر المالك.'),null],
+ owner:['req',b('Decide the next step: P3 authorization, or another governed proof window. Both require your decision.','قرر الخطوة التالية: تفويض P3 أو نافذة إثبات محكومة أخرى. كلاهما يتطلب قرارك.')],
+ next:b('Owner decision on the INCONCLUSIVE outcome.','قرار المالك بشأن النتيجة غير الحاسمة.')});
+ORDER.push('closedInc');
+{const so=b('Runtime stopped by governed shutdown (observed) · reconciliation 14/14','التشغيل متوقف بالإيقاف المحكوم (مرصود) · المطابقة 14/14');
+ ['closing','ownerMerge','verify','closed','closedInc'].forEach(k=>SC[k].nowObs=so);
+ SC.closing.known=[b('Final closure evidence complete','اكتملت أدلة الإغلاق النهائية'),b('Governed shutdown complete; runtime stopped (observed)','اكتمل الإيقاف المحكوم؛ التشغيل متوقف (مرصود)'),b('Reconciliation 14/14 PASS','المطابقة 14/14 ناجحة')];
+ SC.verify.known=[b(`Closure PR ${id('DEMO-PR-42')} merged by the Owner`,`دمج المالك طلب الإغلاق ${id('DEMO-PR-42')}`),b('Runtime stopped (observed)','التشغيل متوقف (مرصود)')];}
+SC.closedInc.owner=['req',b('Decide the next step after an INCONCLUSIVE P2. The options are set by governance, not by this view.','قرر الخطوة التالية بعد نتيجة P2 غير الحاسمة. الخيارات تحددها الحوكمة لا هذه الشاشة.')];
+
+/* ===== v0.2.2 — final reconciliation corrections ===== */
+SC.terminal.owner=['none',b('None yet. Next Owner gate: OWNER_MERGE_REQUIRED.','لا شيء بعد. بوابة المالك التالية: مطلوب دمج المالك.')];
+SC.terminal.claude=b('Execute the governed closure transaction when the contract requires it.','تنفيذ معاملة الإغلاق المحكومة عندما يتطلبها العقد.');
+SC.terminal.system=b('Terminal trigger recorded. Runtime running (observed).','سُجل محفّز الإنهاء. التشغيل يعمل (مرصود).');
+SC.due.owner=['none',b('None yet. Next Owner gate: OWNER_MERGE_REQUIRED.','لا شيء بعد. بوابة المالك التالية: مطلوب دمج المالك.')];
+SC.due.claude=b('Begin the governed closure transaction as the contract requires.','بدء معاملة الإغلاق المحكومة كما يتطلب العقد.');
+/* PASS: entry order PLN-00 -> PLN-01 -> authorization */
+SC.closed.label='13 · P2 CLOSED / PASS';
+SC.closed.owner=['info',b('Review the P2 outcome. Your P3 authorization comes after P3-PLN-00 reconciliation and P3-PLN-01 contract.','راجع نتيجة P2. يأتي تفويضك لـ P3 بعد مطابقة P3-PLN-00 وعقد P3-PLN-01.')];
+SC.closed.claude=b('Prepare P3-PLN-00 Final P2 → P3 Reconciliation (planning only; no P3 code).','تجهيز P3-PLN-00 المطابقة النهائية من P2 إلى P3 (تخطيط فقط؛ لا كود P3).');
+SC.closed.next=b('P3-PLN-00 Final P2 → P3 Reconciliation.','P3-PLN-00 المطابقة النهائية من P2 إلى P3.');
+SC.closed.banner=['info',b('P2 is closed with outcome PASS (DEMO). P3 is not authorized; entry runs through P3-PLN-00 and P3-PLN-01.','أُغلقت P2 بنتيجة ناجحة (DEMO). لم يُصرَّح بـ P3؛ يمر الدخول عبر P3-PLN-00 وP3-PLN-01.'),null];
+SC.closed.signal='events';
+SC.closedInc.label='15 · P2 INCONCLUSIVE / INSUFFICIENT';
+SC.closedInc.claude=b('Nothing until the Owner chooses the governed path. P3 does not auto-start.','لا شيء حتى يختار المالك المسار المحكوم. لا يبدأ P3 تلقائيًا.');
+SC.closedInc.next=b('Owner decision on the INCONCLUSIVE outcome; no automatic P3.','قرار المالك بشأن النتيجة غير الحاسمة؛ لا P3 تلقائي.');
+const SEE_REC=['unver',b('As the closure record states','كما يذكر سجل الإغلاق')];
+SC.closedFail=Object.assign({},SC.closed,{label:'14 · P2 CLOSED / FAIL',
+ outcome:['fail',b('FAIL · DEMO','فشل · DEMO')],
+ law:Object.assign({},LAW_DONE,{capProps:SEE_REC,lifecycle:SEE_REC,recon:SEE_REC,integrity:SEE_REC,identity:SEE_REC}),
+ verdict:b('P2 is closed with outcome FAIL (DEMO). Evidence is preserved. P3 is not authorized.','أُغلقت P2 بنتيجة فشل (DEMO). الأدلة محفوظة. لم يُصرَّح بـ P3.'),
+ banner:['inc',b('P2 is closed as FAIL. The reason is stated in the closure record; this view does not infer it. No P3 execution.','أُغلقت P2 بنتيجة فشل. السبب مذكور في سجل الإغلاق؛ هذه الشاشة لا تستنتجه. لا تنفيذ لـ P3.'),null],
+ known:[b('Closure record states outcome FAIL','سجل الإغلاق يذكر نتيجة الفشل'),b('Evidence archived, sealed and digested','الأدلة مؤرشفة ومختومة ولها بصمة'),b(`Runtime stopped by governed shutdown (observed ${D('12:30')})`,`التشغيل متوقف بالإيقاف المحكوم (رُصد ${D('12:30')})`)],
+ unknown:[b('Failure cause — not asserted by this view; read the closure record','سبب الفشل — لا تؤكده هذه الشاشة؛ راجع سجل الإغلاق')],
+ owner:['req',b('Failure authority must be resolved before any P3 path. Governance defines how.','يجب حسم مرجعية الفشل قبل أي مسار لـ P3. الحوكمة تحدد الكيفية.')],
+ claude:b('Nothing beyond what governance assigns. No P3 work.','لا شيء خارج ما تكلّف به الحوكمة. لا عمل على P3.'),
+ system:b(`Runtime stopped (observed ${D('12:30')}); evidence preserved.`,`التشغيل متوقف (رُصد ${D('12:30')})؛ الأدلة محفوظة.`),
+ next:b('Resolve failure authority per governance.','حسم مرجعية الفشل وفق الحوكمة.'),
+ extraForbid:[b('Starting P3 work before authorization','بدء عمل P3 قبل التفويض'),b('Re-running or reinterpreting P2 evidence','إعادة تشغيل أدلة P2 أو إعادة تفسيرها')]});
+const LBL={normal:'1 · Normal / healthy',viewStale:'2 · Control Room stale',degraded:'3 · Network / data degraded',restart:'4 · Unexpected host restart',recovering:'5 · Recovering',reconFail:'6 · Reconciliation failed',unknown:'7 · Unknown current state',terminal:'8 · Terminal condition detected',due:'9 · Closure due',closing:'10 · Closure transaction in progress',ownerMerge:'11 · OWNER_MERGE_REQUIRED',verify:'12 · Merged-main verification'};
+Object.keys(LBL).forEach(k=>SC[k].label=LBL[k]);
+ORDER.length=0;['normal','viewStale','degraded','restart','recovering','reconFail','unknown','terminal','due','closing','ownerMerge','verify','closed','closedFail','closedInc'].forEach(k=>ORDER.push(k));
+SC.closedFail.signal='owner';
+/* ===== v0.2.3 — Shape Lock pre-freeze corrections (data) ===== */
+Object.assign(W,{notImpl:b('Not implemented','غير منفّذ'),noData:b('No data','لا بيانات'),failClosed:b('Fail-closed','مُغلق عند الفشل'),unkDemo:b('Unknown in this generic demo','غير معروف في هذا العرض العام'),asRecord:b('As the closure record states','كما يذكر سجل الإغلاق')});
+{const PRE_ADMIT=b('Own later admission and authority; outside current scope','قبول وصلاحية لاحقان مستقلان؛ خارج النطاق الحالي');
+ const PRE=[b('Active under the P2 stage contract','فعّال بموجب عقد مرحلة P2'),b('Active under the P2 stage contract; paper only','فعّال بموجب عقد مرحلة P2؛ ورقي فقط'),PRE_ADMIT,PRE_ADMIT,PRE_ADMIT,PRE_ADMIT,
+  b('Post-beta controlled-live authority + explicit Owner authorization','صلاحية التشغيل الحي المضبوط بعد البيتا + تفويض صريح من المالك'),
+  b('Separate post-beta authority + explicit Owner authorization','صلاحية مستقلة بعد البيتا + تفويض صريح من المالك'),
+  b('Unreadable row — treated as blocked','صف غير مقروء — يُعامل كمحظور')];
+ CAPS.forEach((c,i)=>{c.pre=PRE[i];c.since=i===8?'—':'DEMO-DATE'});}
+MKT.caps[1]=[b('Order book depth','عمق دفتر الأوامر'),'off','notImpl'];
+MKT.caps.splice(1,0,[b('Volume','الحجم'),'ok','available']);
+CHECKS[9]=b('Duplicate detection','كشف التكرار');CHECKS[10]=b('Fees & PnL recomputed','إعادة احتساب الرسوم والربح/الخسارة');CHECKS[12]=b('Archive integrity / digest verification','سلامة الأرشيف / التحقق من البصمة');
+SC.ownerMerge.owner=['req',b(`Merge ${id('DEMO-PR-42')} on GitHub as a normal two-parent merge. Blocked until then: merged-main verification and P2 closed.`,`ادمج ${id('DEMO-PR-42')} على GitHub دمجًا عاديًا ثنائي الأصل. متوقف حتى ذلك: التحقق من الفرع الرئيسي وإغلاق P2.`)];
+SC.ownerMerge.banner=['owner',b(`Owner action required: normal two-parent merge of closure PR ${id('DEMO-PR-42')}. Only you can merge it; this app never merges.`,`مطلوب إجراء من المالك: دمج عادي ثنائي الأصل لطلب الإغلاق ${id('DEMO-PR-42')}. أنت وحدك من يدمجه؛ هذا التطبيق لا يدمج أبدًا.`),null];
+/* Generic FAIL: nothing inherited from PASS */
+{const U=['unk','unkDemo'],R=['unver','asRecord'],F=SC.closedFail;
+ F.dims={health:U,authority:['ok','valid'],evidence:R,freshness:['ok','fresh'],runtime:STOPPED,recon:R};
+ F.exc={health:b('Unknown in this generic demo; the closure record governs.','غير معروف في هذا العرض العام؛ سجل الإغلاق هو المرجع.'),evidence:b('Evidence package preserved; its verdict is as the closure record states.','حزمة الأدلة محفوظة؛ وحكمها كما يذكر سجل الإغلاق.'),runtime:b('Stopped by the governed shutdown step (observed).','متوقف بخطوة الإيقاف المحكوم (مرصود).'),recon:b('As the closure record states.','كما يذكر سجل الإغلاق.')};
+ F.lho=b('Unknown in this generic demo','غير معروف في هذا العرض العام');
+ F.nowObs=b('Runtime stopped (observed) · evidence package preserved','التشغيل متوقف (مرصود) · حزمة الأدلة محفوظة');
+ F.law=Object.assign({},LAW_DONE,{capProps:SEE_REC,lifecycle:SEE_REC,recon:SEE_REC,integrity:SEE_REC,identity:SEE_REC,safe:SEE_REC,records:['ok',b('Preserved','محفوظة')]});
+ F.known=[b('Closure record states outcome FAIL','سجل الإغلاق يذكر نتيجة الفشل'),b('Evidence package preserved (archived, sealed, digested)','حزمة الأدلة محفوظة (مؤرشفة ومختومة ولها بصمة)'),b(`Runtime stopped by governed shutdown (observed ${D('12:30')})`,`التشغيل متوقف بالإيقاف المحكوم (رُصد ${D('12:30')})`),b('P3 not authorized','P3 غير مصرّح بها')];
+ F.unknown=[b('Failure cause — read the closure record; not inferred here','سبب الفشل — راجع سجل الإغلاق؛ لا يُستنتج هنا'),b('Every other result — unknown in this generic demo','كل نتيجة أخرى — غير معروفة في هذا العرض العام')];}
+/* Incident contract fields */
+{const add=(inc,o)=>Object.assign(inc.f,o);
+ add(INC_RESTART,{safe:b('Evidence recorded before 03:12; chains verified up to the gap.','الأدلة المسجلة قبل 03:12؛ السلاسل متحقق منها حتى الفجوة.'),recovery:b('Host and runtime back; post-restart reconciliation pending.','عاد الخادم والتشغيل؛ مطابقة ما بعد إعادة التشغيل معلّقة.'),reconReq:b('Yes','نعم'),claude:b('Do not treat new results as verified. No P2 changes.','عدم اعتبار النتائج الجديدة متحققًا منها. لا تغييرات على P2.')});
+ const byId=k=>SC[k].incidents.find(i=>i.s!=='resolved');
+ add(byId('degraded'),{safe:b('Evidence chain intact; runtime process running.','سلسلة الأدلة سليمة؛ عملية التشغيل تعمل.'),recovery:b('Not started; feed still beyond budget.','لم يبدأ؛ التغذية ما زالت خارج الميزانية.'),reconReq:b('As the contract requires once the feed recovers','كما يشترط العقد عند تعافي التغذية'),claude:b('Check feed and API status read-only.','فحص حالة التغذية والواجهة للقراءة فقط.')});
+ add(byId('reconFail'),{safe:b('Trade, input and incident chains valid.','سلاسل الصفقات والمدخلات والحوادث صالحة.'),recovery:b('Not applicable until the cause is known.','لا ينطبق حتى يُعرف السبب.'),reconReq:b('Re-run only after review','إعادة التشغيل بعد المراجعة فقط'),claude:b('Investigate read-only.','التحقيق للقراءة فقط.')});
+ add(byId('unknown'),{safe:b('Unknown — the runtime cannot be observed.','غير معروف — لا يمكن رصد التشغيل.'),recovery:b('Not started.','لم يبدأ.'),reconReq:b('Yes, once observation returns','نعم، عند عودة الرصد'),claude:b('Check runtime reachability read-only.','فحص الوصول إلى التشغيل للقراءة فقط.')});}
+/* ===== v0.2.4 — truth-state propagation (data) ===== */
+/* Decisions cannot post-date the last observation */
+SC.viewStale.lastDec='d3';SC.viewStale.visDecs=['d3'];SC.viewStale.events=EV.slice(0,3);
+SC.unknown.lastDec='d2';SC.unknown.visDecs=['d2','d3'];SC.unknown.dec={unv:false,stale:true,none:null};
+SC.unknown.events=EV.slice(0,4).concat([ev('01:01','unk','system','Last runtime observation','آخر رصد للتشغيل','runtime stamp','ختم التشغيل')]);
+/* Closure freshness: shutdown event time vs current observation */
+{const RT=['off','stopped','4s'];
+ ['closing','ownerMerge','verify','closed','closedInc','closedFail'].forEach(k=>{const s=SC[k];
+  s.dims=Object.assign({},s.dims,{runtime:RT});s.ops=Object.assign({},s.ops,{runtime:RT});
+  if(!s.events.some(e=>e.t==='12:30')){const ev1=ev('12:30','off','stage','Governed shutdown completed','اكتمل الإيقاف المحكوم','governance record','سجل الحوكمة');const i=s.events.findIndex(e=>e.t&&e.t>'12:30'&&e.t<'20:00');s.events=s.events.slice();if(i<0)s.events.push(ev1);else s.events.splice(i,0,ev1)}});
+ const SYS=b(`Governed shutdown occurred at ${D('12:30')}. Current runtime observation: stopped · observed 4s ago.`,`وقع الإيقاف المحكوم ${D('12:30')}. الرصد الحالي للتشغيل: متوقف · رُصد قبل 4 ث.`);
+ const SH=b(`Governed shutdown occurred at ${D('12:30')}`,`وقع الإيقاف المحكوم ${D('12:30')}`),CUR=b('Current runtime observation: stopped · observed 4s ago','الرصد الحالي للتشغيل: متوقف · رُصد قبل 4 ث');
+ SC.closed.system=SYS;SC.closedInc.system=SYS;SC.closedFail.system=b(`${SYS.en} Evidence package preserved.`,`${SYS.ar} حزمة الأدلة محفوظة.`);
+ SC.closed.known=[b('Closure record on main, verified','سجل الإغلاق على الفرع الرئيسي، متحقق منه'),SH,CUR];
+ SC.closedInc.known=[b('Closure record on main, verified','سجل الإغلاق على الفرع الرئيسي، متحقق منه'),b('Closure record states INCONCLUSIVE / INSUFFICIENT','سجل الإغلاق يذكر نتيجة غير حاسمة / غير كافية'),SH,CUR];
+ SC.closedFail.known=[b('Closure record states outcome FAIL','سجل الإغلاق يذكر نتيجة الفشل'),b('Evidence package preserved (archived, sealed, digested)','حزمة الأدلة محفوظة (مؤرشفة ومختومة ولها بصمة)'),SH,CUR,b('P3 not authorized','P3 غير مصرّح بها')];
+ SC.closing.system=b(`Governed shutdown occurred at ${D('12:30')}; current observation: stopped · 4s ago. Archive and digest in progress.`,`وقع الإيقاف المحكوم ${D('12:30')}؛ الرصد الحالي: متوقف · قبل 4 ث. الأرشفة والبصمة جاريتان.`);
+ SC.ownerMerge.system=b('Holds. Current runtime observation: stopped · 4s ago (after governed shutdown).','في وضع الانتظار. الرصد الحالي للتشغيل: متوقف · قبل 4 ث (بعد الإيقاف المحكوم).');}
+SC.closing.pos=[];SC.closing.dec={unv:false,stale:false,none:b('No decisions since the governed shutdown.','لا قرارات منذ الإيقاف المحكوم.')};
+
+/* ================= SHELL ================= */
+function openIncs(){return sc().incidents.filter(i=>i.s!=='resolved')}
+function inspMode(){return S.inspMode==='auto'?(window.innerWidth>=1680?'dock':'drawer'):S.inspMode}
+function proto(){
+ const o=ORDER.map(k=>`<option value="${k}" ${k===S.scenario?'selected':''}>${SC[k].label}</option>`).join('');
+ document.getElementById('proto').innerHTML=`<b>Prototype controls</b>
+ <label>Scenario <select id="pscen">${o}</select></label>
+ <span class="seg" role="group" aria-label="Language"><button data-lang="ar" aria-pressed="${S.lang==='ar'}">العربية</button><button data-lang="en" aria-pressed="${S.lang==='en'}">EN</button></span>
+ <span class="seg" role="group" aria-label="Device"><button data-dev="desktop" aria-pressed="${S.device==='desktop'}">Desktop</button><button data-dev="mobile" aria-pressed="${S.device==='mobile'}">Mobile</button></span>
+ <span class="seg" role="group" aria-label="Inspector"><button data-im="auto" aria-pressed="${S.inspMode==='auto'}">Inspector auto</button><button data-im="dock" aria-pressed="${S.inspMode==='dock'}">Dock</button><button data-im="drawer" aria-pressed="${S.inspMode==='drawer'}">Drawer</button></span>
+ <button class="pbtn" id="pint">Simulate interruption</button><button class="pbtn" id="prec">Simulate recovery</button><button class="pbtn" id="pret">Relaunch (return detection)</button>
+ <span class="note">Controls are for review only · nothing here reaches any system</span>`;
+}
+function pban(){return `<div class="pban" role="note">${x('PROTOTYPE · STATIC MOCK DATA · NOT LIVE · NOT AUTHORITATIVE · NOT CONNECTED TO TRADING RUNTIME','نموذج أولي · بيانات تجريبية ثابتة · ليس مباشرًا · ليس مرجعيًا · غير متصل ببيئة التداول')}</div>`}
+function ownerWord(s){return s.owner[0]==='req'?x('action required','إجراء مطلوب'):s.owner[0]==='info'?x('informed','للعلم'):x('none','لا شيء')}
+function idbar(){
+ const s=sc(),req=s.owner[0]==='req';
+ const sg=s.step===0?'ok':s.step===6?'done':'owner';
+ return `<header class="idbar"><span class="brand">Trading Lab OS</span><span class="sep"></span>
+ <button class="stagechip" data-go="continuity">${gl(sg)} ${L(STAGELBL[s.step])} <span class="muted">· ${id('DEMO-COHORT-001')}</span></button>
+ <span class="mode">${x('PAPER','ورقي')}</span><span class="lock">${LOCK}${x('Real money blocked','المال الحقيقي محظور')}</span>
+ <span class="grow"></span>
+ <span class="ownerind ${req?'req':''}">${req?gl('owner')+' ':''}${x('Owner','المالك')}: ${ownerWord(s)}</span>
+ <span class="heart ${s.viewStale?'st':''}" id="heart"></span>
+ <span class="langt" role="group" aria-label="Language"><button data-lang="ar" aria-pressed="${S.lang==='ar'}">AR</button><button data-lang="en" aria-pressed="${S.lang==='en'}">EN</button></span></header>`;
+}
+function truth(){const d=sc().dims;return `<div class="truth" role="list" aria-label="${x('Truth Strip','شريط الحقيقة')}">${Object.keys(d).map(k=>`<button role="listitem" data-insp="${k}"><span class="dl">${L(DIMN[k])}</span>${chip(d[k][0],d[k][1],d[k][2])}</button>`).join('')}</div>`}
+function side(){
+ const n=openIncs().length,req=sc().owner[0]==='req';
+ const item=k=>`<button class="ni" data-go="${k}" ${S.screen===k?'aria-current="page"':''} title="${esc(strip(L(NAME[k])))}"><span><span aria-hidden="true" style="display:inline-block;width:20px">${ICON[k]}</span><span class="lbl">${L(NAME[k])}</span></span>${k==='incidents'&&n?`<span class="badge">${n}</span>`:''}${k==='continuity'&&req?`<span class="badge w">!</span>`:''}</button>`;
+ return `<nav class="side" aria-label="${x('Main','الرئيسية')}">${GROUPS.map(([g,items])=>`<div class="ng">${L(g)}</div>${items.map(item).join('')}`).join('')}<div class="spacer"></div>${item('settings')}</nav>`;
+}
+function bannerHTML(){const bn=sc().banner;if(!bn)return'';
+ return `<div class="banner b-${bn[0]}" role="${bn[0]==='info'?'status':'alert'}"><span class="bg" aria-hidden="true">${G[bn[0]]||G.info}</span><p>${L(bn[1])}</p>${bn[2]?`<button class="bl" data-inc="${bn[2]}">${x('View incident','عرض الحادثة')}</button>`:''}</div>`}
+function shead(k){return `<div class="shead"><h1>${L(NAME[k])}</h1><span class="asof">${x('as of','حتى')} ${D(sc().now)}</span><span class="mocktag">${x('DEMO data','بيانات تجريبية')}</span></div>`}
+function row(k,val,o){o=o||{};return `<button class="row ${o.cls||''}" ${o.insp?`data-insp="${o.insp}"`:''}><span class="k">${k}</span><span class="v">${val}</span></button>`}
+function timeline(evs,compact){return `<ul class="tl">${evs.map(e=>e.gap?`<li class="gap">${L(e.gap)}</li>`:`<li class="${e.ck?'ck':''}"><span class="t">${D(e.t)}</span>${gl(e.s)}<span>${L(e.d)}</span>${compact?'':`<span class="src">${x('source','المصدر')}: ${L(e.src)}</span>`}</li>`).join('')}</ul>`}
+function sinceCk(){const e=sc().events;const i=e.findIndex(v=>v.ck);return e.slice(i<0?0:i)}
+function viewerChip(){const n=sc().viewerNew;return `<p class="vchip">${gl('info')}<span>${x('Viewer only · not project truth','للعارض فقط · ليست حقيقة المشروع')}:</span><span>${n?x(`${n} new since you last looked on this device`,`${n} جديد منذ آخر مشاهدة على هذا الجهاز`):x('nothing new since you last looked on this device','لا جديد منذ آخر مشاهدة على هذا الجهاز')}</span></p>`}
+function ladder(full){const s=sc();const own=s.step===4||s.step===6;
+ return `<ol class="lad ${full?'full':''}" aria-label="${x('P2 closure ladder','سلّم إغلاق P2')}">${LAD.map((l,i)=>`<li class="${i<s.step?'done':i===s.step?'cur'+(own?' own':''):''}" ${i===s.step?'aria-current="step"':''}><span class="lg" aria-hidden="true">${i<s.step?'✓':i===s.step?'●':'○'}</span><span>${L(l)}</span>${full&&i===s.step?`<span class="obs">${x('Runtime','التشغيل')}: ${chip(...s.dims.runtime)} ${x('observed, not inferred from this step','مرصود، وليس مستنتجًا من هذه الخطوة')}</span>`:''}${full&&i===3&&s.step>=3?`<ul class="subs">${SUBS.map((u,j)=>`<li class="${j<s.sub?'done':j===s.sub?'cur':''}">${j<s.sub?'✓':j===s.sub?'●':'○'} ${L(u)}</li>`).join('')}</ul>`:''}</li>`).join('')}</ol>`}
+function slots(){const s=sc();
+ return `<div class="slots4"><div class="slot ${s.owner[0]==='req'?'req':s.owner[0]==='info'?'inf':''}"><div class="sl">${x('Owner','المالك')}</div>${L(s.owner[1])}</div>
+ <div class="slot"><div class="sl">Claude</div>${L(s.claude)}</div>
+ <div class="slot"><div class="sl">${x('System','النظام')}</div>${L(s.system)}</div>
+ <div class="slot nx"><div class="sl">${x('Next governed step','الخطوة المحكومة التالية')}${s.fromContract?`<span class="fc">${x('derived from contract','مستمدة من العقد')}</span>`:''}</div>${L(s.next)}</div></div>`}
+function pipeMini(tr){tr=tr||DECS[0].tr;return `<div class="cd upstream">${x('Upstream','المنبع')}: <b>${x('Market / Data Truth','حقيقة السوق / البيانات')}</b> ${chip(...sc().sys.feed)} <span aria-hidden="true">${S.lang==='ar'?'←':'→'}</span> ${x('Decision / Execution Trace','مسار القرار / التنفيذ')}</div><div class="pipe" aria-label="${x('Decision / Execution Trace','مسار القرار / التنفيذ')}">${PIPE.map((p,i)=>`<div class="ps ${tr[i][0]==='off'?'nr':''}"><div class="pn">${L(p)}</div><div>${gl(tr[i][0])} ${L(tr[i][1])}</div></div>`).join('')}</div>`}
+function blockedExec(){return CAPS.filter(c=>c.exec&&c.st[0]!=='ok')}
+
+/* ================= COMMAND CENTER ================= */
+function decCol(){const s=sc();const h=`<div class="ptitle"><button data-go="decisions">${x('Latest decision','آخر قرار')}</button><span class="asof">${D('01:05')}</span></div>`;
+ if(s.dec.none)return `<div class="col">${h}<p class="quiet">${L(s.dec.none)}</p></div>`;
+ return `<div class="col">${h}<button class="row ${s.dec.unv?'unv':''} ${s.dec.stale?'stl':''}" data-dec="d1" style="grid-template-columns:1fr"><span class="v">${chip('warn',b('HOLD','انتظار'))} ${id('DEMO-PAIR-A')} ${s.dec.unv?chip('unver','unverified'):''} ${s.dec.stale?chip('stale','stale'):''}</span></button>${pipeMini()}<div class="sec small">${x('Why: regime below prior threshold','السبب: نظام السوق أدنى من عتبة الاحتمال المسبق')}</div></div>`}
+function riskCol(){const s=sc(),st=s.risk.stale;
+ return `<div class="col ${st?'stl':''}"><div class="ptitle"><button data-go="risk">${x('Risk & exposure','المخاطر والانكشاف')}</button>${st?chip('stale','stale'):''}</div>
+ <div class="sec small">${x('Exposure','الانكشاف')}</div><div class="big num">18% <span class="muted" style="font-size:13px">/ 40% ${x('cap','الحد')}</span></div><div class="bar"><i style="width:45%"></i></div>
+ ${row(x('Daily loss','الخسارة اليومية'),`${tm('0.4%')} <span class="a">/ 2.0%</span>`)}${row(x('Vetoes (24h)','الاعتراضات (24 س)'),tm('3'))}${row(x('Real money','المال الحقيقي'),chip('blocked','blocked'),{insp:'cap:6'})}</div>`}
+function posCol(){const s=sc();const bl=blockedExec();
+ return `<div class="col"><div class="ptitle"><button data-go="trades">${x('Open positions','المراكز المفتوحة')}</button></div>
+ <div class="sec">${s.pos.length?x(`${s.pos.length} open`,`${s.pos.length} مفتوح`):x('None open','لا مراكز مفتوحة')}</div>
+ ${s.pos.map(k=>{const p=POS[k];return `<button class="row" data-insp="pos:${k}" style="grid-template-columns:1fr"><span class="v">${id(p.pair)} · ${L(p.side)} · ${x('risk','مخاطرة')} ${tm(p.risk)} ${s.posUnv?chip('unver','unverified'):chip('ok',b('Verified','متحقق'))}</span></button>`}).join('')}</div>`}
+function incSummary(){const o=openIncs();
+ return o.length?o.map(i=>`<button class="exrow" data-inc="${i.id}">${gl(i.s==='recovering'?'rec':'inc')}<b>${id(i.id)}</b><span>${L(i.title)}</span><span class="ol">${x('Open','فتح')}</span></button>`).join(''):`<p class="quiet">${gl('ok')} ${x('None open.','لا حوادث مفتوحة.')} <span class="muted">${x('Last closed','آخر إغلاق')} ${D('14:31')}</span></p>`}
+function command(){const s=sc();const exc=Object.keys(s.dims).filter(k=>s.dims[k][0]!=='ok');
+ return `${bannerHTML()}
+ <section class="sit" aria-label="${x('Situation','الموقف')}"><div class="vl"><p class="vs">${L(s.verdict)}</p><p class="asof">${x('Derived','مشتق')} ${D(s.now)} · ${x('from 6 sources','من 6 مصادر')}</p></div>${slots()}</section>
+ ${projectNow()}
+ <h2 class="bandlabel">${x('Trading now','التداول الآن')}</h2>
+ <section class="band c32">${decCol()}${riskCol()}${posCol()}</section>
+ ${activeCaps()}
+ <h2 class="bandlabel">${x('Attention','ما يستدعي الانتباه')}</h2>
+ <section class="band c2"><div class="col"><div class="ptitle"><button data-go="incidents">${x('Incidents','الحوادث')}</button></div>${incSummary()}</div>
+ <div class="col"><div class="ptitle"><span>${x('Exceptions','الاستثناءات')}</span><span class="asof">${x('only what is not healthy','غير السليم فقط')}</span></div>${exc.length?exc.map(k=>`<button class="exrow" data-insp="${k}">${gl(s.dims[k][0])}<b>${L(DIMN[k])}</b><span>${L(s.exc[k]||b('Not healthy; open for detail.','غير سليم؛ افتح للتفاصيل.'))}</span><span class="ol">${x('Open','فتح')}</span></button>`).join(''):`<p class="quiet">${gl('ok')} ${x('None. All six dimensions are within budget; the Truth Strip is the verdict.','لا يوجد. الأبعاد الستة ضمن الميزانية؛ شريط الحقيقة هو الحكم.')}</p>`}</div></section>
+ <h2 class="bandlabel">${x('Since last governed checkpoint','منذ آخر نقطة تحقق محكومة')}</h2>
+ <section class="band c1"><div class="col">${timeline(sinceCk().slice(-5),true)}</div></section>
+ ${viewerChip()}
+ <section class="band c1 perf"><div class="col"><div class="ptitle"><span>${x('Performance','الأداء')}</span><span class="cap">${x('P&L does not decide the P2 outcome and is not used to judge system health.','الربح والخسارة لا يحددان نتيجة P2 ولا يُستخدمان للحكم على سلامة النظام.')}</span></div><span class="sec">${x('Prospective paper edge','الأفضلية الورقية المستقبلية')} ${chip('off',b('Not evaluated','لم تُقيَّم'))}</span></div></section>`}
+
+/* ================= PROJECT & CONTINUITY ================= */
+function kv(label,arr){return `<span class="k">${label}</span><span>${arr.length?`<ul class="kl">${arr.map(a=>`<li>${L(a)}</li>`).join('')}</ul>`:`<span class="muted">${x('None','لا يوجد')}</span>`}</span>`}
+function resumeBlock(){const s=sc();const forb=FORBID.concat(s.extraForbid);
+ return `<section class="resume" aria-label="${x('Resume from here','استأنف من هنا')}"><div class="rh"><h2>${x('Resume from here','استأنف من هنا')}</h2><span class="asof">${x('derived','مشتق')} ${D(s.now)}</span></div>
+ <div class="rv"><p class="vs" style="margin:0">${L(s.verdict)}</p></div>
+ <div class="rgrid"><span class="k">${x('Last governed checkpoint','آخر نقطة تحقق محكومة')}</span><span>${L(s.lgc)}</span><span class="k">${x('Last healthy observation','آخر رصد سليم')}</span><span>${L(s.lho)}</span>
+ ${kv(chip('ok',b('Known','معروف')),s.known)}${kv(chip('unk',b('Unknown','غير معروف')),s.unknown)}${kv(chip('warn',b('Affected','متأثر')),s.affected)}${kv(chip('unver',b('Unverified','غير متحقق')),s.unverified)}</div>
+ ${slots()}
+ <div class="forb"><span class="k sec">${x('Forbidden now','ممنوع الآن')}</span><ul>${forb.map(f=>`<li>${L(f)}</li>`).join('')}</ul></div>
+ <div class="ract"><button class="btn2" id="copybrief">${x('Copy resume brief for a new session','نسخ ملخص الاستئناف لجلسة جديدة')}</button></div>${S.briefFail?`<pre class="brief" tabindex="0" aria-label="${x('Resume brief, select to copy','ملخص الاستئناف، حدده للنسخ')}">${esc(brief())}</pre>`:''}</section>`}
+function continuity(){const s=sc();
+ const ret=S.returned?`<div class="notice why">${gl('info')}<span><b>${x('Why you are here:','لماذا أنت هنا:')}</b> ${sigText(s)}</span><button data-go="command">${x('Go to Command Center','الانتقال إلى مركز التحكم')}</button></div>`:'';
+ const cps=`<h2 class="bandlabel">${x('Checkpoints','نقاط التحقق')}</h2><section class="band c3 cps">
+ <div class="col"><div class="sec small">${x('Last governed checkpoint','آخر نقطة تحقق محكومة')}</div><div class="big">${L(s.lgc)}</div><div class="cd">${x('source: governance record · does not go stale','المصدر: سجل الحوكمة · لا يتقادم')}</div></div>
+ <div class="col"><div class="sec small">${x('Last healthy observation','آخر رصد سليم')}</div><div class="big">${L(s.lho)}</div><div class="cd">${x('source: operational observations','المصدر: الأرصاد التشغيلية')}</div></div>
+ <div class="col"><div class="sec small">${x('Current','الحالي')}</div><div class="big">${L(s.nowObs)}</div><div class="cd">${x('derived now from 6 sources','مشتق الآن من 6 مصادر')}</div></div></section>`;
+ const gm=`<h2 class="bandlabel">${x('Stage & gate map','خريطة المراحل والبوابات')}</h2><section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Stage','المرحلة')}</th><th>${x('State','الحالة')}</th><th>${x('Evidence source','مصدر الدليل')}</th></tr></thead><tbody>
+ <tr><td><b>P1</b></td><td>${chip('ok',b('Closed · PASS','مغلقة · ناجحة'))}</td><td class="sec">${id('DEMO-P1-CLOSURE')}</td></tr>
+ <tr><td><b>P2</b></td><td>${chip(s.step===6?'ok':s.step===0?'info':'owner',LAD[s.step])}</td><td class="sec">${x('stage contract + ladder records','عقد المرحلة + سجلات السلّم')}</td></tr>
+ <tr><td></td><td>${chip('ok',b('A15 restart / continuity · PASS','A15 إعادة التشغيل / الاستمرارية · ناجح'))} ${s.step>=5?chip('ok',b('A15 final closure · done','A15 الإغلاق النهائي · منجز')):chip('wait',b('A15 final closure · not done','A15 الإغلاق النهائي · لم يُنجز'))}</td><td class="sec">${x('governed test records','سجلات الاختبار المحكومة')}</td></tr>
+ <tr><td><b>P3</b></td><td>${chip('na',b('Paper Beta Release · design allowed · code not authorized','إصدار البيتا الورقي · التصميم مسموح · الكود غير مصرّح'))}</td><td class="sec">${x('Owner decision pending','قرار المالك معلّق')}</td></tr>
+ <tr><td><b>POST-BETA</b></td><td>${chip('na',b('Controlled-Live Readiness · not authorized','جاهزية التشغيل الحي المضبوط · غير مصرّح'))}</td><td class="sec">${x('Separate future Owner authorization required','يتطلب تفويضًا مستقبليًا منفصلًا من المالك')}</td></tr></tbody></table></div></section>`;
+ return `${bannerHTML()}${ret}${ladder(true)}${outcomeHTML()}${resumeBlock()}${lawPanel()}${cps}<h2 class="bandlabel">${x('Since last governed checkpoint','منذ آخر نقطة تحقق محكومة')}</h2><section class="band c1"><div class="col">${timeline(sinceCk())}</div></section>${gm}${viewerChip()}`}
+
+/* ================= INCIDENTS ================= */
+const ISTATE={open:['inc','open'],recovering:['rec','recovering'],resolved:['ok','resolved']};
+function incidents(){const s=sc();
+ if(S.inc){const i=s.incidents.find(v=>v.id===S.inc)||s.incidents[0];return incidentPage(i)}
+ return `${bannerHTML()}<section class="band c1"><div class="col twrap"><table><thead><tr><th>ID</th><th>${x('Title','العنوان')}</th><th>${x('State','الحالة')}</th><th>${x('Opened','فُتحت')}</th></tr></thead><tbody>${s.incidents.map(i=>`<tr class="click" data-inc="${i.id}" tabindex="0"><td>${id(i.id)}</td><td>${L(i.title)}</td><td>${chip(...ISTATE[i.s])}</td><td>${D(i.when)}</td></tr>`).join('')}</tbody></table></div></section>`}
+function incidentPage(i){const f=i.f;
+ const F=[[chip('ok',b('Known','معروف')),f.known],[x('Detected by','طريقة الرصد'),f.detect],[chip('unk',b('Unknown','غير معروف')),f.unknown],[chip('warn',b('Affected','متأثر')),f.affected],[chip('unver',b('Unverified','غير متحقق')),f.unverified],[x('What remained safe','ما بقي آمنًا'),f.safe],[x('Recovery','التعافي'),f.recovery],[x('Reconciliation required?','هل تلزم المطابقة؟'),f.reconReq],[`${x('Next action','الإجراء التالي')} <span class="fc">${x('derived from contract','مستمد من العقد')}</span>`,f.next],[x('Current state','الحالة الحالية'),f.state],[x('Owner','المالك'),f.owner],['Claude',f.claude],[x('Evidence','الأدلة'),f.evidence]].filter(r=>r[1]);
+ return `${bannerHTML()}<div class="shead"><button class="btn2" data-inc="">${S.lang==='ar'?'→':'←'} ${x('Incidents','الحوادث')}</button><h1 style="font-size:18px">${id(i.id)} · ${L(i.title)}</h1>${chip(...ISTATE[i.s])}<span class="asof">${x('opened','فُتحت')} ${D(i.when)}</span></div>
+ <section class="band c1"><div class="col"><div class="rgrid" style="padding:0;grid-template-columns:220px 1fr">${F.map(r=>`<span class="k">${r[0]}</span><span>${L(r[1])}</span>`).join('')}</div></div></section>
+ <p class="cd" style="margin:-8px 0 16px">${x('Only what evidence proves is stated as known. Causes and outcomes that are not proven are listed as unknown.','لا يُذكر كمعروف إلا ما تثبته الأدلة. الأسباب والنتائج غير المثبتة تُدرج كغير معروفة.')}</p>
+ ${i.id==='DEMO-INC-015'?`<h2 class="bandlabel">${x('Incident timeline','الخط الزمني للحادثة')}</h2><section class="band c1"><div class="col">${timeline(sc().events.slice(-4))}</div></section>`:''}
+ <section class="band c1 ackz"><div class="col"><div><b>${x('Acknowledge incident','الإقرار بالحادثة')}</b> ${chip('off','notImpl')} ${chip('na','na')}<p class="sec small" style="margin:6px 0 0;max-width:62ch">${x('Proposed operator action. Its permission, audit record, effect on incident state and persistence will be set by the P3 operator-control contract. Nothing happens here.','إجراء تشغيلي مقترح. تُحدَّد صلاحيته وسجل تدقيقه وأثره على حالة الحادثة واستمراريته في عقد التحكم التشغيلي لـ P3. لا يحدث شيء هنا.')}</p></div><button class="btn2" aria-disabled="true" id="ack">${x('Acknowledge','إقرار')}</button></div></section>`}
+
+/* ================= OPERATIONS ================= */
+const ACTS=[
+ [b('Safe Stop','الإيقاف الآمن'),b('Stop new entries and bring the runtime to its safe state.','إيقاف الصفقات الجديدة ونقل التشغيل إلى حالته الآمنة.'),b('P3 Operator Control Contract','عقد التحكم التشغيلي لـ P3')],
+ [b('Resume paper trading','استئناف التداول الورقي'),b('Leave the safe state and allow paper entries again.','الخروج من الحالة الآمنة والسماح بالصفقات الورقية مجددًا.'),b('P3 Operator Control Contract','عقد التحكم التشغيلي لـ P3')],
+ [b('Run reconciliation','تشغيل المطابقة'),b('Run the contract’s reconciliation outside its schedule.','تشغيل مطابقة العقد خارج جدولها.'),b('P3 Operator Control Contract','عقد التحكم التشغيلي لـ P3')],
+ [b('Acknowledge incident','الإقرار بالحادثة'),b('Record that the Owner has seen an incident. Effect on incident state not defined until the contract.','تسجيل أن المالك اطلع على الحادثة. أثره على حالة الحادثة غير محدد حتى العقد.'),b('P3 Operator Control Contract','عقد التحكم التشغيلي لـ P3')],
+ [b('Verify latest backup','التحقق من آخر نسخة احتياطية'),b('Check the latest backup can be read and matches its manifest.','التحقق من أن آخر نسخة قابلة للقراءة ومطابقة لبيانها.'),b('P3 Operator Control Contract','عقد التحكم التشغيلي لـ P3')],
+ [b('Restore from a recovery point','الاستعادة من نقطة تعافٍ'),b('Replace current state with a verified recovery point.','استبدال الحالة الحالية بنقطة تعافٍ متحقق منها.'),b('Owner + P3 Operator Control Contract','المالك + عقد التحكم التشغيلي لـ P3')]];
+function operations(){const s=sc(),o=s.ops;const rec=o.rec;
+ const ov=[[x('Runtime','التشغيل'),chip(...o.runtime)],[x('Safe state','الحالة الآمنة'),chip(...o.safe)],[x('Recovery','التعافي'),chip(...o.recovery)],[x('Backup','النسخ الاحتياطي'),chip('unk','unknown')],[x('Restore','الاستعادة'),chip('unk','unknown')]];
+ const sub=(k,l)=>row(l,rec?chip(...rec[k]):chip('off','none'));
+ return `${bannerHTML()}
+ <section class="ovl" aria-label="${x('Operations overview','نظرة عامة على العمليات')}">${ov.map(v=>`<span><span class="k">${v[0]}</span>${v[1]}</span>`).join('')}</section>
+ <section class="band opsg">
+  <div class="col"><div class="ptitle"><span>${x('Runtime','التشغيل')}</span></div>${row(x('Operational state','الحالة التشغيلية'),chip(...o.runtime),{insp:'runtime'})}${row(x('Safe-state status','حالة الوضع الآمن'),chip(...o.safe))}${row(x('Recovery state','حالة التعافي'),chip(...o.recovery))}</div>
+  <div class="col"><div class="ptitle"><span>${x('Backup','النسخ الاحتياطي')}</span><span class="asof">${x('no source inventoried yet','لم يُجرد أي مصدر بعد')}</span></div>${row(x('Backup health','سلامة النسخ'),chip('unk','unknown'))}${row(x('Last backup','آخر نسخة'),chip('unk','unknown'))}${row(x('Last verified backup','آخر نسخة متحقق منها'),chip('unk','unknown'))}${row(x('Retention / readiness','الاحتفاظ / الجاهزية'),chip('unk','unknown'))}</div>
+  <div class="col"><div class="ptitle"><span>${x('Restore','الاستعادة')}</span></div>${row(x('Restore readiness','جاهزية الاستعادة'),chip('unk','unknown'))}${row(x('Recovery points','نقاط التعافي'),chip('unk','noneListed'))}${row(x('Last successful restore proof','آخر إثبات استعادة ناجحة'),chip('unk','notRecorded'))}</div>
+  <div class="col"><div class="ptitle"><span>${x('Recovery','التعافي')}</span></div>${row(x('Current status','الحالة الحالية'),chip(...o.recovery))}${sub('host',x('Host recovery','تعافي الخادم'))}${sub('runtime',x('Runtime recovery','تعافي التشغيل'))}${sub('evidence',x('Evidence recovery','تعافي الأدلة'))}${sub('recon',x('Reconciliation after recovery','المطابقة بعد التعافي'))}${row(x('Unresolved conditions','حالات غير محلولة'),tm(String(o.unresolved)))}${row(x('Recovery history','سجل التعافي'),`<span class="a">${L(o.hist)}</span>`)}</div>
+ </section>
+ <p class="cd" style="margin:-8px 0 16px">${x('Backup and restore show Unknown on purpose: no source has been inventoried, and a designed “healthy” would be invented truth. Recovery closes only when every sub-row is verified.','تظهر النسخ الاحتياطي والاستعادة كغير معروفة عمدًا: لم يُجرد أي مصدر، وإظهار «سليم» مصمَّم سيكون حقيقة مختلقة. يُغلق التعافي فقط عندما يُتحقق من كل بند فرعي.')}</p>
+ <h2 class="bandlabel">${x('Authorized actions · future P3','الإجراءات المصرّح بها · مستقبلًا في P3')}</h2>
+ <section class="band c1"><div class="col">${ACTS.map(a=>`<div class="op"><div><div><b>${L(a[0])}</b></div><div class="od">${L(a[1])}</div><div class="od">${x('Requires','يتطلب')}: ${L(a[2])}</div></div><div>${chip('off','notImpl')} ${chip('na','na')}</div></div>`).join('')}</div></section>
+ <section class="emerg" aria-label="${x('Emergency','الطوارئ')}"><h2>${x('Emergency · Kill Switch','الطوارئ · مفتاح الإيقاف الكلي')}</h2>
+ <p class="sec small" style="margin:0">${x('Separate from Safe Stop. States its consequence before any confirmation. Bound to authority. Cannot be triggered accidentally: no shortcut, no single click, not on mobile.','منفصل عن الإيقاف الآمن. يوضّح عاقبته قبل أي تأكيد. مقيّد بالصلاحية. لا يمكن تفعيله بالخطأ: لا اختصار، ولا نقرة واحدة، ولا على الجوال.')}</p>
+ <ul><li>${x('Consequence (to be defined by contract): all runtime activity stops; recovery requires a governed restart.','العاقبة (يحددها العقد): يتوقف كل نشاط التشغيل؛ ويتطلب التعافي إعادة تشغيل محكومة.')}</li><li>${x('Interaction candidates, not frozen: typed phrase, hold duration, number of confirmation screens.','مرشحات تفاعل غير مجمّدة: عبارة مكتوبة، ومدة ضغط، وعدد شاشات التأكيد.')}</li></ul>
+ <button class="btn2" aria-disabled="true" id="kill">${x('Kill Switch','مفتاح الإيقاف الكلي')} · ${x('not authorized','غير مصرّح')}</button></section>`}
+
+function outcomeHTML(){const s=sc();if(!s.outcome)return'';return `<section class="sit" style="padding:14px 20px"><span class="sec">${x('P2 closure outcome','نتيجة إغلاق P2')}</span> ${chip(...s.outcome)} <span class="cd">${x('from the closure record · separate from closure state','من سجل الإغلاق · منفصلة عن حالة الإغلاق')}</span></section>`}
+function lawPanel(){const s=sc(),l=s.law;const R=[['capProps',b('Capability properties','خصائص القدرة')],['lifecycle',b('Natural completed trade lifecycle','دورة صفقة مكتملة طبيعيًا')],['recon',b('Reconciliation','المطابقة')],['integrity',b('Evidence integrity','سلامة الأدلة')],['identity',b('Source / cohort / lane identity','هوية المصدر / الدفعة / المسار')],['safe',b('Safe closure','إغلاق آمن')],['records',b('Archive / digest / closure records','سجلات الأرشيف / البصمة / الإغلاق')]];
+ return `<h2 class="bandlabel">${x('P2 terminal law · what PASS requires','قانون إنهاء P2 · ما تتطلبه النتيجة الناجحة')}</h2><section class="band c2"><div class="col">${R.slice(0,4).map(r=>row(L(r[1]),chip(...l[r[0]]))).join('')}</div><div class="col">${R.slice(4).map(r=>row(L(r[1]),chip(...l[r[0]]))).join('')}${row(x('Prospective paper edge','الأفضلية الورقية المستقبلية'),chip('off',b('Not evaluated','لم تُقيَّم')))}<p class="cd">${x('P&L does not decide PASS or FAIL. Without a natural lifecycle by the hard cap, the truthful outcome is INCONCLUSIVE / INSUFFICIENT. Values are DEMO.','الربح والخسارة لا يحددان النجاح أو الفشل. إذا لم تُرصد دورة طبيعية حتى الحد الأقصى فالنتيجة الصادقة غير حاسمة / غير كافية. القيم تجريبية.')}</p></div></section>`}
+
+/* ===== v0.2.3 — Shape Lock pre-freeze corrections (views) ===== */
+function nextGate(s){const k=S.scenario;
+ if(k==='closed')return b('P3 authorization, after P3-PLN-00 and P3-PLN-01','تفويض P3، بعد P3-PLN-00 وP3-PLN-01');
+ if(k==='closedFail')return b('Failure authority resolution','حسم مرجعية الفشل');
+ if(k==='closedInc')return b('Owner choice of the governed path','اختيار المالك للمسار المحكوم');
+ if(s.step===4)return b('OWNER_MERGE_REQUIRED — now','مطلوب دمج المالك — الآن');
+ if(s.step===5)return b('None until P2 is closed','لا شيء حتى إغلاق P2');
+ return b('OWNER_MERGE_REQUIRED, after the closure transaction','مطلوب دمج المالك، بعد معاملة الإغلاق')}
+function projectNow(){const s=sc();const sub=s.step===3&&s.sub>=0?SUBS[s.sub]:null;
+ return `<h2 class="bandlabel">${x('Project now','المشروع الآن')}</h2><section class="band c1"><div class="col">
+ <div class="pnow"><span>${chip('ok',b('P1 closed · PASS','P1 مغلقة · ناجحة'))}</span><span>${chip(s.step===6?'ok':s.step===4?'owner':'info',b(`P2 · ${LAD[s.step].en}`,`P2 · ${LAD[s.step].ar}`))}</span><span>${chip('na',b('P3 not authorized','P3 غير مصرّح بها'))}</span><span class="sec gate">${x('Next Owner gate','بوابة المالك التالية')}: <b>${L(nextGate(s))}</b></span></div>
+ ${ladder(false)}
+ <div class="cd" style="margin-top:8px">${x('Last governed checkpoint','آخر نقطة تحقق محكومة')}: ${L(s.lgc)}${sub?` · ${x('Closure sub-step','خطوة الإغلاق الفرعية')}: ${L(sub)}`:''}${s.outcome?` · ${x('Outcome','النتيجة')} ${chip(...s.outcome)}`:''} · <button class="lnk" data-go="continuity">${x('Open Project & Continuity','فتح المشروع والاستمرارية')}</button></div></div></section>`}
+function activeCaps(){const pick=[0,1,2,3,6].map(i=>CAPS[i]);const unk=CAPS.filter(c=>c.st[0]==='unk').length;
+ return `<h2 class="bandlabel">${x('Active capabilities','القدرات الفعّالة')}</h2><section class="band c1"><div class="col"><div class="pnow">${pick.map((c,i)=>`<button class="capb" data-insp="cap:${[0,1,2,3,6][i]}">${L(c.k)} ${chip(...c.st)}</button>`).join('')}${unk?`<span>${chip('unk',b(`${unk} unknown — treated as blocked`,`${unk} غير معروف — يُعامل كمحظور`))}</span>`:''}<button class="lnk" data-go="risk">${x('Full matrix in Risk & Authority','المصفوفة الكاملة في المخاطر والصلاحيات')}</button></div></div></section>`}
+function closedTrades(){const s=sc(),lc=s.law.lifecycle[0];
+ const body=lc==='ok'?`<table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th class="r">${x('Entry','الدخول')}</th><th class="r">${x('Exit','الخروج')}</th><th>${x('Exit reason','سبب الخروج')}</th><th>${x('Reconciliation','المطابقة')}</th><th>${x('Verified outcome','النتيجة المتحقق منها')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody><tr><td>${id('DEMO-PAIR-C')}</td><td>${x('Long','شراء')}</td><td class="r">${id('DEMO-PRICE')}</td><td class="r">${id('DEMO-PRICE')}</td><td>${x('Exit contract: target','عقد الخروج: الهدف')}</td><td>${chip('ok','pass')}</td><td>${chip('ok','done')}</td><td class="r">${id('DEMO')}</td></tr></tbody></table>`
+  :lc==='unver'?`<p class="quiet">${chip('unver','asRecord')}</p>`:`<p class="quiet">${chip('off','noData')} ${x('No completed trade lifecycle yet.','لا توجد دورة صفقة مكتملة بعد.')}</p>`;
+ return `<h2 class="bandlabel">${x('Closed','المغلقة')}</h2><section class="band c1"><div class="col twrap">${body}</div></section>`}
+function netState(){return S.scenario==='degraded'?['warn','degraded']:(sc().sys.api[0]==='unk'||sc().sys.api[0]==='stale')?[sc().sys.api[0],'unknown']:['ok',b('OK','سليم')]}
+function awareness(){return `<section class="band c1"><div class="col"><div class="ptitle"><span>${x('Owner awareness','إطلاع المالك')}</span><span class="asof">P3-PLN-06</span></div>${row(x('Off-host observation','الرصد من خارج الجهاز'),chip('off','notImpl'))}${row(x('Owner notification','تنبيه المالك'),chip('off','notImpl'))}<p class="cd">${x('A host that is down cannot report its own absence; this needs something that is not on the host.','الجهاز المتوقف لا يستطيع الإبلاغ عن غيابه؛ يحتاج ذلك شيئًا خارج الجهاز.')}</p></div></section>`}
+function syncCaps(){const off=sc().dims.runtime[0]==='off';const st=off?['off',b('Stopped · governed shutdown','متوقف · إيقاف محكوم')]:['ok','allowed'];CAPS[0].st=st;CAPS[1].st=st}
+function expoTxt(){const s=sc();if(S.scenario==='closedFail')return chip('unver','asRecord');return s.pos.length||s.step<3?tm('18% / 40%'):tm('0% / 40%')}
+function riskCol(){const s=sc(),st=s.risk.stale;const h=`<div class="ptitle"><button data-go="risk">${x('Risk & exposure','المخاطر والانكشاف')}</button>${st?chip('stale','stale'):''}</div>`;
+ if(S.scenario==='closedFail')return `<div class="col">${h}<p class="quiet">${chip('unver','asRecord')}</p></div>`;
+ if(s.step>=3&&!s.pos.length)return `<div class="col">${h}<div class="sec small">${x('Exposure','الانكشاف')}</div><div class="big num">0% <span class="muted" style="font-size:13px">/ 40% ${x('cap','الحد')}</span></div><p class="cd">${x('No open positions after the governed shutdown.','لا مراكز مفتوحة بعد الإيقاف المحكوم.')}</p></div>`;
+ return `<div class="col ${st?'stl':''}">${h}<div class="sec small">${x('Exposure','الانكشاف')}</div><div class="big num">18% <span class="muted" style="font-size:13px">/ 40% ${x('cap','الحد')}</span></div><div class="bar"><i style="width:45%"></i></div>${row(x('Daily loss','الخسارة اليومية'),`${tm('0.4%')} <span class="a">/ 2.0%</span>`)}${row(x('Vetoes (24h)','الاعتراضات (24 س)'),tm('3'))}</div>`}
+function posCol(){const s=sc();const h=`<div class="ptitle"><button data-go="trades">${x('Open positions','المراكز المفتوحة')}</button></div>`;
+ if(S.scenario==='closedFail')return `<div class="col">${h}<p class="quiet">${chip('unver','asRecord')}</p></div>`;
+ return `<div class="col">${h}<div class="sec">${s.pos.length?x(`${s.pos.length} open`,`${s.pos.length} مفتوح`):x('None open','لا مراكز مفتوحة')}</div>${s.pos.map(k=>{const p=POS[k];return `<button class="row" data-insp="pos:${k}" style="grid-template-columns:1fr"><span class="v">${id(p.pair)} · ${L(p.side)} · ${x('risk','مخاطرة')} ${tm(p.risk)} ${s.posUnv?chip('unver','unverified'):chip('ok',b('Verified','متحقق'))}</span></button>`}).join('')}</div>`}
+
+/* ================= TRADING & GOVERNANCE SCREENS ================= */
+function candles(){let seed=7;const r=()=>(seed=(seed*9301+49297)%233280)/233280;let p=100,out='';const n=56,w=880,h=260,cw=w/n;const bars=[];
+ for(let i=0;i<n;i++){const o=p,c=o+(r()-.48)*3,hi=Math.max(o,c)+r()*1.6,lo=Math.min(o,c)-r()*1.6;bars.push([o,c,hi,lo]);p=c}
+ const mx=Math.max(...bars.map(v=>v[2])),mn=Math.min(...bars.map(v=>v[3])),Y=v=>12+(mx-v)/(mx-mn)*(h-24);
+ for(let g=0;g<5;g++){const y=12+g*(h-24)/4;out+=`<line x1="0" x2="${w}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`}
+ bars.forEach((v,i)=>{const X=i*cw+cw/2,up=v[1]>=v[0];out+=`<line x1="${X}" x2="${X}" y1="${Y(v[2])}" y2="${Y(v[3])}" stroke="var(--tx3)"/><rect x="${X-cw*.3}" y="${Y(Math.max(v[0],v[1]))}" width="${cw*.6}" height="${Math.max(1,Math.abs(Y(v[0])-Y(v[1])))}" fill="${up?'none':'var(--tx3)'}" stroke="${up?'var(--tx2)':'var(--tx3)'}"/>`});
+ const mi=50,mX=mi*cw+cw/2;out+=`<path d="M${mX-6} ${h-4} L${mX+6} ${h-4} L${mX} ${h-14}Z" fill="var(--warn)"/><text x="${mX+10}" y="${h-6}" fill="var(--tx2)" font-size="11" font-family="var(--sans)">HOLD</text>`;
+ return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${x('Candle chart, DEMO data','رسم الشموع، بيانات تجريبية')}">${out}</svg>`}
+function market(){
+ return `${bannerHTML()}${shead('market')}
+ <section class="band c1"><div class="col">
+ <div class="capstrip"><span class="sec">${x('Pair','الزوج')}</span><span class="tfs">${MKT.pairs.map(p=>`<button data-pair="${p}" aria-pressed="${S.pair===p}">${id(p)}</button>`).join('')}</span><span class="sep"></span>
+ <span class="sec">${x('Timeframe','الإطار الزمني')}</span><span class="tfs">${MKT.timeframes.map(t=>`<button data-tf="${t}" aria-pressed="${S.tf===t}">${tm(t)}</button>`).join('')}</span><span class="mocktag">DEMO</span></div>
+ <p class="cd" style="margin:0 0 8px">${x('Pairs, timeframes and data capabilities are rendered from the market capability contract. These are DEMO values, not product requirements.','الأزواج والأطر الزمنية وقدرات البيانات تُعرض من عقد قدرات السوق. هذه قيم تجريبية وليست متطلبات للمنتج.')}</p>
+ ${candles()}</div></section>
+ <section class="band c2"><div class="col"><div class="ptitle"><span>${x('Market / Data Truth · capabilities','حقيقة السوق / البيانات · القدرات')}</span><span class="asof">${x('upstream of the Decision / Execution Trace','منبع مسار القرار / التنفيذ')}</span></div>${MKT.caps.map(c=>row(L(c[0]),chip(c[1],c[2]))).join('')}</div>
+ <div class="col"><div class="ptitle"><span>${x('Context','السياق')}</span></div>${row(x('Data age','عمر البيانات'),chip(...sc().sys.feed))}${row(x('Regime','نظام السوق'),chip('unk','unkInv'))}${row(x('Volatility','التذبذب'),chip('unk','unkInv'))}${row(x('Liquidity','السيولة'),chip('unk','unkInv'))}${row(x('Higher-timeframe context','سياق الإطار الأعلى'),chip('unk','unkInv'))}<p class="cd">${x('Neutral candles by design: colour is reserved for system state.','شموع محايدة عمدًا: اللون محجوز لحالة النظام.')}</p></div></section>`}
+function decisions(){const d=DECS.find(v=>v.id===S.dec)||DECS[0];const s=sc();
+ return `${bannerHTML()}${shead('decisions')}<section class="band" style="grid-template-columns:4fr 8fr"><div class="col twrap"><table><thead><tr><th>${x('Time','الوقت')}</th><th>${x('Pair','الزوج')}</th><th>${x('Outcome','النتيجة')}</th></tr></thead><tbody>${DECS.map(v=>`<tr class="click" data-dec="${v.id}" tabindex="0" ${v.id===d.id?'style="background:var(--raised)"':''}><td>${tm(v.t)}</td><td>${id(v.p)}</td><td>${chip(...v.o)}</td></tr>`).join('')}</tbody></table></div>
+ <div class="col"><div class="ptitle"><span>${x('Decision / Execution Trace','مسار القرار / التنفيذ')} ${id(d.p)} · ${D(d.t)}</span>${s.dec.unv&&d.id==='d1'?chip('unver','unverified'):''}</div>
+ ${PIPE.map((p,i)=>`<div class="row" style="grid-template-columns:24px 150px 1fr;${d.tr[i][0]==='off'?'opacity:.55':''}"><span class="muted num">${i+1}</span><span class="k">${L(p)}</span><span class="v">${gl(d.tr[i][0])} ${L(d.tr[i][1])}${d.tr[i][0]==='off'?` <span class="a">${x('not reached','لم تُبلغ')}</span>`:''}</span></div>`).join('')}
+ <p class="sec small">${x('Reason','السبب')}: ${L(d.r)}</p>${row(x('Market / Data Truth context','سياق حقيقة السوق / البيانات'),chip(...s.sys.feed))}${row(x('Evidence refs','مراجع الأدلة'),id('DEMO-DEC-'+d.id.toUpperCase()))}${row(x('Runtime / source identity','هوية التشغيل / المصدر'),id('DEMO-RUNTIME-A1B2C3'))}<p class="cd">${x('Per-stage outputs: UNKNOWN UNTIL SOURCE INVENTORY (depends on what the runtime logs).','مخرجات كل مرحلة: غير معروفة حتى جرد المصادر (تعتمد على ما يسجله التشغيل).')}</p></div></section>`}
+function trades(){const s=sc();const ex=CAPS.filter(c=>c.exec);
+ return `${bannerHTML()}${shead('trades')}
+ <div class="capstrip"><span class="sec">${x('Execution capabilities','قدرات التنفيذ')}:</span>${ex.map(c=>`${L(c.k)} ${chip(...c.st)}`).join(' ')}<span class="cd">${x('rows supplied by authority truth','الصفوف مصدرها حقيقة الصلاحيات')}</span></div>
+ <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th>${x('Verification','التحقق')}</th><th>${x('Size','الحجم')}</th><th class="r">${x('Entry','الدخول')}</th><th>${x('Risk at entry','المخاطرة عند الدخول')}</th><th>${x('Exit contract','عقد الخروج')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody>
+ ${s.pos.length?s.pos.map(k=>{const p=POS[k];return `<tr class="click" data-insp="pos:${k}" tabindex="0"><td>${id(p.pair)}</td><td>${L(p.side)}</td><td>${s.posUnv?chip('unver','unverified'):chip('ok',b('Verified','متحقق'))}</td><td>${id(p.size)}</td><td class="r">${id(p.entry)}</td><td>${tm(p.risk)}</td><td>${L(p.exit)}</td><td class="r">${tm(p.pnl)}</td></tr>`}).join(''):`<tr><td colspan="8" class="sec">${x('No open positions.','لا مراكز مفتوحة.')}</td></tr>`}
+ </tbody></table></div></section>${closedTrades()}`}
+function risk(){
+ return `${bannerHTML()}${shead('risk')}
+ <section class="band c3"><div class="col"><div class="sec small">${x('Exposure','الانكشاف')}</div><div class="big num">18% <span class="muted" style="font-size:13px">/ 40%</span></div><div class="bar"><i style="width:45%"></i></div></div><div class="col">${row(x('Daily loss','الخسارة اليومية'),`${tm('0.4%')} <span class="a">/ 2.0%</span>`)}${row(x('Vetoes (24h)','الاعتراضات (24 س)'),tm('3'))}</div><div class="col">${row(x('Risk per trade','المخاطرة لكل صفقة'),tm('0.5%'))}${row(x('Limits source','مصدر الحدود'),id('DEMO-RISK-CONFIG'))}</div></section>
+ <h2 class="bandlabel">${x('Capability & Authority Matrix','مصفوفة القدرات والصلاحيات')}</h2>
+ <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Capability','القدرة')}</th><th>${x('State','الحالة')}</th><th>${x('Authority source','مصدر الصلاحية')}</th><th>${x('Since','منذ')}</th><th>${x('Expected relationship / preconditions','العلاقة المتوقعة / الشروط المسبقة')}</th></tr></thead><tbody>
+ ${CAPS.map((c,i)=>`<tr class="click" data-insp="cap:${i}" tabindex="0"><td>${typeof c.k==='string'?id(c.k):L(c.k)}</td><td>${chip(...c.st)}</td><td>${typeof c.src==='string'?id(c.src):L(c.src)}</td><td>${c.since==='—'?'—':id(c.since)}</td><td class="sec">${L(c.pre)}</td></tr>`).join('')}</tbody></table>
+ <p class="cd">${x('Rows come from authority truth, not from this layout. A new capability appears as a new row; an unreadable row shows Unknown and is treated as blocked.','الصفوف مصدرها حقيقة الصلاحيات لا هذا التصميم. تظهر أي قدرة جديدة كصف جديد؛ والصف غير المقروء يظهر غير معروف ويُعامل كمحظور.')}</p></div></section>`}
+function evidencep(){const s=sc(),f=s.checks.fail,p=s.checks.pending,d=s.dims.recon;
+ const rows=CHECKS.map((c,i)=>{let st=['ok','pass'];if(f&&i===1)st=['fail','fail'];if(p&&i>=14-p)st=['unver','pending'];if(s.viewStale)st=['stale','pass'];if(S.scenario==='unknown')st=['unk','unknown'];if(S.scenario==='closedFail')st=['unver','asRecord'];return{c,st}}).sort((a,z)=>(a.st[0]==='ok')-(z.st[0]==='ok'));
+ return `${bannerHTML()}${shead('evidencep')}<section class="sit"><div class="vl"><p class="vs">${x('Reconciliation','المطابقة')} ${chip(...d)}</p><p class="asof">${x('Run','التشغيل')} ${id('DEMO-RECON-RUN-07')}</p></div></section>
+ <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Check','الفحص')}</th><th>${x('Result','النتيجة')}</th><th>${x('Source','المصدر')}</th></tr></thead><tbody>${rows.map(r=>`<tr class="click" data-insp="recon" tabindex="0"><td>${L(r.c)}</td><td>${chip(...r.st)}</td><td class="sec">${x('reconciliation record','سجل المطابقة')}</td></tr>`).join('')}</tbody></table></div></section>`}
+function historyScr(){const s=sc();const F=[['all',b('All','الكل')],['decision',b('Decisions','القرارات')],['recon',b('Reconciliation','المطابقة')],['stage',b('Stage','المرحلة')],['system',b('System','النظام')]];
+ const evs=s.events.filter(e=>S.hist==='all'||e.gap||e.c===S.hist);
+ return `${bannerHTML()}${shead('history')}<div class="filters">${F.map(f=>`<button data-hist="${f[0]}" aria-pressed="${S.hist===f[0]}">${L(f[1])}</button>`).join('')}</div><section class="band c1"><div class="col">${timeline(evs)}</div></section>`}
+function system(){const y=sc().sys;
+ return `${bannerHTML()}${shead('system')}<section class="band c2"><div class="col"><div class="ptitle"><span>${x('Can stop trading','قد يوقف التداول')}</span></div>${row(x('Runtime','التشغيل'),chip(...sc().dims.runtime),{insp:'runtime'})}${row(x('Market feed','تغذية السوق'),chip(...y.feed))}${row(x('Exchange API','واجهة البورصة'),chip(...y.api))}${row(x('Network','الشبكة'),chip(...netState()))}${row(x('Clock','الساعة'),chip(...y.clock))}</div>
+ <div class="col"><div class="ptitle"><span>${x('Host','الخادم')}</span></div>${row(x('Host','الخادم'),chip(...y.host))}${row(x('Containers','الحاويات'),chip(...y.containers))}${row(x('Monitor','المراقبة'),chip(...y.monitor))}${row(x('Last boot','آخر إقلاع'),tm(y.boot))}${row(x('Boot ID','معرّف الإقلاع'),id('DEMO-BOOT-ID'))}${row(x('CPU / RAM / disk','المعالج / الذاكرة / القرص'),`${id('DEMO')} <span class="mocktag">DEMO</span>`)}${row(x('Timers','المؤقتات'),`${id('demo-window.timer')} ${chip('ok',b('Active','نشط'))}`)}</div></section>
+ <section class="band c1"><div class="col"><div class="ptitle"><span>${x('Build & identity','البناء والهوية')}</span></div>${row(x('Runtime source','مصدر التشغيل'),`${id('DEMO-RUNTIME-A1B2C3')} <span class="a">= ${x('pin','التثبيت')} ✓</span>`,{insp:'runtime'})}${row(x('Governance main','الفرع الرئيسي للحوكمة'),id('DEMO-MAIN-D4E5F6'))}${row(x('Relationship','العلاقة'),`${chip('ok',b('As declared','كما هو مُعلَن'))} <span class="a">${x('runtime pinned at activation; main may advance','التشغيل مثبّت عند التفعيل؛ ويجوز تقدم الفرع الرئيسي')}</span>`)}</div></section>${awareness()}`}
+function settings(){
+ const sig=[b('Significant absence','غياب طويل'),b('Meaningful events since last view','أحداث مهمة منذ آخر مشاهدة'),b('New incident','حادثة جديدة'),b('Host / runtime restart','إعادة تشغيل الخادم / التشغيل'),b('Owner gate opened','فتح بوابة المالك')];
+ return `${shead('settings')}<section class="band c2"><div class="col"><div class="ptitle"><span>${x('Return detection','رصد العودة')}</span><span class="asof">${x('viewer preference · UI only','تفضيل العارض · الواجهة فقط')}</span></div>${sig.map(v=>row(L(v),chip('ok',b('On','مفعّل')))).join('')}${row(x('Absence threshold','حد الغياب'),`${id('DEMO-THRESHOLD')}`)}<p class="cd">${x('These settings decide only whether Resume opens first. They never change what Resume says.','تحدد هذه الإعدادات فقط ما إذا كان الاستئناف يُفتح أولًا. ولا تغيّر أبدًا ما يقوله.')}</p></div>
+ <div class="col"><div class="ptitle"><span>${x('Display','العرض')}</span></div>${row(x('Language','اللغة'),x('English','العربية'))}${row(x('Theme','السمة'),x('Dark','داكنة'))}${row(x('Time display','عرض الوقت'),`${id('UTC')} + ${x('local','المحلي')}`)}${row(x('Density','الكثافة'),x('Comfortable','مريحة'))}${row(x('Inspector','المُفتِّش'),x('Auto: dock on wide screens','تلقائي: مثبّت على الشاشات العريضة'))}${row(x('Notifications','التنبيهات'),chip('off',b('Not implemented · P3-PLN-06','غير منفّذ · P3-PLN-06')))}${row(x('Remote access','الوصول عن بُعد'),chip('off',b('Not implemented · P3-PLN-06','غير منفّذ · P3-PLN-06')))}</div></section>`}
+
+/* ================= INSPECTOR ================= */
+function inspector(){if(!S.insp)return'';const s=sc();let title,val,rows=[],extra='';
+ const [kind,key]=S.insp.split(':');
+ if(DIMN[S.insp]){const d=s.dims[S.insp],p=PROV[S.insp];title=L(DIMN[S.insp]);val=chip(...d);
+  if(s.exc[S.insp])extra=`<p class="sec small">${L(s.exc[S.insp])}</p>`;
+  rows=[[x('Kind','النوع'),L(p.kind)],[x('Source','المصدر'),L(p.src)],[x('Observed','وقت الرصد'),s.viewStale?D('00:32'):D(s.now)],[x('Authoritative source','المرجعية'),L(p.auth)],[x('Freshness budget','ميزانية الحداثة'),x('contract value · Level C','قيمة من العقد · المستوى C')],[x('Evidence ref','مرجع الدليل'),id(p.ref)]]}
+ else if(kind==='pos'){const p=POS[key];title=`${id(p.pair)} · ${L(p.side)}`;val=posTrust();
+  rows=[[x('Size','الحجم'),id(p.size)],[x('Entry','الدخول'),id(p.entry)],[x('Risk at entry','المخاطرة عند الدخول'),tm(p.risk)],[x('Exit contract','عقد الخروج'),L(p.exit)],[x('Source','المصدر'),x('paper runtime','التشغيل الورقي')],[x('Verified by','تحقق بواسطة'),id('DEMO-RECON-RUN-07')]]}
+ else if(kind==='cap'){const c=CAPS[+key];title=typeof c.k==='string'?id(c.k):L(c.k);val=chip(...c.st);
+  rows=[[x('Scope','النطاق'),L(c.scope)],[x('Authority source','مصدر الصلاحية'),typeof c.src==='string'?id(c.src):L(c.src)],[x('Since','منذ'),c.since==='—'?'—':id(c.since)],[x('Expected relationship / preconditions','العلاقة المتوقعة / الشروط المسبقة'),L(c.pre)],[x('Kind','النوع'),x('Governed record','سجل محكوم')]]}
+ else return'';
+ const dr=inspMode()==='drawer';
+ return `${dr?'<div class="scrim" data-closeinsp="1"></div>':''}<aside class="insp" aria-label="${x('Inspector','المُفتِّش')}"><div class="ihead"><h2>${title}</h2><button data-closeinsp="1" aria-label="${x('Close','إغلاق')}">×</button></div><div>${val}</div>${extra}<div class="prov">${rows.map(r=>`<span class="k">${r[0]}</span><span>${r[1]}</span>`).join('')}</div><p class="itag">${x('Provenance is shown for every important value. All values here are DEMO.','يُعرض المصدر لكل قيمة مهمة. جميع القيم هنا تجريبية.')}</p><p class="itag">${dr?x('Drawer mode (narrower screens).','وضع الدُرج (الشاشات الأضيق).'):x('Docked mode (wide screens).','وضع التثبيت (الشاشات العريضة).')}</p></aside>`}
+
+/* ================= MOBILE ================= */
+function mResp(){const s=sc();return `<div class="mcard"><div class="mrow ${s.owner[0]==='req'?'req':''}"><span class="k">${x('Owner','المالك')}</span><span>${L(s.owner[1])}</span></div><div class="mrow"><span class="k">Claude</span><span>${L(s.claude)}</span></div><div class="mrow"><span class="k">${x('System','النظام')}</span><span>${L(s.system)}</span></div><div class="mrow"><span class="k">${x('Next','التالي')}</span><span>${L(s.next)}${s.fromContract?` <span class="fc">${x('from contract','من العقد')}</span>`:''}</span></div></div>`}
+function mStatus(){const s=sc();const exc=Object.keys(s.dims).filter(k=>s.dims[k][0]!=='ok');const o=openIncs();
+ return `${bannerHTML()}<p class="vs">${L(s.verdict)}</p>${mResp()}<div class="mcard small">${x('Project','المشروع')}: P2 · ${L(LAD[s.step])}${s.outcome?` · ${chip(...s.outcome)}`:''}<br>${x('Next Owner gate','بوابة المالك التالية')}: ${L(nextGate(s))}</div>
+ <div class="mcard small">${s.dec.none?L(s.dec.none):`${x('Last decision','آخر قرار')} ${chip(...lastDec().o)} ${s.dec.unv?chip('unver','unverified'):''}${s.dec.stale?chip('stale',b('Last known','آخر حالة معروفة')):''}`}<br>${x('Exposure','الانكشاف')} ${expoTxt()} · ${s.pos.length?x(`${s.pos.length} open position`,`${s.pos.length} مركز مفتوح`):x('no open positions','لا مراكز مفتوحة')}<br>${x('Open incidents','حوادث مفتوحة')}: ${tm(String(o.length))}</div>
+ ${exc.length?`<div class="mcard">${exc.map(k=>`<div class="mrow"><span class="k">${gl(s.dims[k][0])} ${L(DIMN[k])}</span><span>${L(s.exc[k]||'')}</span></div>`).join('')}</div>`:''}`}
+function mResume(){const s=sc();
+ return `${S.returned?`<div class="notice why" style="margin-bottom:10px">${gl('info')}<span>${sigText(s)}</span></div>`:''}${s.banner&&s.banner[0]!=='info'?bannerHTML():''}
+ <div class="mstep">${x('Step','الخطوة')} ${tm(`${s.step+1}/7`)} · <b>${L(LAD[s.step])}</b></div>
+ <p class="vs">${L(s.verdict)}</p>${s.outcome?`<div class="mcard small">${x('Closure outcome','نتيجة الإغلاق')} ${chip(...s.outcome)}</div>`:''}
+ <div class="mcard small"><div class="mrow"><span class="k">${x('Lifecycle','دورة الصفقة')}</span><span>${chip(...s.law.lifecycle)}</span></div><div class="mrow"><span class="k">${x('Checkpoint','نقطة التحقق')}</span><span>${L(s.lgc)}</span></div><div class="mrow"><span class="k">${x('Healthy','سليم')}</span><span>${L(s.lho)}</span></div>
+ ${[['ok','Known','معروف',s.known],['unk','Unknown','غير معروف',s.unknown],['warn','Affected','متأثر',s.affected],['unver','Unverified','غير متحقق',s.unverified]].filter(r=>r[3].length).map(r=>`<div class="mrow"><span class="k">${gl(r[0])} ${x(r[1],r[2])}</span><span>${r[3].map(L).join('<br>')}</span></div>`).join('')}</div>
+ ${mResp()}<div class="mcard small"><b>${x('Forbidden now','ممنوع الآن')}</b><br>${FORBID.concat(s.extraForbid).map(f=>`⊘ ${L(f)}`).join('<br>')}</div>${viewerChip()}`}
+function mInc(){const s=sc();return `<div class="mlist">${s.incidents.map(i=>`<button data-mdet="inc:${i.id}"><span>${id(i.id)}<br><span class="sec small">${L(i.title)}</span></span>${chip(...ISTATE[i.s])}</button>`).join('')}</div>`}
+function mMore(){return `<div class="mlist">${['market','decisions','trades','risk','evidencep','history','operations','system','settings'].map(k=>`<button data-mdet="${k}"><span>${ICON[k]} ${L(NAME[k])}</span><span class="muted">›</span></button>`).join('')}</div>`}
+function mDetail(k){const s=sc();
+ if(k.startsWith('inc:')){const i=s.incidents.find(v=>v.id===k.slice(4));const f=i.f;return `<div class="mcard"><b>${id(i.id)}</b> ${chip(...ISTATE[i.s])}<br>${L(i.title)}</div><div class="mcard small">${[['ok','Known','معروف',f.known],['ok','Remained safe','بقي آمنًا',f.safe],['unk','Unknown','غير معروف',f.unknown],['warn','Affected','متأثر',f.affected],['unver','Unverified','غير متحقق',f.unverified]].filter(r=>r[3]).map(r=>`<div class="mrow"><span class="k">${gl(r[0])} ${x(r[1],r[2])}</span><span>${L(r[3])}</span></div>`).join('')}${f.next?`<div class="mrow"><span class="k">${x('Next','التالي')}</span><span>${L(f.next)} <span class="fc">${x('from contract','من العقد')}</span></span></div>`:''}</div><p class="cd">${x('Acknowledge: not implemented, not authorized; desktop only.','الإقرار: غير منفّذ وغير مصرّح؛ على سطح المكتب فقط.')}</p>`}
+ if(k==='operations'){const o=s.ops;return `<div class="mcard small">${[[x('Runtime','التشغيل'),chip(...o.runtime)],[x('Safe state','الحالة الآمنة'),chip(...o.safe)],[x('Recovery','التعافي'),chip(...o.recovery)],[x('Backup','النسخ الاحتياطي'),chip('unk','unknown')],[x('Restore','الاستعادة'),chip('unk','unknown')]].map(r=>`<div class="mrow"><span class="k">${r[0]}</span><span>${r[1]}</span></div>`).join('')}</div><p class="cd">${x('Actions and the Kill Switch are desktop-only and not authorized.','الإجراءات ومفتاح الإيقاف الكلي على سطح المكتب فقط وغير مصرّح بها.')}</p>`}
+ if(k==='market')return `<div class="mcard small">${x('Charts are intentionally not shown on mobile.','الرسوم البيانية لا تُعرض على الجوال عمدًا.')}<br>${x('Data age','عمر البيانات')} ${chip(...s.sys.feed)}</div>`;
+ if(k==='decisions')return `<div class="mcard small">${s.dec.none?L(s.dec.none):`${chip(...lastDec().o)} ${id(lastDec().p)} · ${D(lastDec().t)}${s.dec.stale?' '+chip('stale',b('Last known','آخر حالة معروفة')):''}${s.dec.unv?' '+chip('unver','unverified'):''}`}</div>${s.dec.none?'':PIPE.map((p,i)=>`<div class="mrow"><span class="k">${L(p)}</span><span>${gl(lastDec().tr[i][0])} ${L(lastDec().tr[i][1])}</span></div>`).join('')}`;
+ if(k==='trades')return s.pos.length?s.pos.map(p=>`<div class="mcard small">${id(POS[p].pair)} · ${L(POS[p].side)} · ${tm(POS[p].risk)}</div>`).join(''):`<div class="mcard small">${x('No open positions.','لا مراكز مفتوحة.')}</div>`;
+ if(k==='risk')return `<div class="mcard small">${CAPS.map(c=>`<div class="mrow"><span class="k">${typeof c.k==='string'?id(c.k):L(c.k)}</span><span>${chip(...c.st)}</span></div>`).join('')}</div>`;
+ if(k==='evidencep')return `<div class="mcard small">${x('Reconciliation','المطابقة')} ${chip(...s.dims.recon)}<br>${x('Evidence','الأدلة')} ${chip(...s.dims.evidence)}</div>`;
+ if(k==='history')return `<div class="mcard">${timeline(s.events,true)}</div>`;
+ if(k==='system')return `<div class="mcard small">${[['host','Host','الخادم'],['containers','Containers','الحاويات'],['feed','Feed','التغذية'],['clock','Clock','الساعة']].map(r=>`<div class="mrow"><span class="k">${x(r[1],r[2])}</span><span>${chip(...s.sys[r[0]])}</span></div>`).join('')}</div>`;
+ return `<div class="mcard small">${x('Settings are desktop-first in this prototype.','الإعدادات على سطح المكتب أولًا في هذا النموذج.')}</div>`}
+function mobile(){const s=sc();const d=s.dims;
+ const tabs=[['status',b('Status','الحالة'),'◧'],['resume',b('Resume','استئناف'),'↺'],['incidents',b('Incidents','الحوادث'),'■'],['more',b('More','المزيد'),'⋯']];
+ const body=S.mdetail?`<button class="btn2" data-mdet="">${S.lang==='ar'?'→':'←'} ${x('Back','رجوع')}</button><div style="margin-top:10px">${mDetail(S.mdetail)}</div>`:S.mtab==='status'?mStatus():S.mtab==='resume'?mResume():S.mtab==='incidents'?mInc():mMore();
+ const allok=Object.values(d).every(v=>v[0]==='ok');
+ return `<div class="phone" dir="${S.lang==='ar'?'rtl':'ltr'}" lang="${S.lang}">${pban()}
+ <div class="mbar"><b>TLOS</b><span class="sec">${L(STAGELBL[s.step])}</span><span class="mode">${x('PAPER','ورقي')}</span><span class="lock" title="${x('Real money blocked','المال الحقيقي محظور')}">${LOCK}</span><span class="grow"></span><span class="heart ${s.viewStale?'st':''}" id="heart"></span></div>
+ <div class="mglyph">${Object.keys(d).map(k=>`<span title="${esc(L(DIMN[k]))}" class="gl s-${d[k][0]}">${G[d[k][0]]}</span>`).join('')}<span class="sec" style="font-size:12px">${allok?x('all 6 ok','الستة سليمة'):x(`${Object.values(d).filter(v=>v[0]!=='ok').length} need attention`,`${Object.values(d).filter(v=>v[0]!=='ok').length} تحتاج انتباهًا`)}</span></div>
+ <div class="mscroll ${s.viewStale?'viewstale':''}">${body}</div>
+ <nav class="mtabs" aria-label="${x('Mobile','الجوال')}">${tabs.map(([k,l,ic])=>`<button data-mtab="${k}" ${S.mtab===k&&!S.mdetail?'aria-current="page"':''}><span aria-hidden="true">${ic}</span>${L(l)}${k==='incidents'&&openIncs().length?` <span class="badge">${openIncs().length}</span>`:''}</button>`).join('')}</nav></div>`}
+
+/* ================= RENDER ================= */
+const SCREENS={command,continuity,incidents,market,decisions,trades,risk,evidencep,history:historyScr,operations,system,settings};
+function render(){syncCaps();proto();const root=document.getElementById('root');const s=sc();document.documentElement.lang=S.lang;
+ if(S.device==='mobile'){root.innerHTML=`<div class="devwrap">${mobile()}</div>`}
+ else{const head=['command','continuity','incidents','operations'].includes(S.screen)&&!(S.screen==='incidents'&&S.inc)?shead(S.screen):'';
+  root.innerHTML=`<div class="app ${inspMode()}" dir="${S.lang==='ar'?'rtl':'ltr'}" lang="${S.lang}">${pban()}${idbar()}${truth()}<div class="body">${side()}<main id="main"><div class="content ${s.viewStale?'viewstale':''}">${head}${SCREENS[S.screen]()}</div></main>${inspector()}</div></div>`}
+ heart()}
+let beat=0;
+function heart(){const h=document.getElementById('heart');if(!h)return;h.textContent=sc().viewStale?`${x('View','العرض')}: ${x('stale','متوقف')} 38m`:`${x('View','العرض')}: ${x('live','مباشر')} ${beat}s`}
+setInterval(()=>{beat=(beat+1)%5;heart()},1000);
+function toast(m){const e=document.getElementById('toast');e.textContent=m;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,2200)}
+function brief(){const s=sc(),E=v=>strip(typeof v==='string'?v:v.en),J=a=>a.length?a.map(E).join('; '):'none';
+ return `TRADING LAB OS — RESUME BRIEF · PROTOTYPE · DEMO DATA · NOT AUTHORITATIVE
+DERIVED: DEMO-DATE ${s.now}
+STAGE: P2 · step ${s.step+1}/7 ${LAD[s.step].en} · cohort DEMO-COHORT-001 · runtime DEMO-RUNTIME-A1B2C3 (pinned) · main DEMO-MAIN-D4E5F6
+LAST GOVERNED CHECKPOINT: ${E(s.lgc)}
+LAST HEALTHY OBSERVATION: ${E(s.lho)}
+KNOWN: ${J(s.known)}
+UNKNOWN: ${J(s.unknown)}
+AFFECTED: ${J(s.affected)}
+UNVERIFIED: ${J(s.unverified)}
+OWNER: ${E(s.owner[1])}
+CLAUDE: ${E(s.claude)}
+SYSTEM: ${E(s.system)}
+NEXT GOVERNED STEP${s.fromContract?' (derived from contract)':''}: ${E(s.next)}
+FORBIDDEN: ${J(FORBID.concat(s.extraForbid))}`}
+
+/* ================= EVENTS ================= */
+document.addEventListener('click',e=>{
+ const el=e.target.closest('button,[data-inc],[data-dec],[data-insp],[data-hist],[data-closeinsp],[data-mdet]');if(!el)return;const ds=el.dataset;
+ if(ds.lang){S.lang=ds.lang;return render()}
+ if(ds.dev){S.device=ds.dev;return render()}
+ if(ds.im){S.inspMode=ds.im;return render()}
+ if(el.id==='pint'){S.scenario='restart';S.returned=true;S.screen='continuity';S.mtab='resume';S.mdetail=null;S.inc=null;return render()}
+ if(el.id==='prec'){S.scenario=S.scenario==='restart'?'recovering':'normal';return render()}
+ if(el.id==='pret'){S.returned=true;S.screen='continuity';S.mtab='resume';S.mdetail=null;S.insp=null;S.inc=null;return render()}
+ if(el.id==='copybrief'){const txt=brief();const ok=()=>{S.briefFail=false;toast(x('Resume brief copied','تم نسخ ملخص الاستئناف'))};const fail=()=>{S.briefFail=true;render();toast(x('Could not copy. The brief is shown below to copy by hand.','تعذّر النسخ. الملخص معروض أدناه للنسخ يدويًا.'))};try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(ok,fail)}else{fail()}}catch(_){fail()}return}
+ if(el.id==='ack'){toast(x('Proposed action · not authorized · nothing was recorded','إجراء مقترح · غير مصرّح · لم يُسجَّل شيء'));return}
+ if(el.id==='kill'){toast(x('Interaction candidate · pending the P3 Operator Control Contract','مرشح تفاعل · بانتظار عقد التحكم التشغيلي لـ P3'));return}
+ if(ds.closeinsp){S.insp=null;return render()}
+ if(ds.go){S.screen=ds.go;S.inc=null;if(ds.go!=='continuity')S.returned=false;return render()}
+ if(ds.inc!==undefined){S.screen='incidents';S.inc=ds.inc||null;return render()}
+ if(ds.dec){S.screen='decisions';S.dec=ds.dec;S.insp=null;return render()}
+ if(ds.insp){S.insp=ds.insp;return render()}
+ if(ds.hist){S.hist=ds.hist;return render()}
+ if(ds.pair){S.pair=ds.pair;return render()}
+ if(ds.tf){S.tf=ds.tf;return render()}
+ if(ds.mtab){S.mtab=ds.mtab;S.mdetail=null;return render()}
+ if(ds.mdet!==undefined){S.mdetail=ds.mdet||null;return render()}
+});
+document.addEventListener('change',e=>{if(e.target.id==='pscen'){S.scenario=e.target.value;S.inc=null;render()}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('tr.click'))e.target.click();if(e.key==='Escape'&&S.insp){S.insp=null;render()}});
+let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.inspMode==='auto'&&S.insp)render()},150)});
+render();
+
+/* ===== v0.2.4 — truth-state propagation (views) ===== */
+function lastDec(){const k=sc().lastDec||'d1';return DECS.find(v=>v.id===k)}
+function visDecs(){const v=sc().visDecs;return v?DECS.filter(d=>v.includes(d.id)):DECS}
+function riskMode(){const k=S.scenario,s=sc();
+ if(k==='viewStale')return 'stale';if(k==='unknown')return 'unknown';if(k==='degraded')return 'degraded';
+ if(k==='restart'||k==='recovering'||k==='reconFail')return 'unver';if(k==='closedFail')return 'fail';
+ if(s.step>=3&&!s.pos.length)return 'zero';return 'normal'}
+function riskMetric(w){const m=riskMode(),V={exp:'18%',loss:'0.4%',veto:'3'}[w],LK=x('last known','آخر قيمة معروفة');
+ if(m==='normal')return {v:tm(V),c:''};
+ if(m==='stale')return {v:`${LK} ${tm(V)}`,c:chip('stale','stale','38m')};
+ if(m==='unknown')return {v:`<span class="muted">${LK} ${tm(V)} · ${D('01:01')}</span>`,c:chip('unk','unknown')};
+ if(m==='degraded')return w==='veto'?{v:tm(V),c:''}:{v:`${x('last valued','آخر تقييم')} ${tm(V)}`,c:chip('unver',b('Unverified · price stale','غير متحقق · السعر قديم'))};
+ if(m==='unver')return {v:`${LK} ${tm(V)}`,c:chip('unver','unverified')};
+ if(m==='zero')return w==='exp'?{v:tm('0%'),c:chip('ok',b('No open positions','لا مراكز مفتوحة'))}:{v:'—',c:chip('off',b('Not applicable · runtime stopped','لا ينطبق · التشغيل متوقف'))};
+ return {v:'',c:chip('unver','asRecord')}}
+function metricRow(w,label,lim){const r=riskMetric(w);return row(label,`${r.v}${lim&&riskMode()==='normal'?` <span class="a">/ ${lim}</span>`:''} ${r.c}`)}
+function expoTxt(){const e=riskMetric('exp');return `${e.v} ${e.c}`}
+function riskCol(){const m=riskMode(),e=riskMetric('exp');
+ return `<div class="col"><div class="ptitle"><button data-go="risk">${x('Risk & exposure','المخاطر والانكشاف')}</button></div><div class="sec small">${x('Current exposure','الانكشاف الحالي')}</div><div class="big num">${e.v} <span class="muted" style="font-size:13px">/ 40% ${x('cap','الحد')}</span></div>${e.c?`<div>${e.c}</div>`:''}${m==='normal'?'<div class="bar"><i style="width:45%"></i></div>':''}${metricRow('loss',x('Daily loss','الخسارة اليومية'),'2.0%')}${metricRow('veto',x('Vetoes (24h)','الاعتراضات (24 س)'))}</div>`}
+function posTrust(){const k=S.scenario,s=sc();
+ if(k==='viewStale')return chip('stale',b('Last known','آخر حالة معروفة'),'38m');if(k==='unknown')return chip('unk','unknown');if(k==='closedFail')return chip('unver','asRecord');
+ return s.posUnv?chip('unver','unverified'):chip('ok',b('Verified','متحقق'))}
+function pnlCell(p){const k=S.scenario;
+ if(k==='viewStale')return `<span class="muted">${x('last known','آخر قيمة معروفة')} ${tm(p.pnl)}</span> ${chip('stale','stale','38m')}`;
+ if(k==='degraded')return chip('stale',b('Price stale','السعر قديم'),'14m');
+ if(k==='unknown')return chip('unk','unknown');
+ if(sc().posUnv)return chip('unver','unverified');
+ return tm(p.pnl)}
+function posCol(){const s=sc(),k=S.scenario;const h=`<div class="ptitle"><button data-go="trades">${x('Open positions','المراكز المفتوحة')}</button></div>`;
+ if(k==='closedFail')return `<div class="col">${h}<p class="quiet">${chip('unver','asRecord')}</p></div>`;
+ const cnt=s.pos.length?x(`${s.pos.length} open`,`${s.pos.length} مفتوح`):x('None open','لا مراكز مفتوحة');
+ return `<div class="col">${h}<div class="sec">${k==='viewStale'||k==='unknown'?`${x('Last known','آخر حالة معروفة')}: ${cnt}`:cnt}</div>${s.pos.map(q=>{const p=POS[q];return `<button class="row" data-insp="pos:${q}" style="grid-template-columns:1fr"><span class="v">${id(p.pair)} · ${L(p.side)} · ${x('risk','مخاطرة')} ${tm(p.risk)} ${posTrust()}</span></button>`}).join('')}</div>`}
+function decCol(){const s=sc();const t=`<button data-go="decisions">${x('Latest decision','آخر قرار')}</button>`;
+ if(s.dec.none)return `<div class="col"><div class="ptitle">${t}</div><p class="quiet">${L(s.dec.none)}</p></div>`;
+ const d=lastDec();
+ return `<div class="col"><div class="ptitle">${t}<span class="asof">${D(d.t)}</span></div><button class="row ${s.dec.unv?'unv':''} ${s.dec.stale?'stl':''}" data-dec="${d.id}" style="grid-template-columns:1fr"><span class="v">${chip(...d.o)} ${id(d.p)} ${s.dec.unv?chip('unver','unverified'):''} ${s.dec.stale?chip('stale',b('Last known','آخر حالة معروفة')):''}</span></button>${pipeMini(d.tr)}<div class="sec small">${x('Why','السبب')}: ${L(d.r)}</div></div>`}
+function decisions(){const s=sc(),V=visDecs();const d=V.find(v=>v.id===S.dec)||lastDec();
+ return `${bannerHTML()}${shead('decisions')}<section class="band" style="grid-template-columns:4fr 8fr"><div class="col twrap"><table><thead><tr><th>${x('Time','الوقت')}</th><th>${x('Pair','الزوج')}</th><th>${x('Outcome','النتيجة')}</th></tr></thead><tbody>${V.map(v=>`<tr class="click" data-dec="${v.id}" tabindex="0" ${v.id===d.id?'style="background:var(--raised)"':''}><td>${tm(v.t)}</td><td>${id(v.p)}</td><td>${chip(...v.o)}</td></tr>`).join('')}</tbody></table>${s.visDecs?`<p class="cd">${x('Only decisions observed before the last observation are listed.','تُعرض فقط القرارات المرصودة قبل آخر رصد.')}</p>`:''}</div>
+ <div class="col"><div class="ptitle"><span>${x('Decision / Execution Trace','مسار القرار / التنفيذ')} ${id(d.p)} · ${D(d.t)}</span>${s.dec.unv&&d.id===lastDec().id?chip('unver','unverified'):''}${s.dec.stale&&d.id===lastDec().id?chip('stale',b('Last known','آخر حالة معروفة')):''}</div>
+ ${PIPE.map((p,i)=>`<div class="row" style="grid-template-columns:24px 150px 1fr;${d.tr[i][0]==='off'?'opacity:.55':''}"><span class="muted num">${i+1}</span><span class="k">${L(p)}</span><span class="v">${gl(d.tr[i][0])} ${L(d.tr[i][1])}${d.tr[i][0]==='off'?` <span class="a">${x('not reached','لم تُبلغ')}</span>`:''}</span></div>`).join('')}
+ <p class="sec small">${x('Reason','السبب')}: ${L(d.r)}</p>${row(x('Market / Data Truth context','سياق حقيقة السوق / البيانات'),chip(...s.sys.feed))}${row(x('Evidence refs','مراجع الأدلة'),id('DEMO-DEC-'+d.id.toUpperCase()))}${row(x('Runtime / source identity','هوية التشغيل / المصدر'),id('DEMO-RUNTIME-A1B2C3'))}<p class="cd">${x('Per-stage outputs: UNKNOWN UNTIL SOURCE INVENTORY (depends on what the runtime logs).','مخرجات كل مرحلة: غير معروفة حتى جرد المصادر (تعتمد على ما يسجله التشغيل).')}</p></div></section>`}
+function trades(){const s=sc(),k=S.scenario;const ex=CAPS.filter(c=>c.exec);
+ const rows=k==='closedFail'?`<tr><td colspan="8">${chip('unver','asRecord')}</td></tr>`:s.pos.length?s.pos.map(q=>{const p=POS[q];return `<tr class="click" data-insp="pos:${q}" tabindex="0"><td>${id(p.pair)}</td><td>${L(p.side)}</td><td>${posTrust()}</td><td>${id(p.size)}</td><td class="r">${id(p.entry)}</td><td>${tm(p.risk)}</td><td>${L(p.exit)}</td><td class="r">${pnlCell(p)}</td></tr>`}).join(''):`<tr><td colspan="8" class="sec">${x('No open positions.','لا مراكز مفتوحة.')}</td></tr>`;
+ return `${bannerHTML()}${shead('trades')}
+ <div class="capstrip"><span class="sec">${x('Execution capabilities','قدرات التنفيذ')}:</span>${ex.map(c=>`${L(c.k)} ${chip(...c.st)}`).join(' ')}<span class="cd">${x('rows supplied by authority truth','الصفوف مصدرها حقيقة الصلاحيات')}</span></div>
+ <h2 class="bandlabel">${x('Open','المفتوحة')}</h2><section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th>${x('Verification','التحقق')}</th><th>${x('Size','الحجم')}</th><th class="r">${x('Entry','الدخول')}</th><th>${x('Risk at entry','المخاطرة عند الدخول')}</th><th>${x('Exit contract','عقد الخروج')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody>${rows}</tbody></table>${k==='closedFail'?'':`<p class="cd">${x('PnL is shown as a number only when price and position truth are current and verified.','يظهر الربح/الخسارة رقمًا فقط عندما تكون حقيقة السعر والمركز حالية ومتحققًا منها.')}</p>`}</div></section>${closedTrades()}`}
+function risk(){const m=riskMode(),s=sc(),e=riskMetric('exp');
+ const posR=m==='fail'?chip('unver','asRecord'):m==='unknown'?`<span class="muted">${x('last known','آخر قيمة معروفة')} ${tm(String(s.pos.length))}</span> ${chip('unk','unknown')}`:m==='stale'?`${x('last known','آخر قيمة معروفة')} ${tm(String(s.pos.length))} ${chip('stale','stale','38m')}`:`${tm(String(s.pos.length))}${m==='unver'?' '+chip('unver','unverified'):''}`;
+ return `${bannerHTML()}${shead('risk')}
+ <section class="band c2"><div class="col"><div class="ptitle"><span>${x('Current state','الحالة الحالية')}</span><span class="asof">${x('follows the scenario’s trust state','تتبع حالة الثقة في الحالة المعروضة')}</span></div>${row(x('Current exposure','الانكشاف الحالي'),`${e.v} ${e.c}`)}${m==='normal'?'<div class="bar"><i style="width:45%"></i></div>':''}${metricRow('loss',x('Daily loss','الخسارة اليومية'))}${metricRow('veto',x('Vetoes (24h)','الاعتراضات (24 س)'))}${row(x('Open positions','المراكز المفتوحة'),posR)}</div>
+ <div class="col"><div class="ptitle"><span>${x('Governed configuration','الإعداد المحكوم')}</span><span class="asof">${x('contract / config fact, not current state','حقيقة عقد / إعداد، وليست حالة حالية')}</span></div>${row(x('Exposure cap','حد الانكشاف'),tm('40%'))}${row(x('Daily loss limit','حد الخسارة اليومية'),tm('2.0%'))}${row(x('Risk per trade','المخاطرة لكل صفقة'),tm('0.5%'))}${row(x('Limits source','مصدر الحدود'),id('DEMO-RISK-CONFIG'))}</div></section>
+ <h2 class="bandlabel">${x('Capability & Authority Matrix','مصفوفة القدرات والصلاحيات')}</h2>
+ <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Capability','القدرة')}</th><th>${x('State','الحالة')}</th><th>${x('Authority source','مصدر الصلاحية')}</th><th>${x('Since','منذ')}</th><th>${x('Expected relationship / preconditions','العلاقة المتوقعة / الشروط المسبقة')}</th></tr></thead><tbody>
+ ${CAPS.map((c,i)=>`<tr class="click" data-insp="cap:${i}" tabindex="0"><td>${typeof c.k==='string'?id(c.k):L(c.k)}</td><td>${chip(...c.st)}</td><td>${typeof c.src==='string'?id(c.src):L(c.src)}</td><td>${c.since==='—'?'—':id(c.since)}</td><td class="sec">${L(c.pre)}</td></tr>`).join('')}</tbody></table>
+ <p class="cd">${x('Rows come from authority truth, not from this layout. A new capability appears as a new row; an unreadable row shows Unknown and is treated as blocked.','الصفوف مصدرها حقيقة الصلاحيات لا هذا التصميم. تظهر أي قدرة جديدة كصف جديد؛ والصف غير المقروء يظهر غير معروف ويُعامل كمحظور.')}</p></div></section>`}
+function chartState(){const k=S.scenario;
+ if(k==='viewStale')return {cut:44,cls:'stale',t:b('Data ends 38 min ago · STALE · no bars or markers after this point','تنتهي البيانات قبل 38 دقيقة · قديمة · لا شموع ولا علامات بعد هذه النقطة')};
+ if(k==='degraded')return {cut:50,cls:'stale',t:b('Data ends 14 min ago · STALE · no bars or markers after this point','تنتهي البيانات قبل 14 دقيقة · قديمة · لا شموع ولا علامات بعد هذه النقطة')};
+ if(k==='unknown')return {cut:49,cls:'unk',t:b(`CURRENT MARKET STATE UNKNOWN · last observation ${D('01:01')} · chart shows last-known data only`,`حالة السوق الحالية غير معروفة · آخر رصد ${D('01:01')} · يعرض الرسم آخر بيانات معروفة فقط`)};
+ return null}
+function candles(){const cs=chartState();let seed=7;const r=()=>(seed=(seed*9301+49297)%233280)/233280;let p=100,out='';const n=56,w=880,h=260,cw=w/n;const bars=[];
+ for(let i=0;i<n;i++){const o=p,c=o+(r()-.48)*3,hi=Math.max(o,c)+r()*1.6,lo=Math.min(o,c)-r()*1.6;bars.push([o,c,hi,lo]);p=c}
+ const mx=Math.max(...bars.map(v=>v[2])),mn=Math.min(...bars.map(v=>v[3])),Y=v=>12+(mx-v)/(mx-mn)*(h-24);const cut=cs?cs.cut:n;
+ for(let g=0;g<5;g++){const y=12+g*(h-24)/4;out+=`<line x1="0" x2="${w}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`}
+ bars.forEach((v,i)=>{if(i>=cut)return;const X=i*cw+cw/2,up=v[1]>=v[0];out+=`<line x1="${X}" x2="${X}" y1="${Y(v[2])}" y2="${Y(v[3])}" stroke="var(--tx3)"/><rect x="${X-cw*.3}" y="${Y(Math.max(v[0],v[1]))}" width="${cw*.6}" height="${Math.max(1,Math.abs(Y(v[0])-Y(v[1])))}" fill="${up?'none':'var(--tx3)'}" stroke="${up?'var(--tx2)':'var(--tx3)'}"/>`});
+ const mi=50;if(mi<cut){const mX=mi*cw+cw/2;out+=`<path d="M${mX-6} ${h-4} L${mX+6} ${h-4} L${mX} ${h-14}Z" fill="var(--warn)"/><text x="${mX+10}" y="${h-6}" fill="var(--tx2)" font-size="11" font-family="var(--sans)">HOLD</text>`}
+ if(cs){const X0=cut*cw;out+=`<defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="var(--line2)" stroke-width="3"/></pattern></defs><rect x="${X0}" y="0" width="${w-X0}" height="${h}" fill="url(#hatch)" opacity=".7"/><line x1="${X0}" x2="${X0}" y1="0" y2="${h}" stroke="var(--${cs.cls==='unk'?'unk':'stale'})" stroke-dasharray="4 3"/>`}
+ const svg=`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${x('Candle chart, DEMO data','رسم الشموع، بيانات تجريبية')}">${out}</svg>`;
+ return `<div class="chartwrap ${cs&&cs.cls==='unk'?'unkchart':''}">${svg}${cs?`<div class="chartov s-${cs.cls}" dir="${S.lang==='ar'?'rtl':'ltr'}" role="status">${gl(cs.cls)} ${L(cs.t)}</div>`:''}</div>`}
+function market(){const cs=chartState();
+ return `${bannerHTML()}${shead('market')}
+ <section class="band c1"><div class="col">
+ <div class="capstrip"><span class="sec">${x('Pair','الزوج')}</span><span class="tfs">${MKT.pairs.map(p=>`<button data-pair="${p}" aria-pressed="${S.pair===p}">${id(p)}</button>`).join('')}</span><span class="sep"></span>
+ <span class="sec">${x('Timeframe','الإطار الزمني')}</span><span class="tfs">${MKT.timeframes.map(t=>`<button data-tf="${t}" aria-pressed="${S.tf===t}">${tm(t)}</button>`).join('')}</span><span class="mocktag">DEMO</span></div>
+ <p class="cd" style="margin:0 0 8px">${x('Pairs, timeframes and data capabilities are rendered from the market capability contract. These are DEMO values, not product requirements.','الأزواج والأطر الزمنية وقدرات البيانات تُعرض من عقد قدرات السوق. هذه قيم تجريبية وليست متطلبات للمنتج.')}</p>
+ ${candles()}</div></section>
+ <section class="band c2"><div class="col"><div class="ptitle"><span>${x('Market / Data Truth · capabilities','حقيقة السوق / البيانات · القدرات')}</span><span class="asof">${x('upstream of the Decision / Execution Trace','منبع مسار القرار / التنفيذ')}</span></div>${MKT.caps.map(c=>row(L(c[0]),chip(c[1],c[2]))).join('')}</div>
+ <div class="col"><div class="ptitle"><span>${x('Context','السياق')}</span>${cs?chip(cs.cls,cs.cls==='unk'?'unknown':'stale'):''}</div>${row(x('Data age','عمر البيانات'),chip(...sc().sys.feed))}${row(x('Regime','نظام السوق'),chip('unk','unkInv'))}${row(x('Volatility','التذبذب'),chip('unk','unkInv'))}${row(x('Liquidity','السيولة'),chip('unk','unkInv'))}${row(x('Higher-timeframe context','سياق الإطار الأعلى'),chip('unk','unkInv'))}<p class="cd">${x('Neutral candles by design: colour is reserved for system state.','شموع محايدة عمدًا: اللون محجوز لحالة النظام.')}</p></div></section>`}
+
+</script>
+</body>
+</html>
