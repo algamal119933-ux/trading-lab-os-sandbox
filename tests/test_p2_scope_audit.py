@@ -1496,9 +1496,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-09 Control Room, slices 1–2: the frozen prototype used verbatim plus a read-only evidence
-# adapter; 8 of 12 screens bound to live evidence; hourly regeneration in the health run. Its authority
-# (PR #80) is merged and pinned above. No runtime, strategy, risk, dataset, registry or evidence change.
+# P3-PLN-09 Control Room, slices 1–2 (PR #81) and slice 3 (this branch, stacked on #81): the frozen
+# prototype used verbatim plus a read-only evidence adapter; all 12 screens bound, slice 3 from the sealed
+# cohort named by the newest PLN-07 audit record. Its authority (PR #80) is merged and pinned above.
+# No runtime, strategy, risk, dataset, registry or evidence change.
 _P09 = "P3-PLN-09 Control Room"
 BRANCH_SCOPE: dict[str, str] = {
     "research/p3/control_room.py": f"{_P09} — collect / project / build; digest-checked prototype, read-only",
@@ -1509,8 +1510,8 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/scheduled_health.sh": f"{_P09} — hourly view regeneration; health verdict unchanged",
     "research/p3/health.py": f"{_P09} — standard_findings shared by the health CLI and the view",
     "scripts/p3/health_check.py": f"{_P09} — uses health.standard_findings",
-    "tests/test_p3_control_room.py": f"{_P09} — degraded mappings and refusals, synthetic only",
-    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slices 1–2, binding plan and estimate",
+    "tests/test_p3_control_room.py": f"{_P09} — degraded mappings, refusals and slice-3 sealed screens, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slices 1–3, binding plan and estimate",
     "tests/test_p2_scope_audit.py": "P3-PLN-09 authority (PR #80) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

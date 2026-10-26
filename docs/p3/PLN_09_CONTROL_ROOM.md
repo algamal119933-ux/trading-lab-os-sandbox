@@ -12,7 +12,7 @@ PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO
 | Governed workstream status (changes only by merged PR; the view never writes it) | `research/p3/records/p3_workstreams.json` | record |
 | CLI `build` | `scripts/p3/control_room.py` | — |
 | Hourly regeneration inside the existing health run (a failed build never changes the health verdict) | `scripts/p3/scheduled_health.sh` | REUSE (the existing timer) |
-| Tests: 22, synthetic only | `tests/test_p3_control_room.py` | — |
+| Tests: 28, synthetic only | `tests/test_p3_control_room.py` | — |
 
 Properties:
 - **NEW_CONTROL_PLANE = NO.** The page is a static file with the prototype's CSP (`connect-src 'none'`). There is no server, no network and no write, and it has no control.
@@ -59,7 +59,41 @@ Properties:
   - the PLN-07 execution audit of the sealed P2 archive: **2 unbacked, contextual (F-2)**, shown as a finding, not hidden. Record: `p3-evidence/audits/l2-cohort-20260924T120000Z.json`.
 - **History:** governance merges, backup sets, operator ledger records, drills and audits on one filtered timeline.
 
-## Remaining screens: binding plan and estimate
+## Slice 3 delivered: Decisions, Trades & Positions, Market Workspace, Settings (all 12 screens bound)
+Source: the sealed cohort that the newest PLN-07 execution-audit record names (`p3-evidence/audits/*.json` → `evidence_dir`). Its decision, trade and input ledgers are read **read-only** by `control_room.sealed_cohort`. No paper cohort runs now, so every slice-3 screen says that this is a sealed record and that there is no current state.
+
+- **Decisions:**
+  - The listed decisions are every enter/exit intent and every admission, plus the last decision per pair. They are capped at the newest 40, out of 3,194 in the P2 cohort.
+  - The 9-stage trace shows only what the runtime logged:
+    - Spotter: the signal state
+    - Verifier: the bar class
+    - Prior / Regime: the EMA values
+    - Risk Sizer: the admission result and its reasons
+    - One Core: the intended action
+    - Paper Execution and Reconciliation: the fill and its backing, from the PLN-07 audit
+  - The Exit Contract and Verified Outcome stages are **not logged per decision**, so they read "not logged" and are never inferred.
+  - The evidence reference (ledger path and market_event_id) and the strategy and config digests are shown for each decision.
+- **Trades & Positions:**
+  - Open: none, because no cohort is running.
+  - Closed: from the sealed trade ledger, showing entry, exit, exit reason and realised PnL as recorded.
+  - Reconciliation and outcome are shown **per leg** from the audit: both legs backed gives "Backed · entry + exit"; an unbacked leg gives "Contextual · unbacked (F-2)"; a missing leg gives unknown.
+- **Market Workspace:**
+  - The current market state is **unknown** (no runtime, no feed). The prototype's own unknown overlay is shown.
+  - The chart shows the last 56 bars of the sealed input ledger only, with markers at the recorded fills.
+  - Pairs and timeframe come from the record.
+  - Capabilities: candles "No live feed · sealed record only"; order book not provided; regime unknown.
+- **Settings:** viewer preferences only.
+  - Return detection reads "not active", because a static view keeps no viewer state.
+  - The notification row cites `scripts/p3/scheduled_health.sh`.
+  - Settings never change risk, mode or authority.
+- **Missing or unreadable evidence:** when no audit record exists or the ledgers cannot be read, each slice-3 screen shows **unknown** with the reason. Nothing is rendered as healthy. This is covered by a negative test.
+- **Verification (synthetic):** headless Chromium, EN and AR/RTL, bound and missing-evidence cases. No console errors, and no DEMO text on any slice-3 screen.
+
+**Status: 12 of 12 screens are bound.** What remains for PLN-09:
+- the mobile tabs (same scenario, prototype mobile components, about 0.5 d);
+- the Owner review round.
+
+## Remaining screens: binding plan and estimate (historical estimate; see slice 3)
 | Screen | Live source (existing) | Effort |
 |---|---|---|
 | Project & Continuity (resume brief, checkpoints, ladder) | git merges, the workstream record, P2_CLOSURE, the pre-reboot snapshot | 0.5 d |

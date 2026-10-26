@@ -47,6 +47,9 @@ BACKUP_TARGET = Path("/mnt/tlos-wdc/tlos-backups")
 EVIDENCE_DIR = Path("/home/hamza/tlos-paper/p3-evidence")  # drills/ and audits/ hold persisted proof records
 # The view is regenerated hourly with the health timer; past this age it is shown as stale.
 FRESHNESS_BUDGET_S = 2 * 3600
+# Slice 3 reads the sealed cohort named by the newest execution-audit record (read-only).
+SEALED_DECISIONS_SHOWN = 40   # newest notable decisions listed on the Decisions screen
+SEALED_CANDLES_SHOWN = 56     # bars per pair on the Market Workspace (the prototype's chart width)
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
 
@@ -73,6 +76,45 @@ def _utc(epoch: float) -> str:
 
 def b(en: str, ar: str) -> dict:
     return {"en": en, "ar": ar}
+
+
+# ---------------------------------------------------------------- sealed cohort (slice 3)
+def _ledger_payloads(path: Path) -> list[dict]:
+    return [json.loads(line)["payload"] for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def sealed_cohort(audits: list[dict]) -> dict | None:
+    """The decision, trade and input ledgers of the sealed cohort that the newest readable execution-audit
+    record names. Read-only. None when no audit record exists; ``error`` when the ledgers cannot be read."""
+    audit = next((a for a in reversed(audits) if not a.get("unreadable") and a.get("evidence_dir")), None)
+    if audit is None:
+        return None
+    ev = Path(audit["evidence_dir"])
+    base = {"evidence_dir": str(ev), "cohort": ev.parent.name, "audit_file": audit.get("_file"),
+            "executions": audit.get("executions", [])}
+    try:
+        decisions = _ledger_payloads(ev / "paper_decision_ledger.jsonl")
+        trades = _ledger_payloads(ev / "paper_trade_ledger.jsonl")
+        inputs = _ledger_payloads(ev / "paper_input_ledger.jsonl")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return dict(base, error=f"{type(exc).__name__}: {exc}")
+    notable = [d for d in decisions if d.get("intended_action") != "hold"
+               or (d.get("admission") or {}).get("result") not in (None, "NOT_REQUIRED")]
+    last_per_pair = {}
+    for d in decisions:
+        last_per_pair[d.get("pair")] = d
+    chosen = {(d.get("pair"), d.get("candle_ts")): d for d in notable + list(last_per_pair.values())}
+    shown = sorted(chosen.values(), key=lambda d: (int(d.get("candle_ts") or 0), str(d.get("pair"))))[-SEALED_DECISIONS_SHOWN:]
+    candles: dict[str, list] = {}
+    for i in inputs:
+        c = i.get("candle") or {}
+        candles.setdefault(i.get("pair"), []).append(
+            [int(c["ts"]), float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])])
+    for pair in candles:
+        candles[pair] = sorted(candles[pair])[-SEALED_CANDLES_SHOWN:]
+    timeframes = sorted({str(d.get("timeframe")) for d in decisions if d.get("timeframe")})
+    return dict(base, n_decisions=len(decisions), decisions=shown, trades=trades, candles=candles,
+                timeframes=timeframes)
 
 
 # ---------------------------------------------------------------- collect
@@ -120,6 +162,7 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
         "observation_version": "P3_CONTROL_ROOM_OBSERVATION_V1",
         "drills": drills,
         "audits": audits,
+        "sealed": sealed_cohort(audits),
         "ledger_tail": ledger_records[-20:],
         "observed_epoch": now,
         "observed_utc": _utc(now),
@@ -389,6 +432,7 @@ def project(obs: dict) -> dict:
         "real_money_authorized": False,
     }
     _bind_screens(obs, live)
+    _bind_slice3(obs, live)
     return live
 
 
@@ -538,6 +582,136 @@ def _bind_screens(obs: dict, live: dict) -> None:
         f"NEXT GOVERNED STEP (derived from contract): {E(sc['next'])}",
         "FORBIDDEN: real money; H1 launch; restarting FP-CONTROL-3; strategy, risk or dataset change; reopening the product shape",
     ])
+
+
+def _ms_utc(ms) -> str:
+    return datetime.fromtimestamp(int(ms) / 1000, timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+
+
+_TF_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
+_ACTION = {"enter_long": b("ENTER", "دخول"), "exit_long": b("EXIT", "خروج"), "hold": b("HOLD", "انتظار")}
+
+
+def _decision_row(i: int, d: dict, fills: dict, ev: str) -> dict:
+    """One sealed decision on the prototype's DECS shape. Only logged fields are shown; a stage the runtime
+    does not log is 'not logged', never inferred."""
+    adm = d.get("admission") or {}
+    result, reasons = adm.get("result"), adm.get("reasons") or []
+    action = d.get("intended_action")
+    act = _ACTION.get(action, b(str(action), str(action)))
+    tf_ms = _TF_MS.get(d.get("timeframe", "1h"), 3_600_000)
+    close_utc = _ms_utc(int(d.get("candle_ts") or 0) + tf_ms)
+    if action == "hold":
+        outcome = ["warn", act]
+    elif result == "ADMITTED":
+        outcome = ["ok", act]
+    elif result == "BLOCKED":
+        outcome = ["inc", b(f"{act['en']} · BLOCKED", f"{act['ar']} · محجوب")]
+    else:
+        outcome = ["off", b(f"{act['en']} · {result or 'no admission'}", f"{act['ar']} · {result or 'لا قبول'}")]
+    not_logged = ["unk", b("not logged", "غير مسجّل")]
+    off = ["off", "—"]
+    fill = fills.get((d.get("pair"), action, close_utc.replace(" ", "T")))  # audit format YYYY-MM-DDTHH:MMZ
+    acting = action in ("enter_long", "exit_long")
+    tr = [
+        ["ok", b(str(d.get("signal_state")), str(d.get("signal_state")))] if d.get("signal_state") else not_logged,
+        ["ok", b(f"{d.get('bar_class')} bar", f"شمعة {d.get('bar_class')}")] if d.get("bar_class") == "LIVE"
+        else (["warn", b(str(d.get("bar_class")), str(d.get("bar_class")))] if d.get("bar_class") else not_logged),
+        ["info", b(f"EMA {d.get('ema_fast')} / {d.get('ema_slow')}", f"EMA {d.get('ema_fast')} / {d.get('ema_slow')}")]
+        if d.get("ema_fast") is not None else not_logged,
+        (["ok", b("ADMITTED", "مقبول")] if result == "ADMITTED" else
+         ["inc", b(f"BLOCKED · {'; '.join(reasons)}", f"محجوب · {'؛ '.join(reasons)}")] if result == "BLOCKED" else off)
+        if acting else off,
+        not_logged if acting and result == "ADMITTED" else off,
+        outcome,
+        (["ok", b(f"filled {fill['fill_utc']}", f"نُفّذ {fill['fill_utc']}")] if fill else
+         ["warn", b("no fill recorded", "لا تنفيذ مسجّل")]) if acting and result == "ADMITTED" else off,
+        ["ok", b("backed · PLN-07 audit", "مدعوم · تدقيق PLN-07")] if fill else off,
+        not_logged if fill else off,
+    ]
+    why = d.get("no_action_reason") or ("; ".join(reasons) if reasons else (result or ""))
+    return {"id": f"s{i}", "t": close_utc, "p": d.get("pair"), "tf": d.get("timeframe"), "o": outcome,
+            "r": b(why or "—", why or "—"), "tr": tr,
+            "refs": f"{ev}/paper_decision_ledger.jsonl · {d.get('market_event_id', '—')}",
+            "ident": f"strategy {str(d.get('strategy_sha256') or '—')[:12]} · config {str(d.get('config_sha256') or '—')[:12]}",
+            "t0": d.get("t0_relation")}
+
+
+def _bind_slice3(obs: dict, live: dict) -> None:
+    """Slice 3: Decisions, Trades & Positions, Market Workspace and Settings, from the sealed cohort named by
+    the newest execution-audit record. Pure; adds keys to ``live``. Missing evidence is unknown, never healthy."""
+    sealed = obs.get("sealed")
+    if not sealed:
+        state, why = "none", b("No execution-audit record names a sealed cohort; nothing to show.",
+                               "لا يوجد سجل تدقيق تنفيذ يحدد مجموعة مختومة؛ لا شيء للعرض.")
+    elif sealed.get("error"):
+        state, why = "unreadable", b(f"Sealed ledgers could not be read: {sealed['error']}",
+                                     f"تعذّرت قراءة السجلات المختومة: {sealed['error']}")
+    else:
+        state, why = "bound", None
+    src = sealed["evidence_dir"] if sealed else "—"
+    cohort = sealed.get("cohort") if sealed else None
+    execs = (sealed or {}).get("executions") or []
+    # each backed execution, keyed by (pair, action, decided candle close 'YYYY-MM-DDTHH:MMZ')
+    fills = {}
+    for e in execs:
+        bd = e.get("backing_decision") or {}
+        if e.get("backed") and bd.get("candle_close_utc"):
+            action = "enter_long" if e.get("event") == "position_opened" else "exit_long"
+            fills[(e.get("pair"), action, bd["candle_close_utc"])] = e
+    rows = [_decision_row(i, d, fills, sealed["evidence_dir"]) for i, d in enumerate(sealed["decisions"])] \
+        if state == "bound" else []
+    live["decisions"] = {"state": state, "why": why, "cohort": cohort, "src": src,
+                         "n": (sealed or {}).get("n_decisions"), "rows": rows}
+
+    # Trades & Positions: closed lifecycles from the sealed trade ledger, each leg's backing from the audit.
+    backed = {(e.get("trade_id"), e.get("event")): e.get("backed") for e in execs}
+    closed = []
+    if state == "bound":
+        opened = {t.get("trade_id"): t for t in sealed["trades"] if t.get("event") == "position_opened"}
+        for t in sealed["trades"]:
+            if t.get("event") != "position_closed":
+                continue
+            o = opened.get(t.get("trade_id"), {})
+            legs = [backed.get((t.get("trade_id"), "position_opened")), backed.get((t.get("trade_id"), "position_closed"))]
+            if all(v is True for v in legs):
+                recon, outcome = ["ok", "pass"], ["ok", b("Backed · entry + exit", "مدعومة · دخول + خروج")]
+            elif any(v is None for v in legs):
+                recon, outcome = ["unk", "unknown"], ["unk", "unknown"]
+            else:
+                recon = ["warn", b("Unbacked leg (F-2)", "طرف غير مدعوم (F-2)")]
+                outcome = ["warn", b("Contextual · unbacked", "سياقية · غير مدعومة")]
+            pnl = t.get("profit_abs")
+            closed.append({"trade_id": t.get("trade_id"), "pair": t.get("pair"),
+                           "entry": f"{o.get('open_rate', t.get('open_rate'))} · {o.get('open_date_utc', t.get('open_date_utc'))}",
+                           "exit": f"{t.get('close_rate')} · {t.get('close_date_utc')}",
+                           "reason": t.get("exit_reason") or "—", "recon": recon, "outcome": outcome,
+                           "pnl": None if pnl is None else f"{pnl} {t.get('realised_pnl_currency') or 'USDT'}"})
+    live["trades_closed"] = {"state": state, "why": why, "cohort": cohort, "rows": closed,
+                             "src": f"{src}/paper_trade_ledger.jsonl · {(sealed or {}).get('audit_file') or '—'}"}
+
+    # Market Workspace: no feed and no runtime, so the current market is unknown; the chart shows the sealed
+    # record's last bars only, with the prototype's 'unknown' overlay.
+    candles = sealed.get("candles") or {} if state == "bound" else {}
+    marks = {}
+    if state == "bound":
+        for t in sealed["trades"]:
+            when = t.get("open_date_utc") if t.get("event") == "position_opened" else t.get("close_date_utc")
+            if when:
+                marks.setdefault(t.get("pair"), []).append(
+                    [when, "ENTER" if t.get("event") == "position_opened" else "EXIT"])
+    ends = [c[-1][0] for c in candles.values() if c]
+    live["market"] = {"state": state if candles or state != "bound" else "none", "why": why,
+                      "pairs": sorted(candles), "timeframes": (sealed or {}).get("timeframes") or [],
+                      "candles": candles, "marks": marks,
+                      "end_utc": _ms_utc(max(ends)) if ends else None,
+                      "src": f"{src}/paper_input_ledger.jsonl"}
+
+    # Settings: viewer preferences only; never risk, mode or authority. Facts cite their repository source.
+    live["settings"] = {"notify": b("Desktop notification on WARNING / CRITICAL · this host only",
+                                    "تنبيه سطح المكتب عند WARNING / CRITICAL · هذا الجهاز فقط"),
+                        "notify_src": "scripts/p3/scheduled_health.sh",
+                        "time": b("UTC (as recorded in evidence)", "UTC (كما في الأدلة)")}
 
 
 # ---------------------------------------------------------------- build
