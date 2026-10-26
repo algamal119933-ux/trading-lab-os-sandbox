@@ -1428,6 +1428,28 @@ P3_PLN_09_AUTHORITY_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #81, merged. Two parents: d21bebe5 (main before, P3_PLN_09_AUTHORITY) + 6a12899c
+# (the claude/p3-pln-09-command-center branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_CR_MERGE = "82a975d3ea91c33bfade4b3ce5729c206db1d4ef"
+
+# P3-PLN-09 Control Room, slices 1–2: the frozen prototype used verbatim plus a read-only evidence
+# adapter; 8 of 12 screens bound to live evidence; hourly regeneration in the health run.
+_P09CR = "P3-PLN-09 Control Room"
+P3_PLN_09_CR_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_P09CR} — collect / project / build; digest-checked prototype, read-only",
+    "research/p3/control_room_live.js": f"{_P09CR} — live adapter: same markup, data-bearing components only",
+    "research/p3/records/p3_workstreams.json": f"{_P09CR} — governed PLN-00..11 status read by the view",
+    "research/p3/records/state_classes.json": f"{_P09CR} — operator profile: p3-evidence/control_room/* is derived",
+    "scripts/p3/control_room.py": f"{_P09CR} — build CLI",
+    "scripts/p3/scheduled_health.sh": f"{_P09CR} — hourly view regeneration; health verdict unchanged",
+    "research/p3/health.py": f"{_P09CR} — standard_findings shared by the health CLI and the view",
+    "scripts/p3/health_check.py": f"{_P09CR} — uses health.standard_findings",
+    "tests/test_p3_control_room.py": f"{_P09CR} — degraded mappings and refusals, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09CR} — execution record, slices 1–2, binding plan and estimate",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 authority (PR #80) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1489,6 +1511,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_SCHED": (P3_SCHED_MERGE, P3_SCHED_SCOPE),
     "P3_ACC": (P3_ACC_MERGE, P3_ACC_SCOPE),
     "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
+    "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1496,23 +1519,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-09 Control Room, slices 1–2 (PR #81) and slice 3 (this branch, stacked on #81): the frozen
-# prototype used verbatim plus a read-only evidence adapter; all 12 screens bound, slice 3 from the sealed
-# cohort named by the newest PLN-07 audit record. Its authority (PR #80) is merged and pinned above.
-# No runtime, strategy, risk, dataset, registry or evidence change.
+# P3-PLN-09 Control Room, slice 3: Decisions, Trades & Positions, Market Workspace and Settings bound from
+# the sealed cohort named by the newest PLN-07 audit record (read-only); all 12 screens bound. Slices 1–2
+# (PR #81) and the authority (PR #80) are merged and pinned above. No runtime, strategy, risk, dataset,
+# registry or evidence change.
 _P09 = "P3-PLN-09 Control Room"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/control_room.py": f"{_P09} — collect / project / build; digest-checked prototype, read-only",
-    "research/p3/control_room_live.js": f"{_P09} — live adapter: same markup, data-bearing components only",
-    "research/p3/records/p3_workstreams.json": f"{_P09} — governed PLN-00..11 status read by the view",
-    "research/p3/records/state_classes.json": f"{_P09} — operator profile: p3-evidence/control_room/* is derived",
-    "scripts/p3/control_room.py": f"{_P09} — build CLI",
-    "scripts/p3/scheduled_health.sh": f"{_P09} — hourly view regeneration; health verdict unchanged",
-    "research/p3/health.py": f"{_P09} — standard_findings shared by the health CLI and the view",
-    "scripts/p3/health_check.py": f"{_P09} — uses health.standard_findings",
-    "tests/test_p3_control_room.py": f"{_P09} — degraded mappings, refusals and slice-3 sealed screens, synthetic only",
-    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slices 1–3, binding plan and estimate",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 authority (PR #80) pinned to its merge; this branch's scope",
+    "research/p3/control_room.py": f"{_P09} — slice 3: sealed cohort reader and the four remaining screens",
+    "research/p3/control_room_live.js": f"{_P09} — slice 3: Decisions, Trades & Positions, Market Workspace, Settings",
+    "research/p3/records/p3_workstreams.json": f"{_P09} — PLN-09 evidence: 12 of 12 screens bound",
+    "tests/test_p3_control_room.py": f"{_P09} — slice-3 sealed screens and missing-evidence negatives, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slice 3",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slices 1–2 (PR #81) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

@@ -13,21 +13,21 @@
     {"id": "PLN-06", "status": "PARTIAL", "en": "Monitoring & hardening", "ar": "المراقبة والتقوية", "evidence": "hourly health + journal + notification; alerting PR #85 prepared; Prometheus scrape needs node-exporter"},
     {"id": "PLN-07", "status": "PARTIAL", "en": "Verification", "ar": "التحقق", "evidence": "per-execution audit + failure matrix PASS except the reboot row"},
     {"id": "PLN-08", "status": "ACCEPTED", "en": "Operator controls", "ar": "تحكم المشغّل", "evidence": "kill switch drill 0.162 s; ledger PASS"},
-    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "authority PR #80 merged d21bebe5; PR #81 + slice 3: 12 of 12 screens bound (slice 3 from the sealed P2 cohort); mobile remains"},
+    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "authority PR #80 merged d21bebe5; slices 1–2 PR #81 merged 82a975d3; slice 3 PR #87: 12 of 12 screens bound (from the sealed P2 cohort); mobile remains"},
     {"id": "PLN-10", "status": "PENDING", "en": "Paper Beta acceptance", "ar": "قبول النسخة التجريبية الورقية", "evidence": "needs PLN-02..PLN-09"},
     {"id": "PLN-11", "status": "PENDING", "en": "Freeze & execution pack", "ar": "التجميد وحزمة التنفيذ", "evidence": "after PLN-10"}
   ],
   "owner": {
     "state": "req",
-    "en": "Merge PR #81 (Control Room slices 1–2), then PR #85 (alerting). Open host gates: a planned reboot window (PLN-04/07), an independent host (PLN-05), prometheus-node-exporter (PLN-06).",
-    "ar": "ادمج طلب الدمج #81 (شرائح غرفة التحكم 1–2) ثم #85 (التنبيهات). بوابات الخادم المفتوحة: نافذة إعادة إقلاع مخططة (PLN-04/07)، خادم مستقل (PLN-05)، prometheus-node-exporter (PLN-06)."
+    "en": "Merge PR #87 (Control Room slice 3), then PR #85 (alerting). Open host gates: a planned reboot window (PLN-04/07), an independent host (PLN-05), prometheus-node-exporter (PLN-06).",
+    "ar": "ادمج طلب الدمج #87 (الشريحة 3 من غرفة التحكم) ثم #85 (التنبيهات). بوابات الخادم المفتوحة: نافذة إعادة إقلاع مخططة (PLN-04/07)، خادم مستقل (PLN-05)، prometheus-node-exporter (PLN-06)."
   },
   "claude": {
-    "en": "Bind the remaining PLN-09 screens (Decisions, Trades & Positions, Market Workspace, Settings) over verified evidence. No runtime, strategy or risk change.",
-    "ar": "ربط بقية شاشات PLN-09 (القرارات، الصفقات والمراكز، مساحة السوق، الإعدادات) بالأدلة المتحقق منها. لا تغيير في التشغيل أو الاستراتيجية أو المخاطر."
+    "en": "Bind the PLN-09 mobile tabs from the same live scenario. No runtime, strategy or risk change.",
+    "ar": "ربط تبويبات الجوال لـ PLN-09 من نفس العرض المباشر. لا تغيير في التشغيل أو الاستراتيجية أو المخاطر."
   },
   "next": {
-    "en": "Owner merges #81; PLN-09 slice 3 then proceeds on main.",
-    "ar": "يدمج المالك #81؛ ثم تتقدم الشريحة 3 من PLN-09 على الفرع الرئيسي."
+    "en": "Owner merges #87; the PLN-09 mobile tabs then proceed on main.",
+    "ar": "يدمج المالك #87؛ ثم تتقدم تبويبات الجوال لـ PLN-09 على الفرع الرئيسي."
   }
 }
