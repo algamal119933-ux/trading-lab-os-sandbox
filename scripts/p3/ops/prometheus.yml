@@ -1,0 +1,25 @@
+# Trading Lab OS — P3-PLN-06 operations-plane Prometheus (scripts/p3/ops/docker-compose.p3-ops.yml).
+#
+# Reuse, not a new platform (P3_CONTRACT §4): the same Prometheus image as the FP stack, a separate
+# compose project so it runs while no paper cohort runs and never touches the FP runtime tree.
+# It scrapes the host's prometheus-node-exporter (installed by the Owner, listening on 127.0.0.1:9100),
+# whose textfile collector reads the hourly tlos_p3_health.prom written by scripts/p3/scheduled_health.sh.
+# Network: host mode, every listener bound to 127.0.0.1. PAPER / RESEARCH ONLY.
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+  external_labels:
+    tlos_plane: p3-ops
+
+rule_files:
+  - /etc/prometheus/rules/tlos_p3_alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:9093"]
+
+scrape_configs:
+  - job_name: tlos-host-node
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
