@@ -131,7 +131,11 @@ def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict
         *normal_end_due(registry, fp_lane_root),
     ]
     if s19 is not None:
-        findings += s19_findings(registry, **s19)
+        try:
+            findings += s19_findings(registry, **s19)
+        except Exception as exc:  # noqa: BLE001 - checks that cannot run are a failure, not an absence
+            findings.append(_finding("s19_checks", CRITICAL, f"§19 checks could not run ({type(exc).__name__}: "
+                                                             f"{str(exc)[:120]})"))
     return findings
 
 
@@ -185,7 +189,8 @@ def paper_guard_configs(configs: list[Path], checker: Callable[[Path], list[str]
     """§19 'paper guard failure': run the repository paper guard on every present paper config."""
     present = [Path(c) for c in configs if Path(c).is_file()]
     if not present:
-        return _finding("paper_guard", INFO, "no paper config present on this host (no runtime to guard)")
+        return _finding("paper_guard", WARNING,
+                        "UNPROVEN: no paper config found at the expected paths, so the guard could not run")
     problems = []
     for cfg in present:
         try:
@@ -221,12 +226,19 @@ def _live_env_problems(env: dict[str, str], source: str) -> list[str]:
     return problems
 
 
-def real_money_state(configs: list[Path], env_files: list[Path], container_envs: dict[str, dict[str, str]]) -> dict:
-    """§19 'real-money enabled': any paper config, env file or running paper container that is not paper."""
-    problems = []
+def real_money_state(configs: list[Path], env_files: list[Path], container_envs: dict[str, dict[str, str]],
+                     *, containers_known: bool = True, uninspectable: list[str] | None = None) -> dict:
+    """§19 'real-money enabled': any paper config, env file or running paper container that is not paper.
+
+    Fail-closed: a running paper container whose environment cannot be read is a problem, and a run that
+    could inspect neither a config nor an env file, or could not ask docker, is UNPROVEN (WARNING), never
+    INFO."""
+    problems = [f"container {n}: environment unreadable, cannot prove no live switch" for n in (uninspectable or [])]
+    checked = 0
     for cfg in (Path(c) for c in configs):
         if not cfg.is_file():
             continue
+        checked += 1
         try:
             data = json.loads(cfg.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
@@ -243,6 +255,7 @@ def real_money_state(configs: list[Path], env_files: list[Path], container_envs:
                     problems.append(f"{cfg.name}: exchange credential {key!r} is set")
     for env_file in (Path(e) for e in env_files):
         if env_file.is_file():
+            checked += 1
             try:
                 problems += _live_env_problems(_env_names(env_file.read_text(encoding="utf-8")), env_file.name)
             except Exception:  # noqa: BLE001
@@ -251,7 +264,13 @@ def real_money_state(configs: list[Path], env_files: list[Path], container_envs:
         problems += _live_env_problems(env, f"container {name}")
     if problems:
         return _finding("real_money", CRITICAL, f"REAL-MONEY STATE: {_short(problems)}")
-    return _finding("real_money", INFO, "no live switch or exchange credential found (dry_run true everywhere checked)")
+    if not checked:
+        return _finding("real_money", WARNING, "UNPROVEN: no paper config or env file found to inspect")
+    if not containers_known:
+        return _finding("real_money", WARNING,
+                        f"UNPROVEN: {checked} file(s) clean, but docker could not be queried for container env")
+    return _finding("real_money", INFO, f"no live switch or exchange credential found in {checked} file(s) "
+                                        f"and {len(container_envs)} running paper container(s)")
 
 
 def operator_ledger_chain(path: Path, verifier: Callable[[Path], list[str]]) -> dict:
@@ -318,13 +337,19 @@ def _default_container_lister(runner) -> dict[str, str] | None:
         return None
 
 
-def _container_envs(names: list[str], runner) -> dict[str, dict[str, str]]:
-    envs = {}
+def _container_envs(names: list[str], runner) -> tuple[dict[str, dict[str, str]], list[str]]:
+    """({name: env}, [names whose env could not be read]). An unreadable env is never treated as clean."""
+    envs, failed = {}, []
     for name in names:
-        res = runner(["inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", name])
-        if getattr(res, "returncode", 1) == 0:
+        try:
+            res = runner(["inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", name])
+        except Exception:  # noqa: BLE001
+            res = None
+        if res is not None and getattr(res, "returncode", 1) == 0:
             envs[name] = _env_names(res.stdout)
-    return envs
+        else:
+            failed.append(name)
+    return envs, failed
 
 
 def s19_findings(registry: dict, *, paper_configs: list[Path], env_files: list[Path], ledger: Path,
@@ -333,9 +358,11 @@ def s19_findings(registry: dict, *, paper_configs: list[Path], env_files: list[P
     """The §19 CRITICAL checks, every dependency injected (tests pass fakes; the host passes defaults)."""
     containers = _default_container_lister(docker_runner) if docker_runner is not None else None
     running = [n for n, s in (containers or {}).items() if s == "running"]
+    envs, uninspectable = _container_envs(running, docker_runner) if docker_runner else ({}, [])
     return [
         paper_guard_configs(paper_configs, config_checker),
-        real_money_state(paper_configs, env_files, _container_envs(running, docker_runner) if docker_runner else {}),
+        real_money_state(paper_configs, env_files, envs, containers_known=containers is not None,
+                         uninspectable=uninspectable),
         operator_ledger_chain(ledger, ledger_verifier),
         sealed_archives(archive_roots, archive_verifier),
         *paper_runtime_vs_registry(registry, containers),

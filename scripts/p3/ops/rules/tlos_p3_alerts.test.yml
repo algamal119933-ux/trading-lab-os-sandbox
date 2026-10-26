@@ -115,7 +115,8 @@ tests:
 
   # Master plan §19 CRITICAL conditions observed by the health job (research/p3/health.py s19_findings):
   # paper-guard failure, real-money-enabled state, broken evidence chains, unauthorized execution and a
-  # stopped control each raise TLOSHealthCritical under their own check label.
+  # stopped control each raise TLOSHealthCritical under their own check label, and so does a §19 run that
+  # could not execute at all (s19_checks): a check that cannot run is never silently healthy.
   - interval: 1m
     input_series:
       - series: 'tlos_p3_health_check{check="paper_guard"}'
@@ -129,6 +130,8 @@ tests:
       - series: 'tlos_p3_health_check{check="unauthorized_execution"}'
         values: '0 2 2'
       - series: 'tlos_p3_health_check{check="control_running:FP-CONTROL-3"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="s19_checks"}'
         values: '0 2 2'
       - series: 'tlos_p3_health_check{check="paper_runtime"}'
         values: '1 1 1'
@@ -163,6 +166,10 @@ tests:
             exp_annotations:
               summary: "TLOS health CRITICAL: control_running:FP-CONTROL-3"
               description: "P3 health check control_running:FP-CONTROL-3 is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "s19_checks"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: s19_checks"
+              description: "P3 health check s19_checks is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
       - eval_time: 2m
         alertname: TLOSHealthWarning
         exp_alerts:

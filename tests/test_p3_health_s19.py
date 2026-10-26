@@ -57,8 +57,9 @@ def test_a_guard_that_cannot_run_is_critical_not_healthy(tmp_path):
     assert health.paper_guard_configs([_cfg(tmp_path)], broken)["severity"] == "CRITICAL"
 
 
-def test_no_config_on_the_host_is_info(tmp_path):
-    assert health.paper_guard_configs([tmp_path / "absent.json"], _real_checker())["severity"] == "INFO"
+def test_no_config_on_the_host_is_unproven_not_healthy(tmp_path):
+    f = health.paper_guard_configs([tmp_path / "absent.json"], _real_checker())
+    assert f["severity"] == "WARNING" and "UNPROVEN" in f["detail"]
 
 
 # --- real-money-enabled state -------------------------------------------------------------------------
@@ -103,7 +104,8 @@ def test_container_env_is_parsed_by_name_only():
     class R:
         returncode = 0
         stdout = f"PATH=/usr/bin\nFREQTRADE__EXCHANGE__KEY={SECRET}\n"
-    envs = health._container_envs(["tradinglab-fp-control-3"], lambda cmd: R())
+    envs, failed = health._container_envs(["tradinglab-fp-control-3"], lambda cmd: R())
+    assert failed == []
     f = health.real_money_state([], [], envs)
     assert f["severity"] == "CRITICAL" and SECRET not in f["detail"]
 
@@ -244,7 +246,7 @@ def test_standard_findings_without_s19_is_unchanged(tmp_path):
 def test_the_promtool_rule_tests_cover_every_s19_check_label():
     text = RULE_TESTS.read_text(encoding="utf-8")
     for label in ("paper_guard", "real_money", "evidence_chain:operator_ledger", "evidence_chain:sealed_archives",
-                  "unauthorized_execution", "control_running:FP-CONTROL-3"):
+                  "unauthorized_execution", "control_running:FP-CONTROL-3", "s19_checks"):
         assert f'check="{label}"' in text and f'check: "{label}"' in text
 
 
@@ -261,3 +263,61 @@ def test_the_s19_defaults_are_read_only_paths_and_never_secret_values():
     assert inputs["env_files"] == [health.RUNTIME_ROOT / ".env"]
     assert health.OPERATOR_LEDGER.name == "operator_ledger.jsonl"
     assert hashlib.sha256(EXAMPLE.read_bytes()).hexdigest()  # the example stays readable
+
+
+# --- fail-closed: nothing that cannot be proven is reported as healthy ---------------------------------
+
+def test_real_money_with_nothing_inspected_is_unproven(tmp_path):
+    f = health.real_money_state([tmp_path / "absent.json"], [tmp_path / ".env-absent"], {})
+    assert f["severity"] == "WARNING" and "UNPROVEN" in f["detail"]
+
+
+def test_real_money_with_docker_unknown_is_unproven(tmp_path):
+    f = health.real_money_state([_cfg(tmp_path)], [], {}, containers_known=False)
+    assert f["severity"] == "WARNING" and "docker" in f["detail"]
+
+
+def test_a_running_paper_container_whose_env_cannot_be_read_is_critical(tmp_path):
+    f = health.real_money_state([_cfg(tmp_path)], [], {}, uninspectable=["tlos-h1-paper-cohort-1"])
+    assert f["severity"] == "CRITICAL" and "unreadable" in f["detail"]
+
+
+def test_container_env_inspect_failure_is_reported_not_dropped():
+    class R:
+        def __init__(self, rc, out=""):
+            self.returncode, self.stdout, self.stderr = rc, out, ""
+
+    def docker(cmd):
+        if cmd[0] == "ps":
+            return R(0, "tradinglab-fp-control-3\trunning\n")
+        raise OSError("docker went away")
+    envs, failed = health._container_envs(["tradinglab-fp-control-3"], docker)
+    assert envs == {} and failed == ["tradinglab-fp-control-3"]
+
+
+def test_a_s19_run_that_raises_is_critical_not_omitted(tmp_path):
+    class R:
+        returncode, stdout, stderr = 0, "enabled\n", ""
+
+    def explode(_cfg):
+        raise RuntimeError("guard import broke")
+    s19 = dict(paper_configs=[_cfg(tmp_path)], env_files=[], ledger=tmp_path / "absent.jsonl", archive_roots=[],
+               config_checker=explode, ledger_verifier=kill_switch.verify_ledger, archive_verifier=lambda a: {},
+               docker_runner=None)
+    real = health.s19_findings
+    try:
+        health.s19_findings = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        findings = health.standard_findings({"instances": []}, runner=lambda cmd: R(), verifier=None,
+                                            lane=tmp_path, backup_target=tmp_path, fp_lane_root=tmp_path, s19=s19)
+    finally:
+        health.s19_findings = real
+    s19f = [f for f in findings if f["check"] == "s19_checks"]
+    assert s19f and s19f[0]["severity"] == "CRITICAL"
+    assert health.overall(findings) == "CRITICAL"
+
+
+def test_the_health_cli_never_drops_the_s19_set_silently():
+    src = (REPO_ROOT / "scripts" / "p3" / "health_check.py").read_text(encoding="utf-8")
+    # a set that cannot be prepared is CRITICAL; a deliberately disabled set is a WARNING, never absent
+    assert '"check": "s19_checks", "severity": health.CRITICAL' in src
+    assert '"check": "s19_checks", "severity": health.WARNING' in src

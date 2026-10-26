@@ -56,6 +56,28 @@ tests (each label raises its alert). A check that cannot run reports WARNING/CRI
 | **unexpected writer** | — | — | **NOT_COVERED**. Needs a file-integrity watch on the lane/evidence paths (e.g. `auditd` rules or inotify), a host install — Owner decision. Sealed-evidence tampering is still caught by the archive rehash |
 | WARNING examples (research disk, API/rate limit, H1 provenance, upstream change, contention) | `free_space:*`, `backup_recency`, timers | existing | **PARTIAL** — capacity/recovery covered; API/rate-limit and upstream-change belong to a running cohort's capture loop |
 
+### 1.2 Fail-closed audit: no safety failure can be reported as healthy
+Every path where a §19 check cannot establish its answer reports WARNING (UNPROVEN) or CRITICAL. None reports INFO.
+
+| Situation | Reported as |
+|---|---|
+| paper guard raises, or a config is unreadable | `paper_guard` CRITICAL |
+| no paper config found at the expected paths (nothing to guard) | `paper_guard` WARNING "UNPROVEN". It used to be INFO; that was changed in this update |
+| a config or env file is unreadable | `real_money` CRITICAL ("cannot prove") |
+| no config and no env file could be inspected | `real_money` WARNING "UNPROVEN". It used to be INFO; changed in this update |
+| docker could not be queried, so container envs are unknown | `real_money` WARNING "UNPROVEN" (changed in this update); `paper_runtime` WARNING |
+| a running paper container's env cannot be read (`docker inspect` fails or raises) | `real_money` CRITICAL. Previously the container was silently skipped; changed in this update |
+| operator ledger absent / verifier raises | `evidence_chain:operator_ledger` WARNING / CRITICAL |
+| no sealed archive found / verifier raises on one | `evidence_chain:sealed_archives` WARNING / CRITICAL |
+| the §19 set raises as a whole, or its inputs cannot be prepared (e.g. an import breaks) | `s19_checks` CRITICAL (new in this update). It is never omitted |
+| §19 deliberately disabled with `--no-s19` | `s19_checks` WARNING (new in this update) |
+| the hourly job itself dies or stops writing | `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` CRITICAL (rule leg; requires node-exporter) |
+| the exporter is down | `TLOSNodeExporterDown` CRITICAL (requires node-exporter) |
+
+Residual limit: until node-exporter and a channel are installed (§3), alerts are evaluated only in tests, and on the host
+only the journal and desktop notification from `scheduled_health.sh` are live. A dead host cannot report itself without
+the optional off-host dead-man (§3 step 7).
+
 ## 2. Verification done in this change (cloud, no host)
 - `promtool check rules` and `promtool check config` (Prometheus 3.14.0): SUCCESS, 7 rules.
 - `promtool test rules scripts/p3/ops/rules/tlos_p3_alerts.test.yml`: SUCCESS. Every CRITICAL and WARNING the
