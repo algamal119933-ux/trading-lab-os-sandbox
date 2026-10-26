@@ -26,6 +26,37 @@ REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_reg
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Fail-closed wrapper: a health run that crashes is reported as CRITICAL (exit 2, and the textfile
+    says so), never as a WARNING exit code or a stale-but-healthy textfile."""
+    try:
+        return _run(argv)
+    except SystemExit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - a health run that cannot complete is a critical finding
+        finding = {"check": "health_run", "severity": health.CRITICAL,
+                   "detail": f"health run failed ({type(exc).__name__}: {str(exc)[:160]})"}
+        prom = _arg_value(argv, "--prom-textfile")
+        if prom:
+            try:
+                health.write_textfile([finding], Path(prom))
+            except Exception:  # noqa: BLE001 - the stale-textfile alert still covers this
+                pass
+        print(f"  {finding['severity']:8} {finding['check']:42} {finding['detail']}")
+        print(f"HEALTH = {health.CRITICAL}")
+        return 2
+
+
+def _arg_value(argv: list[str] | None, flag: str) -> str | None:
+    args = list(sys.argv[1:] if argv is None else argv)
+    for i, a in enumerate(args):
+        if a == flag and i + 1 < len(args):
+            return args[i + 1]
+        if a.startswith(flag + "="):
+            return a.split("=", 1)[1]
+    return None
+
+
+def _run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root-min-gib", type=float, default=20.0)
     parser.add_argument("--lane", type=Path, default=Path("/home/hamza/tlos-paper/h1-paper-cohort-1"))

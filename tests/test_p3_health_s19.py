@@ -321,3 +321,37 @@ def test_the_health_cli_never_drops_the_s19_set_silently():
     # a set that cannot be prepared is CRITICAL; a deliberately disabled set is a WARNING, never absent
     assert '"check": "s19_checks", "severity": health.CRITICAL' in src
     assert '"check": "s19_checks", "severity": health.WARNING' in src
+
+
+# -- fail-closed: base checks and the run itself (Owner review 2026-10-27) ----------------------------
+
+
+def test_a_timer_whose_state_systemd_cannot_give_is_unproven_not_healthy():
+    def silent(cmd):  # systemctl answered nothing at all
+        return subprocess.CompletedProcess(cmd, 1, "", "")
+    for want_active in (True, False):
+        f = health.timer_expected("tlos-p2-window-fp-control-3.timer", want_active=want_active, runner=silent)
+        assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+
+
+def test_a_timer_check_whose_runner_raises_is_unproven_not_healthy():
+    def broken(cmd):
+        raise OSError("no user bus")
+    f = health.timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=broken)
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+
+
+def test_a_crashed_health_run_is_critical_with_exit_2_and_a_critical_textfile(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("hc_failclosed", REPO_ROOT / "scripts" / "p3" / "health_check.py")
+    hc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hc)
+
+    def boom(argv=None):
+        raise RuntimeError("registry unreadable")
+    monkeypatch.setattr(hc, "_run", boom)
+    prom = tmp_path / "tlos_p3_health.prom"
+    assert hc.main(["--prom-textfile", str(prom)]) == 2
+    text = prom.read_text(encoding="utf-8")
+    assert 'tlos_p3_health_check{check="health_run"} 2' in text
+    assert "HEALTH = CRITICAL" in capsys.readouterr().out

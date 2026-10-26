@@ -71,6 +71,8 @@ Every path where a §19 check cannot establish its answer reports WARNING (UNPRO
 | no sealed archive found / verifier raises on one | `evidence_chain:sealed_archives` WARNING / CRITICAL |
 | the §19 set raises as a whole, or its inputs cannot be prepared (e.g. an import breaks) | `s19_checks` CRITICAL (new in this update). It is never omitted |
 | §19 deliberately disabled with `--no-s19` | `s19_checks` WARNING (new in this update) |
+| systemd cannot be queried, or gives no state for a timer (including the P2 timer) | `timer:<unit>` WARNING "UNPROVEN". It used to be INFO for the P2 timer, which counts as "not active"; changed in the Owner-review update |
+| the health run itself raises (e.g. an unreadable registry) | `health_run` CRITICAL, exit code 2, and a textfile with `tlos_p3_health_overall 2`. It used to be a Python traceback, exit 1 (read as WARNING) and a stale textfile; changed in the Owner-review update |
 | the hourly job itself dies or stops writing | `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` CRITICAL (rule leg; requires node-exporter) |
 | the exporter is down | `TLOSNodeExporterDown` CRITICAL (requires node-exporter) |
 

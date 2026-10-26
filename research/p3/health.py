@@ -72,10 +72,19 @@ def _unit_state(unit: str, runner) -> tuple[str, str]:
 
 
 def timer_expected(unit: str, *, want_active: bool, runner) -> dict:
-    enabled, active = _unit_state(unit, runner)
+    """A timer judged against its expected state. Fail-closed: if systemd cannot be asked, or answers
+    nothing for is-active (which always prints a state, including 'inactive' for an absent unit), the
+    state is UNPROVEN (WARNING), never INFO."""
+    want = "enabled+active" if want_active else "disabled+inactive"
+    try:
+        enabled, active = _unit_state(unit, runner)
+    except Exception as exc:  # noqa: BLE001 - a state that cannot be read is not a healthy state
+        return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: systemctl could not be queried "
+                                                  f"({type(exc).__name__}); expected {want}")
+    if active == "unknown":
+        return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: systemctl gave no state ({enabled}/?); expected {want}")
     ok = (enabled == "enabled" and active == "active") if want_active else (enabled != "enabled" and active != "active")
     sev = INFO if ok else (WARNING if want_active else CRITICAL)
-    want = "enabled+active" if want_active else "disabled+inactive"
     return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
 
 
