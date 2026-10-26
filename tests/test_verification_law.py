@@ -231,3 +231,74 @@ def test_fat_tails_inflate_alpha_at_wald_bound_and_calibration_restores_it():
 def test_simulation_is_deterministic():
     kw = dict(true_sharpe=0.0, s=0.3, upper=2.77, lower=-1.56, burn_in=10, max_n=500, paths=50, seed=5)
     assert vl.simulate_error_rates(**kw) == vl.simulate_error_rates(**kw)
+
+
+# -- §6.4 calibration under the declared return model (Owner decision OD-3) ----------------------------
+
+_CAL = dict(s=0.2, alpha=0.05, beta=0.20, burn_in=20, max_n=400)
+_SIM = dict(s=0.2, burn_in=20, max_n=400)
+
+
+def test_path_peak_matches_the_sprt_decision_unit_for_unit():
+    from verification_law.sprt import _path_max_llr
+    rng = random.Random(7)
+    upper, lower = vl.sprt_bounds(0.05, 0.20)
+    for _ in range(300):
+        xs = [rng.gauss(0.0, 1.0) * (3.0 if rng.random() < 0.05 else 1.0) for _ in range(rng.randrange(25, 200))]
+        peak = _path_max_llr(iter(xs), true_sharpe=0.15, s=0.2, lower=lower, burn_in=20, max_n=150)
+        state = vl.sprt_run([0.01 * (0.15 + e) for e in xs], s=0.2, alpha=0.05, beta=0.20, burn_in=20, max_n=150)
+        assert (peak >= upper) == (state.decision == sp.ACCEPT_H1)
+
+
+def test_calibration_keeps_wald_under_the_gaussian_model():
+    out = vl.calibrate_upper_bound(seed=101, paths=2000, model=vl.iid_model(), **_CAL)
+    assert out["status"] == "CALIBRATED"
+    assert out["upper"] == pytest.approx(out["wald_upper"]) and out["false_accept"] <= 0.05
+
+
+@pytest.mark.parametrize("name, model", [
+    ("student_t3", vl.iid_model(vl.student_t_sampler(3))),
+    ("garch_t3", vl.garch_t_model()),
+])
+def test_naive_wald_bound_over_accepts_and_calibration_restores_alpha(name, model):
+    out = vl.calibrate_upper_bound(seed=101, paths=3000, model=model, **_CAL)
+    assert out["false_accept_at_wald"] > 0.05, f"{name}: the naive Wald bound should over-accept at zero edge"
+    assert out["status"] == "CALIBRATED" and out["upper"] > out["wald_upper"] and out["false_accept"] <= 0.05
+    fresh = vl.simulate_model_error_rates(true_sharpe=0.0, upper=out["upper"], lower=out["lower"], seed=202,
+                                          paths=2000, model=model, **_SIM)
+    assert fresh["ACCEPT_H1"] <= 0.05 + 0.015, f"{name}: calibrated bound must hold out of sample"
+    power = vl.simulate_model_error_rates(true_sharpe=0.2, upper=out["upper"], lower=out["lower"], seed=303,
+                                          paths=800, model=model, **_SIM)
+    assert power["ACCEPT_H1"] >= 1 - 0.20 - 0.03
+
+
+def test_block_bootstrap_of_a_clustered_series_calibrates_without_weakening():
+    rng = random.Random(5)
+    gen = vl.garch_t_model()(rng)
+    series = [next(gen) for _ in range(3000)]
+    model = vl.stationary_bootstrap_model(series, mean_block=20)
+    out = vl.calibrate_upper_bound(seed=404, paths=2000, model=model, **_CAL)
+    assert out["status"] == "CALIBRATED" and out["upper"] >= out["wald_upper"] and out["false_accept"] <= 0.05
+    fresh = vl.simulate_model_error_rates(true_sharpe=0.0, upper=out["upper"], lower=out["lower"], seed=505,
+                                          paths=1500, model=model, **_SIM)
+    assert fresh["ACCEPT_H1"] <= 0.05 + 0.015
+
+
+def test_calibration_never_weakens_and_reports_failure_honestly():
+    model = vl.garch_t_model()
+    out = vl.calibrate_upper_bound(seed=101, paths=1000, model=model, ceiling=2.8, **_CAL)
+    assert out["status"] == "NOT_CALIBRATABLE"
+    for seed in (1, 2, 3):
+        assert vl.calibrate_upper_bound(seed=seed, paths=500, model=vl.iid_model(), **_CAL)["upper"] >= \
+            vl.sprt_bounds(0.05, 0.20)[0]
+
+
+def test_calibration_and_models_are_deterministic_and_validated():
+    kw = dict(seed=9, paths=300, model=vl.garch_t_model(), **_CAL)
+    assert vl.calibrate_upper_bound(**kw) == vl.calibrate_upper_bound(**kw)
+    with pytest.raises(ValueError):
+        vl.garch_t_model(a=0.2, b=0.85)
+    with pytest.raises(ValueError):
+        vl.stationary_bootstrap_model([1.0] * 10)
+    with pytest.raises(ValueError):
+        vl.calibrate_upper_bound(seed=1, paths=10, model=vl.iid_model(), **_CAL)

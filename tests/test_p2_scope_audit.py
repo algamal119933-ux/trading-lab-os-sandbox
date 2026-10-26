@@ -1571,10 +1571,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # dataset, registry, ledger or evidence change.
 _PVL = "PROFITABILITY-VERIFICATION-LAW-1"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/PROFITABILITY_VERIFICATION_LAW_1.md": f"{_PVL} — the law: evidence classes, gates, SPRT, kills, verdicts",
+    "research/PROFITABILITY_VERIFICATION_LAW_1.md": f"{_PVL} — the law with Owner decisions OD-1..OD-3 applied",
     "research/verification_law/__init__.py": f"{_PVL} — package exports",
     "research/verification_law/core.py": f"{_PVL} — PSR, SR0, MinTRL, power, kill bounds, BHY; DSR/PBO/Holm forwarded",
-    "research/verification_law/sprt.py": f"{_PVL} — Wald SPRT on standardized units and its calibration simulator",
+    "research/verification_law/sprt.py": f"{_PVL} — Wald SPRT; §6.4 calibration under t, GARCH-t and block-bootstrap models",
     "tests/test_verification_law.py": f"{_PVL} — paper example, trialgate equality, power table, SPRT error rates",
     "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
