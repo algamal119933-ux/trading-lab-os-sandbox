@@ -102,6 +102,24 @@ def overall(findings: list[dict]) -> str:
     return CRITICAL if CRITICAL in sevs else WARNING if WARNING in sevs else INFO
 
 
+def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict] | None,
+                      root_min_gib: float = 20.0, lane: Path = Path("/home/hamza/tlos-paper/h1-paper-cohort-1"),
+                      lane_min_gib: float = 20.0, backup_target: Path = Path("/mnt/tlos-wdc/tlos-backups"),
+                      rpo_hours: float = 26.0,
+                      fp_lane_root: Path = Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"),
+                      ) -> list[dict]:
+    """The host's standard check set, shared by the health CLI and the Control Room projection."""
+    return [
+        free_space(Path("/"), root_min_gib, "root"),
+        free_space(lane, lane_min_gib, "h1_lane"),
+        mounted("/mnt/tlos-wdc"),
+        backup_recency(backup_target, rpo_hours, verifier=verifier),
+        timer_expected("tlos-p3-backup.timer", want_active=True, runner=runner),
+        timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=runner),
+        *normal_end_due(registry, fp_lane_root),
+    ]
+
+
 def default_runner(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
