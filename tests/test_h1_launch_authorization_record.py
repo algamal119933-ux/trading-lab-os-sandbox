@@ -152,3 +152,39 @@ def test_no_launch_tool_reads_the_record():
             text = path.read_text(encoding="utf-8")
             assert "OWNER_H1_LAUNCH_AUTHORIZATION" not in text, path
             assert "H1_LAUNCH_AUTHORIZED" not in text, path
+
+
+# -- coordination with the merged §19 health check (PR #85; research/p3/health.py is Lane B's) ----------
+# The hourly health run reports `unauthorized_execution` CRITICAL for any running paper container that no
+# RUNNING registry cohort backs. H1 has no registry row, so today a running H1 container is CRITICAL. A
+# grant PR that flips H1_LAUNCH_AUTHORIZED to YES must, in the same change, give the health check a way to
+# recognise the granted H1 cohort (e.g. a RUNNING H1 row the check reads). Otherwise a lawful launch would
+# page as unauthorized execution. This test fails if the record says YES before that is true.
+
+H1_CONTAINER = "tlos-h1-paper-cohort-1-freqtrade"
+
+
+def _h1_is_unauthorized_today() -> bool:
+    import json
+    import sys
+    for extra in (str(REPO / "research"), str(REPO / "scripts")):
+        if extra not in sys.path:
+            sys.path.insert(0, extra)
+    from p3 import health  # noqa: PLC0415
+    registry = json.loads((REPO / "research" / "fp" / "records" / "forward_paper_cohort_registry.json")
+                          .read_text(encoding="utf-8"))
+    findings = health.paper_runtime_vs_registry(registry, {H1_CONTAINER: "running"})
+    sev = {f["check"]: f["severity"] for f in findings}
+    return sev.get("unauthorized_execution") == health.CRITICAL
+
+
+def test_the_health_check_and_the_record_agree_about_h1():
+    granted = {k: v[0] for k, v in parse(machine_block(RECORD.read_text(encoding="utf-8"))).items()}[
+        "H1_LAUNCH_AUTHORIZED"]
+    if granted == "YES":
+        assert not _h1_is_unauthorized_today(), (
+            "H1_LAUNCH_AUTHORIZED = YES, but research/p3/health.py would still page a running H1 container as "
+            "unauthorized execution: the grant PR must also teach the health check the granted cohort")
+    else:
+        assert granted == "NO"
+        assert _h1_is_unauthorized_today(), "while NOT granted, a running H1 container must be CRITICAL"
