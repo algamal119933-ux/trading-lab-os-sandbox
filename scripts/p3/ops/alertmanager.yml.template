@@ -1,0 +1,63 @@
+# Trading Lab OS — P3-PLN-06 Alertmanager TEMPLATE. NO SECRETS IN GIT.
+#
+# OWNER ACTION (docs/p3/PLN_06_ALERTING.md §3): copy this file to
+#   ~/.config/tlos-p3-ops/alertmanager.yml
+# (outside the repository and outside every P3 backup root), replace each __PLACEHOLDER__, delete the
+# receivers you do not use, and put secrets only in the files under ~/.config/tlos-p3-ops/secrets/
+# (chmod 600). Alertmanager reads them through *_file fields; their values never enter Git, the
+# compose file, the journal or a backup set.
+#
+# Routing (master plan §19): critical → page now and repeat every 1 h; warning → grouped, repeat
+# every 12 h; the always-firing TLOSWatchdog → the off-host dead-man receiver only.
+# Until the Owner chooses a channel, everything goes to the "null" receiver: nothing is sent.
+global:
+  resolve_timeout: 2h
+
+route:
+  receiver: "null"
+  group_by: ["alertname", "check"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: ['alertname="TLOSWatchdog"']
+      receiver: "null"            # OWNER CHOICE: "deadman" once a healthchecks.io / Uptime Kuma push URL exists
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 5m
+    - matchers: ['severity="critical"']
+      receiver: "null"            # OWNER CHOICE: "telegram" or "ntfy"
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers: ['severity="warning"']
+      receiver: "null"            # OWNER CHOICE: "telegram" or "ntfy"
+      repeat_interval: 12h
+
+inhibit_rules:
+  # When the exporter is down, its textfile alerts are a consequence, not news.
+  - source_matchers: ['alertname="TLOSNodeExporterDown"']
+    target_matchers: ['alertname=~"TLOSHealthTextfile.*|TLOSTextfileScrapeError"']
+
+receivers:
+  - name: "null"
+
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/secrets/telegram_bot_token
+        chat_id: __TELEGRAM_CHAT_ID__     # integer; the Owner's own chat with the bot
+        parse_mode: ""
+        send_resolved: true
+
+  - name: ntfy
+    webhook_configs:
+      # url_file holds e.g. https://ntfy.sh/<private-topic> (or a self-hosted ntfy). The raw
+      # Alertmanager JSON is delivered as the message body; verify the rendering on first test.
+      - url_file: /etc/alertmanager/secrets/ntfy_url
+        send_resolved: true
+
+  - name: deadman
+    webhook_configs:
+      # url_file holds the healthchecks.io ping URL (or a remote Uptime Kuma push URL). Configure
+      # that check with period 5 min and grace 15 min, so silence pages the Owner from off-host.
+      - url_file: /etc/alertmanager/secrets/deadman_url
+        send_resolved: false

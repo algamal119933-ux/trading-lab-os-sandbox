@@ -1391,6 +1391,24 @@ P3_SCHED_SCOPE: dict[str, str] = {
 }
 
 
+# PR #79, merged. Two parents: 253dbf29 (main before, P3_SCHED) + 819ee7e4
+# (the claude/p3-acceptance-03-06 branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_ACC_MERGE = "8f673eb448b3490710a90c0caedabbd30d561e24"
+
+# P3 acceptance record for PLN-03 (first scheduled set under systemd: verify + restore drill PASS) and
+# PLN-06 (hourly health under systemd), plus classifying the hourly-rewritten health textfile as derived
+# so the operator inventory is not perpetually STALE. No runtime, strategy, risk, dataset or evidence change.
+_ACC = "P3-PLN-03/06 scheduled acceptance"
+P3_ACC_SCOPE: dict[str, str] = {
+    "research/p3/records/state_classes.json": f"{_ACC} — operator profile: p3-evidence/*.prom is derived (rewritten hourly)",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_ACC} — scheduled set 20261025T211956Z verify + drill PASS",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_ACC} — health timer installed and running; remaining PLN-06 condition",
+    "tests/test_p3_state_inventory.py": f"{_ACC} — the health textfile is classified derived in the operator profile",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05/06 (PR #78) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1449,6 +1467,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_OPS": (P3_OPS_MERGE, P3_OPS_SCOPE),
     "P3_PLN_04": (P3_PLN_04_MERGE, P3_PLN_04_SCOPE),
     "P3_SCHED": (P3_SCHED_MERGE, P3_SCHED_SCOPE),
+    "P3_ACC": (P3_ACC_MERGE, P3_ACC_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1456,16 +1475,20 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 acceptance record for PLN-03 (first scheduled set under systemd: verify + restore drill PASS) and
-# PLN-06 (hourly health under systemd), plus classifying the hourly-rewritten health textfile as derived
-# so the operator inventory is not perpetually STALE. No runtime, strategy, risk, dataset or evidence change.
-_ACC = "P3-PLN-03/06 scheduled acceptance"
+# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
+# Alertmanager template with no secrets, and a separate loopback-only ops-plane compose project.
+# Prepared, not installed or started. No runtime, strategy, risk, dataset, registry or evidence change.
+_P06A = "P3-PLN-06 §19 alert leg"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/records/state_classes.json": f"{_ACC} — operator profile: p3-evidence/*.prom is derived (rewritten hourly)",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_ACC} — scheduled set 20261025T211956Z verify + drill PASS",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_ACC} — health timer installed and running; remaining PLN-06 condition",
-    "tests/test_p3_state_inventory.py": f"{_ACC} — the health textfile is classified derived in the operator profile",
-    "tests/test_p2_scope_audit.py": "P3-PLN-05/06 (PR #78) pinned to its merge; this branch's scope",
+    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06A} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
+    "scripts/p3/ops/prometheus.yml": f"{_P06A} — scrape the host node-exporter, load the rules, send to Alertmanager",
+    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06A} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06A} — promtool rule unit tests: every condition raises its alert",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06A} — receivers via *_file secrets, routed to null until the Owner chooses",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06A} — design, verification, Owner runbook, acceptance mapping",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06A} — pointer update; PLN-06 stays PARTIAL",
+    "tests/test_p3_alerting.py": f"{_P06A} — rules read only emitted metrics; loopback, pinned, secret-free",
+    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
