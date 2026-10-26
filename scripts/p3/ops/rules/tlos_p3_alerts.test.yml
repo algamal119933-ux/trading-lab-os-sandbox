@@ -1,0 +1,179 @@
+# promtool test rules tlos_p3_alerts.test.yml  (run from scripts/p3/ops/rules/)
+# Each §19 condition the health job emits raises its alert in a test (P3_CONTRACT §3 PLN-06).
+rule_files:
+  - tlos_p3_alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'tlos_p3_health_check{check="mount:/mnt/tlos-wdc"}'
+        values: '0 0 2 2 2'
+      - series: 'tlos_p3_health_check{check="timer:tlos-p2-window-fp-control-3.timer"}'
+        values: '0 0 0 2 2'
+      - series: 'tlos_p3_health_check{check="free_space:root"}'
+        values: '2 2 2 2 2'
+      - series: 'tlos_p3_health_check{check="backup_recency"}'
+        values: '0 1 1 1 1'
+      - series: 'tlos_p3_health_check{check="normal_end:FP-CONTROL-3"}'
+        values: '1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "free_space:root"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: free_space:root"
+              description: "P3 health check free_space:root is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 4m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "mount:/mnt/tlos-wdc"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: mount:/mnt/tlos-wdc"
+              description: "P3 health check mount:/mnt/tlos-wdc is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "timer:tlos-p2-window-fp-control-3.timer"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: timer:tlos-p2-window-fp-control-3.timer"
+              description: "P3 health check timer:tlos-p2-window-fp-control-3.timer is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "free_space:root"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: free_space:root"
+              description: "P3 health check free_space:root is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 0m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "normal_end:FP-CONTROL-3"}
+            exp_annotations:
+              summary: "TLOS health WARNING: normal_end:FP-CONTROL-3"
+              description: "P3 health check normal_end:FP-CONTROL-3 is WARNING."
+      - eval_time: 2m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "backup_recency"}
+            exp_annotations:
+              summary: "TLOS health WARNING: backup_recency"
+              description: "P3 health check backup_recency is WARNING."
+          - exp_labels: {severity: warning, check: "normal_end:FP-CONTROL-3"}
+            exp_annotations:
+              summary: "TLOS health WARNING: normal_end:FP-CONTROL-3"
+              description: "P3 health check normal_end:FP-CONTROL-3 is WARNING."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="tlos-host-node", instance="127.0.0.1:9100"}'
+        values: '1 0 0 0 0 0 0 0'
+      - series: 'node_textfile_scrape_error'
+        values: '0 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: TLOSNodeExporterDown
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: TLOSNodeExporterDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: tlos-host-node, instance: "127.0.0.1:9100"}
+            exp_annotations:
+              summary: "Host node-exporter is down"
+              description: "Prometheus cannot scrape 127.0.0.1:9100."
+      - eval_time: 7m
+        alertname: TLOSTextfileScrapeError
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "node-exporter cannot parse a textfile"
+              description: "The textfile collector reports a scrape error."
+      - eval_time: 12m
+        alertname: TLOSHealthTextfileMissing
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "TLOS health textfile is not visible to node-exporter"
+              description: "No tlos_p3_health.prom in the textfile collector. Check the collector directory and permissions."
+      - eval_time: 0m
+        alertname: TLOSWatchdog
+        exp_alerts:
+          - exp_labels: {severity: none}
+            exp_annotations:
+              summary: "TLOS ops-plane watchdog (always firing)"
+
+  - interval: 1m
+    input_series:
+      # mtime frozen at t=0: the health job stopped writing.
+      - series: 'node_textfile_mtime_seconds{file="/home/hamza/tlos-paper/p3-evidence/tlos_p3_health.prom"}'
+        values: '0x200'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: TLOSHealthTextfileStale
+        exp_alerts: []
+      - eval_time: 130m
+        alertname: TLOSHealthTextfileStale
+        exp_alerts:
+          - exp_labels: {severity: critical, file: "/home/hamza/tlos-paper/p3-evidence/tlos_p3_health.prom"}
+            exp_annotations:
+              summary: "TLOS health job has not written for over 2 hours"
+              description: "tlos_p3_health.prom is 2h 10m 0s old. Check tlos-p3-health.timer."
+
+  # Master plan §19 CRITICAL conditions observed by the health job (research/p3/health.py s19_findings):
+  # paper-guard failure, real-money-enabled state, broken evidence chains, unauthorized execution and a
+  # stopped control each raise TLOSHealthCritical under their own check label, and so does a §19 run that
+  # could not execute at all (s19_checks): a check that cannot run is never silently healthy.
+  - interval: 1m
+    input_series:
+      - series: 'tlos_p3_health_check{check="paper_guard"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="real_money"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="evidence_chain:operator_ledger"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="evidence_chain:sealed_archives"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="unauthorized_execution"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="control_running:FP-CONTROL-3"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="s19_checks"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="paper_runtime"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: TLOSHealthCritical
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "paper_guard"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: paper_guard"
+              description: "P3 health check paper_guard is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "real_money"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: real_money"
+              description: "P3 health check real_money is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "evidence_chain:operator_ledger"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: evidence_chain:operator_ledger"
+              description: "P3 health check evidence_chain:operator_ledger is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "evidence_chain:sealed_archives"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: evidence_chain:sealed_archives"
+              description: "P3 health check evidence_chain:sealed_archives is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "unauthorized_execution"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: unauthorized_execution"
+              description: "P3 health check unauthorized_execution is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "control_running:FP-CONTROL-3"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: control_running:FP-CONTROL-3"
+              description: "P3 health check control_running:FP-CONTROL-3 is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "s19_checks"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: s19_checks"
+              description: "P3 health check s19_checks is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 2m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "paper_runtime"}
+            exp_annotations:
+              summary: "TLOS health WARNING: paper_runtime"
+              description: "P3 health check paper_runtime is WARNING."
