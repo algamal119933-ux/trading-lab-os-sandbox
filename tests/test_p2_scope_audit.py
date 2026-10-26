@@ -1408,6 +1408,92 @@ P3_ACC_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #80, merged. Two parents: 8f673eb4 (main before, P3_ACC) + 7919e776
+# (the claude/p3-pln-09-authority branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_AUTHORITY_MERGE = "d21bebe57844ec57104df953b41f03eb2784fdf1"
+
+# P3-PLN-09 product-shape authority: the Owner-identified frozen sources, byte for byte, with digests,
+# and the identification + reconciliation record. Documents only; no runtime, strategy, risk, dataset,
+# registry or evidence change.
+_P09A = "P3-PLN-09 product-shape authority"
+P3_PLN_09_AUTHORITY_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_09_PRODUCT_SHAPE_AUTHORITY.md": f"{_P09A} — identification, hash verification, contract reconciliation",
+    "docs/p3/product_shape/Trading_Lab_OS_Prototype_v0.2.5_FINAL.html": f"{_P09A} — frozen prototype, sha256 e17d50dc…",
+    "docs/p3/product_shape/Trading_Lab_OS_LEVEL_A_FREEZE_RECORD_v1.0.md": f"{_P09A} — Level-A freeze record v1.0",
+    "docs/p3/product_shape/TLOS_Control_Room_Approved_Design.md": f"{_P09A} — approved visual direction 2026-09-24",
+    "docs/p3/product_shape/Trading_Lab_OS_CLAUDE_NEW_SESSION_PACK_v1.0.md": f"{_P09A} — carries Shape Lock v1.2 as Appendix A",
+    "docs/p3/product_shape/SOURCES.sha256": f"{_P09A} — the digests of the four sources",
+    "tests/test_p3_product_shape_authority.py": f"{_P09A} — digests, prototype identity, 12 screens, offline CSP",
+    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #81, merged. Two parents: d21bebe5 (main before, P3_PLN_09_AUTHORITY) + 6a12899c
+# (the claude/p3-pln-09-command-center branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_CR_MERGE = "82a975d3ea91c33bfade4b3ce5729c206db1d4ef"
+
+# P3-PLN-09 Control Room, slices 1–2: the frozen prototype used verbatim plus a read-only evidence
+# adapter; 8 of 12 screens bound to live evidence; hourly regeneration in the health run.
+_P09CR = "P3-PLN-09 Control Room"
+P3_PLN_09_CR_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_P09CR} — collect / project / build; digest-checked prototype, read-only",
+    "research/p3/control_room_live.js": f"{_P09CR} — live adapter: same markup, data-bearing components only",
+    "research/p3/records/p3_workstreams.json": f"{_P09CR} — governed PLN-00..11 status read by the view",
+    "research/p3/records/state_classes.json": f"{_P09CR} — operator profile: p3-evidence/control_room/* is derived",
+    "scripts/p3/control_room.py": f"{_P09CR} — build CLI",
+    "scripts/p3/scheduled_health.sh": f"{_P09CR} — hourly view regeneration; health verdict unchanged",
+    "research/p3/health.py": f"{_P09CR} — standard_findings shared by the health CLI and the view",
+    "scripts/p3/health_check.py": f"{_P09CR} — uses health.standard_findings",
+    "tests/test_p3_control_room.py": f"{_P09CR} — degraded mappings and refusals, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09CR} — execution record, slices 1–2, binding plan and estimate",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 authority (PR #80) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
+# PR #87, merged. Two parents: 82a975d3 (main before, P3_PLN_09_CR) + 507e0f77
+# (the claude/p3-pln-09-slice-3 branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_S3_MERGE = "bf208ba647c76e2350b99a4bb744e9b9ad570d40"
+
+# P3-PLN-09 Control Room, slice 3: Decisions, Trades & Positions, Market Workspace and Settings bound from
+# the sealed cohort named by the newest PLN-07 audit record (read-only); all 12 screens bound.
+_P09S3 = "P3-PLN-09 Control Room"
+P3_PLN_09_S3_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_P09S3} — slice 3: sealed cohort reader and the four remaining screens",
+    "research/p3/control_room_live.js": f"{_P09S3} — slice 3: Decisions, Trades & Positions, Market Workspace, Settings",
+    "research/p3/records/p3_workstreams.json": f"{_P09S3} — PLN-09 evidence: 12 of 12 screens bound",
+    "tests/test_p3_control_room.py": f"{_P09S3} — slice-3 sealed screens and missing-evidence negatives, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09S3} — execution record, slice 3",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slices 1–2 (PR #81) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #85, merged. Two parents: bf208ba6 (main before, P3_PLN_09_S3) + dc385f10
+# (the claude/p3-pln-06-alerting branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_ALERT_MERGE = "19d77e905100bca4063fcae309d28aa43fb9e9e5"
+
+# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
+# Alertmanager template with no secrets, a separate loopback-only ops-plane compose project, and the §19
+# CRITICAL health checks (fail-closed). Prepared, not installed or started.
+_P06AL = "P3-PLN-06 §19 alert leg"
+P3_PLN_06_ALERT_SCOPE: dict[str, str] = {
+    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06AL} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
+    "scripts/p3/ops/prometheus.yml": f"{_P06AL} — scrape the host node-exporter, load the rules, send to Alertmanager",
+    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06AL} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06AL} — promtool rule unit tests: every condition raises its alert",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06AL} — receivers via *_file secrets, routed to null until the Owner chooses",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06AL} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06AL} — pointer update; PLN-06 stays PARTIAL",
+    "tests/test_p3_alerting.py": f"{_P06AL} — rules read only emitted metrics; loopback, pinned, secret-free",
+    "research/p3/health.py": f"{_P06AL} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
+    "scripts/p3/health_check.py": f"{_P06AL} — runs the §19 checks by default (--no-s19 for diagnosis)",
+    "research/p3/control_room.py": f"{_P06AL} — the Control Room health view includes the §19 checks",
+    "research/p3/records/p3_workstreams.json": f"{_P06AL} — PLN-06 evidence text: §19 coverage, still PARTIAL",
+    "tests/test_p3_health_s19.py": f"{_P06AL} — positive/negative per §19 condition; no secret value in any finding",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1468,6 +1554,10 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_04": (P3_PLN_04_MERGE, P3_PLN_04_SCOPE),
     "P3_SCHED": (P3_SCHED_MERGE, P3_SCHED_SCOPE),
     "P3_ACC": (P3_ACC_MERGE, P3_ACC_SCOPE),
+    "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
+    "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
+    "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
+    "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1483,7 +1573,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/a1b/a1b_prereg.json": f"{_BR} — machine-readable frozen spec",
     "research/a1b/SHA256SUMS": f"{_BR} — the spec's frozen sha256",
     "tests/test_a1b_preregistration.py": f"{_BR} — digest, boundary and completeness checks, offline",
-    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

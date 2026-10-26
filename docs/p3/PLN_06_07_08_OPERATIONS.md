@@ -86,3 +86,9 @@ The only warning is the uninstalled backup timer. That is an Owner action from P
 PLN-06 acceptance status:
 - **Met:** normal-end detection (F-3), capacity and RPO alerts, scheduled hourly execution, journal record, and desktop notification.
 - **Remaining:** the §19 Prometheus/Grafana leg. It needs `prometheus-node-exporter` with the textfile collector pointed at `p3-evidence/` (a package install, an Owner action), then a scrape target and an alert rule. Without that, **PLN-06 = PARTIAL**, not PASS.
+
+## Update 2026-10-26 — §19 Prometheus leg prepared
+The scrape target, alert rules (with promtool rule tests), Alertmanager template and a separate loopback-only
+ops-plane compose project are prepared in [`PLN_06_ALERTING.md`](PLN_06_ALERTING.md), with the exact Owner steps.
+Nothing was installed or started. **PLN-06 = PARTIAL** until the Owner installs node-exporter, chooses a channel and
+a delivered test alert is recorded.

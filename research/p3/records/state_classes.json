@@ -147,7 +147,8 @@
           ".mypy_cache/*",
           "research/records/scratch/*",
           "*/.venv/*",
-          "p3-evidence/*.prom"
+          "p3-evidence/*.prom",
+          "p3-evidence/control_room/*"
         ]
       },
       {
