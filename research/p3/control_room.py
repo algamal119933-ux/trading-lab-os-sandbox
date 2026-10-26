@@ -127,7 +127,8 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
     now = time.time() if now is None else now
     registry = json.loads(Path(registry_path).read_text(encoding="utf-8"))
     if findings is None:
-        findings = health.standard_findings(registry, runner=health.default_runner, verifier=backup.verify_backup)
+        findings = health.standard_findings(registry, runner=health.default_runner, verifier=backup.verify_backup,
+                                            s19=health.default_s19_inputs(repo_root))
     try:
         paper = kill_switch.paper_containers(docker or kill_switch._docker)
         paper_error = None

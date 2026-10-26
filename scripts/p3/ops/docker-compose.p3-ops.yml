@@ -1,0 +1,48 @@
+# Trading Lab OS — P3-PLN-06 operations plane: alert evaluation and delivery.
+#
+# A separate compose project: it is NOT part of the FP paper runtime (docker-compose.yml +
+# docker-compose.fp.yml), starts no trading component, holds no exchange credential and runs
+# whether or not a paper cohort runs. Reuse only (P3_CONTRACT §4): the FP stack's Prometheus image
+# plus the upstream Alertmanager. Relative paths resolve against this directory. Host networking with every listener on 127.0.0.1, so nothing is
+# exposed to the LAN or the tailnet; it scrapes the host node-exporter on 127.0.0.1:9100.
+#
+# OWNER ACTION to start (docs/p3/PLN_06_ALERTING.md): needs ~/.config/tlos-p3-ops/alertmanager.yml
+#   docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml up -d
+# Stop: docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml down   (never `down -v`)
+# PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
+name: tlos-p3-ops
+
+services:
+  p3-prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: tlos-p3-prometheus
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules:/etc/prometheus/rules:ro
+      - p3_prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.listen-address=127.0.0.1:9091
+
+  p3-alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: tlos-p3-alertmanager
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ${HOME:?HOME must be set}/.config/tlos-p3-ops/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${HOME:?HOME must be set}/.config/tlos-p3-ops/secrets:/etc/alertmanager/secrets:ro
+      - p3_alertmanager_data:/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=127.0.0.1:9093
+      - --cluster.listen-address=
+
+volumes:
+  p3_prometheus_data:
+  p3_alertmanager_data:
