@@ -1,6 +1,6 @@
 # P3-PLN-09 — Control Room (execution record)
 
-**Authority:** [`PLN_09_PRODUCT_SHAPE_AUTHORITY.md`](PLN_09_PRODUCT_SHAPE_AUTHORITY.md) (PR #80; it unblocks PLN-09 on Owner merge) and [`P3_CONTRACT.md`](P3_CONTRACT.md) §3 PLN-09.
+**Authority:** [`PLN_09_PRODUCT_SHAPE_AUTHORITY.md`](PLN_09_PRODUCT_SHAPE_AUTHORITY.md) (PR #80, Owner-merged at `d21bebe5`; PLN-09 is unblocked) and [`P3_CONTRACT.md`](P3_CONTRACT.md) §3 PLN-09.
 PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO
 
 ## Approach: realise the frozen shape, without redesigning it

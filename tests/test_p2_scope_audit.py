@@ -1408,6 +1408,26 @@ P3_ACC_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #80, merged. Two parents: 8f673eb4 (main before, P3_ACC) + 7919e776
+# (the claude/p3-pln-09-authority branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_AUTHORITY_MERGE = "d21bebe57844ec57104df953b41f03eb2784fdf1"
+
+# P3-PLN-09 product-shape authority: the Owner-identified frozen sources, byte for byte, with digests,
+# and the identification + reconciliation record. Documents only; no runtime, strategy, risk, dataset,
+# registry or evidence change.
+_P09A = "P3-PLN-09 product-shape authority"
+P3_PLN_09_AUTHORITY_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_09_PRODUCT_SHAPE_AUTHORITY.md": f"{_P09A} — identification, hash verification, contract reconciliation",
+    "docs/p3/product_shape/Trading_Lab_OS_Prototype_v0.2.5_FINAL.html": f"{_P09A} — frozen prototype, sha256 e17d50dc…",
+    "docs/p3/product_shape/Trading_Lab_OS_LEVEL_A_FREEZE_RECORD_v1.0.md": f"{_P09A} — Level-A freeze record v1.0",
+    "docs/p3/product_shape/TLOS_Control_Room_Approved_Design.md": f"{_P09A} — approved visual direction 2026-09-24",
+    "docs/p3/product_shape/Trading_Lab_OS_CLAUDE_NEW_SESSION_PACK_v1.0.md": f"{_P09A} — carries Shape Lock v1.2 as Appendix A",
+    "docs/p3/product_shape/SOURCES.sha256": f"{_P09A} — the digests of the four sources",
+    "tests/test_p3_product_shape_authority.py": f"{_P09A} — digests, prototype identity, 12 screens, offline CSP",
+    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1468,6 +1488,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_04": (P3_PLN_04_MERGE, P3_PLN_04_SCOPE),
     "P3_SCHED": (P3_SCHED_MERGE, P3_SCHED_SCOPE),
     "P3_ACC": (P3_ACC_MERGE, P3_ACC_SCOPE),
+    "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1476,13 +1497,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # out and starts being a permanent record.
 
 # P3-PLN-09 Control Room, slices 1–2: the frozen prototype used verbatim plus a read-only evidence
-# adapter; 8 of 12 screens bound to live evidence; hourly regeneration in the health run. Stacked on
-# PR #80 (product-shape authority), whose scope follows. No runtime, strategy, risk, dataset, registry or
-# evidence change.
+# adapter; 8 of 12 screens bound to live evidence; hourly regeneration in the health run. Its authority
+# (PR #80) is merged and pinned above. No runtime, strategy, risk, dataset, registry or evidence change.
 _P09 = "P3-PLN-09 Control Room"
-# P3-PLN-09 product-shape authority: the Owner-identified frozen sources, byte for byte, with digests,
-# and the identification + reconciliation record. Documents only.
-_P09A = "P3-PLN-09 product-shape authority"
 BRANCH_SCOPE: dict[str, str] = {
     "research/p3/control_room.py": f"{_P09} — collect / project / build; digest-checked prototype, read-only",
     "research/p3/control_room_live.js": f"{_P09} — live adapter: same markup, data-bearing components only",
@@ -1494,14 +1511,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/health_check.py": f"{_P09} — uses health.standard_findings",
     "tests/test_p3_control_room.py": f"{_P09} — degraded mappings and refusals, synthetic only",
     "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slices 1–2, binding plan and estimate",
-    "docs/p3/PLN_09_PRODUCT_SHAPE_AUTHORITY.md": f"{_P09A} — identification, hash verification, contract reconciliation",
-    "docs/p3/product_shape/Trading_Lab_OS_Prototype_v0.2.5_FINAL.html": f"{_P09A} — frozen prototype, sha256 e17d50dc…",
-    "docs/p3/product_shape/Trading_Lab_OS_LEVEL_A_FREEZE_RECORD_v1.0.md": f"{_P09A} — Level-A freeze record v1.0",
-    "docs/p3/product_shape/TLOS_Control_Room_Approved_Design.md": f"{_P09A} — approved visual direction 2026-09-24",
-    "docs/p3/product_shape/Trading_Lab_OS_CLAUDE_NEW_SESSION_PACK_v1.0.md": f"{_P09A} — carries Shape Lock v1.2 as Appendix A",
-    "docs/p3/product_shape/SOURCES.sha256": f"{_P09A} — the digests of the four sources",
-    "tests/test_p3_product_shape_authority.py": f"{_P09A} — digests, prototype identity, 12 screens, offline CSP",
-    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned; PR #80 and PLN-09 slice scopes",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 authority (PR #80) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
