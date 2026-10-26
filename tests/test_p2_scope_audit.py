@@ -1494,6 +1494,42 @@ P3_PLN_06_ALERT_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #88, merged. Two parents: 19d77e90 (main before) + 6cf6f3fb
+# (the claude/p3-pln-09-mobile-acceptance branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_MOBILE_MERGE = "4a90a054c85e77209dd846e9002f51c00e2d84d2"
+
+# P3-PLN-09 mobile view + Owner acceptance preparation: the frozen mobile tabs (Status, Resume, Incidents,
+# More) bound from the same live scenario, navigation only; the governed forbidden list replaces the
+# prototype's P2-era list; the Owner acceptance checklist (PENDING). Slice 3 (PR #87), slices 1–2 (PR #81),
+# the authority (PR #80) and the PLN-06 alert leg (PR #85) are merged and pinned above. No runtime, strategy, risk, dataset, registry or
+# evidence change.
+_P09 = "P3-PLN-09 Control Room"
+P3_PLN_09_MOBILE_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_P09} — mobile: governed forbidden list (FORBIDDEN_NOW); incidents_state (UNKNOWN without findings)",
+    "research/p3/control_room_live.js": f"{_P09} — mobile tabs bound (Incidents with empty/UNKNOWN states), navigation only; device by viewport or address",
+    "research/p3/records/p3_workstreams.json": f"{_P09} — PLN-09 evidence: mobile bound, Owner checklist pending",
+    "tests/test_p3_control_room.py": f"{_P09} — mobile: no consequential control, unknown on missing evidence",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, mobile slice",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P09} — Owner walkthrough and sign-off block (PENDING)",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 alert leg (PR #85) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #89, merged. Two parents: 4a90a054 (main before) + 5aa0d719
+# (the claude/p3-pln-04-05-runbooks branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_05_RUNBOOKS_MERGE = "c0bb6b2b6f1463705f2543b40a3f216d70df7a38"
+
+# P3-PLN-04/05 runbooks: the reboot acceptance runbook (classification, commands, record template) and the
+# Tier-3 independent-host backup/restore procedure reusing scripts/p3/offsite.py. Documents only; nothing run.
+_P0405 = "P3-PLN-04/05 runbooks"
+P3_PLN_04_05_RUNBOOKS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": f"{_P0405} — reboot acceptance: preflight, commands, classes, record template",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_P0405} — Tier-3 independent host: prerequisites, transport, restore proof",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P0405} — precondition pointer: the repository reboot acceptance runbook",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 mobile view (PR #88) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1558,6 +1594,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
     "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
     "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
+    "P3_PLN_09_MOBILE": (P3_PLN_09_MOBILE_MERGE, P3_PLN_09_MOBILE_SCOPE),
+    "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1575,7 +1613,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/p3/health.py": f"{_P06DR} — monitor_timer (health timer itself, CRITICAL when unscheduled) and clock_sync; unknown → UNPROVEN",
     "tests/test_p3_health_s19.py": f"{_P06DR} — positive/negative/UNPROVEN tests for the two new checks",
     "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06DR} — promtool group: health-timer CRITICAL and clock_sync WARNING raise their alerts",
-    "tests/test_p2_scope_audit.py": "P3-PLN-06 alert leg (PR #85) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/05 runbooks (PR #89) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

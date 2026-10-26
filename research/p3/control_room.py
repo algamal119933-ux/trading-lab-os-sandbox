@@ -352,7 +352,7 @@ def project(obs: dict) -> dict:
         "nowObs": b(f"Observed {now}", f"رُصد {now}"),
         "known": known, "unknown": unknown, "affected": [], "unverified": unverified,
         "events": events, "incidents": [], "viewerNew": 0, "viewStale": False,
-        "extraForbid": [b("Real money, H1 launch, or restarting FP-CONTROL-3", "المال الحقيقي أو إطلاق H1 أو إعادة تشغيل FP-CONTROL-3")],
+        "extraForbid": [],
         "dec": {"unv": False, "stale": False,
                 "none": b(f"No paper cohort running; no decisions since the P2 closure ({fp3.get('closed_utc')}).",
                           f"لا مجموعة ورقية تعمل؛ لا قرارات منذ إغلاق P2 ({fp3.get('closed_utc')}).")},
@@ -407,6 +407,11 @@ def project(obs: dict) -> dict:
         "identity": {"runtime_pin": obs["runtime"]["pin"], "runtime_clean": obs["runtime"]["clean"],
                      "main": obs["governance"]["main"], "boot_id": obs["host"]["boot_id"]},
         "health_findings": obs["health"]["findings"],
+        # Incidents are raised from non-INFO health findings. With no findings at all the health run did
+        # not report, so "none open" would be unproven: the view says UNKNOWN instead (fail closed).
+        "incidents_state": {"state": "bound"} if obs["health"]["findings"] else
+        {"state": "unknown", "why": b("No health findings in this observation; incidents are UNPROVEN.",
+                                      "لا نتائج صحة في هذا الرصد؛ الحوادث غير مثبتة.")},
         "prov": {
             "health": {"kind": b("Derived", "مشتقة"), "src": b("P3 health check over host, timers, mounts, backups",
                                                             "فحص صحة P3 عبر الخادم والمؤقتات ونقاط التحميل والنسخ"),
@@ -430,6 +435,9 @@ def project(obs: dict) -> dict:
         },
         "scenario": scenario,
         "caps": caps,
+        # The prototype's FORBID list describes P2 ("P3 code or runtime action"); under P3 execution the
+        # governed list is this one, the same as the resume brief's FORBIDDEN line.
+        "forbid": FORBIDDEN_NOW,
         "real_money_authorized": False,
     }
     _bind_screens(obs, live)
@@ -583,6 +591,15 @@ def _bind_screens(obs: dict, live: dict) -> None:
         f"NEXT GOVERNED STEP (derived from contract): {E(sc['next'])}",
         "FORBIDDEN: real money; H1 launch; restarting FP-CONTROL-3; strategy, risk or dataset change; reopening the product shape",
     ])
+
+
+FORBIDDEN_NOW = [
+    b("Real money", "المال الحقيقي"),
+    b("H1 launch", "إطلاق H1"),
+    b("Restarting FP-CONTROL-3", "إعادة تشغيل FP-CONTROL-3"),
+    b("Strategy, risk or dataset change", "تغيير الاستراتيجية أو المخاطر أو مجموعة البيانات"),
+    b("Reopening the product shape", "إعادة فتح شكل المنتج"),
+]
 
 
 def _ms_utc(ms) -> str:

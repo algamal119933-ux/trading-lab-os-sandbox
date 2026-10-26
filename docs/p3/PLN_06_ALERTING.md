@@ -111,7 +111,7 @@ Classification: COVERED · PARTIAL · NOT_COVERED · NOT_APPLICABLE · UNPROVEN.
 
 ## 3. Owner runbook: installation and delivery acceptance (exact steps)
 **Preconditions (all of them, in order):**
-1. The planned reboot acceptance (PLN-04/07, `claude/REBOOT_RUNBOOK_2026-10-26.md`) has PASSED. The host freeze is lifted by the Owner.
+1. The planned reboot acceptance (PLN-04/07, [`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), record in [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) has PASSED. The host freeze is lifted by the Owner.
 2. `~/projects/trading/tlos-p3` is updated to a main that contains this document, by an Owner action.
 3. The first hourly health run after that update was read and triaged. A CRITICAL there is a real finding and is handled before going on.
 
