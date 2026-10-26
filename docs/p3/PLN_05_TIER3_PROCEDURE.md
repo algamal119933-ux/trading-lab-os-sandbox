@@ -29,6 +29,8 @@ The gaps below are covered by this procedure, not by new code:
 | Remote verification needs a shell command, so a pure `rrsync` forced command would block it | §4: a narrow forced-command wrapper that allows only the operations `offsite.py` issues |
 
 ## 2. Destination prerequisites (the "independent" test)
+Owner decisions on candidate destinations, including that the Toshiba USB disk does not satisfy Tier-3, are recorded in [`PLN_05_DESTINATION_DECISIONS.md`](PLN_05_DESTINATION_DECISIONS.md).
+
 The destination counts only if a total loss of `hamza-workstation` cannot also take the copy. That loss includes disk,
 power, fire, theft, a ransomware account compromise, and the WDC disk, which is in the same machine.
 

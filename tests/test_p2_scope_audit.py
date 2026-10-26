@@ -1515,6 +1515,21 @@ P3_PLN_09_MOBILE_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #89, merged. Two parents: 4a90a054 (main before) + 5aa0d719
+# (the claude/p3-pln-04-05-runbooks branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_05_RUNBOOKS_MERGE = "c0bb6b2b6f1463705f2543b40a3f216d70df7a38"
+
+# P3-PLN-04/05 runbooks: the reboot acceptance runbook (classification, commands, record template) and the
+# Tier-3 independent-host backup/restore procedure reusing scripts/p3/offsite.py. Documents only; nothing run.
+_P0405 = "P3-PLN-04/05 runbooks"
+P3_PLN_04_05_RUNBOOKS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": f"{_P0405} — reboot acceptance: preflight, commands, classes, record template",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_P0405} — Tier-3 independent host: prerequisites, transport, restore proof",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P0405} — precondition pointer: the repository reboot acceptance runbook",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 mobile view (PR #88) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1580,6 +1595,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
     "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
     "P3_PLN_09_MOBILE": (P3_PLN_09_MOBILE_MERGE, P3_PLN_09_MOBILE_SCOPE),
+    "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1587,14 +1603,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-04/05 runbooks: the reboot acceptance runbook (classification, commands, record template) and the
-# Tier-3 independent-host backup/restore procedure reusing scripts/p3/offsite.py. Documents only; nothing run.
-_P0405 = "P3-PLN-04/05 runbooks"
+# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decision that the Toshiba USB disk is optional
+# personal storage and not Tier-3, and the evaluation of the second Windows PC as a candidate independent
+# destination. Documents only; PLN-05 stays OPEN; nothing run on any machine.
+_R05D = "P3-PLN-05 destination decisions"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": f"{_P0405} — reboot acceptance: preflight, commands, classes, record template",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_P0405} — Tier-3 independent host: prerequisites, transport, restore proof",
-    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P0405} — precondition pointer: the repository reboot acceptance runbook",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 mobile view (PR #88) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — Toshiba disk is not Tier-3; second-PC evaluation and minimum Owner inputs",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer to the destination decisions",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/05 runbooks (PR #89) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
