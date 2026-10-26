@@ -97,8 +97,8 @@ The frozen mobile components are re-declared only where they carry data. Same ma
 | Stage label (mobile bar) | `LIVE.ident.stage` ("P3 · Paper Beta executing") | The prototype's `STAGELBL[step]` would read "P2 Closed" |
 | Status · project line | the governed project chips and next Owner gate (the workstream record) | Replaces the prototype's hard-coded "P2 · ladder" line |
 | Status · decision / exposure / incidents | the scenario (no cohort: no decisions; exposure 0 %; incidents from non-INFO health) | — |
-| Resume | the prototype's own body over the live scenario | The ladder is the frozen P2-closure ladder (7/7), as on desktop |
-| Incidents | the prototype's own body (non-INFO health findings) | Acknowledge stays "not in this view" |
+| Resume | the prototype's own body; every field it reads (step, verdict, outcome, lifecycle, checkpoint, healthy-at, known / unknown / unverified, responsibility, forbidden list) is projected from evidence by `control_room.py`, and a test pins that list | The ladder is the frozen P2-closure ladder (7/7), as on desktop |
+| Incidents | re-declared `mInc`: the prototype's list of non-INFO health findings (§19 checks included), plus an explicit "None open" state (the prototype rendered nothing) and **UNKNOWN** when the health run gave no findings (`LIVE.incidents_state`) | The same UNKNOWN state now applies to desktop Incidents. Acknowledge stays "not in this view" |
 | More → Operations | backup / restore / host-reboot recovery from the newest set and the persisted drill record | The prototype hard-coded backup and restore as unknown |
 | More → Decisions | the last **sealed** decision, with its 9-stage trace, marked "Sealed record" | Unknown, with the reason, when the sealed record is missing |
 | More → Trades | open: none; the sealed closed trades with per-leg backing | Unknown when missing |
@@ -117,6 +117,14 @@ The frozen mobile components are re-declared only where they carry data. Same ma
   - unknown shown when the sealed record is missing;
   - a 1400 px viewport opens the desktop layout, and `#mobile` forces the mobile one.
 - **Owner acceptance preparation:** [`PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md`](PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md). `PLN09_OWNER_ACCEPTANCE = PENDING`. The Owner records the sign-off in the Owner's own PR.
+
+**Reconciled with main `19d77e90` (PR #85 merged)** by a normal merge; the §19 health findings now feed Incidents on both layouts.
+- **Browser verification (Lane A, 2026-10-27):** headless Chromium on synthetic observations.
+  - Cases: healthy, a CRITICAL `real_money` finding, and no findings.
+  - Languages: EN and AR.
+  - Layouts: desktop 1440×900 (all 12 screens) and mobile 390×844 (4 tabs plus all 9 More details).
+  - Result: 0 console errors, no DEMO text, `dir="rtl"` in AR, and only navigation buttons on mobile.
+  - Mobile Incidents shows "None open" when healthy, the finding when one exists, and UNKNOWN when the run gave no findings.
 
 **Status: 12 of 12 screens and the 4 mobile tabs are bound.** What remains for PLN-09 is the Owner review and acceptance round (the checklist). It runs on the host after the planned reboot and after `tlos-p3` is updated.
 

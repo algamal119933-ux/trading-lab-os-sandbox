@@ -109,7 +109,7 @@ function continuity(){const s=sc();
 /* ---------- Incidents ---------- */
 function incidents(){const s=sc();
  if(S.inc){const i=s.incidents.find(v=>v.id===S.inc)||s.incidents[0];if(i)return incidentPage(i)}
- return `${bannerHTML()}<section class="band c1"><div class="col twrap"><table><thead><tr><th>ID</th><th>${x('Title','العنوان')}</th><th>${x('State','الحالة')}</th><th>${x('Opened','فُتحت')}</th></tr></thead><tbody>${s.incidents.length?s.incidents.map(i=>`<tr class="click" data-inc="${i.id}" tabindex="0"><td>${id(i.id)}</td><td>${L(i.title)}</td><td>${chip(...ISTATE[i.s])}</td><td>${LD(i.when)}</td></tr>`).join(''):`<tr><td colspan="4" class="quiet">${gl('ok')} ${x('None open. Incidents are raised from non-INFO health findings; none at this observation.','لا حوادث مفتوحة. تُفتح الحوادث من نتائج الصحة غير INFO؛ لا شيء في هذا الرصد.')}</td></tr>`}</tbody></table></div></section>`}
+ return `${bannerHTML()}<section class="band c1"><div class="col twrap"><table><thead><tr><th>ID</th><th>${x('Title','العنوان')}</th><th>${x('State','الحالة')}</th><th>${x('Opened','فُتحت')}</th></tr></thead><tbody>${LIVE.incidents_state&&LIVE.incidents_state.state!=='bound'?`<tr><td colspan="4" class="quiet">${chip('unk','unknown')} ${L(LIVE.incidents_state.why)}</td></tr>`:s.incidents.length?s.incidents.map(i=>`<tr class="click" data-inc="${i.id}" tabindex="0"><td>${id(i.id)}</td><td>${L(i.title)}</td><td>${chip(...ISTATE[i.s])}</td><td>${LD(i.when)}</td></tr>`).join(''):`<tr><td colspan="4" class="quiet">${gl('ok')} ${x('None open. Incidents are raised from non-INFO health findings; none at this observation.','لا حوادث مفتوحة. تُفتح الحوادث من نتائج الصحة غير INFO؛ لا شيء في هذا الرصد.')}</td></tr>`}</tbody></table></div></section>`}
 /* the prototype's incident page, with live dates (a wrapper would capture this hoisted declaration) */
 function incidentPage(i){const f=i.f;
  const F=[[chip('ok',b('Known','معروف')),f.known],[x('Detected by','طريقة الرصد'),f.detect],[chip('unk',b('Unknown','غير معروف')),f.unknown],[chip('warn',b('Affected','متأثر')),f.affected],[chip('unver',b('Unverified','غير متحقق')),f.unverified],[x('What remained safe','ما بقي آمنًا'),f.safe],[x('Recovery','التعافي'),f.recovery],[x('Reconciliation required?','هل تلزم المطابقة؟'),f.reconReq],[`${x('Next action','الإجراء التالي')} <span class="fc">${x('derived from contract','مستمد من العقد')}</span>`,f.next],[x('Current state','الحالة الحالية'),f.state],[x('Owner','المالك'),f.owner],['Claude',f.claude],[x('Evidence','الأدلة'),f.evidence]].filter(r=>r[1]);
@@ -205,8 +205,10 @@ function settings(){const T=LIVE.settings;
    The frozen mobile components, re-declared only where they carry data: the stage label and project
    line come from the live identity and the governed workstream record, Operations from the persisted
    backup and drill records, Decisions and Trades from the sealed cohort. Nothing on mobile acts: no
-   action, no acknowledgement, no Kill Switch. Resume, Incidents, Risk, Evidence, History, System and
-   Market keep the prototype's own bodies, which already read the live scenario. */
+   action, no acknowledgement, no Kill Switch. Incidents is re-declared below (explicit empty and UNKNOWN
+   states). Resume keeps the prototype's own body: every field it shows (step, verdict, outcome, lifecycle,
+   checkpoint, known/unknown, responsibility, forbidden list) is projected from evidence by control_room.py.
+   Risk, Evidence, History, System and Market keep the prototype's own bodies over the live scenario. */
 function mStatus(){const s=sc();const exc=Object.keys(s.dims).filter(k=>s.dims[k][0]!=='ok');const o=openIncs();
  return `${bannerHTML()}<p class="vs">${L(s.verdict)}</p>${mResp()}<div class="mcard small">${x('Project','المشروع')}: ${L(LIVE.ident.stage)}<br>${LIVE.project.chips.map(c=>chip(c[0],c[1])).join(' ')}<br>${x('Next Owner gate','بوابة المالك التالية')}: ${L(LIVE.project.gate)}</div>
  <div class="mcard small">${s.dec.none?L(s.dec.none):`${x('Last decision','آخر قرار')} ${chip('unk','unknown')}`}<br>${x('Exposure','الانكشاف')} ${expoTxt()} · ${s.pos.length?chip('unk','unknown'):x('no open positions','لا مراكز مفتوحة')}<br>${x('Open incidents','حوادث مفتوحة')}: ${tm(String(o.length))}</div>
@@ -228,6 +230,12 @@ function mDetail(k){const s=sc();
  if(k==='history')return `<div class="mcard">${timeline(s.events,true)}</div>`;
  if(k==='system')return `<div class="mcard small">${[['host','Host','الخادم'],['containers','Containers','الحاويات'],['feed','Feed','التغذية'],['clock','Clock','الساعة']].map(r=>`<div class="mrow"><span class="k">${x(r[1],r[2])}</span><span>${chip(...s.sys[r[0]])}</span></div>`).join('')}</div>`;
  return `<div class="mcard small">${x('Settings are viewer preferences on desktop. They never change risk, mode or authority.','الإعدادات تفضيلات للعارض على سطح المكتب. لا تغيّر المخاطر أو الوضع أو الصلاحيات أبدًا.')}</div>`}
+/* Mobile Incidents: the prototype's list, plus an explicit empty state (the prototype renders nothing)
+   and UNKNOWN when the health run gave no findings. Navigation only: rows open the read-only detail. */
+function mInc(){const s=sc();const st=LIVE.incidents_state||{state:'unknown',why:b('Incident source not observed.','مصدر الحوادث غير مرصود.')};
+ if(st.state!=='bound')return `<div class="mcard small">${chip('unk','unknown')} ${L(st.why)}</div>`;
+ if(!s.incidents.length)return `<div class="mcard small">${gl('ok')} ${x('None open.','لا حوادث مفتوحة.')} <span class="muted">${x('Incidents are raised from non-INFO health findings, §19 checks included; none at this observation.','تُفتح الحوادث من نتائج الصحة غير INFO، ومنها فحوص §19؛ لا شيء في هذا الرصد.')}</span></div>`;
+ return `<div class="mlist">${s.incidents.map(i=>`<button data-mdet="inc:${i.id}"><span>${id(i.id)}<br><span class="sec small">${L(i.title)}</span></span>${chip(...ISTATE[i.s])}</button>`).join('')}</div>`}
 function mobile(){const s=sc();const d=s.dims;
  const tabs=[['status',b('Status','الحالة'),'◧'],['resume',b('Resume','استئناف'),'↺'],['incidents',b('Incidents','الحوادث'),'■'],['more',b('More','المزيد'),'⋯']];
  const body=S.mdetail?`<button class="btn2" data-mdet="">${S.lang==='ar'?'→':'←'} ${x('Back','رجوع')}</button><div style="margin-top:10px">${mDetail(S.mdetail)}</div>`:S.mtab==='status'?mStatus():S.mtab==='resume'?mResume():S.mtab==='incidents'?mInc():mMore();

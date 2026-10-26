@@ -406,3 +406,33 @@ def test_the_governed_forbidden_list_replaces_the_prototypes_p2_era_list():
                   "Reopening the product shape"]
     assert all(f["ar"] for f in live["forbid"]) and not any("P3" in e for e in en)
     assert "FORBID.splice(0,FORBID.length,...LIVE.forbid);" in cr.ADAPTER_JS.read_text(encoding="utf-8")
+
+
+def test_incidents_are_unknown_not_none_open_when_the_health_run_gave_no_findings():
+    live = cr.project(_obs())
+    assert live["incidents_state"] == {"state": "bound"}
+    obs = _obs()
+    obs["health"] = {"findings": [], "overall": "INFO"}
+    live = cr.project(obs)
+    assert live["incidents_state"]["state"] == "unknown" and "UNPROVEN" in live["incidents_state"]["why"]["en"]
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    desk = js[js.index("function incidents()"):js.index("function incidentPage(")]
+    assert "LIVE.incidents_state.state!=='bound'" in desk and "chip('unk','unknown')" in desk
+
+
+def test_mobile_incidents_has_explicit_empty_and_unknown_states_and_navigation_only():
+    m = _mobile_js()
+    inc = m[m.index("function mInc()"):m.index("function mobile()")]
+    assert "st.state!=='bound'" in inc and "chip('unk','unknown')" in inc
+    assert "None open." in inc and "§19" in inc
+    assert re.findall(r"<button ([^>]*)>", inc) == ['data-mdet="inc:${i.id}"']
+
+
+def test_mobile_resume_reads_only_projected_fields():
+    proto = cr.PROTOTYPE.read_text(encoding="utf-8")
+    res = proto[proto.index("function mResume()"):proto.index("function mInc()")]
+    sc = cr.project(_obs())["scenario"]
+    for field in ("step", "verdict", "outcome", "law", "lgc", "lho", "known", "unknown", "affected",
+                  "unverified", "extraForbid"):
+        assert f"s.{field}" in res and field in sc, field
+    assert sc["step"] == 6 and sc["outcome"][0] == "ok" and sc["law"]["lifecycle"][0] in ("ok", "wait")

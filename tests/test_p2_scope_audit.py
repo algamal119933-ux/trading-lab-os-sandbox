@@ -1572,8 +1572,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # evidence change.
 _P09 = "P3-PLN-09 Control Room"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/control_room.py": f"{_P09} — mobile: governed forbidden list (FORBIDDEN_NOW) in the projection",
-    "research/p3/control_room_live.js": f"{_P09} — mobile tabs bound, navigation only; device by viewport or address",
+    "research/p3/control_room.py": f"{_P09} — mobile: governed forbidden list (FORBIDDEN_NOW); incidents_state (UNKNOWN without findings)",
+    "research/p3/control_room_live.js": f"{_P09} — mobile tabs bound (Incidents with empty/UNKNOWN states), navigation only; device by viewport or address",
     "research/p3/records/p3_workstreams.json": f"{_P09} — PLN-09 evidence: mobile bound, Owner checklist pending",
     "tests/test_p3_control_room.py": f"{_P09} — mobile: no consequential control, unknown on missing evidence",
     "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, mobile slice",

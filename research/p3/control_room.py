@@ -407,6 +407,11 @@ def project(obs: dict) -> dict:
         "identity": {"runtime_pin": obs["runtime"]["pin"], "runtime_clean": obs["runtime"]["clean"],
                      "main": obs["governance"]["main"], "boot_id": obs["host"]["boot_id"]},
         "health_findings": obs["health"]["findings"],
+        # Incidents are raised from non-INFO health findings. With no findings at all the health run did
+        # not report, so "none open" would be unproven: the view says UNKNOWN instead (fail closed).
+        "incidents_state": {"state": "bound"} if obs["health"]["findings"] else
+        {"state": "unknown", "why": b("No health findings in this observation; incidents are UNPROVEN.",
+                                      "لا نتائج صحة في هذا الرصد؛ الحوادث غير مثبتة.")},
         "prov": {
             "health": {"kind": b("Derived", "مشتقة"), "src": b("P3 health check over host, timers, mounts, backups",
                                                             "فحص صحة P3 عبر الخادم والمؤقتات ونقاط التحميل والنسخ"),
