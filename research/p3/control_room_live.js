@@ -1,13 +1,12 @@
 /* P3-PLN-09 live adapter for the frozen prototype v0.2.5 (sha256 e17d50dc…).
    Appended after the prototype's own script by research/p3/control_room.py. It adds no screen, slot,
    navigation item or style. It supplies the live scenario (LIVE, built from verified evidence) and
-   re-declares only data-bearing components, with the prototype's markup and classes. Bound so far:
-   the shell, Command Center, System, Project & Continuity, Incidents, Operations, Risk & Authority,
-   Evidence & Reconciliation and History. The other screens render with an explicit "not yet bound"
-   notice, and their DEMO tags stay. Read-only: no network,
-   no write, no control. */
+   re-declares only data-bearing components, with the prototype's markup and classes. Bound: all 12
+   screens. Slice 3 (Decisions, Trades & Positions, Market Workspace, Settings) reads the sealed cohort
+   named by the newest PLN-07 execution-audit record; when it is absent or unreadable those screens say
+   unknown, never healthy. Read-only: no network, no write, no control. */
 "use strict";
-const LIVE_BOUND=['command','system','continuity','incidents','operations','risk','evidencep','history'];
+const LIVE_BOUND=['command','system','continuity','incidents','operations','risk','evidencep','history','decisions','trades','market','settings'];
 const LD=t=>tm(t);
 /* the live scenario rides on the prototype's closed-family scenario, overridden field by field */
 SC.live=Object.assign({},SC.closed,LIVE.scenario);
@@ -153,10 +152,59 @@ function evidencep(){const s=sc(),d=s.dims.recon,R=LIVE.evidence_rows.slice().so
  return `${bannerHTML()}${shead('evidencep')}<section class="sit"><div class="vl"><p class="vs">${x('Reconciliation','المطابقة')} ${chip(...d)}</p><p class="asof">${x('Sources','المصادر')}: ${id('P2_CLOSURE')} · ${id('restore drill')} · ${id('execution audit')}</p></div></section>
  <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Check','الفحص')}</th><th>${x('Result','النتيجة')}</th><th>${x('Source','المصدر')}</th></tr></thead><tbody>${R.map(r=>`<tr class="click" data-insp="recon" tabindex="0"><td>${L(r[0])}</td><td>${chip(...r[1])}</td><td class="sec">${id(r[2])}</td></tr>`).join('')}</tbody></table></div></section>`}
 
+/* ---------- slice 3: sealed cohort (read-only) ---------- */
+function sealedNote(o){if(o.state==='bound')return `<p class="cd">${x(`Sealed cohort ${o.cohort} · read-only record · no paper cohort is running now`,`المجموعة المختومة ${o.cohort} · سجل للقراءة فقط · لا مجموعة ورقية تعمل الآن`)}</p>`;
+ return `<div class="banner b-info" role="status"><span class="bg" aria-hidden="true">${G.unk}</span><p>${chip('unk','unknown')} ${L(o.why)}</p></div>`}
+/* ---------- Decisions ---------- */
+function decisions(){const s=sc(),D3=LIVE.decisions,V=D3.rows;
+ if(D3.state!=='bound'||!V.length)return `${bannerHTML()}${shead('decisions')}${sealedNote(D3)}<section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Time','الوقت')}</th><th>${x('Pair','الزوج')}</th><th>${x('Outcome','النتيجة')}</th></tr></thead><tbody><tr><td colspan="3" class="quiet">${chip('unk','unknown')}</td></tr></tbody></table></div></section>`;
+ const d=V.find(v=>v.id===S.dec)||V[V.length-1];
+ return `${bannerHTML()}${shead('decisions')}${sealedNote(D3)}<section class="band" style="grid-template-columns:4fr 8fr"><div class="col twrap"><table><thead><tr><th>${x('Time','الوقت')}</th><th>${x('Pair','الزوج')}</th><th>${x('Outcome','النتيجة')}</th></tr></thead><tbody>${V.slice().reverse().map(v=>`<tr class="click" data-dec="${v.id}" tabindex="0" ${v.id===d.id?'style="background:var(--raised)"':''}><td>${LD(v.t)}</td><td>${id(v.p)}</td><td>${chip(...v.o)}</td></tr>`).join('')}</tbody></table><p class="cd">${x(`${V.length} of ${D3.n} decisions listed: every enter / exit intent and admission, plus the last decision per pair.`,`${V.length} من ${D3.n} قرارًا: كل نية دخول / خروج وكل قبول، وآخر قرار لكل زوج.`)}</p></div>
+ <div class="col"><div class="ptitle"><span>${x('Decision / Execution Trace','مسار القرار / التنفيذ')} ${id(d.p)} · ${LD(d.t)}</span>${chip('unver',b('Sealed record','سجل مختوم'))}</div>
+ ${PIPE.map((p,i)=>`<div class="row" style="grid-template-columns:24px 150px 1fr;${d.tr[i][0]==='off'?'opacity:.55':''}"><span class="muted num">${i+1}</span><span class="k">${L(p)}</span><span class="v">${gl(d.tr[i][0])} ${L(d.tr[i][1])}${d.tr[i][0]==='off'?` <span class="a">${x('not reached','لم تُبلغ')}</span>`:''}</span></div>`).join('')}
+ <p class="sec small">${x('Reason','السبب')}: ${L(d.r)}</p>${row(x('Market / Data Truth context','سياق حقيقة السوق / البيانات'),`${id(d.tf||'—')} · ${id(d.t0||'—')}`)}${row(x('Evidence refs','مراجع الأدلة'),id(d.refs))}${row(x('Runtime / source identity','هوية التشغيل / المصدر'),id(d.ident))}<p class="cd">${x('Per-stage outputs are shown only where the runtime logged them; a stage it does not log reads "not logged".','تُعرض مخرجات كل مرحلة فقط حيث سجّلها التشغيل؛ والمرحلة غير المسجّلة تظهر "غير مسجّل".')}</p></div></section>`}
+/* ---------- Trades & Positions ---------- */
+function trades(){const s=sc(),T=LIVE.trades_closed;const ex=CAPS.filter(c=>c.exec);
+ const open=s.pos.length?'':`<tr><td colspan="8" class="sec">${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}</td></tr>`;
+ const body=T.state!=='bound'?`<p class="quiet">${chip('unk','unknown')} ${L(T.why)}</p>`:T.rows.length?`<table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th class="r">${x('Entry','الدخول')}</th><th class="r">${x('Exit','الخروج')}</th><th>${x('Exit reason','سبب الخروج')}</th><th>${x('Reconciliation','المطابقة')}</th><th>${x('Verified outcome','النتيجة المتحقق منها')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody>${T.rows.map(r=>`<tr><td>${id(r.pair)} <span class="muted">#${r.trade_id}</span></td><td>${x('Long','شراء')}</td><td class="r">${id(r.entry)}</td><td class="r">${id(r.exit)}</td><td>${id(r.reason)}</td><td>${chip(...r.recon)}</td><td>${chip(...r.outcome)}</td><td class="r">${r.pnl===null?chip('unk','unknown'):tm(r.pnl)}</td></tr>`).join('')}</tbody></table>`:`<p class="quiet">${chip('off','noData')} ${x('No completed trade lifecycle in the sealed record.','لا توجد دورة صفقة مكتملة في السجل المختوم.')}</p>`;
+ return `${bannerHTML()}${shead('trades')}
+ <div class="capstrip"><span class="sec">${x('Execution capabilities','قدرات التنفيذ')}:</span>${ex.map(c=>`${L(c.k)} ${chip(...c.st)}`).join(' ')}<span class="cd">${x('rows supplied by authority truth','الصفوف مصدرها حقيقة الصلاحيات')}</span></div>
+ <h2 class="bandlabel">${x('Open','المفتوحة')}</h2><section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th>${x('Verification','التحقق')}</th><th>${x('Size','الحجم')}</th><th class="r">${x('Entry','الدخول')}</th><th>${x('Risk at entry','المخاطرة عند الدخول')}</th><th>${x('Exit contract','عقد الخروج')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody>${open}</tbody></table></div></section>
+ <h2 class="bandlabel">${x('Closed','المغلقة')}</h2><section class="band c1"><div class="col twrap">${sealedNote(T)}${body}<p class="cd">${x('Realised PnL as recorded in the sealed trade ledger. Reconciliation per leg comes from the PLN-07 execution audit. P&L decides nothing.','الربح/الخسارة المحقق كما في سجل الصفقات المختوم. مطابقة كل طرف من تدقيق التنفيذ PLN-07. الربح والخسارة لا يحددان شيئًا.')} ${id(T.src)}</p></div></section>`}
+/* ---------- Market Workspace ---------- */
+function liveCandles(pair){const M=LIVE.market,bars=(M.candles[pair]||[]);if(!bars.length)return `<p class="quiet">${chip('unk','unknown')}</p>`;
+ const n=bars.length,w=880,h=260,cw=w/n;let out='';const mx=Math.max(...bars.map(v=>v[2])),mn=Math.min(...bars.map(v=>v[3])),Y=v=>12+(mx-v)/((mx-mn)||1)*(h-24);
+ for(let g=0;g<5;g++){const y=12+g*(h-24)/4;out+=`<line x1="0" x2="${w}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`}
+ bars.forEach((v,i)=>{const X=i*cw+cw/2,up=v[4]>=v[1];out+=`<line x1="${X}" x2="${X}" y1="${Y(v[2])}" y2="${Y(v[3])}" stroke="var(--tx3)"/><rect x="${X-cw*.3}" y="${Y(Math.max(v[1],v[4]))}" width="${cw*.6}" height="${Math.max(1,Math.abs(Y(v[1])-Y(v[4])))}" fill="${up?'none':'var(--tx3)'}" stroke="${up?'var(--tx2)':'var(--tx3)'}"/>`});
+ const t0=bars[0][0],step=n>1?(bars[n-1][0]-t0)/(n-1):3600000;
+ (M.marks[pair]||[]).forEach(m=>{const ms=Date.parse(m[0].replace(' ','T')+(m[0].endsWith('Z')?'':'Z'));const i=Math.round((ms-t0)/step);if(i<0||i>=n)return;const mX=i*cw+cw/2;out+=`<path d="M${mX-6} ${h-4} L${mX+6} ${h-4} L${mX} ${h-14}Z" fill="var(--warn)"/><text x="${mX+10}" y="${h-6}" fill="var(--tx2)" font-size="11" font-family="var(--sans)">${m[1]}</text>`});
+ const svg=`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${x(`Candle chart, sealed record ${pair}`,`رسم الشموع، السجل المختوم ${pair}`)}">${out}</svg>`;
+ const t=b(`CURRENT MARKET STATE UNKNOWN · no runtime, no feed · chart shows the sealed P2 record ending ${M.end_utc}`,`حالة السوق الحالية غير معروفة · لا تشغيل ولا تغذية · يعرض الرسم السجل المختوم لـ P2 المنتهي ${M.end_utc}`);
+ return `<div class="chartwrap unkchart">${svg}<div class="chartov s-unk" dir="${S.lang==='ar'?'rtl':'ltr'}" role="status">${gl('unk')} ${L(t)}</div></div>`}
+function market(){const M=LIVE.market;
+ if(M.state!=='bound'||!M.pairs.length)return `${bannerHTML()}${shead('market')}${sealedNote(M.state==='bound'?{state:'none',why:b('The sealed record holds no candles.','لا يحتوي السجل المختوم على شموع.')}:M)}<section class="band c1"><div class="col"><p class="quiet">${chip('unk','unknown')} ${x('Current market state unknown: no runtime, no feed.','حالة السوق الحالية غير معروفة: لا تشغيل ولا تغذية.')}</p></div></section>`;
+ if(!M.pairs.includes(S.pair))S.pair=M.pairs[0];if(!M.timeframes.includes(S.tf))S.tf=M.timeframes[0];
+ const caps=[[b('Candles (OHLCV)','الشموع (OHLCV)'),'off',b('No live feed · sealed record only','لا تغذية مباشرة · السجل المختوم فقط')],[b('Order book depth','عمق دفتر الأوامر'),'na','notProvided'],[b('Regime / higher-timeframe context','نظام السوق / سياق الإطار الأعلى'),'unk','unkInv']];
+ return `${bannerHTML()}${shead('market')}
+ <section class="band c1"><div class="col">
+ <div class="capstrip"><span class="sec">${x('Pair','الزوج')}</span><span class="tfs">${M.pairs.map(p=>`<button data-pair="${p}" aria-pressed="${S.pair===p}">${id(p)}</button>`).join('')}</span><span class="sep"></span>
+ <span class="sec">${x('Timeframe','الإطار الزمني')}</span><span class="tfs">${M.timeframes.map(t=>`<button data-tf="${t}" aria-pressed="${S.tf===t}">${tm(t)}</button>`).join('')}</span></div>
+ <p class="cd" style="margin:0 0 8px">${x('Pairs and timeframe come from the sealed cohort record; markers are its recorded fills.','الأزواج والإطار الزمني من سجل المجموعة المختومة؛ والعلامات هي تنفيذاتها المسجلة.')} ${id(M.src)}</p>
+ ${liveCandles(S.pair)}</div></section>
+ <section class="band c2"><div class="col"><div class="ptitle"><span>${x('Market / Data Truth · capabilities','حقيقة السوق / البيانات · القدرات')}</span><span class="asof">${x('upstream of the Decision / Execution Trace','منبع مسار القرار / التنفيذ')}</span></div>${caps.map(c=>row(L(c[0]),chip(c[1],c[2]))).join('')}</div>
+ <div class="col"><div class="ptitle"><span>${x('Context','السياق')}</span>${chip('unk','unknown')}</div>${row(x('Data age','عمر البيانات'),chip(...sc().sys.feed))}${row(x('Regime','نظام السوق'),chip('unk','unkInv'))}${row(x('Volatility','التذبذب'),chip('unk','unkInv'))}${row(x('Liquidity','السيولة'),chip('unk','unkInv'))}${row(x('Higher-timeframe context','سياق الإطار الأعلى'),chip('unk','unkInv'))}<p class="cd">${x('Neutral candles by design: colour is reserved for system state.','شموع محايدة عمدًا: اللون محجوز لحالة النظام.')}</p></div></section>`}
+/* ---------- Settings: viewer preferences only ---------- */
+function settings(){const T=LIVE.settings;
+ const sig=[b('Significant absence','غياب طويل'),b('Meaningful events since last view','أحداث مهمة منذ آخر مشاهدة'),b('New incident','حادثة جديدة'),b('Host / runtime restart','إعادة تشغيل الخادم / التشغيل'),b('Owner gate opened','فتح بوابة المالك')];
+ const na=chip('off',b('Not active · a static view keeps no viewer state','غير مفعّل · العرض الثابت لا يحفظ حالة العارض'));
+ return `${shead('settings')}<section class="band c2"><div class="col"><div class="ptitle"><span>${x('Return detection','رصد العودة')}</span><span class="asof">${x('viewer preference · UI only','تفضيل العارض · الواجهة فقط')}</span></div>${sig.map(v=>row(L(v),na)).join('')}${row(x('Absence threshold','حد الغياب'),na)}<p class="cd">${x('These settings decide only whether Resume opens first. They never change what Resume says.','تحدد هذه الإعدادات فقط ما إذا كان الاستئناف يُفتح أولًا. ولا تغيّر أبدًا ما يقوله.')}</p></div>
+ <div class="col"><div class="ptitle"><span>${x('Display','العرض')}</span></div>${row(x('Language','اللغة'),x('English','العربية'))}${row(x('Theme','السمة'),x('Dark','داكنة'))}${row(x('Time display','عرض الوقت'),L(T.time))}${row(x('Density','الكثافة'),x('Comfortable','مريحة'))}${row(x('Inspector','المُفتِّش'),x('Auto: dock on wide screens','تلقائي: مثبّت على الشاشات العريضة'))}${row(x('Notifications','التنبيهات'),`${chip('ok',T.notify)} <span class="a">${id(T.notify_src)}</span>`)}${row(x('Remote access','الوصول عن بُعد'),chip('off',b('Not implemented · P3-PLN-06','غير منفّذ · P3-PLN-06')))}<p class="cd">${x('Settings never change risk, mode or authority.','الإعدادات لا تغيّر المخاطر أو الوضع أو الصلاحيات أبدًا.')}</p></div></section>`}
+
 /* ---------- route: bound screens live, unbound screens keep their body under the notice ---------- */
 Object.keys(SCREENS).forEach(k=>{if(LIVE_BOUND.includes(k))return;const f=SCREENS[k];SCREENS[k]=()=>unboundNotice()+f()});
 SCREENS.command=liveCommand;SCREENS.system=system;SCREENS.continuity=continuity;SCREENS.incidents=incidents;
 SCREENS.operations=operations;SCREENS.risk=risk;SCREENS.evidencep=evidencep;SCREENS.history=historyScr;
+SCREENS.decisions=decisions;SCREENS.trades=trades;SCREENS.market=market;SCREENS.settings=settings;
 liveFreshness();
 setInterval(()=>{const was=SC.live.viewStale;liveFreshness();if(SC.live.viewStale!==was)render()},30000);
 render();

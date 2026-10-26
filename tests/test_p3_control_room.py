@@ -230,3 +230,120 @@ def test_the_resume_brief_and_capability_rows_are_live_not_demo():
     assert "DEMO" not in live["brief"] and "LIVE PROJECTION" in live["brief"]
     assert all("pre" in c and "since" in c for c in live["caps"])
     assert [r[0] for r in live["stages"]] == ["P1", "P2", "P3", "POST-BETA"]
+
+
+# ---------------------------------------------------------------- slice 3: sealed cohort screens
+def _write_ledger(path: Path, payloads: list[dict]) -> None:
+    path.write_text("".join(json.dumps({"payload": p}) + "\n" for p in payloads), encoding="utf-8")
+
+
+H = 3_600_000
+T0 = 1_792_000_000_000 - (1_792_000_000_000 % H)
+
+
+def _decision(pair, k, action="hold", result="NOT_REQUIRED", reasons=()):
+    return {"pair": pair, "timeframe": "1h", "candle_ts": T0 + k * H, "market_event_id": f"{pair}|1h|{k}",
+            "signal_state": "above", "intended_action": action, "bar_class": "LIVE", "t0_relation": "POST_T0",
+            "no_action_reason": None if action != "hold" else "no cross", "ema_fast": 1.0, "ema_slow": 2.0,
+            "strategy_sha256": "s" * 64, "config_sha256": "c" * 64,
+            "admission": {"result": result, "reasons": list(reasons)}}
+
+
+def _sealed_dir(tmp_path: Path) -> Path:
+    ev = tmp_path / "l2-cohort-SYN" / "evidence"
+    ev.mkdir(parents=True)
+    decisions = [_decision("BTC/USDT", k) for k in range(5)] + [
+        _decision("BTC/USDT", 5, "enter_long", "ADMITTED"),
+        _decision("ETH/USDT", 6, "enter_long", "BLOCKED", ["max_open_trades 2 already reached (2 open)"]),
+        _decision("BTC/USDT", 8, "exit_long", "ADMITTED"), _decision("ETH/USDT", 9)]
+    _write_ledger(ev / "paper_decision_ledger.jsonl", decisions)
+    def utc(k):  # fill one bar after the decided candle closes
+        return cr._ms_utc(T0 + (k + 1) * H).replace("Z", ":01")
+    trades = [
+        {"trade_id": 1, "pair": "BTC/USDT", "event": "position_opened", "open_date_utc": utc(5), "open_rate": 100.0},
+        {"trade_id": 2, "pair": "ETH/USDT", "event": "position_opened", "open_date_utc": utc(6), "open_rate": 10.0},
+        {"trade_id": 1, "pair": "BTC/USDT", "event": "position_closed", "open_date_utc": utc(5), "close_date_utc": utc(8),
+         "open_rate": 100.0, "close_rate": 99.0, "exit_reason": "exit_signal", "profit_abs": -0.19,
+         "realised_pnl_currency": "USDT"},
+        {"trade_id": 2, "pair": "ETH/USDT", "event": "position_closed", "open_date_utc": utc(6), "close_date_utc": utc(9),
+         "open_rate": 10.0, "close_rate": 9.9, "exit_reason": "exit_signal", "profit_abs": -0.38,
+         "realised_pnl_currency": "USDT"}]
+    _write_ledger(ev / "paper_trade_ledger.jsonl", trades)
+    _write_ledger(ev / "paper_input_ledger.jsonl", [
+        {"pair": p, "timeframe": "1h", "candle": {"ts": T0 + k * H, "open": 1, "high": 2, "low": 0.5, "close": 1.5}}
+        for p in ("BTC/USDT", "ETH/USDT") for k in range(70)])
+    return ev
+
+
+def _audit_for(ev: Path) -> dict:
+    from p3 import execution_audit
+    rec = execution_audit.audit(ev)
+    rec.update({"_file": "audit.json", "_mtime": 1_792_960_000.0})
+    return rec
+
+
+def test_the_sealed_cohort_reader_lists_intents_and_the_last_decision_per_pair(tmp_path):
+    ev = _sealed_dir(tmp_path)
+    sealed = cr.sealed_cohort([_audit_for(ev)])
+    assert sealed["cohort"] == "l2-cohort-SYN" and sealed["n_decisions"] == 9
+    shown = [(d["pair"], d["intended_action"]) for d in sealed["decisions"]]
+    assert shown == [("BTC/USDT", "enter_long"), ("ETH/USDT", "enter_long"), ("BTC/USDT", "exit_long"), ("ETH/USDT", "hold")]
+    assert sealed["timeframes"] == ["1h"] and len(sealed["candles"]["BTC/USDT"]) == cr.SEALED_CANDLES_SHOWN
+
+
+def test_sealed_decisions_trace_only_what_was_logged_and_link_backed_fills(tmp_path):
+    ev = _sealed_dir(tmp_path)
+    audit = _audit_for(ev)
+    live = cr.project(_obs(audits=[audit], sealed=cr.sealed_cohort([audit])))
+    rows = live["decisions"]["rows"]
+    assert live["decisions"]["state"] == "bound"
+    enter = rows[0]
+    assert enter["o"][0] == "ok" and enter["tr"][3][0] == "ok" and enter["tr"][6][0] == "ok" and enter["tr"][7][0] == "ok"
+    assert enter["tr"][4] == ["unk", {"en": "not logged", "ar": "غير مسجّل"}] and enter["tr"][8][0] == "unk"
+    blocked = rows[1]
+    assert blocked["o"][0] == "inc" and "max_open_trades" in blocked["tr"][3][1]["en"] and blocked["tr"][6][0] == "off"
+    assert all(len(r["tr"]) == 9 for r in rows)
+
+
+def test_closed_trades_carry_per_leg_backing_from_the_audit(tmp_path):
+    ev = _sealed_dir(tmp_path)
+    audit = _audit_for(ev)
+    live = cr.project(_obs(audits=[audit], sealed=cr.sealed_cohort([audit])))
+    rows = {r["trade_id"]: r for r in live["trades_closed"]["rows"]}
+    assert rows[1]["recon"] == ["ok", "pass"] and rows[1]["outcome"][0] == "ok" and rows[1]["pnl"] == "-0.19 USDT"
+    assert rows[2]["recon"][0] == "warn" and rows[2]["outcome"][0] == "warn"
+    no_legs = dict(audit, executions=[])
+    rows = cr.project(_obs(audits=[no_legs], sealed=cr.sealed_cohort([no_legs])))["trades_closed"]["rows"]
+    assert all(r["recon"] == ["unk", "unknown"] and r["outcome"] == ["unk", "unknown"] for r in rows)
+
+
+def test_missing_or_unreadable_sealed_evidence_renders_unknown_never_healthy(tmp_path):
+    for sealed, state in ((None, "none"),
+                          (cr.sealed_cohort([{"evidence_dir": str(tmp_path / "gone" / "evidence"), "_file": "a"}]),
+                           "unreadable")):
+        live = cr.project(_obs(sealed=sealed))
+        for key in ("decisions", "trades_closed", "market"):
+            assert live[key]["state"] == state and live[key]["why"]["en"]
+        assert live["decisions"]["rows"] == [] and live["trades_closed"]["rows"] == []
+        assert live["market"]["pairs"] == [] and live["market"]["end_utc"] is None
+    assert "DEMO" not in json.dumps(cr.project(_obs())["settings"])
+
+
+def test_market_marks_come_from_recorded_fills_and_the_view_never_claims_a_live_feed(tmp_path):
+    ev = _sealed_dir(tmp_path)
+    audit = _audit_for(ev)
+    m = cr.project(_obs(audits=[audit], sealed=cr.sealed_cohort([audit])))["market"]
+    assert m["state"] == "bound" and m["pairs"] == ["BTC/USDT", "ETH/USDT"] and m["timeframes"] == ["1h"]
+    assert [k for _, k in m["marks"]["BTC/USDT"]] == ["ENTER", "EXIT"]
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    assert "CURRENT MARKET STATE UNKNOWN" in js and "No live feed" in js
+
+
+def test_the_adapter_binds_all_twelve_frozen_screens():
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    bound = set(re.findall(r"'(\w+)'", re.search(r"const LIVE_BOUND=\[([^\]]*)\]", js).group(1)))
+    proto = cr.PROTOTYPE.read_text(encoding="utf-8")
+    screens = set(re.findall(r"(\w+):b\('", re.search(r"const NAME=\{(.*?)\};", proto).group(1)))
+    assert bound == screens and len(bound) == 12
+    for k in ("decisions", "trades", "market", "settings"):
+        assert f"SCREENS.{k}={k};" in js
