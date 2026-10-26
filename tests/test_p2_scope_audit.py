@@ -1468,6 +1468,32 @@ P3_PLN_09_S3_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #85, merged. Two parents: bf208ba6 (main before, P3_PLN_09_S3) + dc385f10
+# (the claude/p3-pln-06-alerting branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_ALERT_MERGE = "19d77e905100bca4063fcae309d28aa43fb9e9e5"
+
+# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
+# Alertmanager template with no secrets, a separate loopback-only ops-plane compose project, and the §19
+# CRITICAL health checks (fail-closed). Prepared, not installed or started.
+_P06AL = "P3-PLN-06 §19 alert leg"
+P3_PLN_06_ALERT_SCOPE: dict[str, str] = {
+    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06AL} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
+    "scripts/p3/ops/prometheus.yml": f"{_P06AL} — scrape the host node-exporter, load the rules, send to Alertmanager",
+    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06AL} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06AL} — promtool rule unit tests: every condition raises its alert",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06AL} — receivers via *_file secrets, routed to null until the Owner chooses",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06AL} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06AL} — pointer update; PLN-06 stays PARTIAL",
+    "tests/test_p3_alerting.py": f"{_P06AL} — rules read only emitted metrics; loopback, pinned, secret-free",
+    "research/p3/health.py": f"{_P06AL} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
+    "scripts/p3/health_check.py": f"{_P06AL} — runs the §19 checks by default (--no-s19 for diagnosis)",
+    "research/p3/control_room.py": f"{_P06AL} — the Control Room health view includes the §19 checks",
+    "research/p3/records/p3_workstreams.json": f"{_P06AL} — PLN-06 evidence text: §19 coverage, still PARTIAL",
+    "tests/test_p3_health_s19.py": f"{_P06AL} — positive/negative per §19 condition; no secret value in any finding",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1531,6 +1557,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
     "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
     "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
+    "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1538,26 +1565,15 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
-# Alertmanager template with no secrets, and a separate loopback-only ops-plane compose project; plus the
-# §19 CRITICAL health checks (paper guard, evidence chains, real-money state). Prepared, not installed or
-# started. No runtime, strategy, risk, dataset, registry or evidence change.
-_P06A = "P3-PLN-06 §19 alert leg"
+# A1b preregistration (Lane B, outside P3): a frozen JSON spec, its document and its tests.
+# No runtime, strategy, risk, dataset, registry, trial-ledger or evidence change.
+_BR = "A1B-PREREGISTRATION-1"
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06A} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
-    "scripts/p3/ops/prometheus.yml": f"{_P06A} — scrape the host node-exporter, load the rules, send to Alertmanager",
-    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06A} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
-    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06A} — promtool rule unit tests: every condition raises its alert",
-    "scripts/p3/ops/alertmanager.yml.template": f"{_P06A} — receivers via *_file secrets, routed to null until the Owner chooses",
-    "docs/p3/PLN_06_ALERTING.md": f"{_P06A} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06A} — pointer update; PLN-06 stays PARTIAL",
-    "tests/test_p3_alerting.py": f"{_P06A} — rules read only emitted metrics; loopback, pinned, secret-free",
-    "research/p3/health.py": f"{_P06A} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
-    "scripts/p3/health_check.py": f"{_P06A} — runs the §19 checks by default (--no-s19 for diagnosis)",
-    "research/p3/control_room.py": f"{_P06A} — the Control Room health view includes the §19 checks",
-    "research/p3/records/p3_workstreams.json": f"{_P06A} — PLN-06 evidence text: §19 coverage, still PARTIAL",
-    "tests/test_p3_health_s19.py": f"{_P06A} — positive/negative per §19 condition; no secret value in any finding",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
+    "research/a1b/A1B_PREREGISTRATION_1.md": f"{_BR} — frozen A1b preregistration and evaluation plan (no execution)",
+    "research/a1b/a1b_prereg.json": f"{_BR} — machine-readable frozen spec",
+    "research/a1b/SHA256SUMS": f"{_BR} — the spec's frozen sha256",
+    "tests/test_a1b_preregistration.py": f"{_BR} — digest, boundary, completeness, PBO hard gate and prospective-plan checks, offline",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

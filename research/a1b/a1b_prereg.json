@@ -1,0 +1,234 @@
+{
+ "authority": {
+  "evaluation_requires": "an Owner-merged program charter at charters/programs/A1B-QUALIFICATION-1.json (CEA-1 section 12) binding this file's sha256; not created by this preregistration",
+  "merge_order": "#82 verification law -> #83 Owner research authority -> #84 this preregistration -> A1B-QUALIFICATION-1 charter",
+  "owner_record": "research/OWNER_RESEARCH_AUTHORIZATION_A1B_1.md",
+  "owner_record_branch": "owner/research-authorization-a1b",
+  "verification_law": "research/PROFITABILITY_VERIFICATION_LAW_1.md (PR #82, Owner decisions OD-1..OD-3 applied)",
+  "verification_law_precedence": "the law as merged on main governs; where it and this file state different numbers for the same test, the stricter applies; the law must be merged before any evaluation"
+ },
+ "baselines": {
+  "A1B_BENCH": "same universe, sizing and band rule as V1, always long (timing off) — the matched benchmark",
+  "BTC_HOLD": "BTC/USDT buy and hold, same costs",
+  "EXPOSURE_MATCHED_PASSIVE": "A1B_BENCH scaled to V1's realised average gross exposure (report only)",
+  "NO_TRADE": "cash, zero return"
+ },
+ "caps": {
+  "configurations": 4,
+  "engine_invocations": 24,
+  "hyperopt": 0,
+  "llm_agent_tokens": 0
+ },
+ "citations": [
+  "Liu, Tsyvinski and Wu (2022), Common Risk Factors in Cryptocurrency, Journal of Finance",
+  "Liu and Tsyvinski (2021), Risks and Returns of Cryptocurrency, Review of Financial Studies",
+  "Han, Kang and Ryu, Time-Series and Cross-Sectional Momentum in the Cryptocurrency Market (working paper)",
+  "Moskowitz, Ooi and Pedersen (2012), Time Series Momentum, Journal of Financial Economics",
+  "Bailey and Lopez de Prado (2014), The Deflated Sharpe Ratio, Journal of Portfolio Management",
+  "Bailey, Borwein, Lopez de Prado and Zhu (2017), The Probability of Backtest Overfitting, Journal of Computational Finance"
+ ],
+ "code_sha256": {
+  "research/auth2/FUNNEL_LAW_2.md": "8aa91f5ec18cca488fdf3b4051f24fb41c11070faddafe5f866631d0c3234da5",
+  "research/auth2/families.py": "6fe8d9057b78c6bdccd37095c3d572649c275541b26c6340f2c40b3130b4ee6d",
+  "research/auth2/gates.py": "23c8aa41cc28b8ab2ade101a5d2169cb4869e6d5fb6edf3e048115783ab4868f",
+  "research/auth2/prereg/A1.json": "10129e7fddee7b060e44d15e97653065ea32060cb6214f95dbb0ae4080175fe9",
+  "research/auth2/replay.py": "e9ddededbe5132b0dd4670d772bc6ee1ef0568b9c53bdffcd8b24cf5e7342a01",
+  "research/auth2/signals.py": "b86dbd3a1349ff79d22d78bf25913ffc1222654eb5e9b09245c43dd1477eccd7",
+  "research/auth2/stats.py": "894e74e5ea0677c89acda3e369fe24b644386a95be4c95a9044f5e5b6e916020",
+  "research/auth2/universe.py": "fa0c778f5c8253631df789096eb3959c2e5518a814522472675c3a74aebee8b6",
+  "research/datasets/dataset_v3.lock.json": "fbadd0b192a5bbb3f65abe233444d7a8f7953af36aa35fc49fb3f8c275ac098e",
+  "research/datasets/dataset_v3/membership_u6.json": "1dff6b1970ae1b607111db19b827f647b4b62153ed059a52bf99b8c67e19cc00",
+  "research/trial_ledger.py": "c84543db37736969169bd7f7d405e64dc37ce1360a8cff130ce64db2409e2e85"
+ },
+ "costs": {
+  "base_fee_composition": "0.10% Binance spot taker fee + 0.05% slippage allowance (same base as A1/FCS-1)",
+  "base_fee_per_side": 0.0015,
+  "bnb_discount_per_side_report_only": 0.00125,
+  "latency_stress": "+1 engine bar (4h), base cost",
+  "stress_x2_per_side": 0.003,
+  "stress_x3_per_side_report_only": 0.0045
+ },
+ "data": {
+  "dataset": "Dataset V3",
+  "holdout_extension": "a separate lock covering 2026-09-01T00:00:00Z to 2027-01-01T00:00:00Z, built by the same acquisition route only after 2027-01-01T00:00:00Z, checksum-verified, under the Owner record's data-preparation scope",
+  "lock": "research/datasets/dataset_v3.lock.json",
+  "source": "Binance public archive data.binance.vision, every zip verified against its published .CHECKSUM (research/auth2/archive.py)",
+  "survivorship": "point-in-time membership; delisted symbols retained and force-exited at their last kline"
+ },
+ "declared_changes_from_a1": [
+  "universe capped to point-in-time U6 ranks 1..4 (sleeves = 4) for retail-size feasibility",
+  "no-trade band with a minimum-order floor (rebalance_rule below)",
+  "nothing else: lookbacks, target_vol, vol_window, decision time, data, costs and engine are A1's"
+ ],
+ "drawdown_note": "A1's 18.8% max drawdown is low against published long-only TSMOM drawdowns (about 60%, Han, Kang and Ryu); with sleeve sizing capped at 1/sleeves and a 25% per-sleeve vol target, low portfolio vol is expected by construction; E10 must show it with the realised vol and drawdown/vol ratio rather than assume it",
+ "dry_run": true,
+ "exchange_keys": false,
+ "futures": false,
+ "gates": {
+  "E0_DATA": "Dataset V3 lock verifies; holdout extension lock verifies; min_notional_usdt snapshot recorded",
+  "E10_SAMPLE_PERIOD": "delta Sharpe vs A1B_BENCH > 0 in >= 4 of the 7 calendar years 2019-2025; no single year contributes > 60% of the summed yearly log return; realised annual vol and max-drawdown/vol ratio reported; TOO_GOOD flag (max DD < 0.5 x A1B_BENCH max DD AND CAGR >= A1B_BENCH CAGR) forces an Owner review before any paper preparation",
+  "E11_HOLDOUT": "opened once after E0-E10 pass; reject-only: REJECTED if V1 net <= 0 AND delta Sharpe vs A1B_BENCH <= 0; otherwise reported as UNDERPOWERED (about 4 months cannot confirm an edge)",
+  "E1_CAUSALITY": "signals.lookahead_check (20 cuts) and signals.recursive_check (shifts 30/90, warm-up 400 d) on V1 and A1B_BENCH generators: 0 failures; Freqtrade lookahead-analysis and recursive-analysis on the engine strategy: 0 flagged signals",
+  "E2_PARITY": "Freqtrade 2026.7 vs frozen replay, V1@base development: daily-return correlation >= 0.999 and |total-return difference| <= 0.0025",
+  "E3_FEASIBILITY": "G3 re-applied: >= 95% of V1@base development fills have notional >= max(5 USDT, min_notional_usdt) at the 1000 USDT wallet; the 100 USDT wallet share is reported; the live-vs-replay 30-day match is NOT_YET_EVALUABLE until paper",
+  "E4_PAPER_GUARD": "engine config passes engine_io.guard_config; dry_run = true",
+  "E5_SCREEN": "development, V1: R1 net > 0 and Sharpe > 0 at base; R2 net > 0 at x2; R3 net > 0 at +1 bar; R4 Sharpe(V1) - Sharpe(A1B_BENCH) > 0; R5 max drawdown <= 0.50; R6 validation reject-only: NOT (net <= 0 AND delta Sharpe <= 0)",
+  "E6_ROBUSTNESS": "reject V1 if 2 or more of V2-V4 have development Sharpe <= 0 or delta Sharpe vs their own matched bench <= 0",
+  "E7_PBO": "CSCV with S = 16 blocks over the daily net returns (development + validation) of the matrix {A1 primary, A1 P1-P5, V1-V4} (10 columns): PBO <= 0.05 (hard gate; PROFITABILITY-VERIFICATION-LAW-1 section 4.1, Owner decision OD-1: A1b is a new research program); NOT_EVALUABLE is never PASS",
+  "E8_DSR": "deflated Sharpe ratio of V1 daily net returns (development + validation) >= 0.95 with N = max(39, the law's N_eff); 39 = lifetime TLOS configurations 35 (OD-C5) + 4 A1b variants",
+  "E9_EXPOSURE": "delta Sharpe vs A1B_BENCH > 0 (material); Sharpe, CAGR, max drawdown vs BTC_HOLD, NO_TRADE and EXPOSURE_MATCHED_PASSIVE reported; reduced exposure is never called alpha"
+ },
+ "h1_launch_authorized": false,
+ "hyperopt": 0,
+ "hypothesis": "Long-only time-series momentum with per-sleeve volatility targeting on the most liquid point-in-time Binance USDT spot assets earns a higher risk-adjusted net return than the same book held always long, AND remains executable at retail size once trades below a minimum-order floor are suppressed by a declared no-trade band.",
+ "identity": {
+  "candidate_id": "A1B_TSMOM_VT_BAND",
+  "family_id": "AUTH2_A1_TSMOM_VT",
+  "lineage_id": "AUTH2_A1_TSMOM_VT/L2",
+  "parent": "A1 TSMOM-VT primary (research/auth2/prereg/A1.json), unchanged signal",
+  "trial_id": "TRIAL-A1B-1"
+ },
+ "leverage": false,
+ "margin": false,
+ "multiple_testing": {
+  "across_candidates": "per the verification law (Holm/BHY across concurrent candidates)",
+  "within_program": "Holm, m = 1 (V1 only)"
+ },
+ "non_claims": [
+  "no profitability is claimed; historical results are exploratory evidence only",
+  "PREPAPER_CANDIDATE is not paper admission and not a survivor decision",
+  "no part of this file authorizes execution, data download, paper or live trading"
+ ],
+ "open_inputs": {
+  "min_notional_usdt": {
+   "if_missing": "every evaluation step refuses to run (INCONCLUSIVE_INPUT_MISSING)",
+   "source_rule": "max over every symbol that is ever a rank 1..6 U6 member of the NOTIONAL (or MIN_NOTIONAL) filter minNotional in one GET /api/v3/exchangeInfo snapshot captured on the Owner host, its bytes sha256-recorded in the data-preparation PR, before any A1b evaluation; never chosen from a result",
+   "status": "OPEN_INPUT",
+   "value": null
+  }
+ },
+ "paper_launch_authorized": false,
+ "prereg_id": "A1B-PREREGISTRATION-1",
+ "prospective_plan": {
+  "alpha": 0.05,
+  "alternative_s": "chosen once in [0.50, 0.75] x V1's DSR-deflated historical Sharpe (N = max(39, N_eff)), declared at the paper preregistration",
+  "beta": 0.2,
+  "binding_on": "any later, separately authorized A1b paper preregistration; this file authorizes no paper or live step",
+  "burn_in_units_min": 20,
+  "calibration": "law section 6.4: A* = max over iid Gaussian, iid Student-t(3), GARCH(1,1)-t(3) (a 0.12, b 0.85) and a stationary block bootstrap (mean block >= 20) of V1's own development daily returns, >= 2000 paths each, recorded seeds; fresh-seed false acceptance <= alpha + 0.015; power >= 1 - beta - 0.03 or a longer truncation horizon; A* never below Wald's A",
+  "evidence_class": "PROSPECTIVE_PAPER only, from a T0 merged before the first included bar (law section 2)",
+  "kill_rules": "law section 7: SPRT lower bound, triple-penance drawdown / time-under-water bounds, operational kill",
+  "multiple_testing": "alpha / m with m fixed at the paper preregistration; Holm across concurrent candidates (law section 8)",
+  "test": "Wald SPRT on standardized net daily returns (law section 6.1); weekly aggregation declared if daily units are autocorrelated (law section 6.4 item 6)",
+  "verdicts": "law section 9 (Owner decision OD-2): Level A = NOT REFUTED, not proof of profitability, never live authorization; Level B = prospective statistical evidence under the frozen law; no real-money, live or scaling authority follows automatically from either level"
+ },
+ "real_money_authorized": false,
+ "rebalance_rule": {
+  "band_fraction": 0.25,
+  "entry": "flat -> long only when target_notional >= min_order_floor; otherwise stay flat",
+  "exit": "long -> flat always executes as a full close, whatever its size",
+  "gross_exposure_cap": 1.0,
+  "min_order_floor": "2 x min_notional_usdt",
+  "resize": "long -> long only when |target_weight - current_weight| >= max(band_fraction x target_weight, min_order_floor / equity); otherwise hold the drifted position"
+ },
+ "schema_version": "a1b-prereg-1.0.0",
+ "selection_debt_disclosure": "A1's family N = 21 and lifetime TLOS N = 35 (OD-C5); A1's development and validation results (Sharpe 1.39, max DD 18.8%, delta Sharpe +0.203, G3 30.6%) were seen before this file; the rank cap and band were chosen because of G3, which is itself a post-result choice and is the reason the development and validation windows are labelled exploratory",
+ "shorts": false,
+ "signal": {
+  "code": "research/auth2/signals.py a1_weights (unchanged)",
+  "decision_time": "every UTC day boundary, from daily closes known at that boundary (23:00 UTC 1h kline close)",
+  "engine_timeframe": "4h",
+  "exec_offset_bars": 0,
+  "lookbacks_days": [
+   20,
+   60,
+   120
+  ],
+  "on_rule": "sleeve is long when score > 0, else flat (cash)",
+  "score": "mean of the three trailing simple returns of the daily close",
+  "sleeve_size": "min(1, target_vol / realised_vol_30d_annualised) / sleeves",
+  "target_vol": 0.25,
+  "vol_window_days": 30
+ },
+ "status": "FROZEN_PENDING_OWNER_AUTHORITY",
+ "stop_rules": [
+  "any frozen value, window, threshold or variant changed after any A1b result: the program is BURNED",
+  "a causality failure after its one retry: STOP",
+  "a data-lock mismatch: STOP",
+  "the holdout opened before E0-E10: BURNED",
+  "no new variant, parameter or hypothesis may be added after any result; a new idea is a new preregistration"
+ ],
+ "terminal_states": {
+  "INCONCLUSIVE": "a material gate cannot be established honestly (missing input, insufficient coverage)",
+  "INVALID_RUN": "an integrity or causality failure; one technical retry, then STOP",
+  "PREPAPER_CANDIDATE": "every material gate E0-E11 passes; makes V1 eligible to be proposed for a separate Owner paper-admission decision, nothing more",
+  "REJECTED": "a material gate clearly fails"
+ },
+ "universe": {
+  "delisting": "forced exits at a member's terminal kline, as in A1 (Dataset V3 keeps delisted symbols)",
+  "law": "FUNNEL_LAW_2 point-in-time U6 (research/auth2/universe.py), frozen membership research/datasets/dataset_v3/membership_u6.json",
+  "long_only": true,
+  "market_type": "spot",
+  "quote": "USDT",
+  "rank_cap": 4,
+  "sleeves": 4
+ },
+ "variants": {
+  "V1": {
+   "band_fraction": 0.25,
+   "decision": "daily",
+   "rank_cap": 4,
+   "role": "PRIMARY",
+   "sleeves": 4
+  },
+  "V2": {
+   "band_fraction": 0.5,
+   "decision": "daily",
+   "rank_cap": 4,
+   "role": "REJECT_ONLY_PERTURBATION",
+   "sleeves": 4
+  },
+  "V3": {
+   "band_fraction": 0.25,
+   "decision": "weekly, Monday 00:00 UTC",
+   "rank_cap": 4,
+   "role": "REJECT_ONLY_PERTURBATION",
+   "sleeves": 4
+  },
+  "V4": {
+   "band_fraction": 0.25,
+   "decision": "daily",
+   "rank_cap": 6,
+   "role": "REJECT_ONLY_PERTURBATION",
+   "sleeves": 6
+  },
+  "count_toward_n": 4,
+  "rule": "only V1 can become a candidate; V2-V4 can only reject it; no variant is ever substituted for V1"
+ },
+ "wallets": {
+  "primary_usdt": 1000.0,
+  "report_only_usdt": [
+   100.0
+  ]
+ },
+ "windows_utc": {
+  "development": [
+   "2019-01-01T00:00:00Z",
+   "2025-01-01T00:00:00Z"
+  ],
+  "evidence_class": {
+   "development": "HISTORICAL_EXPLORATORY: the A1 primary was screened on it (FCS-1, 2026-10-17) and smoke-tested before AUTH-2",
+   "locked_holdout": "HISTORICAL_UNSEEN for every A1-family configuration per repository and Lane A records; opened exactly once, after every development/validation gate; if any prior exposure is found it is BURNED and only prospective evidence can count",
+   "prospective": "forward paper under a separate Owner authority, judged by the verification law; the only evidence class that can support a profitability claim",
+   "validation": "HISTORICAL_EXPLORATORY: the A1 primary's secondary window was seen in FCS-1 R6"
+  },
+  "locked_holdout": [
+   "2026-09-01T00:00:00Z",
+   "2027-01-01T00:00:00Z"
+  ],
+  "validation": [
+   "2025-01-01T00:00:00Z",
+   "2026-09-01T00:00:00Z"
+  ]
+ }
+}
