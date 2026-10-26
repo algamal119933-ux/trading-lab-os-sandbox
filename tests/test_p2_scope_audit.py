@@ -1424,7 +1424,7 @@ P3_PLN_09_AUTHORITY_SCOPE: dict[str, str] = {
     "docs/p3/product_shape/Trading_Lab_OS_CLAUDE_NEW_SESSION_PACK_v1.0.md": f"{_P09A} — carries Shape Lock v1.2 as Appendix A",
     "docs/p3/product_shape/SOURCES.sha256": f"{_P09A} — the digests of the four sources",
     "tests/test_p3_product_shape_authority.py": f"{_P09A} — digests, prototype identity, 12 screens, offline CSP",
-    "tests/test_p2_scope_audit.py": "P3-PLN-03/06 acceptance (PR #79) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1465,6 +1465,32 @@ P3_PLN_09_S3_SCOPE: dict[str, str] = {
     "tests/test_p3_control_room.py": f"{_P09S3} — slice-3 sealed screens and missing-evidence negatives, synthetic only",
     "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09S3} — execution record, slice 3",
     "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slices 1–2 (PR #81) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #85, merged. Two parents: bf208ba6 (main before, P3_PLN_09_S3) + dc385f10
+# (the claude/p3-pln-06-alerting branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_ALERT_MERGE = "19d77e905100bca4063fcae309d28aa43fb9e9e5"
+
+# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
+# Alertmanager template with no secrets, a separate loopback-only ops-plane compose project, and the §19
+# CRITICAL health checks (fail-closed). Prepared, not installed or started.
+_P06AL = "P3-PLN-06 §19 alert leg"
+P3_PLN_06_ALERT_SCOPE: dict[str, str] = {
+    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06AL} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
+    "scripts/p3/ops/prometheus.yml": f"{_P06AL} — scrape the host node-exporter, load the rules, send to Alertmanager",
+    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06AL} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06AL} — promtool rule unit tests: every condition raises its alert",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06AL} — receivers via *_file secrets, routed to null until the Owner chooses",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06AL} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06AL} — pointer update; PLN-06 stays PARTIAL",
+    "tests/test_p3_alerting.py": f"{_P06AL} — rules read only emitted metrics; loopback, pinned, secret-free",
+    "research/p3/health.py": f"{_P06AL} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
+    "scripts/p3/health_check.py": f"{_P06AL} — runs the §19 checks by default (--no-s19 for diagnosis)",
+    "research/p3/control_room.py": f"{_P06AL} — the Control Room health view includes the §19 checks",
+    "research/p3/records/p3_workstreams.json": f"{_P06AL} — PLN-06 evidence text: §19 coverage, still PARTIAL",
+    "tests/test_p3_health_s19.py": f"{_P06AL} — positive/negative per §19 condition; no secret value in any finding",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
@@ -1531,6 +1557,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
     "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
     "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
+    "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1538,26 +1565,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
-# Alertmanager template with no secrets, and a separate loopback-only ops-plane compose project; plus the
-# §19 CRITICAL health checks (paper guard, evidence chains, real-money state). Prepared, not installed or
-# started. No runtime, strategy, risk, dataset, registry or evidence change.
-_P06A = "P3-PLN-06 §19 alert leg"
+# PROFITABILITY-VERIFICATION-LAW-1 (Owner directive 2026-10-26, PRIORITY 2): a draft law that freezes on
+# Owner merge, plus a standard-library statistics module (DSR/PBO forward to the audited Cycle-2 wrapper)
+# and its synthetic tests. Research governance only: authorizes nothing; no runtime, strategy, risk,
+# dataset, registry, ledger or evidence change.
+_PVL = "PROFITABILITY-VERIFICATION-LAW-1"
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06A} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
-    "scripts/p3/ops/prometheus.yml": f"{_P06A} — scrape the host node-exporter, load the rules, send to Alertmanager",
-    "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06A} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
-    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06A} — promtool rule unit tests: every condition raises its alert",
-    "scripts/p3/ops/alertmanager.yml.template": f"{_P06A} — receivers via *_file secrets, routed to null until the Owner chooses",
-    "docs/p3/PLN_06_ALERTING.md": f"{_P06A} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06A} — pointer update; PLN-06 stays PARTIAL",
-    "tests/test_p3_alerting.py": f"{_P06A} — rules read only emitted metrics; loopback, pinned, secret-free",
-    "research/p3/health.py": f"{_P06A} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
-    "scripts/p3/health_check.py": f"{_P06A} — runs the §19 checks by default (--no-s19 for diagnosis)",
-    "research/p3/control_room.py": f"{_P06A} — the Control Room health view includes the §19 checks",
-    "research/p3/records/p3_workstreams.json": f"{_P06A} — PLN-06 evidence text: §19 coverage, still PARTIAL",
-    "tests/test_p3_health_s19.py": f"{_P06A} — positive/negative per §19 condition; no secret value in any finding",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
+    "research/PROFITABILITY_VERIFICATION_LAW_1.md": f"{_PVL} — the law with Owner decisions OD-1..OD-3 applied",
+    "research/verification_law/__init__.py": f"{_PVL} — package exports",
+    "research/verification_law/core.py": f"{_PVL} — PSR, SR0, MinTRL, power, kill bounds, BHY; DSR/PBO/Holm forwarded",
+    "research/verification_law/sprt.py": f"{_PVL} — Wald SPRT; §6.4 calibration under t, GARCH-t and block-bootstrap models",
+    "tests/test_verification_law.py": f"{_PVL} — paper example, trialgate equality, power table, SPRT error rates",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
