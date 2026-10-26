@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 RECORD = Path(__file__).resolve().parents[1] / "research" / "OWNER_RESEARCH_AUTHORIZATION_A1B_1.md"
-FIELDS = ("AUTHORIZED_SCOPE", "EVALUATION_EXECUTION", "EXECUTION_LIMITS", "TRIALS_COUNTED", "DATASET",
+FIELDS = ("AUTHORIZED_SCOPE", "EVALUATION_EXECUTION", "EXECUTION_LIMITS", "TRIALS_COUNTED", "GOVERNING_LAW", "DATASET",
           "REAL_MONEY_AUTHORIZED", "H1_LAUNCH_AUTHORIZED", "PAPER_LAUNCH_AUTHORIZED", "P3_RELATION", "EXPIRES_UTC")
 
 
@@ -49,3 +49,10 @@ def test_the_record_says_it_binds_only_on_owner_merge():
     text = RECORD.read_text(encoding="utf-8")
     assert "only when the Owner merges it" in text
     assert "CEA-1" in text and "program charter" in text
+
+
+def test_the_governing_law_and_pbo_gate_are_named():
+    f = {k: v[0] for k, v in _fields().items()}
+    assert "PROFITABILITY-VERIFICATION-LAW-1" in f["GOVERNING_LAW"]
+    assert "PBO <= 0.05" in f["GOVERNING_LAW"] and "hard gate" in f["GOVERNING_LAW"]
+    assert "never grants live" in f["GOVERNING_LAW"]

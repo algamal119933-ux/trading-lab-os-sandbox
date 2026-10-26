@@ -1570,7 +1570,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 _BR = "OWNER-RESEARCH-AUTHORIZATION-A1B-1"
 BRANCH_SCOPE: dict[str, str] = {
     "research/OWNER_RESEARCH_AUTHORIZATION_A1B_1.md": f"{_BR} — the Owner's Lane B authority record (binds on Owner merge)",
-    "tests/test_owner_research_authorization_a1b.py": f"{_BR} — every field exactly once; boundary fields NO",
+    "tests/test_owner_research_authorization_a1b.py": f"{_BR} — every field exactly once; boundary fields NO; governing law + PBO gate named",
     "tests/test_p2_scope_audit.py": "P3-PLN-06 §19 alert leg (PR #85) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

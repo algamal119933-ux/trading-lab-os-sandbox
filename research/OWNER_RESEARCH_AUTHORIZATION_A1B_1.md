@@ -24,6 +24,7 @@ AUTHORIZED_SCOPE = A1b pre-registration (research/a1b/, branch claude/research-a
 EVALUATION_EXECUTION = NOT AUTHORIZED BY THIS RECORD; offline evaluation runs only under an Owner-merged program charter charters/programs/A1B-QUALIFICATION-1.json binding the frozen a1b_prereg.json sha256 (CEA-1 section 12)
 EXECUTION_LIMITS = offline and historical only; separate runner by default (OFFLINE_RESEARCH_AUTHORITY_1 section 3); no paper worker; no live trading; no exchange trading credentials; no hyperopt or variant beyond the four declared V1-V4; no locked-holdout opening before gates E0-E10 of the frozen plan pass
 TRIALS_COUNTED = YES; one scientific trial TRIAL-A1B-1 (4 configurations) appended PREREGISTERED to research/records/trial_ledger.jsonl in the charter PR, before any result; DSR N >= 39
+GOVERNING_LAW = PROFITABILITY-VERIFICATION-LAW-1 (research/PROFITABILITY_VERIFICATION_LAW_1.md, PR #82, with Owner decisions OD-1..OD-3) governs every A1b gate and verdict; A1b is a new research program, so PBO <= 0.05 (CSCV, 16 blocks) is a hard gate (law section 4.1); Level A or B never grants live or scaling authority (law section 9)
 DATASET = Dataset V3 (research/datasets/dataset_v3.lock.json, data.binance.vision, every zip verified against its .CHECKSUM) plus the holdout extension lock built by the same route
 REAL_MONEY_AUTHORIZED = NO
 H1_LAUNCH_AUTHORIZED = NO
@@ -45,14 +46,14 @@ edits it before merging if another date is wanted.
 - It does not open the locked holdout early, and it does not change any frozen dataset, strategy, risk setting, threshold,
   P2 record or P3 record.
 - It does not count as evidence of profitability. Historical windows are exploratory. Only prospective evidence judged
-  under the verification law (`research/PROFITABILITY_VERIFICATION_LAW_1.md`, prepared separately) can support such a
-  claim.
+  under the verification law (`research/PROFITABILITY_VERIFICATION_LAW_1.md`, PR #82) can support such a claim, and
+  even then no live or scaling authority follows automatically.
 
 ## Order of merges
 
-1. **This record (Owner).**
-2. The A1b pre-registration PR (`claude/research-a1b-preregistration`).
-3. The verification law PR (`claude/research-verification-law-1`).
+1. The verification law, PR #82 (`claude/research-verification-law-1`). It fixes the PBO gate this record cites.
+2. **This record, PR #83 (Owner).**
+3. The A1b pre-registration, PR #84 (`claude/research-a1b-preregistration`). It binds only after this record.
 4. Only then, the A1b program charter with the `TRIAL-A1B-1` ledger record (Owner).
 
-The pre-registration PR may be merged before or after the law. Evaluation may not start before both are on `main`.
+Evaluation may not start before all three are on `main` and the charter is merged.
