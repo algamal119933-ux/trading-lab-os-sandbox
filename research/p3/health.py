@@ -88,6 +88,30 @@ def timer_expected(unit: str, *, want_active: bool, runner) -> dict:
     return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
 
 
+def monitor_timer(unit: str, *, runner) -> dict:
+    """Monitoring self-failure: the hourly health timer itself. If it is not scheduled the hourly monitor is
+    blind, so 'not active' is CRITICAL here (not the WARNING an ordinary expected-active timer gets).
+    A state systemd cannot give stays WARNING "UNPROVEN" (fail-closed, never INFO)."""
+    f = timer_expected(unit, want_active=True, runner=runner)
+    if f["severity"] == WARNING and "UNPROVEN" not in f["detail"]:
+        return _finding(f["check"], CRITICAL, f"{f['detail']}; the hourly health monitor itself is not scheduled")
+    return f
+
+
+def clock_sync(runner) -> dict:
+    """Startup after reboot / evidence timestamps: the host clock must be NTP-synchronised. Bar timing,
+    admission and reconciliation all compare timestamps. Unknown is UNPROVEN (WARNING), never INFO."""
+    try:
+        out = runner(["timedatectl", "show", "-p", "NTPSynchronized", "--value"]).stdout.strip().lower()
+    except Exception as exc:  # noqa: BLE001 - a clock state that cannot be read is not a healthy one
+        return _finding("clock_sync", WARNING, f"UNPROVEN: timedatectl could not be queried ({type(exc).__name__})")
+    if out == "yes":
+        return _finding("clock_sync", INFO, "NTP synchronised")
+    if out == "no":
+        return _finding("clock_sync", WARNING, "NTP NOT synchronised: evidence timestamps may drift")
+    return _finding("clock_sync", WARNING, f"UNPROVEN: timedatectl gave no NTP state ({out[:40]!r})")
+
+
 def mounted(path: str) -> dict:
     return _finding(f"mount:{path}", INFO if os.path.ismount(path) else CRITICAL,
                     "mounted" if os.path.ismount(path) else "not mounted")
@@ -137,6 +161,8 @@ def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict
         backup_recency(backup_target, rpo_hours, verifier=verifier),
         timer_expected("tlos-p3-backup.timer", want_active=True, runner=runner),
         timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=runner),
+        monitor_timer("tlos-p3-health.timer", runner=runner),
+        clock_sync(runner),
         *normal_end_due(registry, fp_lane_root),
     ]
     if s19 is not None:
