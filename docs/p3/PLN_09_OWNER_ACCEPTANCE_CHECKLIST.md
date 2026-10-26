@@ -8,7 +8,7 @@ The Owner performs this walkthrough. It is **preparation only**. This file grant
 ## 1. When and how to open the view (later; no host action now)
 
 > **Not now.** Wait until all three of these have happened:
-> 1. The planned reboot and its `verify-boot` check are done (`claude/REBOOT_RUNBOOK_2026-10-26.md`, PLN-04/07).
+> 1. The planned reboot and its `verify-boot` check are done ([`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), PLN-04/07).
 > 2. This PR is merged.
 > 3. The Owner has updated `~/projects/trading/tlos-p3` to a `main` that contains it.
 >
