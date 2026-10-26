@@ -46,7 +46,7 @@ power, fire, theft, a ransomware account compromise, and the WDC disk, which is 
 - **Retention:** keep the 14 most recent daily sets plus 6 monthly sets. That is 20 sets, about 20 GB.
 - **Minimum free capacity at the destination: 30 GB.** That is 20 GB of retention plus 50% headroom for set growth and one in-flight transfer.
 - **Recommended:** 50 GB or more.
-- **Check before each push:** `ssh <dest-host> df -h <dest-path>`. Push nothing if free space is below 2× the newest set's size.
+- **Check before each push:** the append-only gate (§4) refuses `df`, so the free-space check runs on the destination itself, as its owner (`df -h <dest-path>` in a session on the destination host), or via its own monitoring. Push nothing if free space is below 2× the newest set's size.
 
 ## 4. Authenticated transport (append-only account)
 These are steps on the **destination**, done by the Owner. Claude has no access there.
