@@ -1539,8 +1539,9 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # out and starts being a permanent record.
 
 # P3-PLN-06 §19 alert leg: node-exporter scrape target, alert rules with promtool rule tests, an
-# Alertmanager template with no secrets, and a separate loopback-only ops-plane compose project.
-# Prepared, not installed or started. No runtime, strategy, risk, dataset, registry or evidence change.
+# Alertmanager template with no secrets, and a separate loopback-only ops-plane compose project; plus the
+# §19 CRITICAL health checks (paper guard, evidence chains, real-money state). Prepared, not installed or
+# started. No runtime, strategy, risk, dataset, registry or evidence change.
 _P06A = "P3-PLN-06 §19 alert leg"
 BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/ops/docker-compose.p3-ops.yml": f"{_P06A} — separate ops-plane compose: Prometheus + Alertmanager, 127.0.0.1 only",
@@ -1548,9 +1549,14 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/ops/rules/tlos_p3_alerts.yml": f"{_P06A} — §19 CRITICAL/WARNING, staleness, exporter-down, watchdog",
     "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06A} — promtool rule unit tests: every condition raises its alert",
     "scripts/p3/ops/alertmanager.yml.template": f"{_P06A} — receivers via *_file secrets, routed to null until the Owner chooses",
-    "docs/p3/PLN_06_ALERTING.md": f"{_P06A} — design, verification, Owner runbook, acceptance mapping",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06A} — design, §19 coverage matrix, verification, Owner runbook, acceptance mapping",
     "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_P06A} — pointer update; PLN-06 stays PARTIAL",
     "tests/test_p3_alerting.py": f"{_P06A} — rules read only emitted metrics; loopback, pinned, secret-free",
+    "research/p3/health.py": f"{_P06A} — §19 CRITICAL checks: paper guard, real-money state, evidence chains, paper runtime vs registry",
+    "scripts/p3/health_check.py": f"{_P06A} — runs the §19 checks by default (--no-s19 for diagnosis)",
+    "research/p3/control_room.py": f"{_P06A} — the Control Room health view includes the §19 checks",
+    "research/p3/records/p3_workstreams.json": f"{_P06A} — PLN-06 evidence text: §19 coverage, still PARTIAL",
+    "tests/test_p3_health_s19.py": f"{_P06A} — positive/negative per §19 condition; no secret value in any finding",
     "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slice 3 (PR #87) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

@@ -112,3 +112,61 @@ tests:
             exp_annotations:
               summary: "TLOS health job has not written for over 2 hours"
               description: "tlos_p3_health.prom is 2h 10m 0s old. Check tlos-p3-health.timer."
+
+  # Master plan §19 CRITICAL conditions observed by the health job (research/p3/health.py s19_findings):
+  # paper-guard failure, real-money-enabled state, broken evidence chains, unauthorized execution and a
+  # stopped control each raise TLOSHealthCritical under their own check label.
+  - interval: 1m
+    input_series:
+      - series: 'tlos_p3_health_check{check="paper_guard"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="real_money"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="evidence_chain:operator_ledger"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="evidence_chain:sealed_archives"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="unauthorized_execution"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="control_running:FP-CONTROL-3"}'
+        values: '0 2 2'
+      - series: 'tlos_p3_health_check{check="paper_runtime"}'
+        values: '1 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: TLOSHealthCritical
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "paper_guard"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: paper_guard"
+              description: "P3 health check paper_guard is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "real_money"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: real_money"
+              description: "P3 health check real_money is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "evidence_chain:operator_ledger"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: evidence_chain:operator_ledger"
+              description: "P3 health check evidence_chain:operator_ledger is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "evidence_chain:sealed_archives"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: evidence_chain:sealed_archives"
+              description: "P3 health check evidence_chain:sealed_archives is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "unauthorized_execution"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: unauthorized_execution"
+              description: "P3 health check unauthorized_execution is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "control_running:FP-CONTROL-3"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: control_running:FP-CONTROL-3"
+              description: "P3 health check control_running:FP-CONTROL-3 is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 2m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "paper_runtime"}
+            exp_annotations:
+              summary: "TLOS health WARNING: paper_runtime"
+              description: "P3 health check paper_runtime is WARNING."

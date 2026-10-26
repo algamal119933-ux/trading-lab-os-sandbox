@@ -36,12 +36,16 @@ def main(argv: list[str] | None = None) -> int:
                         default=Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"))
     parser.add_argument("--json", type=Path)
     parser.add_argument("--prom-textfile", type=Path, help="also write Prometheus text exposition, atomically")
+    parser.add_argument("--no-s19", action="store_true",
+                        help="omit the master plan §19 CRITICAL checks (paper guard, real-money state, evidence chains, "
+                             "paper runtime vs registry); for diagnosis only")
     args = parser.parse_args(argv)
     run = health.default_runner
     findings = health.standard_findings(
         json.loads(REGISTRY.read_text(encoding="utf-8")), runner=run, verifier=backup.verify_backup,
         root_min_gib=args.root_min_gib, lane=args.lane, lane_min_gib=args.lane_min_gib,
-        backup_target=args.backup_target, rpo_hours=args.rpo_hours, fp_lane_root=args.fp_lane_root)
+        backup_target=args.backup_target, rpo_hours=args.rpo_hours, fp_lane_root=args.fp_lane_root,
+        s19=None if args.no_s19 else health.default_s19_inputs(REPO_ROOT))
     verdict = health.overall(findings)
     if args.json:
         args.json.write_text(json.dumps({"findings": findings, "HEALTH": verdict}, indent=2) + "\n", encoding="utf-8")

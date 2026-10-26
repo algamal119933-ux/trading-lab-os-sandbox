@@ -20,8 +20,9 @@ tlos-p3-health.timer (hourly, exists) → scheduled_health.sh → ~/tlos-paper/p
 ```
 - `scripts/p3/ops/docker-compose.p3-ops.yml` is a **separate compose project** (`tlos-p3-ops`). It is not the FP runtime, has no
   trading component, no exchange credential and no published port: host networking with every listener on 127.0.0.1.
-- No health code changed. The rules read only what `research/p3/health.py` already emits
-  (`tlos_p3_health_check{check}` 0/1/2 and `tlos_p3_health_overall`) and node-exporter's own textfile metrics.
+- The rules read only what `research/p3/health.py` emits (`tlos_p3_health_check{check}` 0/1/2 and
+  `tlos_p3_health_overall`) and node-exporter's own textfile metrics. The health job now also emits the §19
+  CRITICAL conditions a read-only host check can observe (`s19_findings`, §1.1); one generic rule pages each.
 - Reuse classification: Prometheus = REUSE_EXISTING; node-exporter and Alertmanager = REUSE (upstream Prometheus
   ecosystem); rules/config = BUILD_SMALL_MISSING_LAYER. NEW_MONITORING_PLATFORM = NO.
 
@@ -35,8 +36,25 @@ tlos-p3-health.timer (hourly, exists) → scheduled_health.sh → ~/tlos-paper/p
 | `TLOSNodeExporterDown` | the exporter is unreachable for 5 min | CRITICAL |
 | `TLOSWatchdog` | always firing; delivered only to the off-host dead-man | — |
 
-Not covered, and not claimed: the §19 governance-level CRITICALs that no P3 metric emits yet (paper guard failure,
-evidence chain broken, real-money enabled, unexpected writer). They need an emitter first; that is PLN-07/PLN-10 work.
+### 1.1 Master plan §19 coverage matrix (reconciled 2026-10-27 at main `bf208ba6`)
+Every row is a read-only check in `research/p3/health.py` (`s19_findings`, run hourly by `scripts/p3/health_check.py`
+and by the Control Room build), emitted as `tlos_p3_health_check{check="…"}` and paged by `TLOSHealthCritical` /
+`TLOSHealthWarning`. Tests: `tests/test_p3_health_s19.py` (positive + negative per row) and the promtool rule
+tests (each label raises its alert). A check that cannot run reports WARNING/CRITICAL, never INFO.
+
+| §19 condition | Check label → severity | Source (reused) | Status |
+|---|---|---|---|
+| **paper guard failure** | `paper_guard` → CRITICAL on any violation or a guard that cannot run | `scripts/paper_guard.py check_config` on the runtime `config.json`, the H1 package config and any materialised H1 lane config present | **COVERED** |
+| **real-money enabled** | `real_money` → CRITICAL | `dry_run` not true; exchange credential fields set in a config or `ccxt_*` block; `FREQTRADE__DRY_RUN`≠true or `FREQTRADE__EXCHANGE__{KEY,SECRET,…}` set in the runtime `.env` or in a running paper container's env (`docker inspect`). Key names only; values are never read into a finding | **COVERED** |
+| **evidence chain broken** (operator ledger) | `evidence_chain:operator_ledger` → CRITICAL on a break; WARNING if the ledger is absent | `kill_switch.verify_ledger` (hash chain, O-1) | **COVERED** |
+| **evidence chain broken** (sealed evidence) | `evidence_chain:sealed_archives` → CRITICAL on any archive that no longer matches its manifest; WARNING if none found | `publish_evidence_digest.verify_archive` over `~/projects/trading/*/artifacts/*/archive_manifest.json` — full rehash hourly (~170 MB, seconds) | **COVERED** |
+| **DB corruption** | sealed `tradesv3.sqlite` → via `evidence_chain:sealed_archives` | as above | **PARTIAL** — sealed DBs only; no live DB exists (no cohort running). A live-DB `PRAGMA integrity_check` belongs to the runtime that owns it (PLN-10 / H1 lane) |
+| **unauthorized execution** | `unauthorized_execution` → CRITICAL: a running `tradinglab-fp-control-*` / `tlos-h1-paper-cohort-*` container with no RUNNING registry cohort | `kill_switch.paper_containers` + the registry; docker unreachable → `paper_runtime` WARNING (UNPROVEN, not healthy) | **COVERED**. Note: H1 is not in the FP registry, so a running H1 container is CRITICAL — correct while `H1_LAUNCH_AUTHORIZED = NO`; the H1 grant PR must teach this check the grant |
+| **FP-CONTROL stopped** | `control_running:<role>` → CRITICAL: a RUNNING cohort whose container is not running | same | **NOT_APPLICABLE_NOW** (no RUNNING cohort; P2 closed). Implemented and tested for when one runs |
+| **strategy/config hash changed** | — | registry `strategy_sha256` / `config_sha256` per cohort; enforced at launch by the FP preflight/overlay checks and by CI scope audit for the repo | **NOT_APPLICABLE_NOW** at runtime (no RUNNING cohort). A runtime hash re-check for a RUNNING cohort is a follow-up when a cohort exists |
+| **T0/cohort changed** | — | registry rows change only through Owner-merged PRs; the scope audit pins every merge | **COVERED by governance (CI), not by the host monitor**; no runtime emitter |
+| **unexpected writer** | — | — | **NOT_COVERED**. Needs a file-integrity watch on the lane/evidence paths (e.g. `auditd` rules or inotify), a host install — Owner decision. Sealed-evidence tampering is still caught by the archive rehash |
+| WARNING examples (research disk, API/rate limit, H1 provenance, upstream change, contention) | `free_space:*`, `backup_recency`, timers | existing | **PARTIAL** — capacity/recovery covered; API/rate-limit and upstream-change belong to a running cohort's capture loop |
 
 ## 2. Verification done in this change (cloud, no host)
 - `promtool check rules` and `promtool check config` (Prometheus 3.14.0): SUCCESS, 7 rules.
@@ -45,6 +63,8 @@ evidence chain broken, real-money enabled, unexpected writer). They need an emit
 - `amtool check-config` (Alertmanager 0.28.1) on the template with a dummy chat id: SUCCESS, 4 receivers.
 - `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml config`: renders two services; the base `docker compose config` is unchanged.
 - `tests/test_p3_alerting.py`: structure, safety and consistency checks; it runs promtool/amtool when present.
+- `tests/test_p3_health_s19.py`: the §19 checks (§1.1), positive and negative per condition, no secret value in any finding,
+  the real paper guard and the real archive verifier on synthetic fixtures (a changed sealed sqlite is CRITICAL).
 
 ## 3. Owner runbook (each step is an OWNER ACTION on hamza-workstation)
 Run from the tools checkout after it is updated to a main that contains this change
@@ -82,9 +102,14 @@ Stopping is `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml down` (n
 ## 4. PLN-06 acceptance mapping
 | Contract acceptance | Evidence after the Owner actions | Status now |
 |---|---|---|
-| "Each §19 CRITICAL condition raises an alert in a test" | `promtool test rules` (this change) for every condition the health job emits | rule leg PASS in test; governance-level CRITICALs not emitted yet (§1) |
+| "Each §19 CRITICAL condition raises an alert in a test" | `promtool test rules` + `tests/test_p3_health_s19.py` for every condition the health job emits (§1.1) | PASS in test for paper guard, real-money, evidence chains, unauthorized execution, stopped control; **NOT_COVERED: unexpected writer**; live-DB integrity and runtime hash drift N/A until a cohort runs |
 | Capacity thresholds are enforced | `free_space:*` CRITICAL → `TLOSHealthCritical` (test) | rule leg PASS in test |
 | Normal end is detected | `normal_end:*` WARNING → `TLOSHealthWarning` (test); detection itself already met | met |
 | Alert reaches the Owner | step 6 test alert received + one real scrape of `tlos_p3_health_overall` | **PENDING — Owner** |
 
-`PLN_06 = PARTIAL` until step 6 is recorded here by an Owner-merged update.
+`PLN_06 = PARTIAL` until (a) step 6 (delivery proof) is recorded here by an Owner-merged update and (b) the
+NOT_COVERED row (unexpected writer) is either covered or explicitly accepted by the Owner. **Not CLOSED.**
+
+**First host run after the update (Owner):** the new checks read real host configs and archives. If the first
+hourly run reports a CRITICAL on `paper_guard`, `real_money` or `evidence_chain:*`, treat it as a real §19 finding:
+stop and send the output to Claude; do not silence it.
