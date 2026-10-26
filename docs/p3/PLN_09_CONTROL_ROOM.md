@@ -89,7 +89,38 @@ Source: the sealed cohort that the newest PLN-07 execution-audit record names (`
 - **Missing or unreadable evidence:** when no audit record exists or the ledgers cannot be read, each slice-3 screen shows **unknown** with the reason. Nothing is rendered as healthy. This is covered by a negative test.
 - **Verification (synthetic):** headless Chromium, EN and AR/RTL, bound and missing-evidence cases. No console errors, and no DEMO text on any slice-3 screen.
 
-**Status: 12 of 12 screens are bound.** What remains for PLN-09:
+## Mobile slice delivered: Status, Resume, Incidents, More (the same scenario; monitoring and continuity only)
+The frozen mobile components are re-declared only where they carry data. Same markup and classes, prototype bytes verbatim, digest check intact, offline CSP.
+
+| Mobile element | Bound from | Note |
+|---|---|---|
+| Stage label (mobile bar) | `LIVE.ident.stage` ("P3 · Paper Beta executing") | The prototype's `STAGELBL[step]` would read "P2 Closed" |
+| Status · project line | the governed project chips and next Owner gate (the workstream record) | Replaces the prototype's hard-coded "P2 · ladder" line |
+| Status · decision / exposure / incidents | the scenario (no cohort: no decisions; exposure 0 %; incidents from non-INFO health) | — |
+| Resume | the prototype's own body over the live scenario | The ladder is the frozen P2-closure ladder (7/7), as on desktop |
+| Incidents | the prototype's own body (non-INFO health findings) | Acknowledge stays "not in this view" |
+| More → Operations | backup / restore / host-reboot recovery from the newest set and the persisted drill record | The prototype hard-coded backup and restore as unknown |
+| More → Decisions | the last **sealed** decision, with its 9-stage trace, marked "Sealed record" | Unknown, with the reason, when the sealed record is missing |
+| More → Trades | open: none; the sealed closed trades with per-leg backing | Unknown when missing |
+| More → Market | the prototype's body: no chart on mobile, by design | — |
+| More → Risk / Evidence / History / System | the prototype's bodies over the live scenario | — |
+| More → Settings | viewer preferences only | The prototype's "desktop-first in this prototype" copy is replaced by a factual line |
+
+- **Device selection:** the prototype's device toggle lives in the hidden prototype panel. A viewport ≤ 720 px opens the mobile view, and `#mobile` / `#desktop` in the address override it. This is view state only; nothing is stored.
+- **No consequential control on mobile:** every mobile button is navigation (`data-mtab` / `data-mdet`). There is no acknowledge, no stop and no Kill Switch, and a test asserts this.
+- **Governed forbidden list:** the prototype's FORBID list describes P2 ("P3 code or runtime action"). The live view now uses the governed list (`control_room.FORBIDDEN_NOW`): real money, H1 launch, restarting FP-CONTROL-3, strategy/risk/dataset change, reopening the product shape. It is the same as the resume brief's FORBIDDEN line, and it applies on desktop and mobile.
+- **Verification (synthetic, headless Chromium, 390×844, EN and AR/RTL, sealed-bound and evidence-missing cases):**
+  - every tab and every More detail rendered;
+  - 0 console errors and no DEMO text;
+  - the stage label is never "P2 Closed";
+  - no Kill Switch element;
+  - unknown shown when the sealed record is missing;
+  - a 1400 px viewport opens the desktop layout, and `#mobile` forces the mobile one.
+- **Owner acceptance preparation:** [`PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md`](PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md). `PLN09_OWNER_ACCEPTANCE = PENDING`. The Owner records the sign-off in the Owner's own PR.
+
+**Status: 12 of 12 screens and the 4 mobile tabs are bound.** What remains for PLN-09 is the Owner review and acceptance round (the checklist). It runs on the host after the planned reboot and after `tlos-p3` is updated.
+
+Earlier status line (slice 3): **Status: 12 of 12 screens are bound.** What remains for PLN-09:
 - the mobile tabs (same scenario, prototype mobile components, about 0.5 d);
 - the Owner review round.
 

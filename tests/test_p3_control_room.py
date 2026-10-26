@@ -347,3 +347,62 @@ def test_the_adapter_binds_all_twelve_frozen_screens():
     assert bound == screens and len(bound) == 12
     for k in ("decisions", "trades", "market", "settings"):
         assert f"SCREENS.{k}={k};" in js
+
+
+# ---------------------------------------------------------------- mobile: Status / Resume / Incidents / More
+def _mobile_js() -> str:
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    start = js.index("/* ---------- Mobile:")
+    return js[start:js.index("function liveDevice()", start)]
+
+
+def test_the_mobile_view_is_redeclared_from_the_live_identity_not_the_p2_stage_ladder():
+    m = _mobile_js()
+    for fn in ("function mStatus()", "function mDetail(k)", "function mobile()"):
+        assert fn in m
+    assert "L(LIVE.ident.stage)" in m and "STAGELBL[" not in m and "nextGate(" not in m
+    assert "LIVE.project.chips" in m and "LIVE.project.gate" in m
+    # data that the prototype hard-codes on mobile is replaced by records, never by DEMO values
+    assert "chip(...P.backup)" in m and "chip(...P.restore)" in m and "chip(...P.reboot)" in m
+    assert "POS[" not in m and "DECS" not in m and "lastDec()" not in m and "DEMO" not in m
+
+
+def test_mobile_offers_no_consequential_control():
+    m = _mobile_js()
+    proto = cr.PROTOTYPE.read_text(encoding="utf-8")
+    kept = proto[proto.index("function mResume()"):proto.index("function mDetail(k)")]  # mResume, mInc, mMore
+    for src in (m, kept):
+        buttons = re.findall(r"<button ([^>]*)>", src)
+        assert buttons, "the mobile tabs and lists are buttons"
+        for attrs in buttons:
+            assert "data-mdet" in attrs or "data-mtab" in attrs, attrs  # navigation only
+        for forbidden in ('id="kill"', "data-kill", "data-act", "data-ack", "data-stop", "data-restart"):
+            assert forbidden not in src
+    assert "never on mobile" in m
+
+
+def test_mobile_decisions_and_trades_say_unknown_when_the_sealed_record_is_missing():
+    m = _mobile_js()
+    dec = m[m.index("if(k==='decisions')"):m.index("if(k==='trades')")]
+    trd = m[m.index("if(k==='trades')"):m.index("if(k==='risk')")]
+    assert "D3.state!=='bound'" in dec and "chip('unk','unknown')" in dec and "Sealed record" in dec
+    assert "T.state!=='bound'" in trd and "chip('unk','unknown')" in trd
+    live = cr.project(_obs(sealed=None))
+    assert live["decisions"]["state"] == "none" and live["trades_closed"]["state"] == "none"
+
+
+def test_the_device_follows_the_viewport_or_the_address_and_stores_nothing():
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    dev = js[js.index("function liveDevice()"):js.index("/* ---------- route")]
+    assert "(max-width: 720px)" in dev and "#mobile" in dev and "#desktop" in dev
+    assert "localStorage" not in dev and "sessionStorage" not in dev and "document.cookie" not in dev
+
+
+def test_the_governed_forbidden_list_replaces_the_prototypes_p2_era_list():
+    live = cr.project(_obs())
+    assert live["scenario"]["extraForbid"] == []
+    en = [f["en"] for f in live["forbid"]]
+    assert en == ["Real money", "H1 launch", "Restarting FP-CONTROL-3", "Strategy, risk or dataset change",
+                  "Reopening the product shape"]
+    assert all(f["ar"] for f in live["forbid"]) and not any("P3" in e for e in en)
+    assert "FORBID.splice(0,FORBID.length,...LIVE.forbid);" in cr.ADAPTER_JS.read_text(encoding="utf-8")

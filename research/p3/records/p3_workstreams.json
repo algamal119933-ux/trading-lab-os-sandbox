@@ -13,7 +13,7 @@
     {"id": "PLN-06", "status": "PARTIAL", "en": "Monitoring & hardening", "ar": "المراقبة والتقوية", "evidence": "hourly health + journal + notification; alerting PR #85 prepared; Prometheus scrape needs node-exporter"},
     {"id": "PLN-07", "status": "PARTIAL", "en": "Verification", "ar": "التحقق", "evidence": "per-execution audit + failure matrix PASS except the reboot row"},
     {"id": "PLN-08", "status": "ACCEPTED", "en": "Operator controls", "ar": "تحكم المشغّل", "evidence": "kill switch drill 0.162 s; ledger PASS"},
-    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "authority PR #80 merged d21bebe5; slices 1–2 PR #81 merged 82a975d3; slice 3 PR #87: 12 of 12 screens bound (from the sealed P2 cohort); mobile remains"},
+    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "12 of 12 screens bound (PRs #80, #81, #87); mobile tabs bound; Owner acceptance checklist PENDING"},
     {"id": "PLN-10", "status": "PENDING", "en": "Paper Beta acceptance", "ar": "قبول النسخة التجريبية الورقية", "evidence": "needs PLN-02..PLN-09"},
     {"id": "PLN-11", "status": "PENDING", "en": "Freeze & execution pack", "ar": "التجميد وحزمة التنفيذ", "evidence": "after PLN-10"}
   ],

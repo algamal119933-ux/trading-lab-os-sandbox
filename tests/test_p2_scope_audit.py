@@ -1451,6 +1451,24 @@ P3_PLN_09_CR_SCOPE: dict[str, str] = {
 }
 
 
+# PR #87, merged. Two parents: 82a975d3 (main before, P3_PLN_09_CR) + 507e0f77
+# (the claude/p3-pln-09-slice-3 branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_09_S3_MERGE = "bf208ba647c76e2350b99a4bb744e9b9ad570d40"
+
+# P3-PLN-09 Control Room, slice 3: Decisions, Trades & Positions, Market Workspace and Settings bound from
+# the sealed cohort named by the newest PLN-07 audit record (read-only); all 12 screens bound.
+_P09S3 = "P3-PLN-09 Control Room"
+P3_PLN_09_S3_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_P09S3} — slice 3: sealed cohort reader and the four remaining screens",
+    "research/p3/control_room_live.js": f"{_P09S3} — slice 3: Decisions, Trades & Positions, Market Workspace, Settings",
+    "research/p3/records/p3_workstreams.json": f"{_P09S3} — PLN-09 evidence: 12 of 12 screens bound",
+    "tests/test_p3_control_room.py": f"{_P09S3} — slice-3 sealed screens and missing-evidence negatives, synthetic only",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09S3} — execution record, slice 3",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slices 1–2 (PR #81) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1512,6 +1530,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_ACC": (P3_ACC_MERGE, P3_ACC_SCOPE),
     "P3_PLN_09_AUTHORITY": (P3_PLN_09_AUTHORITY_MERGE, P3_PLN_09_AUTHORITY_SCOPE),
     "P3_PLN_09_CR": (P3_PLN_09_CR_MERGE, P3_PLN_09_CR_SCOPE),
+    "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1519,18 +1538,20 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-09 Control Room, slice 3: Decisions, Trades & Positions, Market Workspace and Settings bound from
-# the sealed cohort named by the newest PLN-07 audit record (read-only); all 12 screens bound. Slices 1–2
-# (PR #81) and the authority (PR #80) are merged and pinned above. No runtime, strategy, risk, dataset,
-# registry or evidence change.
+# P3-PLN-09 mobile view + Owner acceptance preparation: the frozen mobile tabs (Status, Resume, Incidents,
+# More) bound from the same live scenario, navigation only; the governed forbidden list replaces the
+# prototype's P2-era list; the Owner acceptance checklist (PENDING). Slice 3 (PR #87), slices 1–2 (PR #81)
+# and the authority (PR #80) are merged and pinned above. No runtime, strategy, risk, dataset, registry or
+# evidence change.
 _P09 = "P3-PLN-09 Control Room"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/control_room.py": f"{_P09} — slice 3: sealed cohort reader and the four remaining screens",
-    "research/p3/control_room_live.js": f"{_P09} — slice 3: Decisions, Trades & Positions, Market Workspace, Settings",
-    "research/p3/records/p3_workstreams.json": f"{_P09} — PLN-09 evidence: 12 of 12 screens bound",
-    "tests/test_p3_control_room.py": f"{_P09} — slice-3 sealed screens and missing-evidence negatives, synthetic only",
-    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, slice 3",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 Control Room slices 1–2 (PR #81) pinned to its merge; this branch's scope",
+    "research/p3/control_room.py": f"{_P09} — mobile: governed forbidden list (FORBIDDEN_NOW) in the projection",
+    "research/p3/control_room_live.js": f"{_P09} — mobile tabs bound, navigation only; device by viewport or address",
+    "research/p3/records/p3_workstreams.json": f"{_P09} — PLN-09 evidence: mobile bound, Owner checklist pending",
+    "tests/test_p3_control_room.py": f"{_P09} — mobile: no consequential control, unknown on missing evidence",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_P09} — execution record, mobile slice",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P09} — Owner walkthrough and sign-off block (PENDING)",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 slice 3 (PR #87) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
