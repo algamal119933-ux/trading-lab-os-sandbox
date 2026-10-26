@@ -38,15 +38,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prom-textfile", type=Path, help="also write Prometheus text exposition, atomically")
     args = parser.parse_args(argv)
     run = health.default_runner
-    findings = [
-        health.free_space(Path("/"), args.root_min_gib, "root"),
-        health.free_space(args.lane, args.lane_min_gib, "h1_lane"),
-        health.mounted("/mnt/tlos-wdc"),
-        health.backup_recency(args.backup_target, args.rpo_hours, verifier=backup.verify_backup),
-        health.timer_expected("tlos-p3-backup.timer", want_active=True, runner=run),
-        health.timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=run),
-        *health.normal_end_due(json.loads(REGISTRY.read_text(encoding="utf-8")), args.fp_lane_root),
-    ]
+    findings = health.standard_findings(
+        json.loads(REGISTRY.read_text(encoding="utf-8")), runner=run, verifier=backup.verify_backup,
+        root_min_gib=args.root_min_gib, lane=args.lane, lane_min_gib=args.lane_min_gib,
+        backup_target=args.backup_target, rpo_hours=args.rpo_hours, fp_lane_root=args.fp_lane_root)
     verdict = health.overall(findings)
     if args.json:
         args.json.write_text(json.dumps({"findings": findings, "HEALTH": verdict}, indent=2) + "\n", encoding="utf-8")
