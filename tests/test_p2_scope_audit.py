@@ -1515,6 +1515,21 @@ P3_PLN_09_MOBILE_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #89, merged. Two parents: 4a90a054 (main before) + 5aa0d719
+# (the claude/p3-pln-04-05-runbooks branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_05_RUNBOOKS_MERGE = "c0bb6b2b6f1463705f2543b40a3f216d70df7a38"
+
+# P3-PLN-04/05 runbooks: the reboot acceptance runbook (classification, commands, record template) and the
+# Tier-3 independent-host backup/restore procedure reusing scripts/p3/offsite.py. Documents only; nothing run.
+_P0405 = "P3-PLN-04/05 runbooks"
+P3_PLN_04_05_RUNBOOKS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": f"{_P0405} — reboot acceptance: preflight, commands, classes, record template",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_P0405} — Tier-3 independent host: prerequisites, transport, restore proof",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P0405} — precondition pointer: the repository reboot acceptance runbook",
+    "tests/test_p2_scope_audit.py": "P3-PLN-09 mobile view (PR #88) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1580,6 +1595,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_09_S3": (P3_PLN_09_S3_MERGE, P3_PLN_09_S3_SCOPE),
     "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
     "P3_PLN_09_MOBILE": (P3_PLN_09_MOBILE_MERGE, P3_PLN_09_MOBILE_SCOPE),
+    "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1587,14 +1603,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-04/05 runbooks: the reboot acceptance runbook (classification, commands, record template) and the
-# Tier-3 independent-host backup/restore procedure reusing scripts/p3/offsite.py. Documents only; nothing run.
-_P0405 = "P3-PLN-04/05 runbooks"
+# P3-PLN-06 delivery runbook and residual §19 review: exact Owner installation + acceptance steps with expected
+# outputs, evidence capture, rollback and PASS/FAIL; precise residual classification; two fail-closed health checks
+# (the health timer itself, NTP clock sync). Nothing installed or started. No runtime, strategy, risk, dataset,
+# registry or evidence change.
+_P06DR = "P3-PLN-06 delivery runbook"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": f"{_P0405} — reboot acceptance: preflight, commands, classes, record template",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_P0405} — Tier-3 independent host: prerequisites, transport, restore proof",
-    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P0405} — precondition pointer: the repository reboot acceptance runbook",
-    "tests/test_p2_scope_audit.py": "P3-PLN-09 mobile view (PR #88) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06DR} — exact install/acceptance runbook, residual §19 review, fail-closed rows",
+    "research/p3/health.py": f"{_P06DR} — monitor_timer (health timer itself, CRITICAL when unscheduled) and clock_sync; unknown → UNPROVEN",
+    "tests/test_p3_health_s19.py": f"{_P06DR} — positive/negative/UNPROVEN tests for the two new checks",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06DR} — promtool group: health-timer CRITICAL and clock_sync WARNING raise their alerts",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/05 runbooks (PR #89) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
