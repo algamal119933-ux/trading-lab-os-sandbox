@@ -29,6 +29,7 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from . import kill_switch  # reuse: the kill switch's own scope decides which runtimes S-KILL can cover
@@ -47,6 +48,9 @@ STATUSES = (PASS, FAIL, UNPROVEN)
 #   standalone_record  the merged record that holds the workstream's own (pre-run) acceptance, or "NONE — …".
 #                      A standalone acceptance is a PREREQUISITE (program §1). It never substitutes for the in-run
 #                      record: the contract requires every acceptance to hold in ONE continuous run.
+#   owner              who performs the step in the window: Owner, Claude, or Owner + Claude. Claude always writes
+#                      the evidence record; acceptance is always the Owner's merged record.
+#   stop_condition     when this step stops the run (program §9) or records FAIL / UNPROVEN (program §10).
 # The criterion id is the EVIDENCE ID. The PLN-10 evidence records (`criterion_id`) and the PLN-11 execution
 # pack's evidence index are keyed by the same ids.
 ACCEPTANCE_MATRIX: dict[str, dict[str, str]] = {
@@ -55,54 +59,70 @@ ACCEPTANCE_MATRIX: dict[str, dict[str, str]] = {
         "scenario": "S-INV: state inventory at run start and run end",
         "procedure": "docs/p3/PLN_02_STATE_INVENTORY.md §Verdict (COVERAGE)",
         "standalone_record": "docs/p3/PLN_02_STATE_INVENTORY.md §Acceptance update (PASS, 14 roots)",
-        "evidence": "the procedure's state_inventory JSON, taken inside the window", "validator": "status_pass"},
+        "evidence": "the procedure's state_inventory JSON, taken inside the window", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "the inventory cannot run, or finds an unlisted TLOS state root: FAIL for this run (§10); unattributable state stops the run (§9)"},
     "PLN-02.recovery_sources": {
         "ws": "PLN-02", "criterion": "each item has a verified recovery source",
         "scenario": "S-INV: recheck against the newest scheduled backup set",
         "procedure": "docs/p3/PLN_02_STATE_INVENTORY.md §Verdict (RECOVERY)",
         "standalone_record": "docs/p3/PLN_02_STATE_INVENTORY.md §Acceptance update (PASS, 14 roots)",
         "evidence": "the procedure's state_inventory JSON against a set written inside the window",
-        "validator": "status_pass"},
+        "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "an item has no verified recovery source in a set written inside the window: FAIL for this run (§10)"},
     "PLN-03.restore_drill": {
         "ws": "PLN-03", "criterion": "restore drill passes: manifest sha256 equal, git fsck clean, ARCHIVE_VERIFIED, "
                                      "restored runtime starts in dry-run",
         "scenario": "S-RESTORE: drill from a set taken during the run, into an empty scratch",
         "procedure": "docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill)",
         "standalone_record": "docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (PASS, set 20261025T211956Z)",
-        "evidence": "the procedure's drill JSON for a set written inside the window", "validator": "status_pass"},
+        "evidence": "the procedure's drill JSON for a set written inside the window", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "the drill reports FAIL, or a restore would touch live state: FAIL (§10); a restore over live state is never run (§9 destructive storage operation)"},
     "PLN-03.repeated_after_change": {
         "ws": "PLN-03", "criterion": "the drill is repeated after a change",
         "scenario": "S-RESTORE-2: second drill after any code/config change merged during the run",
         "procedure": "docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill)",
         "standalone_record": "docs/p3/PLN_03_BACKUP_RESTORE.md §Acceptance update (second set drill PASS)",
-        "evidence": "a second drill JSON, on a newer set than the first", "validator": "status_pass"},
+        "evidence": "a second drill JSON, on a newer set than the first", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "a change merged in the window without a second PASS drill on a newer set: criterion unmet (§10)"},
     "PLN-04.reboot_correct": {
         "ws": "PLN-04", "criterion": "after a reboot, the stack's state is correct",
         "scenario": "S-REBOOT: planned clean reboot during the run",
         "procedure": "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md §1-§4 (record per §7)",
         "standalone_record": "docs/p3/PLN_04_RECOVERY.md §Reboot record (RUN 3 PASS 10/10, accepted by the merge "
                              "of PR #94)",
-        "evidence": "the runbook §6 evidence set for a reboot inside the window", "validator": "status_pass"},
+        "evidence": "the runbook §6 evidence set for a reboot inside the window", "validator": "status_pass",
+        "owner": "Owner + Claude",
+        "stop_condition": "verify-boot reports any FAIL or the gap attestation is not clean: FAIL (§10); a host change outside the frozen state stops the run (§9)"},
     "PLN-04.terminal_never_restarted": {
         "ws": "PLN-04", "criterion": "a terminal or Owner-stopped cohort is never auto-restarted (negative test)",
         "scenario": "S-RESTART: kill-switch stop, then reboot; the stopped runtime must stay stopped",
         "procedure": "docs/p3/PLN_04_RECOVERY.md §Acceptance status (terminal-state guard)",
         "standalone_record": "docs/p3/PLN_04_RECOVERY.md §Acceptance status (terminal-state guard PASS)",
         "evidence": "restart_continuity before/after record: the stopped runtime stayed stopped",
-        "validator": "restart_continuity"},
+        "validator": "restart_continuity",
+        "owner": "Owner + Claude",
+        "stop_condition": "a stopped runtime comes back without an attributable resume: stop the run with the kill switch (§9) and record FAIL (§10)"},
     "PLN-04.host_recovery_drill": {
         "ws": "PLN-04", "criterion": "a host-recovery drill from backup passes",
         "scenario": "S-RESTORE (shared with PLN-03)",
         "procedure": "docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill)",
         "standalone_record": "docs/p3/PLN_04_RECOVERY.md §Acceptance status (host-recovery drill PASS)",
-        "evidence": "the PLN-03.restore_drill artifact (one drill, cited twice)", "validator": "status_pass"},
+        "evidence": "the PLN-03.restore_drill artifact (one drill, cited twice)", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "the shared S-RESTORE drill is not PASS: FAIL (§10)"},
     "PLN-05.host_loss_redundancy": {
         "ws": "PLN-05", "criterion": "HOST_LOSS_REDUNDANCY = PROVEN by restoring from the independent host",
         "scenario": "S-TIER3: push + restore drill from the independent host",
         "procedure": "docs/p3/PLN_05_TIER3_PROCEDURE.md §5-§6 (record per §8)",
         "standalone_record": "NONE — docs/p3/PLN_05_EVIDENCE_DURABILITY.md: HOST_LOSS_REDUNDANCY = NOT_PROVEN",
         "evidence": "the procedure §8 evidence for a push and remote restore inside the window",
-        "validator": "status_pass"},
+        "validator": "status_pass",
+        "owner": "Owner + Claude",
+        "stop_condition": "no independent host, or the remote restore is not PASS: UNPROVEN or FAIL, never PASS (§10)"},
     "PLN-05.attributable_stop_start": {
         "ws": "PLN-05", "criterion": "every governed stop/start has an attributable record",
         "scenario": "S-KILL and every start during the run",
@@ -110,59 +130,77 @@ ACCEPTANCE_MATRIX: dict[str, dict[str, str]] = {
         "standalone_record": "docs/p3/PLN_05_EVIDENCE_DURABILITY.md §Acceptance status (ATTRIBUTABLE_STOP_START "
                              "PASS)",
         "evidence": "operator ledger over the window: chain verifies; one record per stop/start",
-        "validator": "status_pass"},
+        "validator": "status_pass",
+        "owner": "Owner + Claude",
+        "stop_condition": "a stop or start without an attributable ledger record, or a broken chain: stop the run (§9 evidence unattributable)"},
     "PLN-06.s19_alerts": {
         "ws": "PLN-06", "criterion": "each §19 CRITICAL condition raises an alert in a test",
         "scenario": "S-ALERT: rule tests + a delivered test alert + the end-to-end stale alert",
         "procedure": "docs/p3/PLN_06_ALERTING.md §3 (steps 6-8, PASS/FAIL table) and §4",
         "standalone_record": "NONE — docs/p3/PLN_06_ALERTING.md §4: PLN_06 = PARTIAL (delivery PENDING — Owner)",
         "evidence": "the §3 evidence directory listing for steps 6-8 run inside the window",
-        "validator": "status_pass"},
+        "validator": "status_pass",
+        "owner": "Owner + Claude",
+        "stop_condition": "a §19 condition without a delivered alert: FAIL (§10); any §19 CRITICAL raised for real stops the run (§9)"},
     "PLN-06.capacity_enforced": {
         "ws": "PLN-06", "criterion": "capacity thresholds are enforced",
         "scenario": "S-ALERT: health findings free_space:root / free_space:h1_lane at run start and end",
         "procedure": "docs/p3/PLN_06_ALERTING.md §4 (capacity row)",
         "standalone_record": "docs/p3/PLN_06_ALERTING.md §4 (rule leg PASS in test)",
-        "evidence": "health JSON at run start and end", "validator": "status_pass"},
+        "evidence": "health JSON at run start and end", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "a free_space finding below INFO at run start: no T0; during the window: stop the run before storage runs out (§9)"},
     "PLN-06.normal_end_detected": {
         "ws": "PLN-06", "criterion": "normal end is detected on lifecycle completion",
         "scenario": "S-END: the run's cohort completes its lifecycle",
         "procedure": "docs/p3/PLN_06_ALERTING.md §4 (normal-end row)",
         "standalone_record": "docs/p3/PLN_06_ALERTING.md §4 (detection met)",
-        "evidence": "the health finding normal_end raised at the cohort's completion", "validator": "status_pass"},
+        "evidence": "the health finding normal_end raised at the cohort's completion", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "the lifecycle ends without a normal_end finding: FAIL (§10)"},
     "PLN-07.matrix_rows": {
         "ws": "PLN-07", "criterion": "every failure/recovery matrix row has a passing test",
         "scenario": "S-CI: full suite at the run's frozen commit",
         "procedure": "docs/p3/PLN_04_RECOVERY.md §PLN-07 failure/recovery matrix",
         "standalone_record": "docs/p3/PLN_04_RECOVERY.md §Acceptance status (PLN-07 PASS for every row, reboot row "
                              "accepted by the merge of PR #94)",
-        "evidence": "CI run id + pytest exit 0 at the frozen commit", "validator": "status_pass"},
+        "evidence": "CI run id + pytest exit 0 at the frozen commit", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "any test of the failure/recovery matrix fails at frozen_commit: FAIL (§10)"},
     "PLN-07.f2_finding": {
         "ws": "PLN-07", "criterion": "F-2 has a reconcile finding with negative controls",
         "scenario": "S-AUDIT: execution audit over the run's fills",
         "procedure": "docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-07 (per-execution audit)",
         "standalone_record": "docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-07 (F-2 finding on the sealed P2 archive)",
-        "evidence": "execution_audit JSON over the run's ledgers", "validator": "status_pass"},
+        "evidence": "execution_audit JSON over the run's ledgers", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "an execution not backed by an admitted decision is unexplained: FAIL (§10); a live route stops the run (§9)"},
     "PLN-07.data_truth": {
         "ws": "PLN-07", "criterion": "the data-truth checks pass",
         "scenario": "S-AUDIT: missing/duplicate candles recorded, never filled (§13)",
         "procedure": "docs/p3/P3_CONTRACT.md §4 (Data truth, master plan §13)",
         "standalone_record": "NONE — PLN-07 data-truth evidence is open on main",
-        "evidence": "data-truth report over the run's input ledger", "validator": "status_pass"},
+        "evidence": "data-truth report over the run's input ledger", "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "a missing or duplicate candle is filled or hidden: FAIL (§10); a dataset authority conflict stops the run (§9)"},
     "PLN-08.kill_bounded": {
         "ws": "PLN-08", "criterion": "the kill switch stops everything within a bounded time and leaves an "
                                      "attributable record",
         "scenario": "S-KILL: engage the kill switch on the run's paper runtime",
         "procedure": "docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-08 (kill switch)",
         "standalone_record": "docs/p3/PLN_06_07_08_OPERATIONS.md §Acceptance status (PLN-08 PASS, drill 0.162 s)",
-        "evidence": "the P3_KILL_SWITCH_V1 ledger record of the in-window stop", "validator": "kill_switch_bounded"},
+        "evidence": "the P3_KILL_SWITCH_V1 ledger record of the in-window stop", "validator": "kill_switch_bounded",
+        "owner": "Owner + Claude",
+        "stop_condition": "the stop exceeds the D3 bound, is not attributable, or leaves a runtime running: FAIL (§10) and a §9 stop by any bounded means"},
     "PLN-08.no_live_route": {
         "ws": "PLN-08", "criterion": "no control can set dry_run=false or reach a live route (guard test)",
         "scenario": "S-CI + S-ALERT: paper guard and real_money health findings throughout the run",
         "procedure": "docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-08 (guard)",
         "standalone_record": "docs/p3/PLN_06_07_08_OPERATIONS.md §Acceptance status (PLN-08 PASS)",
         "evidence": "paper_guard PASS + real_money INFO in every health run of the window",
-        "validator": "status_pass"},
+        "validator": "status_pass",
+        "owner": "Claude",
+        "stop_condition": "paper_guard or real_money goes CRITICAL, or dry_run is not true: stop the run at once (§9)"},
     "PLN-09.projection": {
         "ws": "PLN-09", "criterion": "a Control Room projection over canonical evidence, Arabic/English, realising "
                                      "the frozen shape; the UI is never evidence authority",
@@ -170,17 +208,24 @@ ACCEPTANCE_MATRIX: dict[str, dict[str, str]] = {
         "procedure": "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md §2-§4 (sign-off block §6)",
         "standalone_record": "NONE — docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md §6: PLN09_OWNER_ACCEPTANCE = "
                              "PENDING",
-        "evidence": "the checklist §6 block filled for this run_id", "validator": "status_pass"},
+        "evidence": "the checklist §6 block filled for this run_id", "validator": "status_pass",
+        "owner": "Owner",
+        "stop_condition": "a walkthrough step reads FAIL: record it under FINDINGS; it is never waived (§10)"},
     "PLN-10.pnl_reconciles": {
         "ws": "PLN-10", "criterion": "P&L measurement reconciles to fills and fees (measurement only)",
         "scenario": "S-PNL: every closed trade of the run",
         "procedure": "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md §3 S-PNL",
         "standalone_record": "NONE — measured only inside the run",
-        "evidence": "fills + fees + reported P&L records of the run", "validator": "reconcile_pnl"},
+        "evidence": "fills + fees + reported P&L records of the run", "validator": "reconcile_pnl",
+        "owner": "Claude",
+        "stop_condition": "any closed trade does not reconcile within the D4 tolerance: FAIL (§10); never re-measured to fit"},
 }
 REQUIRED_WORKSTREAMS = ("PLN-02", "PLN-03", "PLN-04", "PLN-05", "PLN-06", "PLN-07", "PLN-08", "PLN-09")
 VALIDATORS = ("status_pass", "restart_continuity", "kill_switch_bounded", "reconcile_pnl")
-ROW_KEYS = ("ws", "criterion", "scenario", "procedure", "standalone_record", "evidence", "validator")
+ROW_KEYS = ("ws", "criterion", "scenario", "procedure", "standalone_record", "evidence", "validator", "owner",
+            "stop_condition")
+ROW_OWNERS = ("Owner", "Claude", "Owner + Claude")
+EVIDENCE_ID_RE = re.compile(r"^PLN-\d{2}\.[a-z0-9_]+$")
 _DOC_RE = re.compile(r"(docs/p3/[A-Za-z0-9_]+\.md)")
 
 
@@ -235,11 +280,14 @@ def validate_evidence(record: dict) -> list[str]:
 
 def matrix_completeness(matrix: dict[str, dict[str, str]] = ACCEPTANCE_MATRIX) -> list[str]:
     """Problems with the matrix itself: a workstream without criteria, or an entry without scenario, procedure,
-    standalone record, evidence or a known validator. [] means complete."""
+    standalone record, evidence, a known validator, a known owner, a stop condition, or a well-formed evidence id.
+    [] means complete."""
     problems = []
     covered = {row.get("ws") for row in matrix.values()}
     problems += [f"{ws}: no acceptance criterion mapped" for ws in REQUIRED_WORKSTREAMS if ws not in covered]
     for cid, row in sorted(matrix.items()):
+        if not EVIDENCE_ID_RE.match(cid) or not cid.startswith(f"{row.get('ws')}."):
+            problems.append(f"{cid}: evidence id must be <workstream>.<snake_case> of its own workstream")
         for key in ROW_KEYS:
             if not str(row.get(key, "")).strip():
                 problems.append(f"{cid}: missing {key}")
@@ -247,6 +295,11 @@ def matrix_completeness(matrix: dict[str, dict[str, str]] = ACCEPTANCE_MATRIX) -
             problems.append(f"{cid}: procedure must cite a merged docs/p3 document")
         if row.get("validator") and row["validator"] not in VALIDATORS:
             problems.append(f"{cid}: unknown validator {row['validator']!r}")
+        if str(row.get("owner", "")).strip() and row["owner"] not in ROW_OWNERS:
+            problems.append(f"{cid}: unknown owner {row['owner']!r} (one of {ROW_OWNERS})")
+        stop = str(row.get("stop_condition", ""))
+        if stop.strip() and "§9" not in stop and "§10" not in stop:
+            problems.append(f"{cid}: stop_condition must cite the program's §9 stop conditions or §10 failure handling")
     return problems
 
 
@@ -256,6 +309,22 @@ def _d(value) -> Decimal:
         return Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"not a number: {value!r}") from exc
+
+
+def _check_legs(legs: list[dict], fees: list[dict]) -> None:
+    """Refuse fills and fees that cannot be measured: an unknown side, a non-finite or non-positive quantity or
+    price, a negative or non-finite fee. Each is a FAIL of the trade, never a silently signed number."""
+    for f in legs:
+        if f["side"] not in ("buy", "sell"):
+            raise ValueError(f"fill {f['fill_id']}: side {f['side']!r} is not buy or sell")
+        for key in ("qty", "price"):
+            v = _d(f[key])
+            if not v.is_finite() or v <= 0:
+                raise ValueError(f"fill {f['fill_id']}: {key} {f[key]!r} is not a finite positive number")
+    for fee in fees:
+        v = _d(fee["amount"])
+        if not v.is_finite() or v < 0:
+            raise ValueError(f"fee on fill {fee['fill_id']}: amount {fee['amount']!r} is not a finite number >= 0")
 
 
 @dataclass(frozen=True)
@@ -313,12 +382,17 @@ def reconcile_pnl(fills: list[dict], fees: list[dict], reported: list[dict], *, 
             results.append(PnlCheck(tid, FAIL, None, None, None, None, "duplicate fill id (double execution)"))
             continue
         if not legs:
-            results.append(PnlCheck(tid, FAIL, None, _d(rep["net_quote"]), None, None, "reported trade has no fills"))
+            results.append(PnlCheck(tid, FAIL, None, None, None, None, f"reported trade has no fills (reported "
+                                                                          f"{rep.get('net_quote')!r})"))
             continue
         if rep is None:
             results.append(PnlCheck(tid, FAIL, None, None, None, None, "fills without a reported P&L"))
             continue
         try:
+            _check_legs(legs, fees_by_trade.get(tid, []))
+            reported_net = _d(rep["net_quote"])
+            if not reported_net.is_finite():
+                raise ValueError(f"reported net is not finite: {rep['net_quote']!r}")
             bought = sum((_d(f["qty"]) for f in legs if f["side"] == "buy"), Decimal(0))
             sold = sum((_d(f["qty"]) for f in legs if f["side"] == "sell"), Decimal(0))
             gross = sum((_d(f["qty"]) * _d(f["price"]) * (1 if f["side"] == "sell" else -1) for f in legs), Decimal(0))
@@ -338,8 +412,8 @@ def reconcile_pnl(fills: list[dict], fees: list[dict], reported: list[dict], *, 
                     if price is None:
                         raise ValueError(f"fee in {asset} on fill {fid} has no conversion price")
                     fee_quote += amount * _d(price)
-        except (KeyError, ValueError) as exc:
-            results.append(PnlCheck(tid, FAIL, None, _d(rep["net_quote"]), None, None, f"cannot compute: {exc}"))
+        except (KeyError, ValueError, ArithmeticError) as exc:
+            results.append(PnlCheck(tid, FAIL, None, None, None, None, f"cannot compute: {exc}"))
             continue
         dust = bought - sold - base_fee
         if dust < 0:
@@ -347,7 +421,6 @@ def reconcile_pnl(fills: list[dict], fees: list[dict], reported: list[dict], *, 
                                     "sold more than bought net of base fees (position not closed consistently)"))
             continue
         net = gross - fee_quote
-        reported_net = _d(rep["net_quote"])
         ok = abs(net - reported_net) <= tol
         results.append(PnlCheck(tid, PASS if ok else FAIL, net, reported_net, fee_quote + base_fee_value, dust,
                                 "reconciles" if ok else f"differs by {net - reported_net}"))
@@ -379,6 +452,8 @@ def kill_switch_bounded(record: dict, *, bound_s: float) -> tuple[str, str]:
         elapsed = float(record["elapsed_s"])
     except (KeyError, TypeError, ValueError):
         return FAIL, "elapsed time missing"
+    if not math.isfinite(elapsed) or elapsed < 0:
+        return FAIL, f"elapsed time {record['elapsed_s']!r} is not a finite, non-negative number of seconds"
     if elapsed > bound_s:
         return FAIL, f"stop took {elapsed} s > bound {bound_s} s"
     return PASS, f"{len(record['targets'])} target(s) stopped in {elapsed} s (bound {bound_s} s)"
@@ -420,7 +495,8 @@ OWNER_DECISIONS: dict[str, dict[str, str]] = {
            "blocks_until": "runtime_id is a paper runtime inside the kill switch's scope (not FP-CONTROL-3), "
                            "dry_run is true, and its authority record is cited"},
     "D2": {"decision": "trial duration", "field": "trial_window",
-           "blocks_until": "start_utc is an ISO-8601 Z time and duration_hours is a positive number"},
+           "blocks_until": "start_utc is an ISO-8601 Z time, duration_hours is a positive number, and the window ends "
+                           "no later than the P3 execution authorization's EXPIRES_UTC"},
     "D3": {"decision": "emergency-stop bound", "field": "emergency_stop_bound_s",
            "blocks_until": "a positive, finite number of seconds"},
     "D4": {"decision": "acceptance criteria", "field": "acceptance_criteria",
@@ -451,6 +527,8 @@ _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA64 = re.compile(r"^[0-9a-f]{64}$")
 _UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 P3_EXECUTION_AUTHORIZATION = "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md"
+# EXPIRES_UTC of that record (a test pins it to the record). A trial window that outlives it is not authorized.
+P3_AUTHORIZATION_EXPIRES_UTC = "2027-01-31T23:59:59Z"
 
 
 def _positive_finite(value) -> bool:
@@ -509,6 +587,9 @@ def validate_run_config(config: dict, *, matrix: dict[str, dict[str, str]] = ACC
         b.append("D2 trial_window.start_utc unset or not ISO-8601 Z")
     if not _positive_finite(tw.get("duration_hours")):
         b.append("D2 trial_window.duration_hours unset or not a positive number")
+    window = _trial_window(config)
+    if window is not None and window[1] > _epoch(P3_AUTHORIZATION_EXPIRES_UTC):
+        b.append(f"D2 trial_window ends after the P3 execution authorization expires ({P3_AUTHORIZATION_EXPIRES_UTC})")
 
     if not _positive_finite(config.get("emergency_stop_bound_s")):
         b.append("D3 emergency_stop_bound_s unset or not a positive number of seconds")
@@ -567,6 +648,22 @@ def launch_readiness(config: dict, *, matrix: dict[str, dict[str, str]] = ACCEPT
 
 
 # --- the run verdict ------------------------------------------------------------------------------------------
+def _epoch(utc: str) -> float:
+    return datetime.strptime(utc[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp() + (
+        float("0" + utc[19:-1]) if len(utc) > 20 else 0.0)
+
+
+def _trial_window(config) -> tuple[float, float] | None:
+    """[start, start + duration] of the configuration's trial window (D2), or None when it is not set."""
+    tw = config.get("trial_window") if isinstance(config, dict) else None
+    if not isinstance(tw, dict) or not (isinstance(tw.get("start_utc"), str) and _UTC.match(tw["start_utc"])) \
+            or not _positive_finite(tw.get("duration_hours")):
+        return None
+    try:
+        start = _epoch(tw["start_utc"])
+    except ValueError:
+        return None
+    return start, start + float(tw["duration_hours"]) * 3600
 def run_verdict(records: list[dict], *, config: dict, matrix: dict[str, dict[str, str]] = ACCEPTANCE_MATRIX) -> dict:
     """PLN-10 acceptance input: every criterion needs a valid PASS record from THIS run. Never ACCEPTED by default.
 
@@ -577,6 +674,7 @@ def run_verdict(records: list[dict], *, config: dict, matrix: dict[str, dict[str
     problems = list(matrix_completeness(matrix))
     problems += [f"run config: {x}" for x in validate_run_config(config, matrix=matrix)]
     run_id = config.get("run_id") if isinstance(config, dict) else None
+    window = _trial_window(config)
     best: dict[str, str] = {}
     for rec in records:
         errs = validate_evidence(rec)
@@ -585,6 +683,14 @@ def run_verdict(records: list[dict], *, config: dict, matrix: dict[str, dict[str
             continue
         if not _is_set(run_id) or rec["run_id"] != run_id:
             continue  # evidence from another run never counts toward this one
+        try:
+            at = _epoch(rec["utc"])
+        except ValueError:
+            at = None
+        if window is None or at is None or not window[0] <= at <= window[1]:
+            # the contract asks for ONE continuous run: a record outside its window is not evidence of it
+            problems.append(f"record {rec['criterion_id']} at {rec['utc']} is outside the trial window")
+            continue
         cid = rec["criterion_id"]
         # Precedence within one run: FAIL > PASS > UNPROVEN. A failure is never overwritten by a later pass;
         # a failed acceptance needs a fix and a new continuous run (contract §8: never waived).

@@ -71,8 +71,37 @@ use the same ids.
 | `PLN-09.projection` | S-UI | `PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md` §2–§4, sign-off block §6 | NONE (PENDING) | `status_pass` |
 | `PLN-10.pnl_reconciles` | S-PNL | this program §3 S-PNL | NONE (measured only in the run) | `reconcile_pnl` |
 
+Each row also names its **owner** and its **stop condition** (§2a).
+
 `status_pass`: the procedure's own tool or checklist already decides PASS or FAIL. The PLN-10 record carries that
 status and the sha256 of the tool's output. A test checks that every cited document exists on the branch.
+
+### 2a. Who performs each step, and when it stops
+`owner` is who performs the step inside the window (Claude always writes the evidence record; acceptance is always
+the Owner's merged record). `stop_condition` says when the step stops the run (§9) or records FAIL / UNPROVEN (§10).
+Both are fields of `ACCEPTANCE_MATRIX`; `matrix_completeness` refuses a row without them.
+
+| Evidence id | Owner | Source procedure | Stop condition |
+|---|---|---|---|
+| `PLN-02.inventory_complete` | Claude | docs/p3/PLN_02_STATE_INVENTORY.md §Verdict (COVERAGE) | the inventory cannot run, or finds an unlisted TLOS state root: FAIL for this run (§10); unattributable state stops the run (§9) |
+| `PLN-02.recovery_sources` | Claude | docs/p3/PLN_02_STATE_INVENTORY.md §Verdict (RECOVERY) | an item has no verified recovery source in a set written inside the window: FAIL for this run (§10) |
+| `PLN-03.restore_drill` | Claude | docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill) | the drill reports FAIL, or a restore would touch live state: FAIL (§10); a restore over live state is never run (§9 destructive storage operation) |
+| `PLN-03.repeated_after_change` | Claude | docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill) | a change merged in the window without a second PASS drill on a newer set: criterion unmet (§10) |
+| `PLN-04.reboot_correct` | Owner + Claude | docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md §1-§4 (record per §7) | verify-boot reports any FAIL or the gap attestation is not clean: FAIL (§10); a host change outside the frozen state stops the run (§9) |
+| `PLN-04.terminal_never_restarted` | Owner + Claude | docs/p3/PLN_04_RECOVERY.md §Acceptance status (terminal-state guard) | a stopped runtime comes back without an attributable resume: stop the run with the kill switch (§9) and record FAIL (§10) |
+| `PLN-04.host_recovery_drill` | Claude | docs/p3/PLN_03_BACKUP_RESTORE.md §Scheduled acceptance (verify + drill) | the shared S-RESTORE drill is not PASS: FAIL (§10) |
+| `PLN-05.host_loss_redundancy` | Owner + Claude | docs/p3/PLN_05_TIER3_PROCEDURE.md §5-§6 (record per §8) | no independent host, or the remote restore is not PASS: UNPROVEN or FAIL, never PASS (§10) |
+| `PLN-05.attributable_stop_start` | Owner + Claude | docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-08 (operator ledger, --verify-ledger) | a stop or start without an attributable ledger record, or a broken chain: stop the run (§9 evidence unattributable) |
+| `PLN-06.s19_alerts` | Owner + Claude | docs/p3/PLN_06_ALERTING.md §3 (steps 6-8, PASS/FAIL table) and §4 | a §19 condition without a delivered alert: FAIL (§10); any §19 CRITICAL raised for real stops the run (§9) |
+| `PLN-06.capacity_enforced` | Claude | docs/p3/PLN_06_ALERTING.md §4 (capacity row) | a free_space finding below INFO at run start: no T0; during the window: stop the run before storage runs out (§9) |
+| `PLN-06.normal_end_detected` | Claude | docs/p3/PLN_06_ALERTING.md §4 (normal-end row) | the lifecycle ends without a normal_end finding: FAIL (§10) |
+| `PLN-07.matrix_rows` | Claude | docs/p3/PLN_04_RECOVERY.md §PLN-07 failure/recovery matrix | any test of the failure/recovery matrix fails at frozen_commit: FAIL (§10) |
+| `PLN-07.f2_finding` | Claude | docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-07 (per-execution audit) | an execution not backed by an admitted decision is unexplained: FAIL (§10); a live route stops the run (§9) |
+| `PLN-07.data_truth` | Claude | docs/p3/P3_CONTRACT.md §4 (Data truth, master plan §13) | a missing or duplicate candle is filled or hidden: FAIL (§10); a dataset authority conflict stops the run (§9) |
+| `PLN-08.kill_bounded` | Owner + Claude | docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-08 (kill switch) | the stop exceeds the D3 bound, is not attributable, or leaves a runtime running: FAIL (§10) and a §9 stop by any bounded means |
+| `PLN-08.no_live_route` | Claude | docs/p3/PLN_06_07_08_OPERATIONS.md §PLN-08 (guard) | paper_guard or real_money goes CRITICAL, or dry_run is not true: stop the run at once (§9) |
+| `PLN-09.projection` | Owner | docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md §2-§4 (sign-off block §6) | a walkthrough step reads FAIL: record it under FINDINGS; it is never waived (§10) |
+| `PLN-10.pnl_reconciles` | Claude | docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md §3 S-PNL | any closed trade does not reconcile within the D4 tolerance: FAIL (§10); never re-measured to fit |
 
 ## 3. Scenarios
 All of these run inside the same window, against the same paper runtime, with the code frozen at `frozen_commit`.
@@ -113,6 +142,9 @@ Each of these is a FAIL:
 - fills with no reported P&L;
 - selling more than was bought.
 
+Also a FAIL, never a silently signed number: a side other than `buy` / `sell`, a quantity or price that is not a
+finite positive number, a negative or non-finite fee, or a non-finite reported net.
+
 This proves the measurement is truthful. **It says nothing about profitability** (contract §2, Priority 1).
 
 ## 4. Evidence requirements
@@ -140,6 +172,8 @@ valid `PASS` record from that configuration's `run_id`. Otherwise it returns `NO
 criterion and its state (`MISSING`, `UNPROVEN` or `FAIL`) and each configuration blocker.
 
 - Evidence from another run never counts.
+- A record whose `utc` lies outside the configuration's trial window (`start_utc` to `start_utc + duration_hours`,
+  D2) never counts and is listed as a problem: the contract asks for one continuous run.
 - Within a run, FAIL ranks above PASS, which ranks above UNPROVEN. A failure is never overwritten by a later pass.
 - One malformed record blocks the verdict.
 - The verdict is an input to the Owner. **PLN-10 is accepted only by the Owner's merged acceptance record.**
@@ -188,7 +222,7 @@ negative or a non-finite number all keep the run `LAUNCH_BLOCKED`.
 | Decision | Owner decides | Field that blocks until set | Blocks until |
 |---|---|---|---|
 | D1 | approved paper runtime | `paper_runtime` | `runtime_id` matches the kill switch's scope and is not FP-CONTROL-3; `authority_record` and its 40-hex `authority_merge` are cited; top-level `dry_run` is `true` |
-| D2 | trial duration | `trial_window` | `start_utc` is ISO-8601 Z and `duration_hours` is a positive number |
+| D2 | trial duration | `trial_window` | `start_utc` is ISO-8601 Z, `duration_hours` is a positive number, and the window ends no later than the P3 authorization's `EXPIRES_UTC` (2027-01-31T23:59:59Z) |
 | D3 | emergency-stop bound | `emergency_stop_bound_s` | a positive, finite number of seconds. PLN-08's drill measured 0.162 s; the kill switch's per-container stop timeout is 30 s. The bound is the Owner's choice |
 | D4 | acceptance criteria | `acceptance_criteria` | `matrix_sha256` equals `matrix_digest()`; `criterion_ids` lists **every** matrix id (a subset would be a waiver); `pnl_tolerance_quote` is an explicit decimal string ≥ 0 |
 | D5 | explicit launch authority | `launch_authority` | `granted_by = Owner`; `paper_launch_authorized` is literally `true`; `record_path` and its 40-hex `merge_commit` cite an Owner-merged record. The P3 execution authorization is refused, and an H1 runtime needs an `H1_LAUNCH_AUTHORIZATION` record |
@@ -204,6 +238,8 @@ Template (all decisions open; validates to `LAUNCH_BLOCKED` on D1–D5):
  "launch_authority": {"granted_by": null, "record_path": null, "merge_commit": null, "paper_launch_authorized": false}}
 ```
 Even a complete configuration only yields `CONFIG_COMPLETE_FOR_OWNER_LAUNCH`. It launches nothing.
+
+The options and consequences of each decision are in [`PLN_10_OWNER_DECISION_PACKET.md`](PLN_10_OWNER_DECISION_PACKET.md). No value is chosen there.
 
 ## 9. Stop conditions (contract §7)
 Stop the run (S-KILL) and return to the Owner if any of these happens:

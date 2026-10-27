@@ -397,3 +397,169 @@ def test_the_pln09_checklist_is_the_s_ui_procedure_and_carries_a_run_id():
     assert "no runtime and no trading authority" in text
     for item in [f"G{i}" for i in range(1, 10)] + [f"S{i}" for i in range(1, 13)] + [f"M{i}" for i in range(1, 10)]:
         assert f"| {item} |" in text, f"walkthrough item {item} missing"
+
+
+# -- round 3: every matrix row is executable: evidence id, owner, source procedure, stop condition ----------------
+def test_every_matrix_row_has_an_evidence_id_owner_source_procedure_and_stop_condition():
+    for cid, row in acc.ACCEPTANCE_MATRIX.items():
+        assert acc.EVIDENCE_ID_RE.match(cid) and cid.startswith(row["ws"] + "."), cid
+        assert row["owner"] in acc.ROW_OWNERS, cid
+        assert acc._DOC_RE.search(row["procedure"]), cid
+        assert row["stop_condition"].strip() and ("§9" in row["stop_condition"] or "§10" in row["stop_condition"]), cid
+    assert acc.matrix_completeness() == []
+
+
+@pytest.mark.parametrize("key,value,needle", [
+    ("owner", "", "missing owner"), ("owner", "Someone", "unknown owner"),
+    ("stop_condition", " ", "missing stop_condition"), ("stop_condition", "stop when it feels wrong", "stop_condition must cite"),
+])
+def test_a_row_without_a_known_owner_or_a_cited_stop_condition_is_incomplete(key, value, needle):
+    broken = copy.deepcopy(acc.ACCEPTANCE_MATRIX)
+    broken["PLN-08.kill_bounded"][key] = value
+    assert any(needle in p for p in acc.matrix_completeness(broken))
+
+
+def test_a_malformed_evidence_id_is_refused():
+    broken = copy.deepcopy(acc.ACCEPTANCE_MATRIX)
+    broken["PLN-08 kill"] = broken.pop("PLN-08.kill_bounded")
+    broken["PLN-03.x"] = {**broken["PLN-02.inventory_complete"]}  # id prefix does not match its workstream
+    problems = acc.matrix_completeness(broken)
+    assert any("PLN-08 kill: evidence id" in p for p in problems)
+    assert any("PLN-03.x: evidence id" in p for p in problems)
+
+
+def test_the_program_document_renders_each_rows_owner_and_stop_condition():
+    doc = (REPO_ROOT / "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md").read_text(encoding="utf-8")
+    section = doc[doc.index("### 2a."):doc.index("## 3.")]
+    for cid, row in acc.ACCEPTANCE_MATRIX.items():
+        line = next(l for l in section.splitlines() if l.startswith(f"| `{cid}` |"))
+        assert f"| {row['owner']} |" in line and row["stop_condition"] in line, cid
+
+
+# -- round 3: the run configuration — each decision alone, unset or defaulted, blocks ----------------------------
+@pytest.mark.parametrize("did", ["D1", "D2", "D3", "D4", "D5"])
+def test_each_decision_left_at_its_template_default_blocks_exactly_that_decision(did):
+    field = acc.OWNER_DECISIONS[did]["field"]
+    cfg = _config()
+    cfg[field] = copy.deepcopy(acc.RUN_CONFIG_TEMPLATE[field])
+    r = acc.launch_readiness(cfg)
+    assert r["verdict"] == "LAUNCH_BLOCKED" and r["open_owner_decisions"] == [did], r
+    v = acc.run_verdict([_rec(c) for c in acc.ACCEPTANCE_MATRIX], config=cfg)
+    assert v["verdict"] == "NOT_ACCEPTED" and any(p.startswith(f"run config: {did} ") for p in v["problems"])
+
+
+@pytest.mark.parametrize("over,decision", [
+    ({"paper_runtime": "tradinglab-fp-control-9"}, "D1"),
+    ({"paper_runtime__runtime_id": 9}, "D1"),
+    ({"paper_runtime__authority_record": None}, "D1"),
+    ({"paper_runtime__authority_merge": None}, "D1"),
+    ({"trial_window__start_utc": None}, "D2"),
+    ({"trial_window": None}, "D2"),
+    ({"emergency_stop_bound_s": -1}, "D3"),
+    ({"emergency_stop_bound_s": math.inf}, "D3"),
+    ({"emergency_stop_bound_s": True}, "D3"),
+    ({"acceptance_criteria__criterion_ids": []}, "D4"),
+    ({"acceptance_criteria__criterion_ids": "all"}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": "abc"}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": "NaN"}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": "<tolerance>"}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": ""}, "D4"),
+    ({"acceptance_criteria__matrix_sha256": "TBD"}, "D4"),
+    ({"launch_authority__granted_by": "owner"}, "D5"),
+    ({"launch_authority__granted_by": None}, "D5"),
+    ({"launch_authority__record_path": "docs/p3/AUTH.txt"}, "D5"),
+    ({"launch_authority__record_path": "TBD.md"}, "D5"),
+    ({"launch_authority__merge_commit": "HEAD"}, "D5"),
+    ({"launch_authority": {}}, "D5"),
+])
+def test_further_unset_or_defaulted_decisions_block_the_launch_and_the_verdict(over, decision):
+    cfg = _config(**over)
+    r = acc.launch_readiness(cfg)
+    assert r["verdict"] == "LAUNCH_BLOCKED" and decision in r["open_owner_decisions"], r
+    assert acc.run_verdict([_rec(c) for c in acc.ACCEPTANCE_MATRIX], config=cfg)["verdict"] == "NOT_ACCEPTED"
+
+
+@pytest.mark.parametrize("config", [None, [], "RUN-1", {}])
+def test_a_config_that_is_not_a_complete_object_never_yields_a_candidate(config):
+    v = acc.run_verdict([_rec(c) for c in acc.ACCEPTANCE_MATRIX], config=config)
+    assert v["verdict"] == "NOT_ACCEPTED" and v["problems"] and v["met"] == 0
+
+
+def test_the_template_itself_validates_to_blockers_on_every_decision_and_identity_field():
+    blockers = acc.validate_run_config(copy.deepcopy(acc.RUN_CONFIG_TEMPLATE))
+    for did in ("D1", "D2", "D3", "D4", "D5"):
+        assert any(b.startswith(did + " ") for b in blockers), did
+    assert any("run_id" in b for b in blockers) and any("frozen_commit" in b for b in blockers)
+
+
+def test_no_run_config_with_real_values_is_committed():
+    assert not (REPO_ROOT / acc.RUN_CONFIG_PATH).exists(), "the run configuration is the Owner's own PR"
+
+
+# -- round 3: evidence outside the trial window never counts --------------------------------------------------
+@pytest.mark.parametrize("utc", ["2026-10-31T23:59:59Z", "2026-11-04T00:00:01Z"])
+def test_a_pass_record_outside_the_trial_window_does_not_count(utc):
+    records = [_rec(c) for c in acc.ACCEPTANCE_MATRIX if c != "PLN-08.kill_bounded"]
+    records.append(_rec("PLN-08.kill_bounded", utc=utc))  # window: 2026-11-01T00:00:00Z + 72 h
+    v = acc.run_verdict(records, config=_config())
+    assert v["verdict"] == "NOT_ACCEPTED" and v["unmet"] == {"PLN-08.kill_bounded": "MISSING"}
+    assert any("outside the trial window" in p for p in v["problems"])
+
+
+def test_records_at_the_window_edges_count():
+    records = [_rec(c, utc="2026-11-01T00:00:00Z") for c in acc.ACCEPTANCE_MATRIX]
+    records[0]["utc"] = "2026-11-04T00:00:00Z"
+    assert acc.run_verdict(records, config=_config())["verdict"] == "CANDIDATE_FOR_OWNER_ACCEPTANCE"
+
+
+# -- round 3: validators refuse non-finite or nonsensical measurements --------------------------------------------
+@pytest.mark.parametrize("elapsed", [math.nan, "nan", -0.1, math.inf, None, "fast"])
+def test_a_non_finite_or_negative_stop_time_never_passes(elapsed):
+    status, detail = acc.kill_switch_bounded({**KILL, "elapsed_s": elapsed}, bound_s=30)
+    assert status == acc.FAIL, (elapsed, detail)
+
+
+@pytest.mark.parametrize("fills,fees,reported", [
+    ([{**FILLS[0], "price": "NaN"}, FILLS[1]], [], [{"trade_id": "T1", "net_quote": "0.1"}]),
+    ([{**FILLS[0], "side": "BUY"}, FILLS[1]], [], [{"trade_id": "T1", "net_quote": "-12.1"}]),
+    ([{**FILLS[0], "qty": "-0.0001"}, {**FILLS[1], "qty": "-0.0001"}], [], [{"trade_id": "T1", "net_quote": "-0.1"}]),
+    ([FILLS[0], {**FILLS[1], "price": "0"}], [], [{"trade_id": "T1", "net_quote": "-6"}]),
+    (FILLS, [{"trade_id": "T1", "fill_id": "f1", "asset": "USDT", "amount": "-1"}], [{"trade_id": "T1", "net_quote": "1.1"}]),
+    (FILLS, [], [{"trade_id": "T1", "net_quote": "NaN"}]),
+    (FILLS, [], [{"trade_id": "T1", "net_quote": "Infinity"}]),
+])
+def test_nonsensical_fills_fees_or_reports_fail_and_never_raise(fills, fees, reported):
+    out = acc.reconcile_pnl(fills, fees, reported, base_asset="BTC", tolerance_quote=TOL)
+    assert out and all(c.status == acc.FAIL for c in out), out
+
+
+def test_a_trial_window_that_outlives_the_p3_authorization_is_blocked():
+    import re
+    auth = (REPO_ROOT / acc.P3_EXECUTION_AUTHORIZATION).read_text(encoding="utf-8")
+    assert re.findall(r"^EXPIRES_UTC = (\S+)", auth, re.M) == [acc.P3_AUTHORIZATION_EXPIRES_UTC]
+    cfg = _config(trial_window__start_utc="2027-01-31T00:00:00Z", trial_window__duration_hours=24)
+    r = acc.launch_readiness(cfg)
+    assert r["open_owner_decisions"] == ["D2"] and any("expires" in b for b in r["blockers"])
+    ok = _config(trial_window__start_utc="2027-01-30T23:59:59Z", trial_window__duration_hours=24)
+    assert acc.validate_run_config(ok) == []
+
+
+def test_the_decision_packet_covers_d1_to_d5_and_chooses_nothing():
+    text = (REPO_ROOT / "docs/p3/PLN_10_OWNER_DECISION_PACKET.md").read_text(encoding="utf-8")
+    assert "DECISIONS_OPEN = D1, D2, D3, D4, D5" in text and "No value is chosen here" in text
+    for did, d in acc.OWNER_DECISIONS.items():
+        assert f"## {did} — " in text and f"(`{d['field']}`)" in text and "Validator requires" in text, did
+    assert "PAPER_LAUNCH_AUTHORIZED = NO" in text and "REAL_MONEY_AUTHORIZED = NO" in text
+    assert acc.P3_AUTHORIZATION_EXPIRES_UTC in text and f"({len(acc.ACCEPTANCE_MATRIX)} today)" in text
+
+
+def test_every_walkthrough_step_says_what_to_open_pass_fail_and_its_evidence_id():
+    text = (REPO_ROOT / "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md").read_text(encoding="utf-8")
+    items = [f"G{i}" for i in range(1, 10)] + [f"S{i}" for i in range(1, 13)] + [f"M{i}" for i in range(1, 10)]
+    for item in items:
+        row = next(l for l in text.splitlines() if l.startswith(f"| {item} |"))
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        assert len(cells) == 6 and all(cells[:5]), (item, cells)  # #, Open, PASS when, FAIL when, evidence id, ✓
+        assert cells[4] == f"`PLN09-W-{item}`", item
+    assert "PLN09-W-ID" in text and "PASS / FAIL per evidence id" in text
+    assert "PLN09_OWNER_ACCEPTANCE   = PENDING" in text

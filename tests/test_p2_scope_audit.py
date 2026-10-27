@@ -1649,6 +1649,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
     "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
     "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
+    "docs/p3/PLN_10_OWNER_DECISION_PACKET.md": f"{_P10} — round 3: D1–D5 options, consequences, validator requirements; nothing chosen",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
