@@ -14,6 +14,7 @@ PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -120,26 +121,89 @@ def runbook_index(repo: Path, commit: str) -> list[dict]:
     return rows
 
 
-def evidence_index(repo: Path, commit: str) -> list[dict]:
-    """The P3 workstream records (execution records) with the acceptance status lines they declare."""
-    rows = []
+ACCEPTANCE_SOURCE = "research/p3/acceptance.py"
+_DOC_RE = re.compile(r"(docs/p3/[A-Za-z0-9_]+\.md)")
+
+
+def acceptance_matrix_at(repo: Path, commit: str) -> tuple[dict | None, str]:
+    """The PLN-10 ACCEPTANCE_MATRIX as declared at the commit, read as a literal (never imported or executed).
+
+    Returns (matrix, source). matrix is None when the program is absent or its matrix is not a plain literal;
+    the source string then says why, and every consumer records PENDING instead of guessing.
+    """
+    text = _show(repo, commit, ACCEPTANCE_SOURCE)
+    if text is None:
+        return None, f"MISSING ({ACCEPTANCE_SOURCE} not at this commit)"
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as exc:
+        return None, f"UNPARSEABLE ({ACCEPTANCE_SOURCE}: {exc.msg})"
+    for node in tree.body:
+        target = node.target if isinstance(node, ast.AnnAssign) else (
+            node.targets[0] if isinstance(node, ast.Assign) and len(node.targets) == 1 else None)
+        if isinstance(target, ast.Name) and target.id == "ACCEPTANCE_MATRIX" and node.value is not None:
+            try:
+                matrix = ast.literal_eval(node.value)
+            except ValueError:
+                return None, f"UNPARSEABLE ({ACCEPTANCE_SOURCE}: ACCEPTANCE_MATRIX is not a literal)"
+            if isinstance(matrix, dict) and all(isinstance(v, dict) for v in matrix.values()):
+                return matrix, ACCEPTANCE_SOURCE
+            return None, f"UNPARSEABLE ({ACCEPTANCE_SOURCE}: ACCEPTANCE_MATRIX has an unexpected shape)"
+    return None, f"MISSING (no ACCEPTANCE_MATRIX in {ACCEPTANCE_SOURCE})"
+
+
+def _cited(repo: Path, commit: str, text: str) -> list[dict]:
+    """Each docs/p3 document a matrix field cites, with its blob id at the commit (MISSING when absent)."""
+    out = []
+    for path in sorted(set(_DOC_RE.findall(text or ""))):
+        out.append({"path": path, "blob": source_digests(repo, commit, (path,))[path]["object"]})
+    return out
+
+
+def evidence_index(repo: Path, commit: str) -> dict:
+    """The evidence index, keyed by the SAME evidence ids as the PLN-10 program (criterion id = evidence id).
+
+    by_evidence_id: for each id, its workstream, the merged procedure and standalone record it cites (with blob
+    ids, or MISSING), and the run evidence, which stays PENDING_EVIDENCE until the PLN-10 run's records exist.
+    records: the docs/p3/PLN_* execution records with the status lines they declare.
+    unresolved: every evidence id that cites a document missing at the commit (a freeze blocker).
+    """
+    matrix, source = acceptance_matrix_at(repo, commit)
+    by_id: dict[str, dict] | str = "PENDING"
+    unresolved: list[str] = []
+    if matrix is not None:
+        by_id = {}
+        for cid in sorted(matrix):
+            row = matrix[cid]
+            entry = {"ws": row.get("ws", "MISSING"),
+                     "procedure": row.get("procedure", "MISSING"),
+                     "procedure_documents": _cited(repo, commit, row.get("procedure", "")),
+                     "standalone_record": row.get("standalone_record", "MISSING"),
+                     "standalone_documents": _cited(repo, commit, row.get("standalone_record", "")),
+                     "run_evidence": "PENDING_EVIDENCE"}
+            if entry["procedure"] == "MISSING" or not entry["procedure_documents"]:
+                unresolved.append(f"{cid}: no procedure document cited")
+            unresolved += [f"{cid}: {d['path']} MISSING" for d in entry["procedure_documents"]
+                           + entry["standalone_documents"] if d["blob"] == "MISSING"]
+            by_id[cid] = entry
+    records = []
     for path in _docs(repo, commit):
         if not re.match(r"docs/p3/PLN_\d", path):
             continue
         text = _show(repo, commit, path) or ""
         status_lines = [ln.strip() for ln in text.splitlines()
                         if re.search(r"\b(PASS|FAIL|PENDING|PARTIAL|NOT_PROVEN|BLOCKED|ACCEPTANCE)\b", ln)][:12]
-        rows.append({"path": path, "title": _title(text), "declared_status_lines": status_lines})
-    return rows
+        records.append({"path": path, "title": _title(text), "declared_status_lines": status_lines})
+    return {"source": source, "by_evidence_id": by_id, "unresolved": sorted(unresolved), "records": records}
 
 
 def acceptance_mapping(repo: Path, commit: str) -> dict:
-    """The PLN-10 acceptance matrix if it exists at the commit; otherwise every criterion is PENDING."""
-    text = _show(repo, commit, "research/p3/acceptance.py")
-    if text is None:
-        return {"source": "MISSING (research/p3/acceptance.py not at this commit)", "criteria": "PENDING"}
-    ids = sorted(set(re.findall(r'^\s{4}"(PLN-\d{2}\.[a-z0-9_]+)":\s*\{', text, re.MULTILINE)))
-    return {"source": "research/p3/acceptance.py", "criteria": {cid: "PENDING_EVIDENCE" for cid in ids}}
+    """Every PLN-10 evidence id → PENDING_EVIDENCE (the same ids as the evidence index). Without the program at
+    the commit, the whole mapping is PENDING."""
+    matrix, source = acceptance_matrix_at(repo, commit)
+    if matrix is None:
+        return {"source": source, "criteria": "PENDING"}
+    return {"source": source, "criteria": {cid: "PENDING_EVIDENCE" for cid in sorted(matrix)}}
 
 
 HANDOFF_TEMPLATE = """# POST-BETA handoff (TEMPLATE, DRAFT, NOT FROZEN)

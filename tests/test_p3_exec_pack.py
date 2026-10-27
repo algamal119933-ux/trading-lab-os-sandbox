@@ -28,6 +28,23 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True, env=env).stdout
 
 
+ACCEPTANCE_FIXTURE = """from p3 import kill_switch
+
+ACCEPTANCE_MATRIX: dict[str, dict[str, str]] = {
+    "PLN-02.inventory_complete": {
+        "ws": "PLN-02", "procedure": "docs/p3/PLN_03_BACKUP_RESTORE.md §Verdict",
+        "standalone_record": "docs/p3/PLN_03_BACKUP_RESTORE.md §Acceptance"},
+    "PLN-04.reboot_correct": {
+        "ws": "PLN-04", "procedure": "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md §1-§4",
+        "standalone_record": "docs/p3/PLN_04_RECOVERY.md §Reboot record (" "absent in this fixture)"},
+}
+"""
+
+
+def _tree_bytes(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
 @pytest.fixture()
 def repo(tmp_path: Path) -> Path:
     r = tmp_path / "repo"
@@ -41,8 +58,7 @@ def repo(tmp_path: Path) -> Path:
         "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md": "# Reboot acceptance runbook\n",
         "docs/p3/PLN_03_BACKUP_RESTORE.md": "# PLN-03 record\nPLN_03_ACCEPTANCE = PASS\n",
         "docs/p3/P3_CONTRACT.md": "# contract\n",
-        "research/p3/acceptance.py": 'ACCEPTANCE_MATRIX = {\n    "PLN-02.inventory_complete": {\n    },\n'
-                                     '    "PLN-08.kill_bounded": {\n    },\n}\n',
+        "research/p3/acceptance.py": ACCEPTANCE_FIXTURE,
     }
     for rel, text in files.items():
         p = r / rel
@@ -86,9 +102,9 @@ def test_indexes_and_acceptance_mapping(repo: Path, tmp_path: Path):
     rb = json.loads((tmp_path / "p" / "runbook_index.json").read_text())["data"]
     assert [r["path"] for r in rb] == ["docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md"]
     ev = json.loads((tmp_path / "p" / "evidence_index.json").read_text())["data"]
-    assert any(r["path"] == "docs/p3/PLN_03_BACKUP_RESTORE.md" and r["declared_status_lines"] for r in ev)
+    assert any(r["path"] == "docs/p3/PLN_03_BACKUP_RESTORE.md" and r["declared_status_lines"] for r in ev["records"])
     am = json.loads((tmp_path / "p" / "acceptance_mapping.json").read_text())["data"]
-    assert am["criteria"] == {"PLN-02.inventory_complete": "PENDING_EVIDENCE", "PLN-08.kill_bounded": "PENDING_EVIDENCE"}
+    assert am["criteria"] == {"PLN-02.inventory_complete": "PENDING_EVIDENCE", "PLN-04.reboot_correct": "PENDING_EVIDENCE"}
 
 
 def test_without_the_acceptance_program_the_mapping_is_pending(repo: Path, tmp_path: Path):
@@ -124,3 +140,80 @@ def test_the_real_repository_builds_a_draft_pack(tmp_path: Path):
     assert m["status"] == "DRAFT_NOT_FROZEN" and m["frozen"] is False
     dig = json.loads((tmp_path / "real" / "source_digests.json").read_text())["data"]
     assert dig["docs/p3"]["type"] == "tree"
+
+
+# -- C3/C4: same evidence ids as PLN-10, byte-identical generation, never frozen ------------------------------
+def test_the_evidence_index_uses_the_pln10_evidence_ids_and_records_missing_documents(repo: Path, tmp_path: Path):
+    exec_pack.build(repo, "HEAD", tmp_path / "p")
+    ev = json.loads((tmp_path / "p" / "evidence_index.json").read_text())["data"]
+    am = json.loads((tmp_path / "p" / "acceptance_mapping.json").read_text())["data"]
+    assert sorted(ev["by_evidence_id"]) == sorted(am["criteria"]), "one id space for PLN-10 and PLN-11"
+    reboot = ev["by_evidence_id"]["PLN-04.reboot_correct"]
+    assert reboot["ws"] == "PLN-04" and reboot["run_evidence"] == "PENDING_EVIDENCE"
+    assert reboot["procedure_documents"][0]["path"] == "docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md"
+    assert len(reboot["procedure_documents"][0]["blob"]) == 40
+    assert reboot["standalone_documents"] == [{"path": "docs/p3/PLN_04_RECOVERY.md", "blob": "MISSING"}]
+    assert ev["unresolved"] == ["PLN-04.reboot_correct: docs/p3/PLN_04_RECOVERY.md MISSING"]
+
+
+@pytest.mark.parametrize("source,needle", [
+    ("ACCEPTANCE_MATRIX = build_matrix()\n", "not a literal"),
+    ("def broken(:\n", "UNPARSEABLE"),
+    ("OTHER = {}\n", "no ACCEPTANCE_MATRIX"),
+])
+def test_an_unreadable_program_leaves_everything_pending(repo: Path, tmp_path: Path, source, needle):
+    (repo / "research/p3/acceptance.py").write_text(source, encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "unreadable program")
+    exec_pack.build(repo, "HEAD", tmp_path / "p")
+    ev = json.loads((tmp_path / "p" / "evidence_index.json").read_text())["data"]
+    am = json.loads((tmp_path / "p" / "acceptance_mapping.json").read_text())["data"]
+    assert ev["by_evidence_id"] == "PENDING" and am["criteria"] == "PENDING"
+    assert needle in ev["source"] and needle in am["source"]
+
+
+def test_the_program_is_read_as_a_literal_never_executed(repo: Path, tmp_path: Path):
+    marker = tmp_path / "executed"
+    (repo / "research/p3/acceptance.py").write_text(
+        f"open({str(marker)!r}, 'w').write('x')\n" + ACCEPTANCE_FIXTURE, encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "side effect")
+    exec_pack.build(repo, "HEAD", tmp_path / "p")
+    assert not marker.exists()
+
+
+def test_the_same_commit_gives_byte_identical_packs(repo: Path, tmp_path: Path):
+    exec_pack.build(repo, "HEAD", tmp_path / "a")
+    (repo / "docs/p3/PLN_03_BACKUP_RESTORE.md").write_text("# uncommitted edit\n", encoding="utf-8")
+    exec_pack.build(repo, "HEAD", tmp_path / "b")
+    a, b = _tree_bytes(tmp_path / "a"), _tree_bytes(tmp_path / "b")
+    assert sorted(a) == sorted(b) and len(a) == 7
+    assert a == b, "same inputs must give byte-identical output, PACK_MANIFEST.json included"
+
+
+def test_a_different_commit_gives_a_different_manifest(repo: Path, tmp_path: Path):
+    m1 = exec_pack.build(repo, "HEAD", tmp_path / "a")
+    (repo / "docs/p3/PLN_03_BACKUP_RESTORE.md").write_text("# PLN-03 record\nPLN_03_ACCEPTANCE = FAIL\n")
+    _git(repo, "commit", "-q", "-am", "change")
+    m2 = exec_pack.build(repo, "HEAD", tmp_path / "b")
+    assert m1["commit"] != m2["commit"] and m1["files"]["evidence_index.json"] != m2["files"]["evidence_index.json"]
+
+
+def test_pln11_is_never_marked_frozen():
+    doc = (REPO_ROOT / "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md").read_text(encoding="utf-8")
+    assert "DRAFT / NOT FROZEN" in doc.splitlines()[0]
+    assert exec_pack.STATUS == "DRAFT_NOT_FROZEN"
+    src = (REPO_ROOT / "research/p3/exec_pack.py").read_text(encoding="utf-8")
+    assert '"frozen": False' in src and '"frozen": True' not in src and "p3_closed\": True" not in src
+
+
+def test_the_real_repository_index_matches_the_real_program_when_present(tmp_path: Path):
+    head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+    if head.returncode != 0:
+        pytest.skip("no git history in this checkout")
+    exec_pack.build(REPO_ROOT, "HEAD", tmp_path / "real")
+    ev = json.loads((tmp_path / "real" / "evidence_index.json").read_text())["data"]
+    am = json.loads((tmp_path / "real" / "acceptance_mapping.json").read_text())["data"]
+    if am["criteria"] == "PENDING":
+        assert ev["by_evidence_id"] == "PENDING"  # PLN-10 program not on this commit yet
+        return
+    from p3 import acceptance  # noqa: PLC0415 - only when the program is present
+    assert sorted(ev["by_evidence_id"]) == sorted(am["criteria"]) == sorted(acceptance.ACCEPTANCE_MATRIX)

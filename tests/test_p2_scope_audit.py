@@ -1645,8 +1645,8 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 _P11 = "P3-PLN-11 execution pack structure"
 BRANCH_SCOPE: dict[str, str] = {
     "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md": f"{_P11} — pack contents, reproducibility, later freeze rule",
-    "research/p3/exec_pack.py": f"{_P11} — draft generator: inventory, digests, indexes, mapping, handoff template",
-    "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: reproducible, never frozen, missing recorded",
+    "research/p3/exec_pack.py": f"{_P11} — draft generator; evidence index keyed by the PLN-10 evidence ids",
+    "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: byte-identical, never frozen, missing recorded, one id space",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
