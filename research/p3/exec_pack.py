@@ -50,7 +50,10 @@ class ExecPackError(Exception):
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    res = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    # Git output is decoded as UTF-8 whatever the host locale is: the pack must depend on the commit only
+    # (a C/ASCII locale would otherwise fail on "§" or Arabic text, or decode bytes differently).
+    res = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, encoding="utf-8",
+                         errors="surrogateescape")
     if check and res.returncode != 0:
         raise ExecPackError(f"git {' '.join(args)}: {res.stderr.strip()[:200]}")
     return res
@@ -99,8 +102,9 @@ def source_digests(repo: Path, commit: str, paths: tuple[str, ...] = GOVERNED_PA
 
 
 def _docs(repo: Path, commit: str, prefix: str = "docs/p3/") -> list[str]:
-    res = _git(repo, "ls-tree", "-r", "--name-only", commit, "--", prefix)
-    return sorted(p for p in res.stdout.splitlines() if p.endswith(".md"))
+    # -z: raw path names, never C-quoted (core.quotepath would otherwise make the list depend on git config)
+    res = _git(repo, "ls-tree", "-r", "-z", "--name-only", commit, "--", prefix)
+    return sorted(p for p in res.stdout.split("\0") if p.endswith(".md"))
 
 
 def _title(text: str) -> str:
@@ -123,6 +127,8 @@ def runbook_index(repo: Path, commit: str) -> list[dict]:
 
 ACCEPTANCE_SOURCE = "research/p3/acceptance.py"
 _DOC_RE = re.compile(r"(docs/p3/[A-Za-z0-9_]+\.md)")
+# The PLN-10 evidence id shape: "<workstream>.<snake_case>", where the prefix is the row's own workstream.
+EVIDENCE_ID_RE = re.compile(r"^PLN-\d{2}\.[a-z0-9_]+$")
 
 
 def acceptance_matrix_at(repo: Path, commit: str) -> tuple[dict | None, str]:
@@ -181,6 +187,8 @@ def evidence_index(repo: Path, commit: str) -> dict:
                      "standalone_record": row.get("standalone_record", "MISSING"),
                      "standalone_documents": _cited(repo, commit, row.get("standalone_record", "")),
                      "run_evidence": "PENDING_EVIDENCE"}
+            if not EVIDENCE_ID_RE.match(cid) or not cid.startswith(f"{entry['ws']}."):
+                unresolved.append(f"{cid}: evidence id is not <workstream>.<snake_case> of its own workstream")
             if entry["procedure"] == "MISSING" or not entry["procedure_documents"]:
                 unresolved.append(f"{cid}: no procedure document cited")
             unresolved += [f"{cid}: {d['path']} MISSING" for d in entry["procedure_documents"]
@@ -230,6 +238,24 @@ CONTROLLED_LIVE          = NOT AUTHORIZED (its contract does not exist yet)
 """
 
 
+def freeze_blockers(parts: dict) -> list[str]:
+    """Why this pack cannot be frozen (the freeze rule, PLN_11_EXECUTION_PACK_STRUCTURE.md §4). Never empty for a
+    generated pack: the generator only writes DRAFT_NOT_FROZEN, and freezing is a separate Owner-merged act."""
+    b = [f"status is {STATUS}: the freeze is a separate Owner-merged PR after the PLN-10 acceptance"]
+    ev, am = parts["evidence_index.json"], parts["acceptance_mapping.json"]
+    if am["criteria"] == "PENDING":
+        b.append(f"acceptance program: {am['source']}")
+    else:
+        pending = sorted(cid for cid, v in am["criteria"].items() if v == "PENDING_EVIDENCE")
+        if pending:
+            b.append(f"{len(pending)} evidence id(s) PENDING_EVIDENCE (no accepted PLN-10 run records)")
+    b += [f"unresolved evidence id: {u}" for u in ev["unresolved"]]
+    b += [f"unpinned image: {u}" for u in parts["version_inventory.json"]["unpinned_images"]]
+    b += [f"governed path MISSING: {path}" for path, d in sorted(parts["source_digests.json"].items())
+          if d["object"] == "MISSING"]
+    return b
+
+
 def build(repo: Path, ref: str, out_dir: Path) -> dict:
     """Write the DRAFT pack structure for `ref` into an empty or new `out_dir`. Returns the manifest."""
     repo, out_dir = Path(repo), Path(out_dir)
@@ -254,6 +280,7 @@ def build(repo: Path, ref: str, out_dir: Path) -> dict:
     (out_dir / "POST_BETA_HANDOFF_TEMPLATE.md").write_text(handoff, encoding="utf-8")
     digests["POST_BETA_HANDOFF_TEMPLATE.md"] = hashlib.sha256(handoff.encode("utf-8")).hexdigest()
     manifest = {"pack": PACK_VERSION, "status": STATUS, "commit": commit, "files": digests,
+                "freeze_blockers": freeze_blockers(parts),
                 "frozen": False, "p3_closed": False, "real_money_authorized": False}
     (out_dir / "PACK_MANIFEST.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n",
                                                 encoding="utf-8")

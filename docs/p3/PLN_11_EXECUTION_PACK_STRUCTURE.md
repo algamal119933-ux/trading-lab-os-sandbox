@@ -19,15 +19,17 @@ was built from.
 | `version_inventory.json` | Container images declared in the compose files (an overridable default is shown with its variable). Pinned Python packages (`==`) from the requirement files. A list of images with no tag or `:latest` | `docker-compose.yml`, `docker-compose.fp.yml`, `scripts/p3/ops/docker-compose.p3-ops.yml`, `requirements*.txt` |
 | `source_digests.json` | Git object id (tree or blob) of each governed path at the commit. A missing path is recorded as `MISSING`, never skipped | `GOVERNED_PATHS` in the generator |
 | `runbook_index.json` | Every `docs/p3` document whose name or title marks it as a runbook, procedure, program or checklist, with its blob id | `docs/p3/*.md` |
-| `evidence_index.json` | `by_evidence_id`: keyed by the **PLN-10 evidence ids** (criterion id = evidence id). For each id: its workstream, the merged procedure and standalone record that the PLN-10 matrix cites, each cited document's blob id (or `MISSING`), and `run_evidence = PENDING_EVIDENCE`. `unresolved`: every id that cites a missing document. `records`: every `docs/p3/PLN_*` execution record with the status lines it declares | `ACCEPTANCE_MATRIX` in `research/p3/acceptance.py`; `docs/p3/PLN_*.md` |
+| `evidence_index.json` | `by_evidence_id`: keyed by the **PLN-10 evidence ids** (criterion id = evidence id). For each id: its workstream, the merged procedure and standalone record that the PLN-10 matrix cites, each cited document's blob id (or `MISSING`), and `run_evidence = PENDING_EVIDENCE`. `unresolved`: every id that cites a missing document, cites no procedure, or is not `<workstream>.<snake_case>` of its own workstream. `records`: every `docs/p3/PLN_*` execution record with the status lines it declares | `ACCEPTANCE_MATRIX` in `research/p3/acceptance.py`; `docs/p3/PLN_*.md` |
 | `acceptance_mapping.json` | The same evidence ids, each `PENDING_EVIDENCE` until the run's records exist. If the program is absent or its matrix is not a plain literal at the commit, the whole mapping is `PENDING` | `research/p3/acceptance.py` (PLN-10 draft) |
 | `POST_BETA_HANDOFF_TEMPLATE.md` | The handoff skeleton. Every field stays `TBD` until the closure record is merged. It grants nothing | the generator |
-| `PACK_MANIFEST.json` | sha256 of each file, plus `frozen: false`, `p3_closed: false` and `real_money_authorized: false` | the generator |
+| `PACK_MANIFEST.json` | sha256 of each file; `freeze_blockers` (never empty for a generated pack: the DRAFT status, PENDING evidence ids, unresolved ids, unpinned images, missing governed paths — the §4 rule applied to this build); `frozen: false`, `p3_closed: false` and `real_money_authorized: false` | the generator |
 
 **Reproducibility:** the generator reads Git objects (`git show <commit>:<path>`), never the working tree. Two builds of
 the same commit therefore produce **byte-identical** directories, `PACK_MANIFEST.json` included, and a test compares
 them byte for byte (with an uncommitted edit in between that must not leak). It refuses to write into a non-empty
-directory, so a pack is never written over.
+directory, so a pack is never written over. Git output is decoded as UTF-8 whatever the host locale is, and
+path lists are read NUL-separated (`ls-tree -z`), so neither the locale nor `core.quotepath` changes the bytes;
+tests build the same commit under a C/ASCII locale and with a non-ASCII document name.
 
 **One evidence id space.** The PLN-10 matrix is read from the commit as a literal (`ast.literal_eval`); the program is
 never imported or executed by the generator. PLN-11 therefore consumes exactly the evidence ids that PLN-10's records

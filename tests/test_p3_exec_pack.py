@@ -217,3 +217,76 @@ def test_the_real_repository_index_matches_the_real_program_when_present(tmp_pat
         return
     from p3 import acceptance  # noqa: PLC0415 - only when the program is present
     assert sorted(ev["by_evidence_id"]) == sorted(am["criteria"]) == sorted(acceptance.ACCEPTANCE_MATRIX)
+
+
+# -- round 3: reproducibility does not depend on the host's locale; ids are checked; the pack lists its freeze
+#    blockers and never claims FROZEN ------------------------------------------------------------------------
+_BUILD_IN_CHILD = ("import json, sys; sys.path.insert(0, sys.argv[1]); from p3 import exec_pack; "
+                   "exec_pack.build(sys.argv[2], 'HEAD', sys.argv[3])")
+
+
+def test_the_same_commit_is_byte_identical_under_a_non_utf8_locale(repo: Path, tmp_path: Path):
+    # the fixture's matrix cites "§Verdict": git output must be decoded as UTF-8 whatever the host locale says
+    exec_pack.build(repo, "HEAD", tmp_path / "utf8")
+    env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C", "LANG": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0",
+           "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
+    res = subprocess.run([sys.executable, "-c", _BUILD_IN_CHILD, str(REPO_ROOT / "research"), str(repo),
+                          str(tmp_path / "c")], capture_output=True, text=True, env=env)
+    assert res.returncode == 0, res.stderr[-400:]
+    assert _tree_bytes(tmp_path / "utf8") == _tree_bytes(tmp_path / "c")
+
+
+def test_the_real_repository_builds_byte_identical_packs(tmp_path: Path):
+    head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
+    if head.returncode != 0:
+        pytest.skip("no git history in this checkout")
+    exec_pack.build(REPO_ROOT, "HEAD", tmp_path / "a")
+    exec_pack.build(REPO_ROOT, "HEAD", tmp_path / "b")
+    assert _tree_bytes(tmp_path / "a") == _tree_bytes(tmp_path / "b")
+
+
+@pytest.mark.parametrize("cid,ws", [("PLN-04 reboot", "PLN-04"), ("PLN-05.reboot_correct", "PLN-04"),
+                                    ("pln-04.reboot", "pln-04"), ("PLN-04.Reboot-Correct", "PLN-04")])
+def test_a_malformed_or_mismatched_evidence_id_is_unresolved(repo: Path, tmp_path: Path, cid, ws):
+    src = ACCEPTANCE_FIXTURE.replace('"PLN-04.reboot_correct": {\n        "ws": "PLN-04"',
+                                     f'"{cid}": {{\n        "ws": "{ws}"')
+    assert src != ACCEPTANCE_FIXTURE
+    (repo / "research/p3/acceptance.py").write_text(src, encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "bad id")
+    exec_pack.build(repo, "HEAD", tmp_path / "p")
+    ev = json.loads((tmp_path / "p" / "evidence_index.json").read_text())["data"]
+    assert any(u.startswith(f"{cid}: evidence id") for u in ev["unresolved"]), ev["unresolved"]
+
+
+def test_the_manifest_lists_its_freeze_blockers_and_never_claims_frozen(repo: Path, tmp_path: Path):
+    m = exec_pack.build(repo, "HEAD", tmp_path / "p")
+    blockers = m["freeze_blockers"]
+    assert any("DRAFT_NOT_FROZEN" in b for b in blockers)
+    assert any("PLN-04.reboot_correct: docs/p3/PLN_04_RECOVERY.md MISSING" in b for b in blockers)
+    assert any("PENDING_EVIDENCE" in b for b in blockers)
+    assert any("unpinned image" in b and "busybox" in b for b in blockers)
+    assert any("governed path MISSING: scripts/p3" in b for b in blockers)
+    assert m["frozen"] is False and m["status"] == "DRAFT_NOT_FROZEN"
+    for name, raw in _tree_bytes(tmp_path / "p").items():
+        text = raw.decode("utf-8")
+        assert '"frozen": true' not in text and '"status": "FROZEN"' not in text, name
+        if name.endswith(".json"):
+            assert json.loads(text)["status"] == "DRAFT_NOT_FROZEN", name
+
+
+def test_without_the_program_the_freeze_blockers_say_so(repo: Path, tmp_path: Path):
+    _git(repo, "rm", "-q", "research/p3/acceptance.py")
+    _git(repo, "commit", "-q", "-m", "drop")
+    m = exec_pack.build(repo, "HEAD", tmp_path / "p")
+    assert any(b.startswith("acceptance program: MISSING") for b in m["freeze_blockers"])
+
+
+def test_a_non_ascii_document_name_is_indexed_whatever_core_quotepath_says(repo: Path, tmp_path: Path):
+    name = "docs/p3/PLN_09_مراجعة_checklist.md"  # Arabic in the file name
+    (repo / name).write_text("# Owner checklist\nPLN09 = PENDING\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "non-ascii name")
+    exec_pack.build(repo, "HEAD", tmp_path / "p")
+    rb = json.loads((tmp_path / "p" / "runbook_index.json").read_text(encoding="utf-8"))["data"]
+    ev = json.loads((tmp_path / "p" / "evidence_index.json").read_text(encoding="utf-8"))["data"]
+    assert name in [r["path"] for r in rb] and name in [r["path"] for r in ev["records"]]
