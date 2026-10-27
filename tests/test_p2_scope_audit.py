@@ -1643,10 +1643,21 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # P3-PLN-04/07 residuals: §13 data-truth coverage evidence, the PLN-04 power-loss (UPS) decision packet
 # and decision H (unattended upgrades). Repository-only; nothing run or changed on the host.
 _R47R = "P3-PLN-04/07 residuals"
+# P3-PLN-04/07 residuals: the PLN-07 §13 data-truth coverage record with tests for the live-feed validators,
+# the PLN-04 power-loss decision packet (G) and decision H (unattended upgrades). Documents and tests only;
+# no production code, no host change.
+_R0407 = "P3-PLN-04/07 residuals"
 BRANCH_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_R0407} — §13 item → control → test → evidence class; PLN-07 PARTIAL",
+    "tests/test_p3_data_truth.py": f"{_R0407} — the live-feed validators (fp/market.py) and the never-filled rule, "
+                                   "exercised on synthetic data",
+    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_R0407} — decision packet G: UPS / accepted-risk / hybrid options",
+    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
+                                                           "policy, procedures NOT_RUN",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
+
 
 def _git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
