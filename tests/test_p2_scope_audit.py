@@ -1655,6 +1655,11 @@ BRANCH_SCOPE: dict[str, str] = {
     "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
                                                            "policy, procedures NOT_RUN",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
+    "research/p3/data_truth.py": f"{_R0407} — G-1 captured-ledger missing-bar audit and G-2 exact L-vs-F "
+                                 "comparator; read-only, fail-closed",
+    "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
+    "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
+                                          "frozen-universe config pin",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
