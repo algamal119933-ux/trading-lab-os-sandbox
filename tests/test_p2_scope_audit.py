@@ -1648,6 +1648,9 @@ BRANCH_SCOPE: dict[str, str] = {
     "docs/p3/PLN_06_UNEXPECTED_WRITER.md": f"{_P06UW} — auditd-first design, protected paths, writers, acceptance tests AT-1..AT-7",
     "research/p3/writer_watch.py": f"{_P06UW} — auditd rules generator + read-only classifier; UNEXPECTED → CRITICAL, unknown → UNPROVEN",
     "tests/test_p3_writer_watch.py": f"{_P06UW} — synthetic audit records only; fail-closed mapping",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06UW} — cross-reference PR #90; record the routing and label tests",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06UW} — promtool: unexpected_writer 2/1 pages via the generic rules",
+    "tests/test_p3_alerting.py": f"{_P06UW} — amtool routing: null until chosen; watchdog → deadman; critical/warning → channel",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

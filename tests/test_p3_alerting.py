@@ -222,3 +222,57 @@ def test_amtool_accepts_the_rendered_template(tmp_path):
     out = subprocess.run([_tool("amtool"), "check-config", str(tmp_path / "alertmanager.yml")],
                          capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+# ---------------------------------------------------------------- routing after the Owner's choice (§3 steps 4 and 7)
+
+
+def _owner_rendered(channel: str) -> dict:
+    """The template as the runbook tells the Owner to edit it: critical and warning to the chosen channel,
+    TLOSWatchdog to the dead-man. No secret is involved: receivers read *_file paths only."""
+    cfg = yaml.safe_load(AM_TEMPLATE.read_text(encoding="utf-8").replace("__TELEGRAM_CHAT_ID__", "123456789"))
+    for route in cfg["route"]["routes"]:
+        route["receiver"] = "deadman" if route["matchers"] == ['alertname="TLOSWatchdog"'] else channel
+    return cfg
+
+
+ROUTING_CASES = [  # (labels, receiver once the Owner has chosen)
+    ({"alertname": "TLOSWatchdog", "severity": "none"}, "deadman"),
+    ({"alertname": "TLOSHealthCritical", "severity": "critical", "check": "unexpected_writer"}, "CHANNEL"),
+    ({"alertname": "TLOSHealthTextfileStale", "severity": "critical"}, "CHANNEL"),
+    ({"alertname": "TLOSHealthWarning", "severity": "warning", "check": "unexpected_writer"}, "CHANNEL"),
+    ({"alertname": "TLOSDeliveryTest", "severity": "critical", "check": "owner-test"}, "CHANNEL"),
+]
+
+
+def test_watchdog_route_comes_first_and_does_not_fall_through_to_a_paging_route():
+    routes = _load(AM_TEMPLATE)["route"]["routes"]
+    assert routes[0]["matchers"] == ['alertname="TLOSWatchdog"'] and not routes[0].get("continue", False)
+    assert not any(r.get("continue", False) for r in routes)
+
+
+@pytest.mark.skipif(not _tool("amtool"), reason="amtool not installed")
+@pytest.mark.parametrize("channel", ["telegram", "ntfy"])
+def test_amtool_routes_each_alert_to_the_intended_receiver_after_the_owner_choice(tmp_path, channel):
+    cfg_path = tmp_path / "alertmanager.yml"
+    cfg_path.write_text(yaml.safe_dump(_owner_rendered(channel), sort_keys=False), encoding="utf-8")
+    assert subprocess.run([_tool("amtool"), "check-config", str(cfg_path)], capture_output=True, text=True,
+                          timeout=120).returncode == 0
+    for labels, want in ROUTING_CASES:
+        want = channel if want == "CHANNEL" else want
+        out = subprocess.run([_tool("amtool"), "config", "routes", "test", f"--config.file={cfg_path}",
+                              f"--verify.receivers={want}", *(f"{k}={v}" for k, v in labels.items())],
+                             capture_output=True, text=True, timeout=120)
+        assert out.returncode == 0, (labels, want, out.stdout + out.stderr)
+
+
+@pytest.mark.skipif(not _tool("amtool"), reason="amtool not installed")
+def test_amtool_routes_everything_to_null_until_the_owner_chooses(tmp_path):
+    cfg_path = tmp_path / "alertmanager.yml"
+    cfg_path.write_text(AM_TEMPLATE.read_text(encoding="utf-8").replace("__TELEGRAM_CHAT_ID__", "123456789"),
+                        encoding="utf-8")
+    for labels, _ in ROUTING_CASES:
+        out = subprocess.run([_tool("amtool"), "config", "routes", "test", f"--config.file={cfg_path}",
+                              "--verify.receivers=null", *(f"{k}={v}" for k, v in labels.items())],
+                             capture_output=True, text=True, timeout=120)
+        assert out.returncode == 0, (labels, out.stdout + out.stderr)

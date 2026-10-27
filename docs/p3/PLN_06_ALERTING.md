@@ -53,7 +53,7 @@ tests (each label raises its alert). A check that cannot run reports WARNING/CRI
 | **FP-CONTROL stopped** | `control_running:<role>` → CRITICAL: a RUNNING cohort whose container is not running | same | **NOT_APPLICABLE_NOW** (no RUNNING cohort; P2 closed). Implemented and tested for when one runs |
 | **strategy/config hash changed** | — | registry `strategy_sha256` / `config_sha256` per cohort; enforced at launch by the FP preflight/overlay checks and by CI scope audit for the repo | **NOT_APPLICABLE_NOW** at runtime (no RUNNING cohort). A runtime hash re-check for a RUNNING cohort is a follow-up when a cohort exists |
 | **T0/cohort changed** | — | registry rows change only through Owner-merged PRs; the scope audit pins every merge | **COVERED by governance (CI), not by the host monitor**; no runtime emitter |
-| **unexpected writer** | `unexpected_writer` (prepared, not wired) | auditd-first design and read-only classifier: `docs/p3/PLN_06_UNEXPECTED_WRITER.md`, `research/p3/writer_watch.py` (separate PR) | **NOT_COVERED on the host** until the Owner installs auditd and its acceptance tests AT-1..AT-7 pass (or the Owner explicitly accepts the gap). Sealed-evidence tampering is still caught by the archive rehash |
+| **unexpected writer** | `unexpected_writer` (prepared, not wired) | auditd-first design and read-only classifier: `docs/p3/PLN_06_UNEXPECTED_WRITER.md`, `research/p3/writer_watch.py` (PR #90) | **NOT_COVERED on the host** until the Owner installs auditd and its acceptance tests AT-1..AT-7 pass (or the Owner explicitly accepts the gap). Sealed-evidence tampering is still caught by the archive rehash |
 | WARNING examples (research disk, API/rate limit, H1 provenance, upstream change, contention) | `free_space:*`, `backup_recency`, timers | existing | **PARTIAL** — capacity/recovery covered; API/rate-limit and upstream-change belong to a running cohort's capture loop |
 
 ### 1.2 Fail-closed audit: no safety failure can be reported as healthy
@@ -89,7 +89,7 @@ Classification: COVERED · PARTIAL · NOT_COVERED · NOT_APPLICABLE · UNPROVEN.
 | Condition | What covers it | Classification |
 |---|---|---|
 | **Database integrity** | Sealed `tradesv3.sqlite` files are covered by `evidence_chain:sealed_archives`, which rehashes them hourly. No live trading DB exists while no cohort runs. The Prometheus/Grafana/MLflow volumes are non-authoritative; they are backed up but not integrity-checked | **PARTIAL.** Sealed: COVERED. Live DB: NOT_APPLICABLE now; it belongs to the runtime that owns it (H1 lane / PLN-10). Monitoring volumes: NOT_COVERED, non-authoritative |
-| **Evidence writers** (who writes protected paths) | auditd-first design and classifier, `docs/p3/PLN_06_UNEXPECTED_WRITER.md` (separate PR). Content tampering on sealed evidence is caught by the rehash; the ledger chain is checked hourly | **NOT_COVERED** on the host until auditd is installed and AT-1..AT-7 pass. The repository side is prepared |
+| **Evidence writers** (who writes protected paths) | auditd-first design and classifier, [`PLN_06_UNEXPECTED_WRITER.md`](PLN_06_UNEXPECTED_WRITER.md) (PR #90). Content tampering on sealed evidence is caught by the rehash; the ledger chain is checked hourly | **NOT_COVERED** on the host until auditd is installed and AT-1..AT-7 pass. The repository side is prepared |
 | **Monitoring self-failure** | `health_run` CRITICAL when the run raises (exit 2 plus a CRITICAL textfile). `timer:tlos-p3-health.timer` CRITICAL when the hourly timer is not scheduled (new). `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` when the job silently stops. `TLOSNodeExporterDown`. `TLOSWatchdog` goes to the off-host dead-man | **PARTIAL / UNPROVEN.** The in-run checks are COVERED in tests. The unattended rule leg (stale textfile, exporter down, watchdog) is UNPROVEN until node-exporter, the ops plane and a channel are installed and the §3 acceptance passes |
 | **Monitoring blind spots** | Host down, power loss, network loss or a dead Alertmanager. Only an off-host dead-man (healthchecks.io / remote Uptime Kuma receiving `TLOSWatchdog`) can report these | **NOT_COVERED** until §3 step 7 (dead-man) is done; that step is mandatory for PLN-06 acceptance (see §4). The desktop notification from `scheduled_health.sh` reaches the Owner only while logged in at the host |
 | **Startup after reboot** | Hourly `mount:/mnt/tlos-wdc` (CRITICAL), the timer checks, `clock_sync` (new), and `TLOSHealthTextfileStale` if the first post-boot run does not happen. Formal correctness comes from PLN-04 `verify-boot` (reboot runbook) | **PARTIAL / UNPROVEN.** The hourly checks are COVERED in tests. Post-boot correctness waits on the planned reboot acceptance (PLN-04/07, Owner) |
@@ -108,6 +108,10 @@ Classification: COVERED · PARTIAL · NOT_COVERED · NOT_APPLICABLE · UNPROVEN.
 - Residual review update (2026-10-27): `timer:tlos-p3-health.timer` (`health.monitor_timer`) and `clock_sync` are added
   to the standard set, with positive, negative and UNPROVEN tests in `tests/test_p3_health_s19.py` and a promtool group
   in `tlos_p3_alerts.test.yml`. `promtool test rules`: SUCCESS.
+- Unexpected-writer update (PR #90): a promtool group proves `unexpected_writer` = 2 / 1 raises `TLOSHealthCritical` /
+  `TLOSHealthWarning` with no rule change, and `tests/test_p3_alerting.py` runs `amtool config routes test`: the template
+  routes everything to `null`; after the §3 step 4/7 edit, `TLOSWatchdog` reaches only `deadman` and every critical and
+  warning alert (including `TLOSDeliveryTest`) reaches the chosen channel (Telegram or ntfy).
 
 ## 3. Owner runbook: installation and delivery acceptance (exact steps)
 **Preconditions (all of them, in order):**

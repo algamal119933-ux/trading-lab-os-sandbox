@@ -199,3 +199,27 @@ tests:
             exp_annotations:
               summary: "TLOS health WARNING: clock_sync"
               description: "P3 health check clock_sync is WARNING."
+  # PLN-06 unexpected writer (PR #90): the label research/p3/writer_watch.py will emit once wired pages through the
+  # generic rules with no rule change — CRITICAL (an UNEXPECTED write) and WARNING (UNPROVEN watch state).
+  - interval: 1m
+    input_series:
+      - series: 'tlos_p3_health_check{check="unexpected_writer"}'
+        values: '0 2 2 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: TLOSHealthCritical
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "unexpected_writer"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: unexpected_writer"
+              description: "P3 health check unexpected_writer is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 4m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "unexpected_writer"}
+            exp_annotations:
+              summary: "TLOS health WARNING: unexpected_writer"
+              description: "P3 health check unexpected_writer is WARNING."
