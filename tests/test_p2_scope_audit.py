@@ -1650,7 +1650,14 @@ BRANCH_SCOPE: dict[str, str] = {
                                                "destination; unresolved Tier-3 requirements and destination classes",
     "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
                                              "portable copy on the Windows PC (NOT_RUN)",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer to the destination decisions",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer; hardened §4 gate (injection fix); §6 anchor to the "
+                                         "original; §10 testable Tier-3 requirements",
+    "research/p3/backup.py": f"{_R05D} — compare_hash_export: a Windows Get-FileHash export of the portable copy "
+                             "checked with verify_backup's rules",
+    "scripts/p3/backup.py": f"{_R05D} — compare-export subcommand (read-only; refuses to write into the set)",
+    "tests/test_p3_portable_copy.py": f"{_R05D} — compare_hash_export negative controls on synthetic sets",
+    "tests/test_p3_offsite_gate.py": f"{_R05D} — the §4 forced-command gate, run from the procedure text: "
+                                     "refusals and the commands offsite.py issues",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

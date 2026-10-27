@@ -227,3 +227,101 @@ def restore_drill(set_dir: Path, scratch: Path, *, archive_verifier: Callable[[P
     return {"drill_version": "P3_RESTORE_DRILL_V1", "backup_set": record["stamp"], "checks": checks,
             "PLN_03_RESTORE_DRILL": "PASS" if verdict else "FAIL", "real_money_authorized": False}
 
+
+
+# --------------------------------------------------------------------------------------------------
+# PLN-05 portable copy: compare a Windows Get-FileHash export of a copied set with the set's manifests
+# --------------------------------------------------------------------------------------------------
+
+EXPORT_VERSION = "P3_PORTABLE_COPY_COMPARE_V1"
+
+
+def _export_rows(export_csv: Path) -> list[dict]:
+    """Rows of ``Get-FileHash | Export-Csv`` (PowerShell 5.1 or 7): Algorithm, Hash, Path; BOM and #TYPE tolerated."""
+    import csv
+    import io
+
+    text = Path(export_csv).read_text(encoding="utf-8-sig")
+    lines = [line for line in text.splitlines() if not line.startswith("#TYPE")]
+    return list(csv.DictReader(io.StringIO("\n".join(lines))))
+
+
+def _windows_relative(path: str, root: str) -> str | None:
+    """``path`` relative to ``root`` with '/' separators, compared case-insensitively as Windows does; else None."""
+    norm_root = root.replace("/", "\\").rstrip("\\")
+    norm_path = path.replace("/", "\\")
+    if not norm_path.lower().startswith(norm_root.lower() + "\\"):
+        return None
+    return norm_path[len(norm_root) + 1:].replace("\\", "/")
+
+
+def compare_hash_export(set_dir: Path, export_csv: Path, export_root: str) -> dict:
+    """Is the copy that ``export_csv`` hashed, file by file, the backup set whose manifests are in ``set_dir``?
+
+    ``set_dir`` needs only the set's own ``SHA256SUMS`` and ``BACKUP_RECORD.json``: the original set (the
+    strongest reading, because it proves the copy *is* that set), or copies of the two manifests. The export is
+    ``Get-ChildItem -LiteralPath <copy> -Recurse -File -Force | Get-FileHash -Algorithm SHA256 | Export-Csv``
+    taken on the machine that holds the copy, and ``export_root`` is the copy's folder as that machine named it.
+
+    The rules are ``verify_backup``'s: the manifest digest equals the record, and every listed artifact is
+    present with an equal hash. To them it adds the checks a copy needs: the copy's two manifests are
+    byte-identical to these, the listed count is what ``create_backup`` writes for the record
+    (2 × roots + repos + volumes), and the copy holds no unlisted file. Read-only; nothing is extracted, so no
+    secret is read. An unreadable or empty export is UNPROVEN, which withholds PASS exactly as FAIL does.
+    """
+    set_dir = Path(set_dir)
+    report = {"compare_version": EXPORT_VERSION, "set_dir": str(set_dir), "export": str(export_csv),
+              "export_root": export_root, "checks": {}, "PORTABLE_COPY_MATCHES_SET": "UNPROVEN",
+              "real_money_authorized": False}
+    checks = report["checks"]
+    try:
+        record = json.loads((set_dir / RECORD).read_text(encoding="utf-8"))
+        sums_digest = sha256_file(set_dir / SUMS)
+        record_digest = sha256_file(set_dir / RECORD)
+        listed = _read_manifest(set_dir / SUMS)
+        expected_count = 2 * len(record["roots"]) + len(record["repos"]) + len(record["volumes"])
+        rows = _export_rows(export_csv)
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        checks["inputs_readable"] = {"status": "UNPROVEN", "detail": f"{type(exc).__name__}: {exc}"[:300]}
+        return report
+    checks["inputs_readable"] = {"status": "PASS" if rows else "UNPROVEN",
+                                 "detail": f"{len(rows)} export row(s)" if rows else "the export holds no row"}
+    if not rows:
+        return report
+
+    hashed: dict[str, str] = {}
+    unreadable, outside, duplicate = [], [], []
+    for index, row in enumerate(rows):
+        algorithm, digest, path = (row.get("Algorithm") or ""), (row.get("Hash") or "").lower(), row.get("Path") or ""
+        if algorithm.upper() != "SHA256" or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+            unreadable.append(index)
+            continue
+        rel = _windows_relative(path, export_root)
+        if rel is None:
+            outside.append(path[:200])
+            continue
+        if rel in hashed:
+            duplicate.append(rel)
+        hashed[rel] = digest
+    checks["export_rows"] = {"status": "UNPROVEN" if unreadable else ("FAIL" if outside or duplicate else "PASS"),
+                             "unreadable_rows": unreadable[:20], "outside_root": outside[:20],
+                             "duplicate_paths": duplicate[:20]}
+    checks["record_digest"] = {"status": "PASS" if sums_digest == record.get("sha256sums_digest") else "FAIL",
+                               "detail": "SHA256SUMS digest against BACKUP_RECORD.json sha256sums_digest"}
+    same_sums, same_record = hashed.get(SUMS) == sums_digest, hashed.get(RECORD) == record_digest
+    checks["manifests_identical"] = {"status": "PASS" if same_sums and same_record else "FAIL",
+                                     "SHA256SUMS": same_sums, "BACKUP_RECORD.json": same_record}
+    checks["listed_count"] = {"status": "PASS" if listed and len(listed) == expected_count else "FAIL",
+                              "listed": len(listed), "expected_from_record": expected_count}
+    missing = sorted(rel for rel in listed if rel not in hashed)
+    mismatched = sorted(rel for rel, digest in listed.items() if rel in hashed and hashed[rel] != digest)
+    checks["artifacts"] = {"status": "PASS" if not missing and not mismatched else "FAIL",
+                           "ok": len(listed) - len(missing) - len(mismatched),
+                           "missing": missing[:20], "mismatched": mismatched[:20]}
+    extra = sorted(rel for rel in hashed if rel not in listed and rel not in (SUMS, RECORD))
+    checks["no_unlisted_file"] = {"status": "PASS" if not extra else "FAIL", "extra": extra[:20]}
+
+    statuses = {c["status"] for c in checks.values()}
+    report["PORTABLE_COPY_MATCHES_SET"] = ("FAIL" if "FAIL" in statuses
+                                           else "UNPROVEN" if statuses != {"PASS"} else "PASS")
+    return report

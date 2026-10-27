@@ -79,6 +79,9 @@ disconnected it is out of reach of anything that compromises the workstation. It
 copy. It does not change `HOST_LOSS_REDUNDANCY`, and no record may cite it as Tier-3.
 
 ## 5. Unresolved Tier-3 requirements (all open)
+Their testable form, with a measurable PASS and the procedure check for each, is
+[`PLN_05_TIER3_PROCEDURE.md`](PLN_05_TIER3_PROCEDURE.md) §10 (T3-R1 … T3-R8).
+
 1. **A destination** of an accepted class (§6), chosen by the Owner, on separate hardware, separate power and a
    separate failure domain from `hamza-workstation`.
 2. **Capacity** of at least 30 GB (50 GB or more recommended) on it (procedure §3).
