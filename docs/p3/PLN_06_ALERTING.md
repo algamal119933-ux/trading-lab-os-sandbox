@@ -28,8 +28,8 @@ tlos-p3-health.timer (hourly, exists) → scheduled_health.sh → ~/tlos-paper/p
 
 | Alert | Condition | §19 severity |
 |---|---|---|
-| `TLOSHealthCritical` | any `tlos_p3_health_check == 2` (one alert per check label: free space, WDC mount, backup verify/absence, P2 timer re-enabled …) | CRITICAL |
-| `TLOSHealthWarning` | any `tlos_p3_health_check == 1` (backup older than RPO, backup timer not active, normal end due) | WARNING |
+| `TLOSHealthCritical` | any `tlos_p3_health_check == 2` (one alert per check label: free space, WDC mount, backup verify/absence, P2 timer re-enabled, the health timer itself not scheduled, §19 checks …) | CRITICAL |
+| `TLOSHealthWarning` | any `tlos_p3_health_check == 1` (backup older than RPO, backup timer not active, normal end due, clock not NTP-synchronised, any UNPROVEN state) | WARNING |
 | `TLOSHealthTextfileStale` | the health textfile is more than ~2 h old (the hourly job died) | CRITICAL |
 | `TLOSHealthTextfileMissing` | node-exporter cannot see the textfile for 10 min | CRITICAL |
 | `TLOSTextfileScrapeError` | node-exporter cannot parse a textfile for 5 min | WARNING |
@@ -53,7 +53,7 @@ tests (each label raises its alert). A check that cannot run reports WARNING/CRI
 | **FP-CONTROL stopped** | `control_running:<role>` → CRITICAL: a RUNNING cohort whose container is not running | same | **NOT_APPLICABLE_NOW** (no RUNNING cohort; P2 closed). Implemented and tested for when one runs |
 | **strategy/config hash changed** | — | registry `strategy_sha256` / `config_sha256` per cohort; enforced at launch by the FP preflight/overlay checks and by CI scope audit for the repo | **NOT_APPLICABLE_NOW** at runtime (no RUNNING cohort). A runtime hash re-check for a RUNNING cohort is a follow-up when a cohort exists |
 | **T0/cohort changed** | — | registry rows change only through Owner-merged PRs; the scope audit pins every merge | **COVERED by governance (CI), not by the host monitor**; no runtime emitter |
-| **unexpected writer** | — | — | **NOT_COVERED**. Needs a file-integrity watch on the lane/evidence paths (e.g. `auditd` rules or inotify), a host install — Owner decision. Sealed-evidence tampering is still caught by the archive rehash |
+| **unexpected writer** | `unexpected_writer` (prepared, not wired) | auditd-first design and read-only classifier: `docs/p3/PLN_06_UNEXPECTED_WRITER.md`, `research/p3/writer_watch.py` (separate PR) | **NOT_COVERED on the host** until the Owner installs auditd and its acceptance tests AT-1..AT-7 pass (or the Owner explicitly accepts the gap). Sealed-evidence tampering is still caught by the archive rehash |
 | WARNING examples (research disk, API/rate limit, H1 provenance, upstream change, contention) | `free_space:*`, `backup_recency`, timers | existing | **PARTIAL** — capacity/recovery covered; API/rate-limit and upstream-change belong to a running cohort's capture loop |
 
 ### 1.2 Fail-closed audit: no safety failure can be reported as healthy
@@ -75,10 +75,25 @@ Every path where a §19 check cannot establish its answer reports WARNING (UNPRO
 | the health run itself raises (e.g. an unreadable registry) | `health_run` CRITICAL, exit code 2, and a textfile with `tlos_p3_health_overall 2`. It used to be a Python traceback, exit 1 (read as WARNING) and a stale textfile; changed in the Owner-review update |
 | the hourly job itself dies or stops writing | `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` CRITICAL (rule leg; requires node-exporter) |
 | the exporter is down | `TLOSNodeExporterDown` CRITICAL (requires node-exporter) |
+| the hourly health timer itself is not enabled/active | `timer:tlos-p3-health.timer` CRITICAL (new, residual review): the monitor is blind. Seen by any manual run and by the Control Room build; while the timer is down, no hourly run happens, so this alert needs the stale-textfile rule (node-exporter) or the dead-man to fire unattended |
+| systemd cannot give the health timer's state | `timer:tlos-p3-health.timer` WARNING "UNPROVEN" |
+| the host clock is not NTP-synchronised, or the state cannot be read | `clock_sync` WARNING ("NOT synchronised" / "UNPROVEN"). It is never INFO unless `timedatectl` says `yes` |
 
 Residual limit: until node-exporter and a channel are installed (§3), alerts are evaluated only in tests, and on the host
 only the journal and desktop notification from `scheduled_health.sh` are live. A dead host cannot report itself without
 the optional off-host dead-man (§3 step 7).
+
+### 1.3 Residual §19 review (2026-10-27, main `19d77e90`)
+Classification: COVERED · PARTIAL · NOT_COVERED · NOT_APPLICABLE · UNPROVEN. **"UNPROVEN"** means the repository side exists and is tested, but nothing on the host has proven it yet. An unknown result is never INFO.
+
+| Condition | What covers it | Classification |
+|---|---|---|
+| **Database integrity** | Sealed `tradesv3.sqlite` files are covered by `evidence_chain:sealed_archives`, which rehashes them hourly. No live trading DB exists while no cohort runs. The Prometheus/Grafana/MLflow volumes are non-authoritative; they are backed up but not integrity-checked | **PARTIAL.** Sealed: COVERED. Live DB: NOT_APPLICABLE now; it belongs to the runtime that owns it (H1 lane / PLN-10). Monitoring volumes: NOT_COVERED, non-authoritative |
+| **Evidence writers** (who writes protected paths) | auditd-first design and classifier, `docs/p3/PLN_06_UNEXPECTED_WRITER.md` (separate PR). Content tampering on sealed evidence is caught by the rehash; the ledger chain is checked hourly | **NOT_COVERED** on the host until auditd is installed and AT-1..AT-7 pass. The repository side is prepared |
+| **Monitoring self-failure** | `health_run` CRITICAL when the run raises (exit 2 plus a CRITICAL textfile). `timer:tlos-p3-health.timer` CRITICAL when the hourly timer is not scheduled (new). `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` when the job silently stops. `TLOSNodeExporterDown`. `TLOSWatchdog` goes to the off-host dead-man | **PARTIAL / UNPROVEN.** The in-run checks are COVERED in tests. The unattended rule leg (stale textfile, exporter down, watchdog) is UNPROVEN until node-exporter, the ops plane and a channel are installed and the §3 acceptance passes |
+| **Monitoring blind spots** | Host down, power loss, network loss or a dead Alertmanager. Only an off-host dead-man (healthchecks.io / remote Uptime Kuma receiving `TLOSWatchdog`) can report these | **NOT_COVERED** until §3 step 7 (dead-man) is done; that step is mandatory for PLN-06 acceptance (see §4). The desktop notification from `scheduled_health.sh` reaches the Owner only while logged in at the host |
+| **Startup after reboot** | Hourly `mount:/mnt/tlos-wdc` (CRITICAL), the timer checks, `clock_sync` (new), and `TLOSHealthTextfileStale` if the first post-boot run does not happen. Formal correctness comes from PLN-04 `verify-boot` (reboot runbook) | **PARTIAL / UNPROVEN.** The hourly checks are COVERED in tests. Post-boot correctness waits on the planned reboot acceptance (PLN-04/07, Owner) |
+| **Unauthorized paper runtimes** | `unauthorized_execution` CRITICAL for a running `tradinglab-fp-control-*` / `tlos-h1-paper-cohort-*` container with no RUNNING cohort. If docker is unreachable, `paper_runtime` reports WARNING UNPROVEN. The kill switch stops them (PLN-08) | **COVERED** in tests; UNPROVEN on the host until the first hourly run after `tlos-p3` is updated. A paper runtime under another container name is outside the pattern, and there is no lawful way to start one |
 
 ## 2. Verification done in this change (cloud, no host)
 - `promtool check rules` and `promtool check config` (Prometheus 3.14.0): SUCCESS, 7 rules.
@@ -90,35 +105,45 @@ the optional off-host dead-man (§3 step 7).
 - `tests/test_p3_health_s19.py`: the §19 checks (§1.1), positive and negative per condition, no secret value in any finding,
   the real paper guard and the real archive verifier on synthetic fixtures (a changed sealed sqlite is CRITICAL).
 
-## 3. Owner runbook (each step is an OWNER ACTION on hamza-workstation)
-Run from the tools checkout after it is updated to a main that contains this change
-(`~/projects/trading/tlos-p3`).
+- Residual review update (2026-10-27): `timer:tlos-p3-health.timer` (`health.monitor_timer`) and `clock_sync` are added
+  to the standard set, with positive, negative and UNPROVEN tests in `tests/test_p3_health_s19.py` and a promtool group
+  in `tlos_p3_alerts.test.yml`. `promtool test rules`: SUCCESS.
 
-1. **Install node-exporter** (sudo): `sudo apt install prometheus-node-exporter`
-2. **Point it at the health textfile, loopback only** (sudo): edit `/etc/default/prometheus-node-exporter` so that
-   `ARGS="--web.listen-address=127.0.0.1:9100 --collector.textfile.directory=/home/hamza/tlos-paper/p3-evidence"`,
-   then `sudo systemctl restart prometheus-node-exporter`.
-3. **Let the `prometheus` user read only that directory** (sudo):
-   `systemctl show prometheus-node-exporter -p ProtectHome` must not say `yes` (if it does, add a drop-in with
-   `ProtectHome=read-only`). Then
-   `sudo setfacl -m u:prometheus:--x /home/hamza /home/hamza/tlos-paper` and
-   `sudo setfacl -m u:prometheus:r-x /home/hamza/tlos-paper/p3-evidence` and
-   `sudo setfacl -d -m u:prometheus:r-- /home/hamza/tlos-paper/p3-evidence` (default ACL, so the hourly rewrite stays readable).
-   Verify: `curl -s 127.0.0.1:9100/metrics | grep tlos_p3_health_overall` prints a value.
-4. **Choose the channel** (Telegram or ntfy) and create the files outside Git and outside every backup root:
-   `mkdir -p ~/.config/tlos-p3-ops/secrets && chmod 700 ~/.config/tlos-p3-ops/secrets`;
-   copy `scripts/p3/ops/alertmanager.yml.template` to `~/.config/tlos-p3-ops/alertmanager.yml`, replace
-   `__TELEGRAM_CHAT_ID__` (or delete the Telegram receiver), set the critical/warning routes from `"null"` to the
-   chosen receiver, and write the secret to `secrets/telegram_bot_token` or `secrets/ntfy_url` with `chmod 600`.
-   Both files must exist **before** step 5, or Docker creates directories in their place.
-5. **Start the ops plane**: `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml up -d`.
-   Verify: `curl -s 127.0.0.1:9091/-/ready`, `curl -s 127.0.0.1:9093/-/ready`, and
-   `curl -s 127.0.0.1:9091/api/v1/targets | grep -o '"health":"up"'`.
-6. **Prove delivery** (the acceptance evidence): send one test alert and confirm it on the phone:
-   `docker exec tlos-p3-alertmanager amtool --alertmanager.url=http://127.0.0.1:9093 alert add TLOSDeliveryTest severity=critical check=owner-test`.
-7. **Optional off-host dead-man**: create a healthchecks.io check (period 5 min, grace 15 min) or a remote Uptime Kuma
-   push monitor, put its URL in `secrets/deadman_url`, route `TLOSWatchdog` to `deadman`, and restart Alertmanager.
-   This is the only part that still reports when the host itself is dead.
+## 3. Owner runbook: installation and delivery acceptance (exact steps)
+**Preconditions (all of them, in order):**
+1. The planned reboot acceptance (PLN-04/07, [`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), record in [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) has PASSED. The host freeze is lifted by the Owner.
+2. `~/projects/trading/tlos-p3` is updated to a main that contains this document, by an Owner action.
+3. The first hourly health run after that update was read and triaged. A CRITICAL there is a real finding and is handled before going on.
+
+Every step writes its output to one new evidence directory. That directory is not a watched evidence path, and nothing in it is ever overwritten:
+```bash
+EV=~/tlos-paper/pln06-acceptance/$(date -u +%Y%m%dT%H%M%SZ); [ -e "$EV" ] && echo STOP || mkdir -p "$EV"
+```
+
+| Step | OWNER command (sudo where shown) | Expected output | Evidence to capture | Rollback |
+|---|---|---|---|---|
+| 0. Baseline | `{ date -Is; systemctl --user list-timers 'tlos-*' --no-pager; docker ps -a --format '{{.Names}} {{.Status}}'; ss -ltnp \| grep -E ':(9091\|9093\|9100)\b' \|\| echo 'ports free'; } > $EV/00_baseline.txt` | both tlos timers active; `ports free` | `00_baseline.txt` | — |
+| 1. Install node-exporter | `sudo apt install prometheus-node-exporter 2>&1 \| tee $EV/01_install.txt` | package installed; service active | `01_install.txt`, `apt-cache policy prometheus-node-exporter >> $EV/01_install.txt` | `sudo apt remove prometheus-node-exporter` |
+| 2. Loopback + textfile only | edit `/etc/default/prometheus-node-exporter`: `ARGS="--web.listen-address=127.0.0.1:9100 --collector.textfile.directory=/home/hamza/tlos-paper/p3-evidence"`; `sudo systemctl restart prometheus-node-exporter`; `ss -ltn \| grep 9100 > $EV/02_listen.txt` | listens on `127.0.0.1:9100` **only** (never `0.0.0.0` / `*`) | `02_listen.txt`, a copy of the defaults file | restore the defaults file; restart |
+| 3. Read access, one directory only | `systemctl show prometheus-node-exporter -p ProtectHome` (if `yes`: drop-in `ProtectHome=read-only`); `sudo setfacl -m u:prometheus:--x /home/hamza /home/hamza/tlos-paper`; `sudo setfacl -m u:prometheus:r-x /home/hamza/tlos-paper/p3-evidence`; `sudo setfacl -d -m u:prometheus:r-- /home/hamza/tlos-paper/p3-evidence`; `curl -s 127.0.0.1:9100/metrics \| grep -E '^tlos_p3_health_(overall\|check)' > $EV/03_scrape.txt` | `tlos_p3_health_overall` present and equal to the last health run's verdict; every `check` label present | `03_scrape.txt`, `getfacl` output | `sudo setfacl -x u:prometheus …` on the three paths |
+| 4. Channel + secrets | `mkdir -p ~/.config/tlos-p3-ops/secrets && chmod 700 ~/.config/tlos-p3-ops/secrets`. Copy the template to `~/.config/tlos-p3-ops/alertmanager.yml`. Choose **Telegram** (chat id + `secrets/telegram_bot_token`) **or ntfy** (`secrets/ntfy_url`), `chmod 600`. Route critical and warning to it (no longer `"null"`) | both files exist **before** step 5. `amtool check-config ~/.config/tlos-p3-ops/alertmanager.yml` → SUCCESS | `amtool` output (**never** the secret) in `$EV/04_amcheck.txt` | delete `~/.config/tlos-p3-ops` |
+| 5. Start the ops plane | `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml up -d`; `curl -s 127.0.0.1:9091/-/ready; curl -s 127.0.0.1:9093/-/ready; curl -s 127.0.0.1:9091/api/v1/targets \| grep -o '"health":"up"'` | both report ready; the node target is `"health":"up"`; `curl -s 127.0.0.1:9091/api/v1/rules \| grep -c TLOS` ≥ 7 | outputs in `$EV/05_ops.txt` | `docker compose -f … down` (**never** `down -v`) |
+| 6. Delivered test alert (**acceptance**) | `docker exec tlos-p3-alertmanager amtool --alertmanager.url=http://127.0.0.1:9093 alert add TLOSDeliveryTest severity=critical check=owner-test` | the message arrives on the Owner's phone within 2 minutes | photo/screenshot of the received message, time received, `amtool alert query` output in `$EV/06_delivery.txt` | `amtool silence add alertname=TLOSDeliveryTest` (the test alert expires by itself) |
+| 7. Dead-man (**mandatory for PLN-06**, it is the only cover for host-down) | create a healthchecks.io check (period 5 min, grace 15 min) or a remote Uptime Kuma push monitor. Put the URL in `secrets/deadman_url`, route `TLOSWatchdog` to `deadman`, `docker restart tlos-p3-alertmanager` | the check turns green within 10 minutes | dashboard screenshot + time in `$EV/07_deadman.txt` | delete the check; route `TLOSWatchdog` to `"null"` |
+| 8. Real alert path end-to-end | Stop the health timer for 2.5 h: `systemctl --user stop tlos-p3-health.timer`. Expect `TLOSHealthTextfileStale` on the phone. Then `systemctl --user start tlos-p3-health.timer` | the stale alert arrives; it clears after the next run | message screenshot + both times in `$EV/08_e2e.txt` | `systemctl --user start tlos-p3-health.timer` (mandatory, even on FAIL) |
+
+**PASS/FAIL (all must be PASS; one FAIL keeps PLN-06 PARTIAL and is recorded, never waived):**
+| Item | PASS when |
+|---|---|
+| Exporter loopback-only | step 2 shows only `127.0.0.1:9100` |
+| Textfile scraped | step 3 shows `tlos_p3_health_overall` matching the last run |
+| Rules loaded | step 5 shows ≥ 7 TLOS rules and the target is up |
+| Delivery | step 6 message received |
+| Dead-man | step 7 check green; optionally, pausing Alertmanager for one grace period makes it alert |
+| End-to-end | step 8 stale alert received, then cleared |
+| No secret in Git or backups | `git -C ~/projects/trading/tlos-p3 status` clean, and `~/.config/tlos-p3-ops` outside every backup root (by construction) |
+
+The evidence directory listing and the PASS/FAIL table are recorded in this document by an Owner-merged PR. That merge, together with the unexpected-writer decision, is what moves PLN-06 out of PARTIAL.
 
 Stopping is `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml down` (never `down -v`). The P3 kill switch's scope
 (`tradinglab-fp-control-*`, `tlos-h1-paper-cohort-*`) does not include these containers, by design.
@@ -129,10 +154,12 @@ Stopping is `docker compose -f scripts/p3/ops/docker-compose.p3-ops.yml down` (n
 | "Each §19 CRITICAL condition raises an alert in a test" | `promtool test rules` + `tests/test_p3_health_s19.py` for every condition the health job emits (§1.1) | PASS in test for paper guard, real-money, evidence chains, unauthorized execution, stopped control; **NOT_COVERED: unexpected writer**; live-DB integrity and runtime hash drift N/A until a cohort runs |
 | Capacity thresholds are enforced | `free_space:*` CRITICAL → `TLOSHealthCritical` (test) | rule leg PASS in test |
 | Normal end is detected | `normal_end:*` WARNING → `TLOSHealthWarning` (test); detection itself already met | met |
-| Alert reaches the Owner | step 6 test alert received + one real scrape of `tlos_p3_health_overall` | **PENDING — Owner** |
+| Alert reaches the Owner | §3 steps 3, 6 and 8 (scrape, delivered test alert, real stale-textfile alert end-to-end) | **PENDING — Owner** |
+| Host-down awareness | §3 step 7 dead-man green | **PENDING — Owner** |
 
-`PLN_06 = PARTIAL` until (a) step 6 (delivery proof) is recorded here by an Owner-merged update and (b) the
-NOT_COVERED row (unexpected writer) is either covered or explicitly accepted by the Owner. **Not CLOSED.**
+`PLN_06 = PARTIAL` until (a) the §3 PASS/FAIL table is all PASS and recorded here by an Owner-merged update, and (b) the
+NOT_COVERED row (unexpected writer, `docs/p3/PLN_06_UNEXPECTED_WRITER.md`) is either covered (AT-1..AT-7 PASS) or explicitly accepted by
+the Owner in a recorded decision. **Not CLOSED.**
 
 **First host run after the update (Owner):** the new checks read real host configs and archives. If the first
 hourly run reports a CRITICAL on `paper_guard`, `real_money` or `evidence_chain:*`, treat it as a real §19 finding:
