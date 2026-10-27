@@ -64,6 +64,8 @@ echo "== code"; git -C "$d" log -1 --format='%h %s'; git -C "$d" status --short 
 - `tlos-p3` is at `253dbf2` and clean
 
 ## 2. The reboot (Owner)
+Run the preflight immediately before the reboot; if the reboot is delayed, either re-run the preflight or produce the gap attestation ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)).
+
 1. Save your work and close your apps. Wait until no other project's job is running.
 2. Restart from the GNOME menu (top-right → Power → Restart), or in a terminal run `sudo systemctl reboot -i`.
    - A plain `systemctl reboot` is refused while the GNOME session holds an inhibitor. That is what happened on 2026-10-26 at 21:02.
