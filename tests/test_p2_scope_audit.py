@@ -1530,6 +1530,24 @@ P3_PLN_04_05_RUNBOOKS_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #92, merged. Two parents: c0bb6b2b (main before) + f613208a
+# (the claude/p3-pln-06-delivery-runbook branch). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_DELIVERY_MERGE = "b0a70a472363f4b4b84797f96e9e109b4b5c8e67"
+
+# P3-PLN-06 delivery runbook and residual §19 review: exact Owner installation + acceptance steps with expected
+# outputs, evidence capture, rollback and PASS/FAIL; precise residual classification; two fail-closed health checks
+# (the health timer itself, NTP clock sync). Nothing installed or started. No runtime, strategy, risk, dataset,
+# registry or evidence change.
+_P06DR = "P3-PLN-06 delivery runbook"
+P3_PLN_06_DELIVERY_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06DR} — exact install/acceptance runbook, residual §19 review, fail-closed rows",
+    "research/p3/health.py": f"{_P06DR} — monitor_timer (health timer itself, CRITICAL when unscheduled) and clock_sync; unknown → UNPROVEN",
+    "tests/test_p3_health_s19.py": f"{_P06DR} — positive/negative/UNPROVEN tests for the two new checks",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06DR} — promtool group: health-timer CRITICAL and clock_sync WARNING raise their alerts",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/05 runbooks (PR #89) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1596,6 +1614,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_06_ALERT": (P3_PLN_06_ALERT_MERGE, P3_PLN_06_ALERT_SCOPE),
     "P3_PLN_09_MOBILE": (P3_PLN_09_MOBILE_MERGE, P3_PLN_09_MOBILE_SCOPE),
     "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
+    "P3_PLN_06_DELIVERY": (P3_PLN_06_DELIVERY_MERGE, P3_PLN_06_DELIVERY_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1611,7 +1630,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "docs/p3/PLN_06_UNEXPECTED_WRITER.md": f"{_P06UW} — auditd-first design, protected paths, writers, acceptance tests AT-1..AT-7",
     "research/p3/writer_watch.py": f"{_P06UW} — auditd rules generator + read-only classifier; UNEXPECTED → CRITICAL, unknown → UNPROVEN",
     "tests/test_p3_writer_watch.py": f"{_P06UW} — synthetic audit records only; fail-closed mapping",
-    "tests/test_p2_scope_audit.py": "P3-PLN-04/05 runbooks (PR #89) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 delivery runbook (PR #92) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
