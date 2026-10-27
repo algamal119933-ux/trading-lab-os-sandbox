@@ -355,3 +355,56 @@ def test_a_crashed_health_run_is_critical_with_exit_2_and_a_critical_textfile(tm
     text = prom.read_text(encoding="utf-8")
     assert 'tlos_p3_health_check{check="health_run"} 2' in text
     assert "HEALTH = CRITICAL" in capsys.readouterr().out
+
+
+# -- residual §19 review (Lane B2, 2026-10-27): monitoring self-failure and startup after reboot ---------
+
+
+def _answers(mapping):
+    def run(cmd):
+        key = " ".join(cmd)
+        for needle, out in mapping.items():
+            if needle in key:
+                if isinstance(out, Exception):
+                    raise out
+                return subprocess.CompletedProcess(cmd, 0, out + "\n", "")
+        return subprocess.CompletedProcess(cmd, 0, "\n", "")
+    return run
+
+
+def test_an_unscheduled_health_timer_is_critical_because_the_monitor_is_blind():
+    run = _answers({"is-enabled tlos-p3-health.timer": "disabled", "is-active tlos-p3-health.timer": "inactive"})
+    f = health.monitor_timer("tlos-p3-health.timer", runner=run)
+    assert f["check"] == "timer:tlos-p3-health.timer" and f["severity"] == health.CRITICAL
+    ok = _answers({"is-enabled tlos-p3-health.timer": "enabled", "is-active tlos-p3-health.timer": "active"})
+    assert health.monitor_timer("tlos-p3-health.timer", runner=ok)["severity"] == health.INFO
+
+
+def test_a_health_timer_state_systemd_cannot_give_stays_unproven_not_critical_nor_info():
+    f = health.monitor_timer("tlos-p3-health.timer", runner=_answers({}))
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+    f = health.monitor_timer("tlos-p3-health.timer", runner=_answers({"is-enabled": OSError("no bus")}))
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+
+
+def test_clock_sync_is_info_only_when_ntp_says_yes():
+    assert health.clock_sync(_answers({"NTPSynchronized": "yes"}))["severity"] == health.INFO
+    assert health.clock_sync(_answers({"NTPSynchronized": "no"}))["severity"] == health.WARNING
+    unknown = health.clock_sync(_answers({}))
+    assert unknown["severity"] == health.WARNING and "UNPROVEN" in unknown["detail"]
+    raised = health.clock_sync(_answers({"timedatectl": FileNotFoundError("timedatectl")}))
+    assert raised["severity"] == health.WARNING and "UNPROVEN" in raised["detail"]
+
+
+def test_standard_findings_include_the_monitor_self_check_and_clock_sync(tmp_path):
+    run = _answers({"is-enabled": "enabled", "is-active": "active", "NTPSynchronized": "yes"})
+    checks = {f["check"]: f["severity"] for f in health.standard_findings(
+        {"instances": []}, runner=run, verifier=None, lane=tmp_path, backup_target=tmp_path, fp_lane_root=tmp_path)}
+    assert checks["timer:tlos-p3-health.timer"] == health.INFO
+    assert checks["clock_sync"] == health.INFO
+
+
+def test_the_promtool_rule_tests_cover_the_monitor_self_check_and_clock_sync():
+    text = RULE_TESTS.read_text(encoding="utf-8")
+    for label in ("timer:tlos-p3-health.timer", "clock_sync"):
+        assert f'check="{label}"' in text and f'check: "{label}"' in text
