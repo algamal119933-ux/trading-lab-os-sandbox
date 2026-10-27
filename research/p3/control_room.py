@@ -295,8 +295,14 @@ def project(obs: dict) -> dict:
                    f"إعادة تشغيل FP-CONTROL-3 مرفوضة: {obs['fp_control_3_restart']['reason']}"))
     unknown = [b("Off-host observation: not implemented (PLN-05 Tier 3 / PLN-06)",
                  "الرصد من خارج الجهاز: غير منفّذ (PLN-05 المستوى 3 / PLN-06)")]
-    unverified = [b("Recovery after a host reboot (PLN-04): not yet exercised",
-                    "التعافي بعد إعادة إقلاع الخادم (PLN-04): لم يُختبر بعد")]
+    reboot = _reboot_acceptance(ws)
+    if reboot:
+        known.append(b(reboot["en"], reboot["ar"]))
+        unverified = [b("Power-loss posture (PLN-04): Owner decision G open",
+                        "وضع انقطاع الكهرباء (PLN-04): قرار المالك G مفتوح")]
+    else:
+        unverified = [b("Recovery after a host reboot (PLN-04): not yet exercised",
+                        "التعافي بعد إعادة إقلاع الخادم (PLN-04): لم يُختبر بعد")]
 
     events = []
     for m in reversed(merges):
@@ -445,6 +451,16 @@ def project(obs: dict) -> dict:
     return live
 
 
+def _reboot_acceptance(ws: dict) -> dict | None:
+    """The reboot-correctness acceptance from the governed workstream record (PR #94), or None.
+
+    Fail-closed: anything but a complete ``state == "ok"`` record keeps the reboot shown as not exercised."""
+    r = ws.get("reboot")
+    if isinstance(r, dict) and r.get("state") == "ok" and r.get("en") and r.get("ar") and r.get("record"):
+        return r
+    return None
+
+
 def _sevc(severity: str) -> str:
     return {health.INFO: "ok", health.WARNING: "warn"}.get(severity, "inc")
 
@@ -459,6 +475,7 @@ def _bind_screens(obs: dict, live: dict) -> None:
     sets = obs["backup_sets"]
     drill = next((d for d in reversed(obs.get("drills", [])) if not d.get("unreadable")), None)
     drill_ok = bool(drill) and drill.get("PLN_03_RESTORE_DRILL") == "PASS"
+    reboot = _reboot_acceptance(obs["workstreams"])
     sealed = [a for k, v in (drill or {}).get("checks", {}).items() if k.startswith("sealed:") for a in v.get("archives", [])]
 
     # Incidents: every non-INFO health finding is an open incident; nothing is invented.
@@ -517,7 +534,8 @@ def _bind_screens(obs: dict, live: dict) -> None:
         else (["fail", "fail"] if drill else ["unk", "notRecorded"]),
         "restore_when": _utc(drill["_mtime"]) if drill else None,
         "points": len(sets),
-        "reboot": ["wait", b("Not yet exercised · Owner window", "لم يُختبر بعد · نافذة المالك")],
+        "reboot": (["ok", b(reboot["en"], reboot["ar"])] if reboot
+                   else ["wait", b("Not yet exercised · Owner window", "لم يُختبر بعد · نافذة المالك")]),
         "acts": [
             [b("Kill switch (stop paper runtimes)", "مفتاح الإيقاف (إيقاف التشغيل الورقي)"), "scripts/p3/kill_switch.py --reason …",
              b("Hash-chained operator ledger; bounded docker stop", "سجل مشغّل متسلسل بالبصمة؛ إيقاف docker محدود")],

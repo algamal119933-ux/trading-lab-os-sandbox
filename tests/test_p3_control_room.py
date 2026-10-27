@@ -436,3 +436,24 @@ def test_mobile_resume_reads_only_projected_fields():
                   "unverified", "extraForbid"):
         assert f"s.{field}" in res and field in sc, field
     assert sc["step"] == 6 and sc["outcome"][0] == "ok" and sc["law"]["lifecycle"][0] in ("ok", "wait")
+
+
+def test_the_reboot_row_follows_the_governed_acceptance_record_and_fails_closed():
+    # F-CR-1: after PR #94 the accepted reboot record drives the reboot row; it is no longer "not yet exercised".
+    live = cr.project(_obs())
+    ws = json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8"))
+    assert ws["reboot"]["state"] == "ok" and ws["reboot"]["record"] == "docs/p3/PLN_04_RECOVERY.md"
+    assert live["ops"]["reboot"][0] == "ok"
+    assert "PR #94" in live["ops"]["reboot"][1]["en"]
+    assert not any("not yet exercised" in u["en"] for u in live["scenario"]["unverified"])
+    assert any("decision G" in u["en"] for u in live["scenario"]["unverified"])
+    # Missing or incomplete acceptance → still shown as not exercised (never upgraded silently).
+    for broken in ({}, {"state": "ok", "en": "x", "ar": "x"}, {"state": "wait", "en": "x", "ar": "x", "record": "r"}):
+        w = dict(ws)
+        if broken:
+            w["reboot"] = broken
+        else:
+            w.pop("reboot")
+        lv = cr.project(_obs(workstreams=w))
+        assert lv["ops"]["reboot"][0] == "wait"
+        assert any("not yet exercised" in u["en"] for u in lv["scenario"]["unverified"])
