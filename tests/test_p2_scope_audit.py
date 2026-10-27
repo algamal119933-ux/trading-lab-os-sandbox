@@ -1640,12 +1640,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decision that the Toshiba USB disk is optional
-# personal storage and not Tier-3, and the evaluation of the second Windows PC as a candidate independent
-# destination. Documents only; PLN-05 stays OPEN; nothing run on any machine.
+# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decisions that the Toshiba USB disk is personal,
+# portable storage holding an Owner-carried copy that is not Tier-3, and that the second Windows PC only reads
+# and checks that copy (its earlier evaluation as a Tier-3 destination is withdrawn). Documents only; PLN-05
+# stays OPEN; nothing run on any machine.
 _R05D = "P3-PLN-05 destination decisions"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — Toshiba disk is not Tier-3; second-PC evaluation and minimum Owner inputs",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — portable copy is not Tier-3; Windows PC withdrawn as a "
+                                               "destination; unresolved Tier-3 requirements and destination classes",
+    "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
+                                             "portable copy on the Windows PC (NOT_RUN)",
     "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer to the destination decisions",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
