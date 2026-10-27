@@ -2,76 +2,100 @@
 
 **Authority:** [`P3_CONTRACT.md`](P3_CONTRACT.md) §3 PLN-10, §5, §7 and §8 (frozen at fcd06b21), executed under
 [`OWNER_P3_EXECUTION_AUTHORIZATION.md`](OWNER_P3_EXECUTION_AUTHORIZATION.md) (7b1b1fa1).
-PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO
+PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCH_AUTHORIZED = NO · PAPER_LAUNCH_AUTHORIZED = NO
 
 **Contract acceptance:** every PLN-02 to PLN-09 acceptance holds in **one continuous Paper Beta run**, and the P&L
 measurement reconciles to fills and fees. No real money.
 
 **Status: DRAFT. PLN-10 = NOT STARTED and NOT ACCEPTED.** This document and `research/p3/acceptance.py` prepare the
-program. Nothing here starts a cohort, sets a T0 or claims a result. The validators were developed against
-synthetic evidence only.
+program. Nothing here starts a runtime, sets a T0 or claims a result. The validators were developed against
+synthetic evidence only. Reconciled with main `f584cd43` (PRs #88, #89, #92 and #94 merged).
 
-## 1. Prerequisites. All must hold before the run starts
-1. **PLN-02 to PLN-09 are each accepted** with their own evidence (contract §5: PLN-10 "needs PLN-02..PLN-09").
-   - Today PLN-04 is PENDING (reboot), PLN-05 is NOT_PROVEN (Tier 3), PLN-06 is PARTIAL, and PLN-07 is PENDING (its reboot row).
-   - PLN-09's Owner acceptance is PENDING.
-2. **A paper runtime under its own authority.** The run needs a running paper cohort, and no cohort runs today.
-   - **Which runtime is used is an OPEN Owner decision.** It could be H1 under its separate `H1_LAUNCH_AUTHORIZATION`, or another paper cohort under its own authority.
-   - Do not restart FP-CONTROL-3 (`CLAUDE.md`).
-   - This program never launches a runtime.
-3. Host frozen at a recorded commit for the run. The PLN-11 execution pack inventory is taken at that commit.
-4. The Owner fixes the run window, its duration and the kill-switch time bound, in writing, before T0.
+**Reuse, not re-specification.** Each workstream's procedure and pass rule already live in its own merged record
+(runbook, checklist or execution record). This program does not restate them. For every criterion the matrix names:
+- the **procedure** that the in-run scenario re-executes, unchanged; and
+- the **standalone record** that holds the workstream's own acceptance.
+
+A standalone acceptance is a **prerequisite** (§1). It never replaces the in-run record, because the contract requires
+every acceptance to hold in the same continuous run. Nothing is waived.
+
+## 1. Prerequisites. All must hold before T0
+1. **PLN-02 to PLN-09 are each accepted by their own merged record** (contract §5: PLN-10 "needs PLN-02..PLN-09").
+   State on main `f584cd43`, from `research/p3/records/p3_workstreams.json`:
+
+   | WS | State | What is still open |
+   |---|---|---|
+   | PLN-02 | ACCEPTED | — |
+   | PLN-03 | ACCEPTED | — |
+   | PLN-04 | PARTIAL | Reboot correctness **PASS** ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) reboot record, RUN 3 10/10 with a clean gap attestation, accepted by the merge of PR #94). Open: the power-loss posture (UPS or an accepted posture), an Owner decision |
+   | PLN-05 | PARTIAL | HOST_LOSS_REDUNDANCY = NOT_PROVEN. Needs the independent host and the [`PLN_05_TIER3_PROCEDURE.md`](PLN_05_TIER3_PROCEDURE.md) run |
+   | PLN-06 | PARTIAL | The delivery runbook is merged ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §3, PR #92). The Owner steps 1–8 are pending. The unexpected-writer row is NOT_COVERED |
+   | PLN-07 | PARTIAL | Failure/recovery matrix PASS for every row, including the reboot row (#94). Open: the §13 data-truth evidence |
+   | PLN-08 | ACCEPTED | — |
+   | PLN-09 | IN_PROGRESS | 12 of 12 screens and the mobile tabs are bound. The Owner walkthrough ([`PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md`](PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md) §6) is PENDING |
+2. **A complete run configuration** (§8). All five Owner decisions are set in `docs/p3/PLN_10_RUN_CONFIG.json`, by the
+   Owner's own PR, and `launch_readiness` returns `CONFIG_COMPLETE_FOR_OWNER_LAUNCH`. Today the file does not exist,
+   so the program is `LAUNCH_BLOCKED` on D1–D5.
+3. **The host is frozen** at the configuration's `frozen_commit` for the whole window:
+   - `tlos-p3` is at that commit;
+   - the host-freeze rules of [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) ("Host-freeze lift conditions") apply;
+   - the Owner's unattended-upgrades decision (the same record, decision packet item H) is in force for the window.
+4. Storage headroom for the window is checked by the health check's `free_space:*` findings at INFO (contract §6).
 
 ## 2. Acceptance matrix
-Each criterion in contract §3 is mapped to a scenario, the evidence it must produce, and the validator that judges
-that evidence. The authoritative copy is `ACCEPTANCE_MATRIX` in `research/p3/acceptance.py`; this table is rendered
-from it.
+The authoritative copy is `ACCEPTANCE_MATRIX` in `research/p3/acceptance.py`. Its canonical sha256 (`matrix_digest()`)
+is pinned by the run configuration (D4), so a criterion cannot change silently.
 
-| Criterion id | WS | Criterion (contract §3) | Scenario | Evidence | Validator |
-|---|---|---|---|---|---|
-| `PLN-02.inventory_complete` | PLN-02 | the inventory lists 100% of tracked and untracked TLOS state | S-INV: state inventory at run start and run end | scripts/p3/state_inventory.py JSON: COVERAGE PASS, 0 unclassified, 0 unreadable | `status_pass` |
-| `PLN-02.recovery_sources` | PLN-02 | each item has a verified recovery source | S-INV: recheck against the newest scheduled backup set | state inventory RECOVERY PASS on every declared root | `status_pass` |
-| `PLN-03.restore_drill` | PLN-03 | restore drill passes: manifest sha256 equal, git fsck clean, ARCHIVE_VERIFIED, restored runtime starts in dry-run | S-RESTORE: drill from a set taken during the run, into an empty scratch | scripts/p3/backup.py drill --json: every check PASS | `status_pass` |
-| `PLN-03.repeated_after_change` | PLN-03 | the drill is repeated after a change | S-RESTORE-2: second drill after any code/config change merged during the run | second drill JSON, newer set than the first | `status_pass` |
-| `PLN-04.reboot_correct` | PLN-04 | after a reboot, the stack's state is correct | S-REBOOT: planned clean reboot during the run (runbook PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md) | verify-boot JSON PASS + clean-shutdown journal lines + health exit 0 | `status_pass` |
-| `PLN-04.terminal_never_restarted` | PLN-04 | a terminal or Owner-stopped cohort is never auto-restarted (negative test) | S-RESTART: kill-switch stop, then reboot; the stopped runtime must stay stopped | restart_continuity record: stopped runtime stayed stopped; may-restart = NO | `restart_continuity` |
-| `PLN-04.host_recovery_drill` | PLN-04 | a host-recovery drill from backup passes | S-RESTORE (shared with PLN-03) | drill JSON PASS | `status_pass` |
-| `PLN-05.host_loss_redundancy` | PLN-05 | HOST_LOSS_REDUNDANCY = PROVEN by restoring from the independent host | S-TIER3: push + restore drill from the independent host (PLN_05_TIER3_PROCEDURE.md) | offsite push JSON destination_verify PASS + remote-restore drill JSON PASS | `status_pass` |
-| `PLN-05.attributable_stop_start` | PLN-05 | every governed stop/start has an attributable record | S-KILL and every start during the run | operator ledger: chain verifies; one record per stop/start with operator and reason | `status_pass` |
-| `PLN-06.s19_alerts` | PLN-06 | each §19 CRITICAL condition raises an alert in a test | S-ALERT: promtool rule tests + one delivered test alert on the chosen channel | promtool test rules SUCCESS + delivered-alert record (time, channel, alert name) | `status_pass` |
-| `PLN-06.capacity_enforced` | PLN-06 | capacity thresholds are enforced | S-ALERT: health findings free_space:root / free_space:h1_lane at run start and end | health JSON with the thresholds applied | `status_pass` |
-| `PLN-06.normal_end_detected` | PLN-06 | normal end is detected on lifecycle completion | S-END: the run's cohort completes its lifecycle | health finding normal_end WARNING 'governed stop due' raised at completion | `status_pass` |
-| `PLN-07.matrix_rows` | PLN-07 | every failure/recovery matrix row has a passing test | S-CI: full suite at the run's frozen commit | CI run id + pytest exit 0 | `status_pass` |
-| `PLN-07.f2_finding` | PLN-07 | F-2 has a reconcile finding with negative controls | S-AUDIT: execution audit over the run's fills | execution_audit JSON | `status_pass` |
-| `PLN-07.data_truth` | PLN-07 | the data-truth checks pass | S-AUDIT: missing/duplicate candles recorded, never filled (§13) | data-truth report over the run's input ledger | `status_pass` |
-| `PLN-08.kill_bounded` | PLN-08 | the kill switch stops everything within a bounded time and leaves an attributable record | S-KILL: engage the kill switch on the run's paper runtime | P3_KILL_SWITCH_V1 ledger record | `kill_switch_bounded` |
-| `PLN-08.no_live_route` | PLN-08 | no control can set dry_run=false or reach a live route (guard test) | S-CI + S-ALERT: paper guard and real_money health findings throughout the run | paper_guard PASS + real_money INFO in every health run | `status_pass` |
-| `PLN-09.projection` | PLN-09 | a Control Room projection over canonical evidence, Arabic/English, realising the frozen shape; the UI is never evidence authority | S-UI: Owner acceptance checklist on the host | signed Owner acceptance checklist (PLN-09) | `status_pass` |
-| `PLN-10.pnl_reconciles` | PLN-10 | P&L measurement reconciles to fills and fees (measurement only) | S-PNL: every closed trade of the run | fills + fees + reported P&L records | `reconcile_pnl` |
-`status_pass`: the scenario's own tool already decides PASS or FAIL. The PLN-10 record carries that status and the
-sha256 of the tool's output.
+The **criterion id is the evidence ID**. The evidence records (§4) and the PLN-11 execution pack's evidence index
+use the same ids.
+
+| Evidence id | Scenario | Procedure (re-executed in the window) | Standalone record (prerequisite) | Validator |
+|---|---|---|---|---|
+| `PLN-02.inventory_complete` | S-INV | `PLN_02_STATE_INVENTORY.md` §Verdict (COVERAGE) | `PLN_02_STATE_INVENTORY.md` §Acceptance update (PASS, 14 roots) | `status_pass` |
+| `PLN-02.recovery_sources` | S-INV | `PLN_02_STATE_INVENTORY.md` §Verdict (RECOVERY) | `PLN_02_STATE_INVENTORY.md` §Acceptance update (PASS, 14 roots) | `status_pass` |
+| `PLN-03.restore_drill` | S-RESTORE | `PLN_03_BACKUP_RESTORE.md` §Scheduled acceptance (verify + drill) | same record, PASS (set 20261025T211956Z) | `status_pass` |
+| `PLN-03.repeated_after_change` | S-RESTORE-2 | `PLN_03_BACKUP_RESTORE.md` §Scheduled acceptance | same record, §Acceptance update (second set) | `status_pass` |
+| `PLN-04.reboot_correct` | S-REBOOT | `PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md` §1–§4, record per §7 | `PLN_04_RECOVERY.md` §Reboot record (RUN 3 PASS, #94) | `status_pass` |
+| `PLN-04.terminal_never_restarted` | S-RESTART | `PLN_04_RECOVERY.md` §Acceptance status (terminal-state guard) | same, PASS | `restart_continuity` |
+| `PLN-04.host_recovery_drill` | S-RESTORE | `PLN_03_BACKUP_RESTORE.md` §Scheduled acceptance (one drill, cited twice) | `PLN_04_RECOVERY.md` §Acceptance status, PASS | `status_pass` |
+| `PLN-05.host_loss_redundancy` | S-TIER3 | `PLN_05_TIER3_PROCEDURE.md` §5–§6, record per §8 | NONE (NOT_PROVEN) | `status_pass` |
+| `PLN-05.attributable_stop_start` | S-KILL + every start | `PLN_06_07_08_OPERATIONS.md` §PLN-08 (operator ledger) | `PLN_05_EVIDENCE_DURABILITY.md` §Acceptance status, PASS | `status_pass` |
+| `PLN-06.s19_alerts` | S-ALERT | `PLN_06_ALERTING.md` §3 steps 6–8 (PASS/FAIL table) and §4 | NONE (PLN-06 PARTIAL, delivery PENDING) | `status_pass` |
+| `PLN-06.capacity_enforced` | S-ALERT | `PLN_06_ALERTING.md` §4 (capacity row) | same, rule leg PASS in test | `status_pass` |
+| `PLN-06.normal_end_detected` | S-END | `PLN_06_ALERTING.md` §4 (normal-end row) | same, detection met | `status_pass` |
+| `PLN-07.matrix_rows` | S-CI | `PLN_04_RECOVERY.md` §PLN-07 failure/recovery matrix | same, PASS for every row (#94) | `status_pass` |
+| `PLN-07.f2_finding` | S-AUDIT | `PLN_06_07_08_OPERATIONS.md` §PLN-07 (per-execution audit) | same, F-2 finding on the sealed P2 archive | `status_pass` |
+| `PLN-07.data_truth` | S-AUDIT | `P3_CONTRACT.md` §4 (data truth, master plan §13) | NONE (open on main) | `status_pass` |
+| `PLN-08.kill_bounded` | S-KILL | `PLN_06_07_08_OPERATIONS.md` §PLN-08 (kill switch) | same, PASS (drill 0.162 s) | `kill_switch_bounded` |
+| `PLN-08.no_live_route` | S-CI + S-ALERT | `PLN_06_07_08_OPERATIONS.md` §PLN-08 (guard) | same, PASS | `status_pass` |
+| `PLN-09.projection` | S-UI | `PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md` §2–§4, sign-off block §6 | NONE (PENDING) | `status_pass` |
+| `PLN-10.pnl_reconciles` | S-PNL | this program §3 S-PNL | NONE (measured only in the run) | `reconcile_pnl` |
+
+`status_pass`: the procedure's own tool or checklist already decides PASS or FAIL. The PLN-10 record carries that
+status and the sha256 of the tool's output. A test checks that every cited document exists on the branch.
 
 ## 3. Scenarios
-All of these run inside the same run window, against the same paper runtime, with the code frozen at the run commit.
+All of these run inside the same window, against the same paper runtime, with the code frozen at `frozen_commit`.
 
 | Id | Scenario | Notes |
 |---|---|---|
 | S-INV | state inventory at the start and the end | PLN-02 tooling |
 | S-RESTORE / S-RESTORE-2 | restore drill from a set taken during the run; repeated after any change | PLN-03 tooling, empty scratch |
-| S-RESTART | kill-switch stop, then a restart or reboot; the stopped runtime must stay stopped until an attributable resume | PLN-04 guard `may-restart` |
-| S-REBOOT | planned clean reboot per [`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md) | the baseline is taken at the run start |
+| S-KILL | the kill switch engaged on the running paper runtime | bound = D3 |
+| S-RESTART | after S-KILL, a reboot or restart; the stopped runtime must stay stopped until an attributable resume | PLN-04 guard `may-restart` |
+| S-REBOOT | planned clean reboot per [`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md) | baseline taken at run start; may be the same reboot as S-RESTART |
 | S-TIER3 | push and remote-restore drill per [`PLN_05_TIER3_PROCEDURE.md`](PLN_05_TIER3_PROCEDURE.md) | needs the Owner's independent host |
-| S-ALERT | promtool tests, plus one delivered test alert, plus health findings throughout | needs node-exporter and a channel (PLN-06) |
-| S-END | the cohort reaches its lifecycle end; `normal_end` is raised | — |
-| S-KILL | the kill switch engaged on the running paper runtime | bound fixed by the Owner before T0 |
+| S-ALERT | [`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §3 steps 6–8, plus health findings throughout | needs the PLN-06 Owner install |
+| S-END | the runtime reaches its lifecycle end; `normal_end` is raised | — |
 | S-AUDIT | execution audit (F-2/F-4) and data-truth report over the run's ledgers | §13: never fill gaps |
-| S-CI | full suite and CI at the run commit | — |
-| S-UI | the Owner walks the PLN-09 acceptance checklist on the host | — |
+| S-CI | full suite and CI at `frozen_commit` | — |
+| S-UI | the Owner re-walks the PLN-09 checklist inside the window and fills its §6 block with the `run_id` | — |
 | S-PNL | net-of-fees P&L reconciliation for every closed trade | **measurement only** |
 
 ### S-PNL: net-of-fees reconciliation (measurement only)
 For each closed trade, `reconcile_pnl` recomputes realised net quote from the trade's fills and fees, then compares
-it with the reported value (default tolerance 1e-8 quote).
+it with the reported value. The tolerance is **not a default**: it is `acceptance_criteria.pnl_tolerance_quote` from
+the run configuration (D4), passed explicitly. A call without it is refused.
 
 ```text
 gross    = Σ sell qty × price − Σ buy qty × price
@@ -91,49 +115,128 @@ Each of these is a FAIL:
 
 This proves the measurement is truthful. **It says nothing about profitability** (contract §2, Priority 1).
 
-## 4. Evidence schema
-Every result is one `P3_PLN10_EVIDENCE_V1` JSON record (`EVIDENCE_SCHEMA` in `research/p3/acceptance.py`), with these fields:
-- `run_id`
-- `criterion_id`: one of the matrix ids
-- `scenario`
-- `utc`: ISO-8601 Z
-- `status`: `PASS`, `FAIL` or `UNPROVEN`
-- `artifacts`: at least one `{path, sha256}`
-- `detail`: optional
-- `real_money_authorized`: must be `false`
+## 4. Evidence requirements
+Every result is one `P3_PLN10_EVIDENCE_V1` JSON record (`EVIDENCE_SCHEMA` in `research/p3/acceptance.py`):
+- `run_id`: the run configuration's `run_id`;
+- `criterion_id`: the evidence id, one of the matrix ids;
+- `scenario`;
+- `utc`: ISO-8601 Z, inside the trial window;
+- `status`: `PASS`, `FAIL` or `UNPROVEN`;
+- `artifacts`: at least one `{path, sha256}`. Each is the output that the row's **procedure** already defines (its
+  JSON, its evidence directory listing or its filled template). This program adds no new artifact format;
+- `detail`: optional;
+- `real_money_authorized`: must be `false`.
 
 Additional properties are rejected. The records are stored under `p3-evidence/pln10/<run_id>/`, which the scheduled
-backups pick up.
+backups pick up. A record is never edited: a correction is a new record, and a FAIL stays (§5).
+
+Evidence labels in the acceptance record follow the lane rules: CLAUDE-VERIFIED, OWNER-REPORTED, OWNER-ATTACHED,
+NOT_RUN or UNPROVEN. An OWNER-REPORTED value counts only once the Owner attaches the output it reports.
 
 ## 5. Verdict rule (fail-closed)
-`run_verdict(records, run_id)` returns `CANDIDATE_FOR_OWNER_ACCEPTANCE` only when **every** matrix criterion has a valid
-`PASS` record from **this** `run_id`. Otherwise it returns `NOT_ACCEPTED`, listing each unmet criterion and its state:
-`MISSING`, `UNPROVEN` or `FAIL`.
+`run_verdict(records, config=…)` takes the run configuration as a **required** argument. It returns
+`CANDIDATE_FOR_OWNER_ACCEPTANCE` only when the configuration is complete (§8) **and** every matrix criterion has a
+valid `PASS` record from that configuration's `run_id`. Otherwise it returns `NOT_ACCEPTED`, listing each unmet
+criterion and its state (`MISSING`, `UNPROVEN` or `FAIL`) and each configuration blocker.
 
 - Evidence from another run never counts.
-- Within a run, FAIL ranks above PASS, which ranks above UNPROVEN. A failure is never overwritten by a later pass. It is fixed under the contract and a new continuous run is required (§8: never waived).
+- Within a run, FAIL ranks above PASS, which ranks above UNPROVEN. A failure is never overwritten by a later pass.
 - One malformed record blocks the verdict.
 - The verdict is an input to the Owner. **PLN-10 is accepted only by the Owner's merged acceptance record.**
 
-## 6. Stop and failure conditions during the run (contract §7)
-Stop the run and return to the Owner if any of these happens:
-- a safety gate fails: `paper_guard`, `real_money` or `unauthorized_execution` goes CRITICAL;
-- evidence is found corrupt or unattributable: `evidence_chain:*` goes CRITICAL, or an unattributed stop or start occurs;
+## 6. Safety boundaries (hold for the whole program)
+- PAPER only: `dry_run` stays literally `true`, and `real_money_authorized` literally `false`, in the configuration
+  and in every record. No private exchange key, no withdrawal, no leverage, margin, futures or shorts (`CLAUDE.md`).
+- `paper_guard` and the §19 health checks stay on. They are never weakened or silenced to finish a run.
+- No strategy, risk or dataset change. The runtime's governed limits stay as its own authority defines them.
+- FP-CONTROL-3 is never restarted. An H1 runtime runs only under its own `H1_LAUNCH_AUTHORIZATION`; this program
+  grants neither H1 nor any other launch.
+- The runtime must be inside the kill switch's scope (`kill_switch.PAPER_RUNTIME_PATTERNS`), so S-KILL can stop it.
+- Every host change outside the frozen state needs its own explicit Owner authorization
+  ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions").
+- The Control Room is a read-only projection and never evidence authority (§23).
+- No new engine, database, control plane or monitoring platform (§10).
+
+## 7. Operator procedure
+**Phase 0 — repository (now).** This DRAFT and its validators. Nothing on the host.
+
+**Phase A — before T0 (Owner).**
+1. Confirm each §1 prerequisite by its own merged record.
+2. Merge `docs/p3/PLN_10_RUN_CONFIG.json` with D1–D5 set (§8). CI must show `validate_run_config` = [] for it.
+3. Freeze the host at `frozen_commit` (§1.3). Take the PLN-04 runbook §1 baseline. Run `paper_guard` and the health
+   check: both must be clean.
+
+**Phase B — T0 (Owner).** The runtime is launched by the Owner under the authority record that D5 cites, following
+that runtime's own launch procedure. This program never launches anything.
+
+**Phase C — inside the window.** Each step writes one evidence record (§4).
+1. S-INV (start), S-ALERT (PLN-06 §3 steps 6–8), S-RESTORE.
+2. S-KILL, then S-RESTART together with S-REBOOT: the stopped runtime stays stopped after the reboot, and resumes only
+   by an attributable `scripts/p3/recovery.py authorize-resume`. Record `restart_continuity` before/after.
+3. S-TIER3, S-UI, and S-RESTORE-2 if any change was merged during the window.
+4. S-END at the lifecycle end, then S-INV (end), S-AUDIT, S-PNL and S-CI.
+
+**Phase D — after the window.** Compute `run_verdict`. Claude prepares the acceptance record PR with the verdict and
+the evidence index. The Owner's merge is the only acceptance. PLN-11 then builds its pack at `frozen_commit`.
+
+## 8. Owner decisions: the run configuration
+Each decision is a field of `P3_PLN10_RUN_CONFIG_V1` (`OWNER_DECISIONS` and `validate_run_config` in
+`research/p3/acceptance.py`). Every field starts unset in `RUN_CONFIG_TEMPLATE`, and **no default exists anywhere**.
+A missing key, `null`, a placeholder (`TBD`, `default`, `<…>`, …), a string where a number is required, `0`, a
+negative or a non-finite number all keep the run `LAUNCH_BLOCKED`.
+
+| Decision | Owner decides | Field that blocks until set | Blocks until |
+|---|---|---|---|
+| D1 | approved paper runtime | `paper_runtime` | `runtime_id` matches the kill switch's scope and is not FP-CONTROL-3; `authority_record` and its 40-hex `authority_merge` are cited; top-level `dry_run` is `true` |
+| D2 | trial duration | `trial_window` | `start_utc` is ISO-8601 Z and `duration_hours` is a positive number |
+| D3 | emergency-stop bound | `emergency_stop_bound_s` | a positive, finite number of seconds. PLN-08's drill measured 0.162 s; the kill switch's per-container stop timeout is 30 s. The bound is the Owner's choice |
+| D4 | acceptance criteria | `acceptance_criteria` | `matrix_sha256` equals `matrix_digest()`; `criterion_ids` lists **every** matrix id (a subset would be a waiver); `pnl_tolerance_quote` is an explicit decimal string ≥ 0 |
+| D5 | explicit launch authority | `launch_authority` | `granted_by = Owner`; `paper_launch_authorized` is literally `true`; `record_path` and its 40-hex `merge_commit` cite an Owner-merged record. The P3 execution authorization is refused, and an H1 runtime needs an `H1_LAUNCH_AUTHORIZATION` record |
+
+Template (all decisions open; validates to `LAUNCH_BLOCKED` on D1–D5):
+```json
+{"record_type": "P3_PLN10_RUN_CONFIG_V1", "run_id": null, "frozen_commit": null,
+ "dry_run": true, "real_money_authorized": false,
+ "paper_runtime": {"runtime_id": null, "authority_record": null, "authority_merge": null},
+ "trial_window": {"start_utc": null, "duration_hours": null},
+ "emergency_stop_bound_s": null,
+ "acceptance_criteria": {"matrix_sha256": null, "criterion_ids": null, "pnl_tolerance_quote": null},
+ "launch_authority": {"granted_by": null, "record_path": null, "merge_commit": null, "paper_launch_authorized": false}}
+```
+Even a complete configuration only yields `CONFIG_COMPLETE_FOR_OWNER_LAUNCH`. It launches nothing.
+
+## 9. Stop conditions (contract §7)
+Stop the run (S-KILL) and return to the Owner if any of these happens:
+- a safety gate fails: `dry_run` is not true, a credential or live route appears, or `paper_guard`, `real_money` or
+  `unauthorized_execution` goes CRITICAL;
+- evidence is found corrupt or unattributable: `evidence_chain:*` goes CRITICAL, or a stop or start has no
+  attributable record;
 - a strategy, risk or dataset authority conflict appears;
 - a destructive storage operation is needed;
+- the host changes outside its frozen state (for example a package change outside the Owner's posture for item H);
 - anything would touch real money.
 
-These conditions stop the run, but are not, by themselves, an acceptance FAIL:
-- the host being unavailable;
-- the Owner aborting the run.
+## 10. Failure handling
+- **FAIL** (a criterion's procedure says FAIL): record it. It stays FAIL for this `run_id`. The fix goes through a PR
+  under the same contract, and acceptance needs a **new** continuous run with a new `run_id` and a new configuration.
+  No evidence carries over between runs (§5). Never waived (§8 of the contract).
+- **UNPROVEN** (for example S-KILL with nothing running): re-exercise inside the same window if possible. Otherwise
+  the criterion stays unmet.
+- **ABORTED** (host unavailable, or an Owner abort): not an acceptance FAIL, but never PASS. A new run is required.
+- A §9 stop condition always ends the run as ABORTED or FAIL. The first stop is the kill switch, not a repair.
 
-The run is recorded as `ABORTED`, never as PASS.
+## 11. Controlled rollback
+- **Runtime:** stop only with `scripts/p3/kill_switch.py --reason …` (bounded, recorded). The restart guard keeps it
+  stopped; resume only by `recovery.py authorize-resume`, with a record. Never `docker rm` or `down -v`.
+- **Host code:** `tlos-p3` returns to `frozen_commit`, or to the Owner's previous main SHA, by Owner action. A code
+  fix is a new PR and a new run. Published history is never rewritten.
+- **PLN-06 ops plane:** use the rollback column of [`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §3
+  (`docker compose … down`, never `down -v`).
+- **Evidence and data:** nothing is deleted. A restore goes only into an empty scratch (PLN-03), never over live
+  state. A wrong record is superseded by a new record; it is never edited.
+- **Authority:** an Owner PR that sets `launch_authority.paper_launch_authorized` to `false`, or removes the
+  configuration, blocks any further launch at once.
 
-## 7. Open Owner decisions
-1. Which paper runtime runs the acceptance (§1.2), and its authority.
-2. Run window and duration.
-3. Kill-switch time bound for `S-KILL`. PLN-08's drill measured 0.162 s; the bound is the Owner's choice.
-4. Whether PLN-09 acceptance (the S-UI checklist) is done inside the run window or before it.
-
-## 8. Not claimed
-PLN-10 is not started and not accepted. No cohort or T0 exists, and no profitability claim is made.
+## 12. Not claimed
+PLN-10 is not started and not accepted. No run configuration, cohort or T0 exists. No launch is authorized, and no
+profitability claim is made.

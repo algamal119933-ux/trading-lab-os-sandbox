@@ -7,14 +7,20 @@ The Owner performs this walkthrough. It is **preparation only**. This file grant
 
 ## 1. When and how to open the view (later; no host action now)
 
-> **Not now.** Wait until all three of these have happened:
-> 1. The planned reboot and its `verify-boot` check are done ([`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), PLN-04/07).
-> 2. This PR is merged.
-> 3. The Owner has updated `~/projects/trading/tlos-p3` to a `main` that contains it.
+This walkthrough needs **no runtime and no trading authority**. It reads one static, offline page. It never starts, stops or changes anything, and it does not need, imply or grant any paper or live launch (`PAPER_LAUNCH_AUTHORIZED = NO`).
+
+Preconditions, as of main `f584cd43`:
+
+| # | Precondition | State |
+|---|---|---|
+| P1 | The planned reboot and its `verify-boot` check ([`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), PLN-04/07) | **Done.** RUN 3 PASS 10/10, gap attestation clean, accepted by the merge of PR #94 ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) |
+| P2 | The Control Room mobile slice and this checklist merged | **Done** (PR #88) |
+| P3 | The Owner lifts the host freeze for the controlled `tlos-p3` update only, and updates `~/projects/trading/tlos-p3` to an Owner-chosen main SHA ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions", item 3; item 2 was met by the merge of PR #94) | **Open (Owner)** |
+| P4 | The first hourly health run after that update has been read; a CRITICAL there is handled first ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4, last paragraph) | **Open** |
+
+> **Not before P3 and P4.** Until then, do not update `tlos-p3`, do not restart any service, and do not start any runtime.
 >
-> Before that, do not update `tlos-p3`, do not restart any service, and do not start any runtime.
->
-> **ليس الآن.** انتظر حتى تتم ثلاثة أشياء: إعادة الإقلاع المخططة وفحص `verify-boot`، ودمج هذا الطلب، وتحديث `tlos-p3`.
+> **ليس قبل P3 وP4.** حتى ذلك الحين: لا تحدّث `tlos-p3`، ولا تُعِد تشغيل أي خدمة، ولا تبدأ أي تشغيل.
 
 After those steps the hourly health run regenerates the view automatically (`scripts/p3/scheduled_health.sh`). To open it:
 1. Open `~/tlos-paper/p3-evidence/control_room/index.html` in a browser on the host. It works offline.
@@ -48,7 +54,7 @@ After those steps the hourly health run regenerates the view automatically (`scr
 | S7 | Risk & Authority · المخاطر والصلاحيات | capability matrix; exposure 0 % | registry; P3 contract §23; the authorization at 7b1b1fa1 | Metrics not applicable (runtime stopped) | ☐ |
 | S8 | Evidence & Reconciliation · الأدلة والمطابقة | checks with their sources | P2 reconcile 14/14; backup verify; drill record; ledger chain; PLN-07 audit | The 2 unbacked executions are shown as a finding | ☐ |
 | S9 | History · السجل | the timeline | git merges; backup sets; operator ledger; drills; audits | — | ☐ |
-| S10 | Operations · العمليات | backup, restore, recovery; actions | newest backup set; `p3-evidence/drills/*.json`; operator ledger | Host reboot recovery = "not yet exercised" until PLN-04 closes | ☐ |
+| S10 | Operations · العمليات | backup, restore, recovery; actions | newest backup set; `p3-evidence/drills/*.json`; operator ledger | **Known finding F-CR-1 (see §5):** Host reboot recovery still reads "not yet exercised", although PLN-04 reboot correctness was accepted in PR #94. Record it under FINDINGS unless a fix is merged before the walkthrough | ☐ |
 | S11 | System · النظام | host, disks, timers, runtime pin vs main | host observation; systemd; git | — | ☐ |
 | S12 | Settings · الإعدادات | viewer preferences only | `scripts/p3/scheduled_health.sh` (notifications) | Return detection = not active (static view) | ☐ |
 
@@ -61,7 +67,7 @@ After those steps the hourly health run regenerates the view automatically (`scr
 | M3 | Incidents · الحوادث | the list (rows open a read-only detail) | non-INFO health findings, §19 included | "None open" when INFO; **UNKNOWN** when no findings were produced | ☐ |
 | M4 | More → Decisions | last **sealed** decision, with the 9-stage trace | the sealed decision ledger | Marked "Sealed record"; unknown if the record is missing | ☐ |
 | M5 | More → Trades | open = none; the sealed closed trades with backing | the sealed trade ledger + PLN-07 audit | Unknown if missing | ☐ |
-| M6 | More → Operations | runtime, safe state, recovery, backup, restore, host-reboot recovery | backup set; drill record; `LIVE.ops` | "The Kill Switch is never in this view and never on mobile" | ☐ |
+| M6 | More → Operations | runtime, safe state, recovery, backup, restore, host-reboot recovery | backup set; drill record; `LIVE.ops` | "The Kill Switch is never in this view and never on mobile". Host-reboot recovery: same finding F-CR-1 as S10 | ☐ |
 | M7 | More → Market | no chart (by design); data age | — | "Charts are intentionally not shown on mobile" | ☐ |
 | M8 | More → Risk / Evidence / History / System / Settings | as on desktop, compact | as on desktop | Settings: viewer preferences only | ☐ |
 | M9 | No action on mobile | Only navigation buttons (tabs, list rows, Back) | — | No acknowledge, no stop, no Kill Switch · لا إجراءات على الجوال | ☐ |
@@ -69,9 +75,9 @@ After those steps the hourly health run regenerates the view automatically (`scr
 ## 4a. What is already verified, and what is not (three separate levels)
 | Level | State | Evidence |
 |---|---|---|
-| Implementation | Done: 12 desktop screens + 4 mobile tabs bound | PRs #80, #81, #87 merged; this PR (#88) |
+| Implementation | Done: 12 desktop screens + 4 mobile tabs bound | PRs #80, #81, #87, #88 merged |
 | Repository verification (cloud, synthetic data) | Done | `tests/test_p3_control_room.py`. Headless Chromium EN + AR at desktop 1440 px and mobile 390 px: 0 console errors, no DEMO text, RTL in AR, navigation-only buttons on mobile, UNKNOWN on missing evidence. Frozen prototype digest `e17d50dc…` verified by the build |
-| **Host acceptance (this checklist)** | **PENDING** | Owner walkthrough on the host after the reboot and the `tlos-p3` update; §6 sign-off |
+| **Host acceptance (this checklist)** | **PENDING** | Owner walkthrough on the host after preconditions P3–P4 (§1); §6 sign-off |
 
 CI green is not host acceptance. A merged PR is not operational closure.
 
@@ -83,10 +89,12 @@ CI green is not host acceptance. A merged PR is not operational closure.
 - No off-host observation exists yet (PLN-05 Tier 3 / PLN-06).
 - Until node-exporter and an alert channel are installed (PLN-06), a CRITICAL finding is visible here and in the journal/desktop notification, but is not pushed to the phone.
 - Incidents have no acknowledge/close workflow in the view (operator CLI only, by design).
+- **F-CR-1 (open integration finding):** the host-reboot recovery state is a fixed text in `research/p3/control_room.py` (`LIVE.ops.reboot` and the Resume "unverified" list), not read from the PLN-04 record. Since PR #94 it understates the evidence. It is conservative (never shows green without evidence), but it is not accurate, and it is fixed only by a Control Room PR.
 
 ## 6. Owner sign-off (filled by the Owner in the Owner's own PR)
 ```text
 PLN09_OWNER_ACCEPTANCE   = PENDING
+RUN_ID                   = <STANDALONE for the PLN-09 acceptance; the PLN-10 run_id when re-walked inside that run>
 VIEW_BUILT_AT_MAIN       = <sha>
 VIEW_OBSERVED_UTC        = <time shown in the banner>
 DESKTOP_CHECKS (G1–G9, S1–S12) = <PASS / FAIL with item numbers>
@@ -95,3 +103,5 @@ FINDINGS                 = <list, or NONE>
 SIGNED                   = <Owner, date>
 ```
 A FAIL is recorded and fixed under the contract. It is never waived. Accepting PLN-09 does not accept PLN-10 or authorize anything else.
+
+**Use in PLN-10.** The Paper Beta acceptance run reuses this checklist unchanged as its S-UI procedure (evidence id `PLN-09.projection`, [`PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md`](PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md) §2). The standalone sign-off above (`RUN_ID = STANDALONE`) is the PLN-09 prerequisite. Inside the run, the Owner walks §2–§4 again and fills a second §6 block with that run's `run_id`.

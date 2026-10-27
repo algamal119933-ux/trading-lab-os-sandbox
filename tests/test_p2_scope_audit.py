@@ -1640,13 +1640,15 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix, the evidence schema and fail-closed
-# validators, developed against synthetic evidence. No run, no cohort, no T0, no acceptance claim.
+# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix (reusing the merged PLN-02..09 procedures),
+# the evidence schema, the run configuration that blocks until the five Owner decisions are set, and fail-closed
+# validators, developed against synthetic evidence. No run, no cohort, no T0, no launch, no acceptance claim.
 _P10 = "P3-PLN-10 acceptance program"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, scenarios, schema, verdict rule, stops",
-    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, P&L/kill/restart validators, run verdict",
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, evidence, safety, procedure, stops, rollback",
+    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
     "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

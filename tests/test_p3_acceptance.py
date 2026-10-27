@@ -7,6 +7,8 @@ acceptance. PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 
 from __future__ import annotations
 
+import copy
+import math
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -21,6 +23,30 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
 from p3 import acceptance as acc  # noqa: E402
 
 SHA = "a" * 64
+TOL = "0.00000001"
+
+
+def _config(**over) -> dict:
+    """A COMPLETE synthetic run configuration (every Owner decision set). Synthetic values only."""
+    cfg = {
+        "record_type": acc.RUN_CONFIG_TYPE, "run_id": "RUN-1", "frozen_commit": "c" * 40,
+        "dry_run": True, "real_money_authorized": False,
+        "paper_runtime": {"runtime_id": "tradinglab-fp-control-9", "authority_record": "docs/p3/SYNTHETIC_RUNTIME.md",
+                          "authority_merge": "d" * 40},
+        "trial_window": {"start_utc": "2026-11-01T00:00:00Z", "duration_hours": 72},
+        "emergency_stop_bound_s": 30,
+        "acceptance_criteria": {"matrix_sha256": acc.matrix_digest(), "criterion_ids": sorted(acc.ACCEPTANCE_MATRIX),
+                                "pnl_tolerance_quote": TOL},
+        "launch_authority": {"granted_by": "Owner", "record_path": "docs/p3/SYNTHETIC_LAUNCH_AUTHORITY.md",
+                             "merge_commit": "e" * 40, "paper_launch_authorized": True},
+    }
+    for dotted, value in over.items():
+        node, *path = dotted.split("__")
+        if not path:
+            cfg[node] = value
+        else:
+            cfg[node][path[0]] = value
+    return cfg
 
 
 def _rec(cid: str, status: str = "PASS", run: str = "RUN-1", **over) -> dict:
@@ -74,16 +100,19 @@ def test_net_of_quote_fees_reconciles():
     fees = [{"trade_id": "T1", "fill_id": "f1", "asset": "USDT", "amount": "0.006"},
             {"trade_id": "T1", "fill_id": "f2", "asset": "USDT", "amount": "0.0061"}]
     # gross 6.1 - 6.0 = 0.1; fees 0.0121 → net 0.0879
-    out = acc.reconcile_pnl(FILLS, fees, [{"trade_id": "T1", "net_quote": "0.0879"}], base_asset="BTC")
+    out = acc.reconcile_pnl(FILLS, fees, [{"trade_id": "T1", "net_quote": "0.0879"}], base_asset="BTC",
+                            tolerance_quote=TOL)
     assert out[0].status == acc.PASS and out[0].computed_net_quote == Decimal("0.0879")
 
 
 def test_a_bnb_fee_is_converted_and_deducted_and_needs_a_price():
     fees = [{"trade_id": "T1", "fill_id": "f1", "asset": "BNB", "amount": "0.00001"}]
     ok = acc.reconcile_pnl(FILLS, fees, [{"trade_id": "T1", "net_quote": "0.094"}], base_asset="BTC",
+                           tolerance_quote=TOL,
                            fee_prices={"f1": {"BNB": "600"}})
     assert ok[0].status == acc.PASS  # 0.1 - 0.006
-    missing = acc.reconcile_pnl(FILLS, fees, [{"trade_id": "T1", "net_quote": "0.094"}], base_asset="BTC")
+    missing = acc.reconcile_pnl(FILLS, fees, [{"trade_id": "T1", "net_quote": "0.094"}], base_asset="BTC",
+                                tolerance_quote=TOL)
     assert missing[0].status == acc.FAIL and "conversion price" in missing[0].detail
 
 
@@ -92,14 +121,16 @@ def test_a_base_fee_leaves_dust_and_is_not_double_counted():
              {"trade_id": "T1", "fill_id": "f2", "side": "sell", "qty": "0.0000999", "price": "61000"}]
     fees = [{"trade_id": "T1", "fill_id": "f1", "asset": "BTC", "amount": "0.0000001"}]
     net = Decimal("0.0000999") * 61000 - Decimal("0.0001") * 60000
-    out = acc.reconcile_pnl(fills, fees, [{"trade_id": "T1", "net_quote": str(net)}], base_asset="BTC")
+    out = acc.reconcile_pnl(fills, fees, [{"trade_id": "T1", "net_quote": str(net)}], base_asset="BTC",
+                            tolerance_quote=TOL)
     assert out[0].status == acc.PASS
     assert out[0].dust_base == Decimal("0")
     assert out[0].fees_quote == Decimal("0.0000001") * 60000
 
 
 def test_a_misreported_pnl_fails():
-    out = acc.reconcile_pnl(FILLS, [], [{"trade_id": "T1", "net_quote": "0.2"}], base_asset="BTC")
+    out = acc.reconcile_pnl(FILLS, [], [{"trade_id": "T1", "net_quote": "0.2"}], base_asset="BTC",
+                            tolerance_quote=TOL)
     assert out[0].status == acc.FAIL and "differs" in out[0].detail
 
 
@@ -111,7 +142,7 @@ def test_a_misreported_pnl_fails():
     ([FILLS[0], {**FILLS[1], "qty": "0.0002"}], [{"trade_id": "T1", "net_quote": "0"}], "sold more"),
 ])
 def test_inconsistent_trades_fail_closed(fills, reported, needle):
-    out = acc.reconcile_pnl(fills, [], reported, base_asset="BTC")
+    out = acc.reconcile_pnl(fills, [], reported, base_asset="BTC", tolerance_quote=TOL)
     assert out and out[0].status == acc.FAIL and needle in out[0].detail
 
 
@@ -164,32 +195,205 @@ def test_broken_continuity_fails(over, needle):
 # -- run verdict --------------------------------------------------------------------------------------------
 def test_all_criteria_passing_in_one_run_is_only_a_candidate():
     records = [_rec(cid) for cid in acc.ACCEPTANCE_MATRIX]
-    v = acc.run_verdict(records, run_id="RUN-1")
+    v = acc.run_verdict(records, config=_config())
     assert v["verdict"] == "CANDIDATE_FOR_OWNER_ACCEPTANCE" and v["unmet"] == {}
 
 
 def test_no_evidence_is_not_accepted():
-    v = acc.run_verdict([], run_id="RUN-1")
+    v = acc.run_verdict([], config=_config())
     assert v["verdict"] == "NOT_ACCEPTED" and len(v["unmet"]) == len(acc.ACCEPTANCE_MATRIX)
 
 
 def test_evidence_from_another_run_never_counts():
     records = [_rec(cid, run="RUN-0") for cid in acc.ACCEPTANCE_MATRIX]
-    assert acc.run_verdict(records, run_id="RUN-1")["verdict"] == "NOT_ACCEPTED"
+    assert acc.run_verdict(records, config=_config())["verdict"] == "NOT_ACCEPTED"
 
 
 def test_a_fail_is_never_overwritten_by_a_later_pass_and_unproven_is_not_pass():
     records = [_rec(cid) for cid in acc.ACCEPTANCE_MATRIX]
     records += [_rec("PLN-08.kill_bounded", "FAIL"), _rec("PLN-08.kill_bounded", "PASS")]
-    v = acc.run_verdict(records, run_id="RUN-1")
+    v = acc.run_verdict(records, config=_config())
     assert v["unmet"] == {"PLN-08.kill_bounded": "FAIL"}
     records2 = [_rec(cid) for cid in acc.ACCEPTANCE_MATRIX if cid != "PLN-05.host_loss_redundancy"]
     records2.append(_rec("PLN-05.host_loss_redundancy", "UNPROVEN"))
-    assert acc.run_verdict(records2, run_id="RUN-1")["unmet"] == {"PLN-05.host_loss_redundancy": "UNPROVEN"}
+    assert acc.run_verdict(records2, config=_config())["unmet"] == {"PLN-05.host_loss_redundancy": "UNPROVEN"}
 
 
 def test_a_malformed_record_blocks_the_verdict():
     records = [_rec(cid) for cid in acc.ACCEPTANCE_MATRIX] + [_rec("PLN-02.inventory_complete",
                                                                      real_money_authorized=True)]
-    v = acc.run_verdict(records, run_id="RUN-1")
+    v = acc.run_verdict(records, config=_config())
     assert v["verdict"] == "NOT_ACCEPTED" and v["problems"]
+
+
+def test_an_incomplete_run_config_blocks_the_verdict_even_when_every_record_passes():
+    records = [_rec(cid) for cid in acc.ACCEPTANCE_MATRIX]
+    v = acc.run_verdict(records, config=copy.deepcopy(acc.RUN_CONFIG_TEMPLATE))
+    assert v["verdict"] == "NOT_ACCEPTED" and any(p.startswith("run config: D") for p in v["problems"])
+    with pytest.raises(TypeError):
+        acc.run_verdict(records, run_id="RUN-1")  # the old run_id-only call is gone: a config is mandatory
+
+
+# -- matrix: reuse of merged procedures, evidence ids -------------------------------------------------------
+def test_every_matrix_row_cites_a_merged_procedure_that_exists():
+    refs = acc.referenced_documents()
+    assert refs, "the matrix must cite its procedures"
+    for path in refs:
+        assert (REPO_ROOT / path).is_file(), f"{path} is cited by {sorted(refs[path])} but is not in the repository"
+    for cid, row in acc.ACCEPTANCE_MATRIX.items():
+        assert acc._DOC_RE.search(row["procedure"]), cid
+
+
+def test_reuse_targets_the_accepted_pln04_07_records_and_the_pln09_checklist():
+    m = acc.ACCEPTANCE_MATRIX
+    assert m["PLN-04.reboot_correct"]["procedure"].startswith("docs/p3/PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md")
+    assert "docs/p3/PLN_04_RECOVERY.md" in m["PLN-04.reboot_correct"]["standalone_record"]
+    assert m["PLN-07.matrix_rows"]["procedure"].startswith("docs/p3/PLN_04_RECOVERY.md")
+    assert m["PLN-09.projection"]["procedure"].startswith("docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md")
+    assert m["PLN-06.s19_alerts"]["procedure"].startswith("docs/p3/PLN_06_ALERTING.md")
+
+
+def test_a_row_without_a_procedure_or_standalone_record_is_incomplete():
+    broken = copy.deepcopy(acc.ACCEPTANCE_MATRIX)
+    broken["PLN-02.inventory_complete"]["procedure"] = "see elsewhere"
+    del broken["PLN-03.restore_drill"]["standalone_record"]
+    problems = acc.matrix_completeness(broken)
+    assert any("PLN-02.inventory_complete: procedure" in p for p in problems)
+    assert any("PLN-03.restore_drill: missing standalone_record" in p for p in problems)
+
+
+def test_the_matrix_digest_is_stable_and_sensitive():
+    assert acc.matrix_digest() == acc.matrix_digest(copy.deepcopy(acc.ACCEPTANCE_MATRIX))
+    changed = copy.deepcopy(acc.ACCEPTANCE_MATRIX)
+    changed["PLN-08.kill_bounded"]["criterion"] += " (edited)"
+    assert acc.matrix_digest(changed) != acc.matrix_digest()
+
+
+# -- run configuration: no default may authorize a launch ---------------------------------------------------
+def test_the_template_is_launch_blocked_on_all_five_owner_decisions():
+    r = acc.launch_readiness(copy.deepcopy(acc.RUN_CONFIG_TEMPLATE))
+    assert r["verdict"] == "LAUNCH_BLOCKED"
+    assert r["open_owner_decisions"] == ["D1", "D2", "D3", "D4", "D5"]
+    assert r["paper_launch_performed"] is False and r["real_money_authorized"] is False
+
+
+def test_a_complete_synthetic_config_is_only_complete_never_a_launch():
+    r = acc.launch_readiness(_config())
+    assert r["verdict"] == "CONFIG_COMPLETE_FOR_OWNER_LAUNCH" and r["blockers"] == []
+    assert r["paper_launch_performed"] is False
+
+
+def test_every_owner_decision_maps_to_a_template_field():
+    assert sorted(acc.OWNER_DECISIONS) == ["D1", "D2", "D3", "D4", "D5"]
+    for d in acc.OWNER_DECISIONS.values():
+        assert d["field"] in acc.RUN_CONFIG_TEMPLATE
+
+
+@pytest.mark.parametrize("field", ["paper_runtime", "trial_window", "emergency_stop_bound_s", "acceptance_criteria",
+                                   "launch_authority"])
+def test_removing_any_decision_field_blocks_with_its_decision_id(field):
+    cfg = _config()
+    del cfg[field]
+    did = next(k for k, v in acc.OWNER_DECISIONS.items() if v["field"] == field)
+    r = acc.launch_readiness(cfg)
+    assert r["verdict"] == "LAUNCH_BLOCKED" and did in r["open_owner_decisions"]
+
+
+@pytest.mark.parametrize("over,decision", [
+    ({"paper_runtime__runtime_id": None}, "D1"),
+    ({"paper_runtime__runtime_id": "TBD"}, "D1"),
+    ({"paper_runtime__runtime_id": "<runtime>"}, "D1"),
+    ({"paper_runtime__runtime_id": "freqtrade-live"}, "D1"),
+    ({"paper_runtime__runtime_id": "tradinglab-fp-control-3"}, "D1"),
+    ({"paper_runtime__authority_record": "default"}, "D1"),
+    ({"paper_runtime__authority_merge": "abc"}, "D1"),
+    ({"trial_window__duration_hours": None}, "D2"),
+    ({"trial_window__duration_hours": 0}, "D2"),
+    ({"trial_window__duration_hours": -5}, "D2"),
+    ({"trial_window__duration_hours": "72"}, "D2"),
+    ({"trial_window__duration_hours": True}, "D2"),
+    ({"trial_window__duration_hours": math.inf}, "D2"),
+    ({"trial_window__start_utc": "next week"}, "D2"),
+    ({"emergency_stop_bound_s": None}, "D3"),
+    ({"emergency_stop_bound_s": 0}, "D3"),
+    ({"emergency_stop_bound_s": math.nan}, "D3"),
+    ({"emergency_stop_bound_s": "30"}, "D3"),
+    ({"acceptance_criteria__matrix_sha256": None}, "D4"),
+    ({"acceptance_criteria__matrix_sha256": "f" * 64}, "D4"),
+    ({"acceptance_criteria__criterion_ids": ["PLN-08.kill_bounded"]}, "D4"),
+    ({"acceptance_criteria__criterion_ids": sorted(acc.ACCEPTANCE_MATRIX) + ["PLN-99.extra"]}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": None}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": 1e-8}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": "-1"}, "D4"),
+    ({"acceptance_criteria__pnl_tolerance_quote": "TBD"}, "D4"),
+    ({"launch_authority__paper_launch_authorized": False}, "D5"),
+    ({"launch_authority__paper_launch_authorized": "true"}, "D5"),
+    ({"launch_authority__paper_launch_authorized": 1}, "D5"),
+    ({"launch_authority__granted_by": "Claude"}, "D5"),
+    ({"launch_authority__record_path": None}, "D5"),
+    ({"launch_authority__record_path": "docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md"}, "D5"),
+    ({"launch_authority__merge_commit": None}, "D5"),
+])
+def test_unset_defaulted_or_placeholder_decisions_block_the_launch(over, decision):
+    r = acc.launch_readiness(_config(**over))
+    assert r["verdict"] == "LAUNCH_BLOCKED" and decision in r["open_owner_decisions"], r
+
+
+@pytest.mark.parametrize("over", [{"dry_run": False}, {"dry_run": "true"}, {"real_money_authorized": True},
+                                  {"real_money_authorized": None}, {"run_id": "TBD"}, {"frozen_commit": "HEAD"},
+                                  {"record_type": "OTHER"}])
+def test_safety_and_identity_fields_block_the_launch(over):
+    assert acc.launch_readiness(_config(**over))["verdict"] == "LAUNCH_BLOCKED"
+
+
+def test_an_h1_runtime_needs_its_own_h1_launch_authorization():
+    cfg = _config(paper_runtime__runtime_id="tlos-h1-paper-cohort-1")
+    assert any("H1_LAUNCH_AUTHORIZATION" in x for x in acc.validate_run_config(cfg))
+    cfg["launch_authority"]["record_path"] = "research/paper/h1/launch/H1_LAUNCH_AUTHORIZATION_SYNTHETIC.md"
+    assert acc.validate_run_config(cfg) == []
+
+
+def test_no_committed_run_config_authorizes_a_launch_unless_it_validates():
+    path = REPO_ROOT / acc.RUN_CONFIG_PATH
+    if not path.exists():
+        return  # PAPER_LAUNCH_AUTHORIZED = NO: no configuration is committed
+    import json
+    assert acc.validate_run_config(json.loads(path.read_text(encoding="utf-8"))) == []
+
+
+# -- validators refuse a missing threshold ----------------------------------------------------------------------
+@pytest.mark.parametrize("bound", [None, 0, -1, math.inf, math.nan, "30", True])
+def test_the_kill_validator_refuses_a_missing_or_invalid_bound(bound):
+    status, detail = acc.kill_switch_bounded(KILL, bound_s=bound)
+    assert status == acc.FAIL and "bound" in detail
+
+
+def test_the_pnl_tolerance_has_no_default():
+    with pytest.raises(TypeError):
+        acc.reconcile_pnl(FILLS, [], [{"trade_id": "T1", "net_quote": "0.1"}], base_asset="BTC")
+    for bad in (None, 1e-8, "-0.1", "nan"):
+        with pytest.raises(ValueError):
+            acc.reconcile_pnl(FILLS, [], [{"trade_id": "T1", "net_quote": "0.1"}], base_asset="BTC",
+                              tolerance_quote=bad)
+
+
+# -- the program document renders the module ---------------------------------------------------------------------
+def test_the_program_document_lists_every_criterion_and_every_owner_decision():
+    doc = (REPO_ROOT / "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md").read_text(encoding="utf-8")
+    assert "DRAFT" in doc and "PAPER_LAUNCH_AUTHORIZED = NO" in doc
+    for cid in acc.ACCEPTANCE_MATRIX:
+        assert f"`{cid}`" in doc, cid
+    for did, d in acc.OWNER_DECISIONS.items():
+        assert f"| {did} |" in doc and f"`{d['field']}`" in doc, did
+    for heading in ("Acceptance matrix", "Evidence requirements", "Safety boundaries", "Operator procedure",
+                    "Stop conditions", "Failure handling", "Controlled rollback"):
+        assert heading in doc, heading
+
+
+def test_the_pln09_checklist_is_the_s_ui_procedure_and_carries_a_run_id():
+    text = (REPO_ROOT / "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md").read_text(encoding="utf-8")
+    assert "PLN09_OWNER_ACCEPTANCE   = PENDING" in text, "the checklist must not claim acceptance"
+    assert "RUN_ID" in text and "`PLN-09.projection`" in text
+    assert "no runtime and no trading authority" in text
+    for item in [f"G{i}" for i in range(1, 10)] + [f"S{i}" for i in range(1, 13)] + [f"M{i}" for i in range(1, 10)]:
+        assert f"| {item} |" in text, f"walkthrough item {item} missing"
