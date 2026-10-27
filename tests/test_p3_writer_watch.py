@@ -157,9 +157,10 @@ def test_an_escalated_effective_uid_is_unexpected_even_when_the_real_uid_is_the_
 def test_the_volume_export_helper_is_allowed_as_root_tar_only_on_the_backup_sets():
     bk = "/mnt/tlos-wdc/tlos-backups/20261027T033300Z/volumes/x.tar"
     tar = "/usr/bin/tar"
-    assert ww.classify(ww.parse_audit_log(_event(1, "tlos_backups", "tar", "0", bk, exe=tar)))[0]["verdict"] == ww.AUTHORIZED
-    assert ww.classify(ww.parse_audit_log(_event(2, "tlos_backups", "rm", "0", bk, exe="/usr/bin/rm")))[0]["verdict"] == ww.UNEXPECTED
-    assert ww.classify(ww.parse_audit_log(_event(3, "tlos_ledger", "tar", "0", LEDGER, exe=tar)))[0]["verdict"] == ww.UNEXPECTED
+    unset = "4294967295"  # the helper container runs outside any login session (round 3: auid is matched too)
+    assert ww.classify(ww.parse_audit_log(_event(1, "tlos_backups", "tar", "0", bk, exe=tar, auid=unset)))[0]["verdict"] == ww.AUTHORIZED
+    assert ww.classify(ww.parse_audit_log(_event(2, "tlos_backups", "rm", "0", bk, exe="/usr/bin/rm", auid=unset)))[0]["verdict"] == ww.UNEXPECTED
+    assert ww.classify(ww.parse_audit_log(_event(3, "tlos_ledger", "tar", "0", LEDGER, exe=tar, auid=unset)))[0]["verdict"] == ww.UNEXPECTED
 
 
 def test_scheduled_health_mkdir_is_a_declared_writer_of_p3_evidence_only():
@@ -295,7 +296,8 @@ def test_the_cli_classifies_a_saved_log_and_exits_by_severity(tmp_path, capsys):
     status.write_text(STATUS_OK)
     rules.write_text(RULES_ALL)
     log.write_text(_event(1, "tlos_ledger", "python3", "1000", LEDGER) + HEARTBEAT)
-    assert ww.main(["classify", "--log", str(log), "--status", str(status), "--rules", str(rules)]) == 0
+    assert ww.main(["classify", "--log", str(log), "--status", str(status), "--rules", str(rules),
+                    "--lost-baseline", "0"]) == 0
     out = capsys.readouterr().out
     assert "COUNT tlos_ledger AUTHORIZED 1" in out and "COUNT tlos_p3_evidence AUTHORIZED 1" in out
     log.write_text(_event(2, "tlos_sealed", "cp", "1000", SEALED, exe="/usr/bin/cp"))
@@ -333,3 +335,212 @@ def test_the_script_runs_standalone_from_a_checkout_as_the_runbook_invokes_it():
                          capture_output=True, text=True, timeout=60, cwd=REPO_ROOT)
     assert out.returncode == 0, out.stderr
     assert out.stdout.count("-k tlos_") == 9 and "-e 2" not in out.stdout
+
+
+# --------------------------------------------------------------------------- round 3: adversarial cases
+# Multi-record events as auditd writes them: SYSCALL + CWD + PATH (item 0..n) + PROCTITLE, one serial.
+
+EVID = "/home/hamza/tlos-paper/p3-evidence"
+H1 = "/home/hamza/tlos-paper/h1-paper-cohort-1"
+LEDGER_DIR = "/home/hamza/tlos-paper/operator-ledger"
+BACKUPS = "/mnt/tlos-wdc/tlos-backups"
+UNSET = "4294967295"  # auid of a process outside any login session (e.g. a container started by dockerd)
+
+
+def _hex(s: str) -> str:
+    return s.encode("utf-8").hex().upper()
+
+
+def _multi(serial: int, key: str | None = None, *, comm: str | None = "python3", exe: str | None = "/usr/bin/python3.12",
+           uid: str | None = "1000", euid: str | None = "SAME", auid: str | None = "1000", items=(),
+           cwd: str | None = None, syscall: int = 82, key_raw: str | None = None) -> str:
+    """One event. ``items`` are (name, nametype); a name prefixed 'HEX:' is written hex-encoded, as auditd
+    writes a name containing a space or a control byte. A field given as None is left out of the record."""
+    t = f"1793000100.{serial:03d}:{4000 + serial}"
+    euid = uid if euid == "SAME" else euid
+    fields = [("arch", "c000003e"), ("syscall", str(syscall)), ("success", "yes"), ("exit", "0"), ("ppid", "1"),
+              ("pid", str(3000 + serial)), ("auid", auid), ("uid", uid), ("gid", uid), ("euid", euid), ("ses", "3"),
+              ("comm", None if comm is None else f'"{comm}"'), ("exe", None if exe is None else f'"{exe}"'),
+              ("key", key_raw if key_raw is not None else (f'"{key}"' if key else "(null)"))]
+    recs = [f"type=SYSCALL msg=audit({t}): " + " ".join(f"{k}={v}" for k, v in fields if v is not None)]
+    if cwd is not None:
+        recs.append(f'type=CWD msg=audit({t}): cwd="{cwd}"')
+    for i, (name, nametype) in enumerate(items):
+        shown = _hex(name[4:]) if name.startswith("HEX:") else f'"{name}"'
+        recs.append(f"type=PATH msg=audit({t}): item={i} name={shown} inode={500 + i} dev=08:02 mode=0100644 "
+                    f"ouid=1000 ogid=1000 rdev=00:00 nametype={nametype} cap_fp=0")
+    recs.append(f"type=PROCTITLE msg=audit({t}): proctitle=707974686F6E33002D63")
+    return "\n".join(recs) + "\n"
+
+
+def _verdicts(log: str) -> list[str]:
+    return [c["verdict"] for c in ww.classify(ww.parse_audit_log(log))]
+
+
+def test_an_authorized_comm_from_a_different_system_binary_is_unexpected():
+    # prctl(PR_SET_NAME, "python3") from another root-owned binary: the comm matches, the exe is not python
+    for exe in ("/usr/bin/perl", "/usr/bin/bash", "/bin/dd"):
+        out = ww.classify(ww.parse_audit_log(_event(1, "tlos_ledger", "python3", "1000", LEDGER, exe=exe)))
+        assert out[0]["verdict"] == ww.UNEXPECTED, exe
+    # the interpreter's versioned file name still matches its comm
+    assert _verdicts(_event(2, "tlos_ledger", "python3", "1000", LEDGER, exe="/usr/bin/python3.12")) == [ww.AUTHORIZED]
+    assert _verdicts(_event(3, "tlos_backups", "tar", "1000", f"{BACKUPS}/x", exe="/usr/bin/tar")) == [ww.AUTHORIZED]
+    assert _verdicts(_event(4, "tlos_backups", "tar", "1000", f"{BACKUPS}/x", exe="/usr/bin/zstd")) == [ww.UNEXPECTED]
+
+
+def test_an_event_missing_euid_or_auid_is_never_authorized():
+    item = [(f"{LEDGER_DIR}/operator_ledger.jsonl", "NORMAL")]
+    for missing in ({"euid": None}, {"auid": None}):
+        log = _multi(1, "tlos_ledger", items=item, **missing)
+        out = ww.classify(ww.parse_audit_log(log))
+        assert out[0]["verdict"] == ww.UNATTRIBUTED, missing
+        assert _run(log)["severity"] != ww.INFO
+
+
+def test_a_login_identity_other_than_the_owner_is_unexpected():
+    # uid/euid are the owner, but the login identity (auid) is root, another user, or no login session at all
+    for auid in ("0", "1001", UNSET):
+        out = ww.classify(ww.parse_audit_log(_event(1, "tlos_ledger", "python3", "1000", LEDGER, auid=auid)))
+        assert out[0]["verdict"] == ww.UNEXPECTED and f"auid={auid}" in out[0]["why"], auid
+    # the volume-export helper container runs outside any login session; `sudo tar` from a login is not it
+    bk = f"{BACKUPS}/20261027T033300Z/volumes/x.tar"
+    assert _verdicts(_event(2, "tlos_backups", "tar", "0", bk, exe="/usr/bin/tar", auid=UNSET)) == [ww.AUTHORIZED]
+    assert _verdicts(_event(3, "tlos_backups", "tar", "0", bk, exe="/usr/bin/tar", auid="1000")) == [ww.UNEXPECTED]
+
+
+def test_a_rename_into_a_stricter_class_is_judged_by_every_class_it_touches():
+    # rename(p3-evidence/x -> h1-paper-cohort-1/x) by the owner's python. The kernel records only the key of
+    # the first matching rule (tlos_p3_evidence, which python may write), but the new name is in the H1 lane.
+    plain = [(f"{EVID}/", "PARENT"), (f"{H1}/", "PARENT"), (f"{EVID}/x", "DELETE"), (f"{H1}/x", "CREATE")]
+    relative = [("./", "PARENT"), ("../h1-paper-cohort-1/", "PARENT"), ("x", "DELETE"), ("../h1-paper-cohort-1/x", "CREATE")]
+    traversal = [(f"{EVID}/x", "DELETE"), (f"{EVID}/../h1-paper-cohort-1/x", "CREATE")]
+    hexname = [(f"{EVID}/x", "DELETE"), (f"HEX:{H1}/a b", "CREATE")]
+    for n, items in enumerate((plain, relative, traversal, hexname), start=1):
+        log = _multi(n, "tlos_p3_evidence", items=items, cwd=EVID)
+        out = ww.classify(ww.parse_audit_log(log))
+        assert out[0]["verdict"] == ww.UNEXPECTED and "h1_lane" in out[0]["why"], (n, out)
+        assert _run(log)["severity"] == ww.CRITICAL
+    # an atomic replace inside one class stays lawful
+    inside = [(f"{EVID}/", "PARENT"), (f"{EVID}/tlos_p3_health.prom.tmp", "DELETE"), (f"{EVID}/tlos_p3_health.prom", "CREATE")]
+    assert _verdicts(_multi(9, "tlos_p3_evidence", items=inside, cwd="/")) == [ww.AUTHORIZED]
+
+
+def test_a_hard_link_or_move_out_of_a_watched_tree_is_unexpected():
+    # link(ledger, /tmp/l) by the owner's python: later writes through /tmp/l carry no tlos_ key at all
+    link = [(f"{LEDGER_DIR}/operator_ledger.jsonl", "NORMAL"), ("/tmp/", "PARENT"), ("/tmp/l", "CREATE")]
+    move = [(f"{LEDGER_DIR}/", "PARENT"), ("/tmp/", "PARENT"), (f"{LEDGER_DIR}/operator_ledger.jsonl", "DELETE"),
+            ("/tmp/x", "CREATE")]
+    for n, (items, sc) in enumerate(((link, 265), (move, 82)), start=1):
+        out = ww.classify(ww.parse_audit_log(_multi(n, "tlos_ledger", items=items, cwd="/", syscall=sc)))
+        assert out[0]["verdict"] == ww.UNEXPECTED and "outside" in out[0]["why"], (n, out)
+    # a create by the volume-export container names its own mount (/out), which is not a link or a move
+    tar = _multi(5, "tlos_backups", comm="tar", exe="/usr/bin/tar", uid="0", auid=UNSET,
+                 items=[("/out/", "PARENT"), ("/out/x.tar", "CREATE")], cwd="/", syscall=257)
+    assert _verdicts(tar) == [ww.AUTHORIZED]
+
+
+def test_a_write_to_a_no_writer_class_is_critical_even_when_unattributable():
+    for n, (key, path) in enumerate((("tlos_sealed", SEALED), ("tlos_h1_lane", f"{H1}/x"),
+                                     ("tlos_canary", "/home/hamza/tlos-paper/writer-canary/p")), start=1):
+        log = _event(n, key, None, None, path)
+        assert _verdicts(log) == [ww.UNEXPECTED], key
+        assert _run(log)["severity"] == ww.CRITICAL, key
+
+
+def test_a_hex_encoded_multi_key_is_decoded_and_split():
+    # two -k on one rule: auditd joins them with \x01 and hex-encodes the field
+    ok = _multi(1, key_raw=_hex("tlos_ledger\x01ops"), items=[(f"{LEDGER_DIR}/operator_ledger.jsonl", "NORMAL")])
+    assert _verdicts(ok) == [ww.AUTHORIZED]
+    bad = _multi(2, key_raw=_hex("ops\x01tlos_sealed"), items=[(SEALED, "NORMAL")])
+    assert _verdicts(bad) == [ww.UNEXPECTED] and _run(bad)["severity"] == ww.CRITICAL
+
+
+def test_a_change_under_a_protected_path_carrying_another_key_is_still_classified():
+    # another rule earlier in the list matched first and took the key; the PATH records still show the change
+    h1 = _multi(1, "ops_all_writes", items=[(f"{H1}/", "PARENT"), (f"{H1}/x", "CREATE")], cwd="/")
+    assert _verdicts(h1) == [ww.UNEXPECTED] and _run(h1)["severity"] == ww.CRITICAL
+    ev = _multi(2, None, comm="vim", exe="/usr/bin/vim.basic",
+                items=[(f"{EVID}/", "PARENT"), (f"{EVID}/notes", "CREATE")], cwd="/")
+    assert _verdicts(ev) == [ww.UNEXPECTED]
+    # a read of a protected path audited by another rule (no create/delete) is not a write and not ours
+    read = _multi(3, "ops_reads", items=[(f"{LEDGER_DIR}/operator_ledger.jsonl", "NORMAL")], syscall=257)
+    assert ww.classify(ww.parse_audit_log(read)) == []
+
+
+def test_duplicated_and_out_of_order_records_assemble_into_one_event():
+    one = _multi(1, "tlos_p3_evidence", items=[(f"{EVID}/", "PARENT"), (f"{EVID}/a", "CREATE")], cwd="/")
+    lines = one.splitlines()
+    shuffled = "\n".join(reversed(lines)) + "\n" + one  # PATH before SYSCALL, then the whole event again
+    events = ww.parse_audit_log(shuffled)
+    assert len(events) == 1 and events[0].comm == "python3" and events[0].paths == [f"{EVID}/", f"{EVID}/a"]
+    assert _verdicts(shuffled) == [ww.AUTHORIZED]
+
+
+def test_an_auditd_not_connected_to_the_kernel_is_unproven():
+    # enabled 1 but pid 0: the kernel has no daemon to deliver to, so nothing reaches audit.log
+    for status in (STATUS_OK.replace("pid 812", "pid 0"), STATUS_OK.replace("pid 812\n", "")):
+        f = _run("", status=status)
+        assert f["severity"] == ww.WARNING and "UNPROVEN" in f["detail"], status
+
+
+def test_a_daemon_start_or_resume_inside_the_window_is_a_coverage_gap():
+    # kill -9 leaves no DAEMON_END; the restart's DAEMON_START (or a DAEMON_RESUME after a suspend) is the trace
+    for rtype in ("DAEMON_START", "DAEMON_RESUME"):
+        log = f"type={rtype} msg=audit(1793000001.000:79): op=start ver=3.1.2 format=enriched pid=900 res=success\n"
+        f = _run(log)
+        assert f["severity"] == ww.WARNING and rtype in f["detail"], rtype
+
+
+def test_a_missing_or_unparsable_lost_baseline_is_unproven(tmp_path, capsys):
+    f, _ = ww.evaluate(HEARTBEAT, STATUS_OK, RULES_ALL)
+    assert f["severity"] == ww.WARNING and "baseline" in f["detail"]
+    log, status, rules = tmp_path / "a.raw", tmp_path / "s.txt", tmp_path / "r.txt"
+    log.write_text(HEARTBEAT)
+    status.write_text(STATUS_OK)
+    rules.write_text(RULES_ALL)
+    common = ["classify", "--log", str(log), "--status", str(status), "--rules", str(rules)]
+    assert ww.main(common) == 1
+    assert ww.main([*common, "--lost-baseline", ""]) == 1  # `BASE=$(cat missing-file)` in the runbook
+    assert "baseline" in capsys.readouterr().out
+    assert ww.main([*common, "--lost-baseline", "0"]) == 0
+
+
+def test_the_rules_put_the_classes_without_a_lawful_writer_first():
+    # the kernel records only the key of the first rule an event matches: a write that reaches the H1 lane
+    # through a symlinked name inside p3-evidence must carry tlos_h1_lane, not tlos_p3_evidence
+    keys = [line.rsplit(" ", 1)[-1] for line in ww.render_rules().splitlines() if line.startswith("-w ")]
+    no_writer = {f"tlos_{c.key}" for c in ww.DEFAULT_INVENTORY if not c.writers}
+    first_writer = next(i for i, k in enumerate(keys) if k not in no_writer)
+    assert set(keys[:first_writer]) == no_writer and not no_writer & set(keys[first_writer:])
+
+
+# --------------------------------------------------------------------------- AT-0: the read-only self-test
+
+
+def test_the_self_test_passes_on_the_shipped_synthetic_fixture(capsys):
+    assert ww.SELFTEST_FIXTURE == REPO_ROOT / "tests" / "fixtures" / "p3_writer_watch_selftest.audit"
+    text = ww.SELFTEST_FIXTURE.read_text(encoding="utf-8")
+    assert "SYNTHETIC" in text.splitlines()[0]
+    assert ww.main(["self-test"]) == 0
+    out = capsys.readouterr().out
+    assert "SELFTEST = PASS (15/15 expectations)" in out and "FAIL" not in out
+
+
+def test_the_self_test_fails_on_a_wrong_expectation_a_stray_event_or_a_missing_fixture(tmp_path, capsys):
+    text = ww.SELFTEST_FIXTURE.read_text(encoding="utf-8")
+    wrong = tmp_path / "wrong.audit"
+    wrong.write_text(text.replace("AUTHORIZED hourly health job", "UNEXPECTED hourly health job", 1))
+    assert ww.main(["self-test", "--fixture", str(wrong)]) == 1
+    assert "SELFTEST = FAIL (14/15" in capsys.readouterr().out
+    stray = tmp_path / "stray.audit"
+    stray.write_text(text + _event(77, "tlos_sealed", "cp", "1000", SEALED, exe="/usr/bin/cp"))
+    assert ww.main(["self-test", "--fixture", str(stray)]) == 1
+    assert "has no EXPECT line" in capsys.readouterr().out
+    assert ww.main(["self-test", "--fixture", str(tmp_path / "absent.audit")]) == 1
+    assert "SELFTEST = UNPROVEN" in capsys.readouterr().out
+
+
+def test_the_self_test_runs_standalone_as_the_acceptance_runbook_invokes_it():
+    out = subprocess.run([sys.executable, str(REPO_ROOT / "research" / "p3" / "writer_watch.py"), "self-test"],
+                         capture_output=True, text=True, timeout=60, cwd=REPO_ROOT)
+    assert out.returncode == 0 and "SELFTEST = PASS" in out.stdout, out.stdout + out.stderr

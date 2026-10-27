@@ -8,13 +8,16 @@ the auditd-first design in docs/p3/PLN_06_UNEXPECTED_WRITER.md:
 (a) ``render_rules`` turns the protected-path inventory into an auditd rules file
     (``-w <path> -p wa -k tlos_<class>``). It writes nothing; the Owner installs it.
 (b) ``parse_audit_log`` groups raw ``/var/log/audit/audit.log`` (or ``ausearch --raw``) text into
-    events, and ``classify`` labels each watched event AUTHORIZED, UNEXPECTED or UNATTRIBUTED against
-    the declared writers of its class (comm + uid + euid + exe, all of them).
-(c) ``coverage_gaps`` finds what the counters cannot: the daemon stopping or erroring inside the
-    window, a ``tlos_`` watch removed, or auditing switched off.
+    events (SYSCALL + CWD + PATH + PROCTITLE by serial), and ``classify`` labels each watched event
+    AUTHORIZED, UNEXPECTED or UNATTRIBUTED against the declared writers of every class it touches: the
+    class of its key and the class of every PATH name (resolved against CWD). A writer must match comm,
+    exe (a system binary of the same program), uid, euid and the login uid (auid), all of them.
+(c) ``coverage_gaps`` finds what the counters cannot: the daemon stopping, restarting, resuming or
+    erroring inside the window, a ``tlos_`` watch removed, or auditing switched off.
 (d) ``finding`` maps one run to one health finding, fail-closed:
-    any UNEXPECTED -> CRITICAL; no audit data, a watch not loaded, lost events, a saturated backlog,
-    a coverage gap, an UNATTRIBUTED event or a silent heartbeat class -> WARNING "UNPROVEN";
+    any UNEXPECTED -> CRITICAL; no audit data, a watch not loaded, auditd not connected, no lost
+    baseline, lost events, a saturated backlog, a coverage gap, an UNATTRIBUTED event or a silent
+    heartbeat class -> WARNING "UNPROVEN";
     INFO only when everything is proven.
 
 The protected paths are not a new list: they are derived from the constants the health job and the
@@ -32,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import posixpath
 import re
 import sys
 from collections import Counter
@@ -50,6 +54,8 @@ KEY_PREFIX = "tlos_"
 CHECK = "unexpected_writer"
 
 OWNER_UID = "1000"  # hamza on hamza-workstation (the WDC ntfs3 mount is uid=1000 too); override per host
+# The login uid of a process started outside any login session (a container started by dockerd/containerd).
+AUID_UNSET = "4294967295"
 # Writers must run a root-owned system binary: a process that renames itself (comm) from a binary in
 # a user-writable place does not pass as a declared writer.
 SYSTEM_BIN = ("/usr/bin/", "/bin/", "/usr/local/bin/", "/usr/sbin/", "/sbin/")
@@ -72,22 +78,27 @@ CANARIES = (PAPER_ROOT / "writer-canary", WDC_ROOT / "tlos-writer-canary")
 
 @dataclass(frozen=True)
 class Writer:
-    """A declared writer: comm glob(s), allowed uids (uid and euid), exe prefixes. All given parts must match."""
+    """A declared writer: one program (comm globs that its exe's file name must match too), allowed uids
+    (uid and euid), allowed login uids (auid) and exe prefixes. Every part must match; a missing field never
+    matches. The exe test ties the comm to the binary: a system binary that renames itself (prctl) to an
+    allowed comm is not that program."""
     name: str
     comms: tuple[str, ...]
     uids: tuple[str, ...] = (OWNER_UID,)
     exe_prefixes: tuple[str, ...] = SYSTEM_BIN
+    auids: tuple[str, ...] = (OWNER_UID,)
 
-    def matches(self, comm: str | None, uid: str | None, exe: str | None, euid: str | None = None) -> bool:
-        if not comm or uid is None:
+    def matches(self, comm: str | None, uid: str | None, exe: str | None, euid: str | None,
+                auid: str | None) -> bool:
+        if not comm or not uid or not euid or not auid or not exe:
             return False
         if not any(fnmatch.fnmatchcase(comm, c) for c in self.comms):
             return False
-        if uid not in self.uids or (euid is not None and euid not in self.uids):
+        if uid not in self.uids or euid not in self.uids or auid not in self.auids:
             return False
-        if self.exe_prefixes and not (exe and any(exe.startswith(p) for p in self.exe_prefixes)):
+        if self.exe_prefixes and not any(exe.startswith(p) for p in self.exe_prefixes):
             return False
-        return True
+        return any(fnmatch.fnmatchcase(exe.rsplit("/", 1)[-1], c) for c in self.comms)
 
 
 @dataclass(frozen=True)
@@ -116,8 +127,10 @@ DEFAULT_INVENTORY: tuple[ProtectedClass, ...] = (
         "P3 evidence: hourly health textfile, Control Room build, reboot snapshots and verify records"),
     ProtectedClass(
         "backups", (str(BACKUP_TARGET),),
-        (Writer("backup.py and its helpers (owner)", (*PY, "tar", "zstd", "git", "sha256sum")),
-         Writer("volume export helper container (tar as root)", ("tar",), uids=("0",))),
+        (Writer("backup.py (python, owner)", PY),
+         *(Writer(f"backup.py helper {prog} (owner)", (prog,)) for prog in ("tar", "zstd", "git", "sha256sum")),
+         Writer("volume export helper container (tar as root, no login session)", ("tar",), uids=("0",),
+                auids=(AUID_UNSET,))),
         "append-only backup sets written by scripts/p3/scheduled_backup.sh"),
     ProtectedClass(
         "registry", (str(REGISTRY_DIR),),
@@ -146,7 +159,9 @@ def expected_watches(inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY) 
 
 def render_rules(inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY, *, backlog: int = 8192) -> str:
     """An auditd rules file (for /etc/audit/rules.d/tlos-evidence.rules). Watches writes and attribute changes.
-    Immutable mode (-e 2) is an Owner decision and is never generated here."""
+    The kernel records only the key of the FIRST rule an event matches, so the classes with no lawful writer
+    come first: an event that reaches one of them (e.g. through a symlinked name the classifier cannot
+    resolve) carries its key. Immutable mode (-e 2) is an Owner decision and is never generated here."""
     lines = [
         "# Trading Lab OS P3-PLN-06 — §19 'unexpected writer' watches (generated by research/p3/writer_watch.py).",
         "# Installed only by the Owner (docs/p3/PLN_06_UNEXPECTED_WRITER.md). Read-only for the system it watches.",
@@ -154,7 +169,7 @@ def render_rules(inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY, *, b
         "--backlog_wait_time 60000",
         "-f 1",
     ]
-    for cls in inventory:
+    for cls in sorted(inventory, key=lambda c: bool(c.writers)):  # stable: no-writer classes first
         for path in cls.paths:
             lines.append(f"-w {path} -p wa -k {KEY_PREFIX}{cls.key}")
     return "\n".join(lines) + "\n"
@@ -172,14 +187,11 @@ def _value(raw: str, quoted: str | None) -> str:
         return quoted
     if raw == "(null)":
         return ""
-    # auditd hex-encodes untrusted strings (comm/exe/name/key) that contain spaces or unusual bytes.
+    # auditd writes an untrusted string (comm/exe/name/key/cwd) quoted, or hex-encoded when it holds a space,
+    # a quote or a control byte (a multi-key field holds \x01). An unquoted hex value is always decoded, so
+    # a name with a newline or a key list is read as what it is, never skipped as an opaque token.
     if _HEX_RE.match(raw) and len(raw) % 2 == 0 and len(raw) >= 2:
-        try:
-            decoded = bytes.fromhex(raw).decode("utf-8")
-            if decoded.isprintable():
-                return decoded
-        except ValueError:
-            pass
+        return bytes.fromhex(raw).decode("utf-8", errors="backslashreplace")
     return raw
 
 
@@ -187,7 +199,8 @@ def _value(raw: str, quoted: str | None) -> str:
 class AuditEvent:
     event_id: str
     time: float
-    key: str | None = None
+    key: str | None = None             # the first tlos_ key, else the first key
+    keys: list[str] = field(default_factory=list)
     comm: str | None = None
     exe: str | None = None
     uid: str | None = None
@@ -196,12 +209,14 @@ class AuditEvent:
     pid: str | None = None
     success: str | None = None
     syscall: str | None = None
-    paths: list[str] = field(default_factory=list)
+    cwd: str | None = None
+    paths: list[str] = field(default_factory=list)                         # PATH names, by item number
+    path_items: list[tuple[str, str]] = field(default_factory=list)       # (name, nametype), by item number
     types: set[str] = field(default_factory=set)
     config_changes: list[dict] = field(default_factory=list)
 
 
-_STRING_FIELDS = {"comm", "exe", "key", "name"}
+_STRING_FIELDS = {"comm", "exe", "key", "name", "cwd"}
 
 
 def parse_audit_log(text: str) -> list[AuditEvent]:
@@ -209,6 +224,7 @@ def parse_audit_log(text: str) -> list[AuditEvent]:
     Only the raw part before an ENRICHED log's 0x1d separator is read, so the interpreted upper-case
     fields (UID="hamza") never overwrite the numeric ones."""
     events: dict[str, AuditEvent] = {}
+    items: dict[str, dict[int, tuple[str, str]]] = {}
     for line in text.splitlines():
         line = line.split("\x1d", 1)[0]
         m = _MSG_RE.search(line)
@@ -223,7 +239,8 @@ def parse_audit_log(text: str) -> list[AuditEvent]:
             name, raw, quoted = fm.group(1), fm.group(2), fm.group(3)
             fields[name] = _value(raw, quoted) if name in _STRING_FIELDS else (quoted if quoted is not None else raw)
         if rtype == "SYSCALL":
-            ev.key = fields.get("key") or None
+            ev.keys = [k for k in (fields.get("key") or "").split("\x01") if k]
+            ev.key = next((k for k in ev.keys if k.startswith(KEY_PREFIX)), ev.keys[0] if ev.keys else None)
             ev.comm = fields.get("comm") or None
             ev.exe = fields.get("exe") or None
             ev.uid = fields.get("uid")
@@ -232,40 +249,111 @@ def parse_audit_log(text: str) -> list[AuditEvent]:
             ev.pid = fields.get("pid")
             ev.success = fields.get("success")
             ev.syscall = fields.get("syscall")
+        elif rtype == "CWD":
+            ev.cwd = fields.get("cwd") or None
         elif rtype == "PATH" and fields.get("name"):
-            ev.paths.append(fields["name"])
+            # one entry per item number: a record duplicated by overlapping input is not a second name
+            per = items.setdefault(eid, {})
+            item = int(fields["item"]) if fields.get("item", "").isdigit() else len(per)
+            per[item] = (fields["name"], fields.get("nametype", ""))
         elif rtype == "CONFIG_CHANGE":
             ev.config_changes.append(fields)
+    for eid, per in items.items():
+        events[eid].path_items = [per[i] for i in sorted(per)]
+        events[eid].paths = [name for name, _ in events[eid].path_items]
     return sorted(events.values(), key=lambda e: (e.time, int(e.event_id.split(":")[1])))
 
 
+MODIFY_NAMETYPES = ("CREATE", "DELETE")
+
+
+def _resolve(name: str, cwd: str | None) -> str | None:
+    """A PATH name as an absolute, lexically normalised path ('..' folded); None if it cannot be resolved.
+    Names are lexical: a symlinked name resolves to where it points only in the kernel's inode match
+    (the key), never here."""
+    if name.startswith("/"):
+        return posixpath.normpath(name)
+    if cwd and cwd.startswith("/"):
+        return posixpath.normpath(posixpath.join(cwd, name))
+    return None
+
+
+def _under(path: str, root: str) -> bool:
+    root = root.rstrip("/") or "/"
+    return path == root or path.startswith(root + "/")
+
+
 def classify(events: list[AuditEvent], inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY) -> list[dict]:
-    """Label every write event that carries one of our watch keys. Events without a tlos_ key are not ours.
+    """Label every write event that touches a protected class, through its key or through its PATH names.
+
+    - The classes of an event are the class of each ``tlos_`` key plus the class of every PATH name under a
+      protected path (resolved against CWD; ``..`` folded). The kernel records only the first matching
+      rule's key, so a rename or link across two trees is judged against both, never by rule order.
+    - An event with no ``tlos_`` key is ours only if a PATH record CREATEs or DELETEs a name under a
+      protected path (another rule took the key first); a read audited by some other rule is not.
+    - A class with no lawful writer (sealed, H1 lane, canary) makes the event UNEXPECTED even when it cannot
+      be attributed. Otherwise a missing comm/uid/euid/auid (or no SYSCALL record) is UNATTRIBUTED.
+    - A link or a move under a ``tlos_`` key that creates a name outside every protected tree is UNEXPECTED:
+      writes through that name would carry no key.
+    - Otherwise the event is AUTHORIZED only if, for EVERY class it touches, a declared writer matches.
     A failed attempt (success=no) is classified like a write: the attempt itself is the finding."""
     by_key = {f"{KEY_PREFIX}{c.key}": c for c in inventory}
+    by_name = {c.key: c for c in inventory}
+    protected = [(c.key, p) for c in inventory for p in c.paths]
     out = []
     for ev in events:
-        if "SYSCALL" not in ev.types or not ev.key or not ev.key.startswith(KEY_PREFIX):
+        tlos_keys = [k for k in ev.keys if k.startswith(KEY_PREFIX)]
+        resolved = [(_resolve(name, ev.cwd), nametype) for name, nametype in ev.path_items]
+        considered = resolved if tlos_keys else [(p, nt) for p, nt in resolved if nt in MODIFY_NAMETYPES]
+        classes: list[str] = []
+        for name in [by_key[k].key for k in tlos_keys if k in by_key] + \
+                [c for p, _ in considered if p for c, root in protected if _under(p, root)]:
+            if name not in classes:
+                classes.append(name)
+        if not tlos_keys and not classes:
             continue
-        cls = by_key.get(ev.key)
-        base = {"event": ev.event_id, "key": ev.key, "comm": ev.comm, "exe": ev.exe, "uid": ev.uid,
-                "euid": ev.euid, "auid": ev.auid, "pid": ev.pid, "success": ev.success, "paths": ev.paths[:4]}
-        if cls is None:
-            out.append({**base, "verdict": UNATTRIBUTED, "why": "watch key not in the inventory"})
-        elif not ev.comm or ev.uid is None:
-            out.append({**base, "verdict": UNATTRIBUTED, "why": "event lacks comm or uid"})
-        elif any(w.matches(ev.comm, ev.uid, ev.exe, ev.euid) for w in cls.writers):
-            out.append({**base, "verdict": AUTHORIZED, "why": f"declared writer of {cls.key}"})
+        who = f"comm={ev.comm!r} exe={ev.exe!r} uid={ev.uid} euid={ev.euid} auid={ev.auid}"
+        base = {"event": ev.event_id, "key": ev.key or "(none)", "classes": classes, "comm": ev.comm, "exe": ev.exe,
+                "uid": ev.uid, "euid": ev.euid, "auid": ev.auid, "pid": ev.pid, "success": ev.success,
+                "paths": [p or n for (p, _), n in zip(resolved, ev.paths)][:4]}
+
+        def verdict(v: str, why: str) -> None:
+            out.append({**base, "verdict": v, "why": why})
+
+        no_writer = [c for c in classes if not by_name[c].writers]
+        unknown = [k for k in tlos_keys if k not in by_key]
+        missing = ["SYSCALL record"] if "SYSCALL" not in ev.types else \
+            [f for f in ("comm", "uid", "euid", "auid") if not getattr(ev, f)]
+        is_link_or_move = any(nt == "CREATE" for _, nt in resolved) and \
+            any(nt in ("DELETE", "NORMAL") for _, nt in resolved)
+        created = [p for p, nt in resolved if nt == "CREATE"]
+        if no_writer:
+            verdict(UNEXPECTED, f"{no_writer[0]} has no lawful writer; {who}")
+        elif unknown:
+            verdict(UNATTRIBUTED, f"watch key {unknown[0]} not in the inventory")
+        elif missing:
+            verdict(UNATTRIBUTED, f"event lacks {', '.join(missing)}")
+        elif tlos_keys and is_link_or_move and None in created:
+            verdict(UNATTRIBUTED, "a link or move whose new name cannot be resolved (no CWD record)")
+        elif tlos_keys and is_link_or_move and any(not any(_under(p, r) for _, r in protected) for p in created):
+            outside = next(p for p in created if not any(_under(p, r) for _, r in protected))
+            verdict(UNEXPECTED, f"a link or move places watched content outside the protected trees ({outside}); "
+                                f"{who}")
         else:
-            out.append({**base, "verdict": UNEXPECTED,
-                        "why": f"no declared writer of {cls.key} matches comm={ev.comm!r} exe={ev.exe!r} "
-                               f"uid={ev.uid} euid={ev.euid}"})
+            denied = [c for c in classes
+                      if not any(w.matches(ev.comm, ev.uid, ev.exe, ev.euid, ev.auid) for w in by_name[c].writers)]
+            if denied:
+                verdict(UNEXPECTED, f"no declared writer of {denied[0]} matches {who}")
+            else:
+                verdict(AUTHORIZED, f"declared writer of {', '.join(classes)}")
     return out
 
 
 # --- (c) coverage: the watch itself stopped, was removed or was switched off -------------------------
 
-GAP_RECORD_TYPES = ("DAEMON_END", "DAEMON_ABORT", "DAEMON_ERR")
+# DAEMON_START / DAEMON_RESUME inside the window mean the daemon was not writing just before them (a kill -9
+# leaves no DAEMON_END; a disk-full suspend ends with DAEMON_RESUME). DAEMON_ROTATE is not a gap.
+GAP_RECORD_TYPES = ("DAEMON_END", "DAEMON_ABORT", "DAEMON_ERR", "DAEMON_START", "DAEMON_RESUME")
 
 
 def coverage_gaps(events: list[AuditEvent]) -> list[str]:
@@ -324,10 +412,10 @@ def missing_watches(rules_listing: str, inventory: tuple[ProtectedClass, ...] = 
 # --- (d) one health finding, fail-closed --------------------------------------------------------------
 
 def finding(classified: list[dict] | None, *, status: dict[str, int] | None, rules_listing: str | None,
-            inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY, lost_baseline: int = 0,
+            inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY, lost_baseline: int | None = None,
             gaps: list[str] | None = None, heartbeat_keys: tuple[str, ...] = HEARTBEAT_KEYS) -> dict:
-    """INFO only if everything is proven: every watch loaded, auditd enabled, no event lost since the
-    baseline, the backlog not saturated, no coverage gap in the window, every watched event attributed
+    """INFO only if everything is proven: every watch loaded, auditd enabled and connected, a lost baseline
+    recorded and no event lost since it, the backlog not saturated, no coverage gap in the window, every watched event attributed
     to a declared writer, and each heartbeat class seen at least once."""
     def f(sev: str, detail: str) -> dict:
         return {"check": CHECK, "severity": sev, "detail": detail}
@@ -345,9 +433,14 @@ def finding(classified: list[dict] | None, *, status: dict[str, int] | None, rul
         return f(WARNING, f"UNPROVEN: watch rules not loaded for {', '.join(missing)}")
     if status.get("enabled", 0) < 1:
         return f(WARNING, "UNPROVEN: auditd is not enabled")
+    if not status.get("pid"):
+        return f(WARNING, "UNPROVEN: auditd is not connected to the kernel (pid 0 or absent); records go to the "
+                          "kernel log, not audit.log")
     lost = status.get("lost")
     if lost is None:
         return f(WARNING, "UNPROVEN: auditd lost counter unavailable")
+    if lost_baseline is None:
+        return f(WARNING, "UNPROVEN: no lost baseline recorded (auditctl -s at install or after each reboot)")
     if lost > lost_baseline:
         return f(WARNING, f"UNPROVEN: auditd lost {lost - lost_baseline} event(s) since the baseline")
     if lost < lost_baseline:
@@ -371,7 +464,8 @@ def finding(classified: list[dict] | None, *, status: dict[str, int] | None, rul
                    f"{len(expected_watches(inventory))} watches loaded; no events lost")
 
 
-def evaluate(log_text: str | None, status_text: str | None, rules_text: str | None, *, lost_baseline: int = 0,
+def evaluate(log_text: str | None, status_text: str | None, rules_text: str | None, *,
+             lost_baseline: int | None = None,
              heartbeat_keys: tuple[str, ...] = HEARTBEAT_KEYS,
              inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY) -> tuple[dict, list[dict]]:
     """Text in, (finding, classified) out. A missing input is None and makes the result UNPROVEN at best."""
@@ -381,6 +475,37 @@ def evaluate(log_text: str | None, status_text: str | None, rules_text: str | No
                      rules_listing=rules_text, inventory=inventory, lost_baseline=lost_baseline,
                      gaps=coverage_gaps(events) if events is not None else None, heartbeat_keys=heartbeat_keys)
     return result, classified or []
+
+
+SELFTEST_FIXTURE = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "p3_writer_watch_selftest.audit"
+_EXPECT_RE = re.compile(r"^# EXPECT (\S+) (AUTHORIZED|UNEXPECTED|UNATTRIBUTED|IGNORED) (.*)$")
+
+
+def self_test(fixture: Path = SELFTEST_FIXTURE) -> int:
+    """Read-only acceptance pre-check (AT-0): classify the synthetic fixture shipped with the repository and
+    compare every event with its ``# EXPECT <event> <verdict> <case>`` line. IGNORED = not ours. PASS only if
+    every expectation holds, no unexpected event is classified, and all three verdicts occur."""
+    text = _read(fixture)
+    if text is None:
+        print(f"SELFTEST = UNPROVEN (cannot read {fixture})")
+        return 1
+    expect = {m.group(1): (m.group(2), m.group(3)) for m in map(_EXPECT_RE.match, text.splitlines()) if m}
+    got = {c["event"]: c for c in classify(parse_audit_log(text))}
+    failures = 0
+    for eid, (want, case) in expect.items():
+        have = got.get(eid, {}).get("verdict", "IGNORED")
+        ok = have == want
+        failures += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'} {eid:24} {want:12} {case}" + ("" if ok else f" (got {have})"))
+    stray = sorted(set(got) - set(expect))
+    for eid in stray:
+        print(f"  FAIL {eid:24} {got[eid]['verdict']:12} classified but has no EXPECT line")
+    covered = {v for v, _ in expect.values()} >= {AUTHORIZED, UNEXPECTED, UNATTRIBUTED}
+    if not expect or not covered:
+        print("  FAIL fixture does not exercise AUTHORIZED, UNEXPECTED and UNATTRIBUTED")
+    passed = failures == 0 and not stray and covered and bool(expect)
+    print(f"SELFTEST = {'PASS' if passed else 'FAIL'} ({len(expect) - failures}/{len(expect)} expectations)")
+    return 0 if passed else 1
 
 
 def _read(path: Path | None) -> str | None:
@@ -402,11 +527,16 @@ def main(argv: list[str] | None = None) -> int:
     cls.add_argument("--log", type=Path, required=True)
     cls.add_argument("--status", type=Path, help="saved `auditctl -s` output")
     cls.add_argument("--rules", type=Path, help="saved `auditctl -l` output")
-    cls.add_argument("--lost-baseline", type=int, default=0)
+    cls.add_argument("--lost-baseline", help="the recorded `lost` counter; missing or not an integer = UNPROVEN")
+    st = sub.add_parser("self-test", help="classify the shipped synthetic audit fixture and compare it with its "
+                                          "# EXPECT lines; reads nothing from the host")
+    st.add_argument("--fixture", type=Path, default=SELFTEST_FIXTURE)
     args = parser.parse_args(argv)
     if args.command == "rules":
         sys.stdout.write(render_rules())
         return 0
+    if args.command == "self-test":
+        return self_test(args.fixture)
     if args.command == "check-rules":
         text = _read(args.rules)
         if text is None:
@@ -418,8 +548,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"RULES = LOADED ({total}/{total} watches)")
         return 0
+    baseline = args.lost_baseline.strip() if args.lost_baseline is not None else ""
     result, classified = evaluate(_read(args.log), _read(args.status), _read(args.rules),
-                                  lost_baseline=args.lost_baseline)
+                                  lost_baseline=int(baseline) if re.fullmatch(r"\d+", baseline) else None)
     for c in classified:
         if c["verdict"] != AUTHORIZED:
             print(f"  {c['verdict']:12} {c['key']:18} comm={c['comm']!r} exe={c['exe']!r} uid={c['uid']} "

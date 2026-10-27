@@ -1653,6 +1653,10 @@ BRANCH_SCOPE: dict[str, str] = {
     "tests/test_p3_alerting.py": f"{_P06UW} — amtool routing: null until chosen; watchdog → deadman; critical/warning → channel",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
+    "tests/fixtures/p3_writer_watch_selftest.audit": f"{_P06UW} — round 3: synthetic AT-0 self-test fixture (EXPECT lines)",
+    "research/p3/health.py": f"{_P06UW} — round 3: five §19/health fail-opens fixed (unknown state is never INFO)",
+    "tests/test_p3_health_s19.py": f"{_P06UW} — round 3: regression tests for the health fail-opens + textfile-write failure",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06UW} — round 3: the Owner edit sets the root receiver too",
 }
 
 

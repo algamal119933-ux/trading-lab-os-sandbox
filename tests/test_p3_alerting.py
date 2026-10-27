@@ -185,6 +185,21 @@ def test_alertmanager_template_holds_no_secret_material():
             assert "url" not in wh and wh["url_file"].startswith("/etc/alertmanager/secrets/")
 
 
+def test_inhibition_only_mutes_the_textfile_consequences_of_a_paging_exporter_outage():
+    rules = {r["alert"]: r for r in _rules()}
+    inhibits = _load(AM_TEMPLATE)["inhibit_rules"]
+    assert inhibits
+    for inh in inhibits:
+        sources = [re.fullmatch(r'alertname="([^"]+)"', m).group(1) for m in inh["source_matchers"]]
+        assert sources and all(rules[s]["labels"]["severity"] == "critical" for s in sources), sources
+        assert len(inh["target_matchers"]) == 1
+        pattern = re.fullmatch(r'alertname=~"([^"]+)"', inh["target_matchers"][0]).group(1)
+        muted = {a for a in rules if re.fullmatch(pattern, a)}
+        assert muted == {"TLOSHealthTextfileStale", "TLOSHealthTextfileMissing", "TLOSTextfileScrapeError"}
+        # the health alerts, the dead-man and the source itself are never muted
+        assert not muted & {"TLOSHealthCritical", "TLOSHealthWarning", "TLOSWatchdog", "TLOSDeliveryTest", *sources}
+
+
 def test_critical_repeats_faster_than_warning():
     routes = {tuple(r["matchers"]): r for r in _load(AM_TEMPLATE)["route"]["routes"]}
     crit = routes[('severity="critical"',)]["repeat_interval"]
@@ -233,6 +248,7 @@ def _owner_rendered(channel: str) -> dict:
     cfg = yaml.safe_load(AM_TEMPLATE.read_text(encoding="utf-8").replace("__TELEGRAM_CHAT_ID__", "123456789"))
     for route in cfg["route"]["routes"]:
         route["receiver"] = "deadman" if route["matchers"] == ['alertname="TLOSWatchdog"'] else channel
+    cfg["route"]["receiver"] = channel  # §3 step 4: the default too, so no alert can fall through to "null"
     return cfg
 
 
@@ -242,6 +258,9 @@ ROUTING_CASES = [  # (labels, receiver once the Owner has chosen)
     ({"alertname": "TLOSHealthTextfileStale", "severity": "critical"}, "CHANNEL"),
     ({"alertname": "TLOSHealthWarning", "severity": "warning", "check": "unexpected_writer"}, "CHANNEL"),
     ({"alertname": "TLOSDeliveryTest", "severity": "critical", "check": "owner-test"}, "CHANNEL"),
+    # an alert whose severity is missing or not one of ours must still reach the Owner, never "null"
+    ({"alertname": "TLOSDeliveryTest", "check": "no-severity"}, "CHANNEL"),
+    ({"alertname": "TLOSFutureRule", "severity": "info"}, "CHANNEL"),
 ]
 
 
