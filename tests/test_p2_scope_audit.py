@@ -1647,6 +1647,8 @@ BRANCH_SCOPE: dict[str, str] = {
     "research/p3/records/p3_workstreams.json": f"{_RST} — PLN-04/05/06/07/09/10/11 evidence, Owner/next texts, reboot acceptance record",
     "research/p3/control_room.py": f"{_RST} — F-CR-1: reboot row and unverified list follow the accepted record, fail-closed",
     "tests/test_p3_control_room.py": f"{_RST} — F-CR-1 test, including the fail-closed cases",
+    "research/p3/control_room_live.js": "P3-PLN-09 round 3 — adapter fail-open fixes: caps, exposure, positions, incidents, expiry",
+    "scripts/p3/control_room.py": "P3-PLN-09 round 3 — a stale or malformed health findings file is never reused",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }

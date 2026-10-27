@@ -35,6 +35,10 @@
     "en": "Reboot correctness PASS · RUN 3 verify-boot 10/10 · gap attestation clean · accepted by PR #94",
     "ar": "صحة إعادة الإقلاع ناجحة · فحص الإقلاع 10/10 · شهادة الفجوة نظيفة · مقبولة بدمج ‎#94",
     "record": "docs/p3/PLN_04_RECOVERY.md",
+    "open": [
+      {"en": "Power-loss posture (PLN-04): Owner decision G open", "ar": "وضع انقطاع الكهرباء (PLN-04): قرار المالك G مفتوح"},
+      {"en": "Unattended-upgrades policy (PLN-04): Owner decision H open", "ar": "سياسة التحديثات التلقائية (PLN-04): قرار المالك H مفتوح"}
+    ],
     "merge": "f584cd4363c38627625970cbc25176fe1caa7823"
   }
 }

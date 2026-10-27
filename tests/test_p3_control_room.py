@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
 import sys
 from pathlib import Path
 
@@ -457,3 +458,276 @@ def test_the_reboot_row_follows_the_governed_acceptance_record_and_fails_closed(
         lv = cr.project(_obs(workstreams=w))
         assert lv["ops"]["reboot"][0] == "wait"
         assert any("not yet exercised" in u["en"] for u in lv["scenario"]["unverified"])
+
+
+# ---------------------------------------------------------------- round-3 edge states (synthetic observations)
+# Every case below drives ``project()`` (and, where the adapter decides, the adapter text) through a state the
+# happy-path fixture never reaches. Unknown must stay unknown; nothing unobserved may read as healthy.
+def _caps(live: dict) -> dict:
+    return {c["k"]["en"]: c["st"] for c in live["caps"]}
+
+
+def _txt(v) -> str:
+    return json.dumps(v, ensure_ascii=False)
+
+
+def test_no_health_findings_is_unknown_health_never_healthy():
+    obs = _obs()
+    obs["health"] = {"findings": [], "overall": "INFO"}  # health.overall([]) is INFO: absence is not health
+    live = cr.project(obs)
+    sc = live["scenario"]
+    assert sc["dims"]["health"][0] == "unk" and "health" in sc["exc"]
+    assert sc["lho"]["en"] == "Not current"
+    assert sc["events"][-1]["s"] == "unk"
+    assert live["incidents_state"]["state"] == "unknown"
+
+
+@pytest.mark.parametrize("severity", ["UNKNOWN", "", "critical"])
+def test_an_unrecognised_severity_is_critical_and_opens_an_incident(severity):
+    obs = _obs()
+    obs["health"] = {"findings": obs["health"]["findings"] + [{"check": "x", "severity": severity, "detail": "?"}],
+                     "overall": severity}
+    live = cr.project(obs)
+    assert live["scenario"]["dims"]["health"][0] == "inc"
+    assert [i["id"] for i in live["scenario"]["incidents"]] == ["HEALTH-x"]
+
+
+@pytest.mark.parametrize("expires", ["TBD", "NEVER", "2027-13-40T00:00:00Z", "", "2027-01-31", "zzzz"])
+def test_an_unparseable_expiry_is_not_a_valid_authorization(expires):
+    live = cr.project(_obs(authorization={"present": True, "expires_utc": expires, "real_money": True,
+                                          "h1_launch": True}))
+    assert live["scenario"]["dims"]["authority"][0] == "fail"
+    assert live["auth_expires_epoch"] is None
+
+
+def test_a_valid_expiry_is_carried_to_the_client_for_its_own_expiry_check():
+    live = cr.project(_obs())
+    assert live["scenario"]["dims"]["authority"][0] == "ok"
+    assert live["auth_expires_epoch"] == datetime(2027, 1, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    fresh = js[js.index("function liveFreshness()"):js.index("/* ---------- shell")]
+    # a page generated before expiry and read after it must not keep saying "valid"
+    assert "LIVE.auth_expires_epoch" in fresh and "s.dims.authority=['fail'" in fresh
+
+
+def test_an_invalid_authorization_is_never_listed_as_known():
+    for auth in ({"present": True, "expires_utc": "2026-01-01T00:00:00Z", "real_money": True, "h1_launch": True},
+                 {"present": False, "expires_utc": None, "real_money": False, "h1_launch": False}):
+        live = cr.project(_obs(authorization=auth))
+        sc = live["scenario"]
+        assert "executing" not in live["ident"]["stage"]["en"] and live["project"]["chips"][2][0] == "fail"
+        assert "executing" not in sc["verdict"]["en"] and "STAGE: P3 · authorization not valid" in live["brief"]
+        known = _txt(sc["known"])
+        assert "P3 executing under" not in known
+        assert "authorization" in _txt(sc["affected"]).lower()
+    sc = cr.project(_obs())["scenario"]
+    assert any(k["en"].startswith("P3 executing under") for k in sc["known"]) and sc["affected"] == []
+
+
+def test_the_real_money_and_h1_lines_are_derived_not_asserted():
+    sc = cr.project(_obs())["scenario"]
+    assert any(k["en"] == "Real money blocked · H1 launch not authorized" for k in sc["known"])
+    for over in ({"registry": {"real_money_authorized": True, "instances": []}},
+                 {"registry": {"real_money_authorized": None, "instances": []}},
+                 {"authorization": {"present": True, "expires_utc": "2027-01-31T23:59:59Z", "real_money": False,
+                                    "h1_launch": True}}):
+        sc = cr.project(_obs(**over))["scenario"]
+        assert "Real money blocked" not in _txt(sc["known"])
+        assert "Real money" in _txt(sc["unknown"])
+    sc = cr.project(_obs(authorization={"present": True, "expires_utc": "2027-01-31T23:59:59Z", "real_money": True,
+                                        "h1_launch": False}))["scenario"]
+    assert "H1 launch not authorized" not in _txt(sc["known"]) and "H1 launch" in _txt(sc["unknown"])
+
+
+@pytest.mark.parametrize("over", [
+    {"registry": {"real_money_authorized": True, "fp_run_active": False, "instances": []}},
+    {"registry": {"real_money_authorized": "true", "instances": []}},
+    {"authorization": {"present": True, "expires_utc": "2027-01-31T23:59:59Z", "real_money": False, "h1_launch": True}},
+    {"paper_containers": {"tlos-h1-paper-cohort-1": "running"}},
+])
+def test_real_money_true_anywhere_is_never_shown_allowed(over):
+    live = cr.project(_obs(**over))
+    caps = _caps(live)
+    for k in ("Real money", "Withdrawals", "Shorts", "Leverage", "Margin", "Futures"):
+        assert caps[k][0] in ("blocked", "unk"), k
+    assert live["real_money_authorized"] is False and "allowed" not in _txt(live["caps"])
+    if over.get("registry", {}).get("real_money_authorized") is not False and "registry" in over:
+        assert live["scenario"]["dims"]["authority"][0] == "fail" and caps["Real money"] == ["unk", "unkBlocked"]
+
+
+def test_the_authorization_text_is_parsed_fail_closed():
+    good = cr.parse_authorization("REAL_MONEY_AUTHORIZED = NO\nH1_LAUNCH_AUTHORIZED = NO\nEXPIRES_UTC = 2027-01-31T23:59:59Z\n")
+    assert good == {"present": True, "expires_utc": "2027-01-31T23:59:59Z", "real_money": True, "h1_launch": True}
+    both = cr.parse_authorization("REAL_MONEY_AUTHORIZED = NO\nREAL_MONEY_AUTHORIZED = YES\n"
+                                  "H1_LAUNCH_AUTHORIZED = NO\nH1_LAUNCH_AUTHORIZED = YES\nEXPIRES_UTC = 2027-01-31T23:59:59Z\n")
+    assert both["real_money"] is False and both["h1_launch"] is False
+    assert cr.parse_authorization("") == {"present": False, "expires_utc": None, "real_money": False, "h1_launch": False}
+    two = cr.parse_authorization("REAL_MONEY_AUTHORIZED = NO\nEXPIRES_UTC = 2027-01-31T23:59:59Z\n"
+                                 "EXPIRES_UTC = 2099-01-01T00:00:00Z\n")
+    assert two["expires_utc"] is None  # two different expiries: neither is trusted
+    assert cr.parse_authorization(cr.AUTHORIZATION.read_text(encoding="utf-8"))["real_money"] is True
+
+
+def test_an_unknown_runtime_never_claims_stopped_or_zero_exposure():
+    live = cr.project(_obs(paper_containers=None, paper_error="docker ps failed"))
+    sc = live["scenario"]
+    assert sc["dims"]["runtime"] == ["unk", "unknown"] and sc["ops"]["runtime"][0] == "unk"
+    assert _caps(live)["Paper trading"][0] == "unk" and _caps(live)["Long entries"][0] == "unk"
+    for text in (sc["verdict"], sc["system"]):
+        assert "No paper runtime" not in text["en"]
+    assert sc["dec"]["none"] is None and sc["dec"]["unv"] is True and sc["posUnv"] is True
+    assert sc["sys"]["feed"][0] == "unk" and sc["sys"]["api"][0] == "unk"
+    assert "No paper runtime" not in live["brief"].split("SYSTEM:")[1].split("\n")[0]
+
+
+def test_a_running_paper_runtime_is_never_described_as_stopped():
+    live = cr.project(_obs(paper_containers={"tlos-h1-paper-cohort-1": "running"}))
+    sc = live["scenario"]
+    assert sc["dims"]["runtime"][0] == "ok"
+    assert "No paper runtime" not in sc["verdict"]["en"] and "running" in sc["verdict"]["en"]
+    assert sc["dec"]["none"] is None and sc["dec"]["unv"] is True and sc["posUnv"] is True
+    assert "No cohort running" not in _txt(live["caps"])
+    assert sc["sys"]["containers"][0] == "ok" and sc["sys"]["feed"][0] == "unk"
+
+
+@pytest.mark.parametrize("state", ["restarting", "paused", "removing"])
+def test_a_paper_container_that_is_neither_running_nor_stopped_is_degraded(state):
+    live = cr.project(_obs(paper_containers={"tlos-h1-paper-cohort-1": state}))
+    sc = live["scenario"]
+    assert sc["dims"]["runtime"][0] == "warn" and state in sc["exc"]["runtime"]["en"]
+    assert "No paper runtime" not in sc["verdict"]["en"] and sc["posUnv"] is True
+
+
+@pytest.mark.parametrize("state", ["exited", "created", "dead"])
+def test_a_stopped_paper_container_is_off(state):
+    sc = cr.project(_obs(paper_containers={"tlos-h1-paper-cohort-1": state}))["scenario"]
+    assert sc["dims"]["runtime"][0] == "off" and sc["dec"]["none"] and sc["posUnv"] is False
+
+
+def test_the_adapter_shows_exposure_and_positions_only_when_the_runtime_is_observed_stopped():
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    for fn, nxt in (("function riskCol()", "function posCol()"), ("function risk()", "/* ---------- Evidence")):
+        body = js[js.index(fn):js.index(nxt)]
+        assert "s.dims.runtime[0]==='off'" in body and "s.dims.runtime[0]!=='ok'" not in body, fn
+    pos = js[js.index("function posCol()"):js.index("function incSummary()")]
+    assert "s.posUnv" in pos and "chip('unk','unknown')" in pos
+    dec = js[js.index("function decCol()"):js.index("function riskCol()")]
+    assert "s.dec.none?" in dec and "chip('unk','unknown')" in dec
+    assert "function expoTxt()" in js  # the prototype's expoTxt says 0% whenever pos is empty
+    expo = js[js.index("function expoTxt()"):]
+    assert "s.dims.runtime[0]==='off'" in expo.split("}")[0] + expo.split("}")[1]
+    trd = js[js.index("function trades()"):js.index("/* ---------- Market Workspace")]
+    assert "s.posUnv" in trd
+    m = _mobile_js()
+    assert "s.posUnv" in m[m.index("function mStatus()"):m.index("function mDetail(k)")]
+
+
+@pytest.mark.parametrize("missing", ["owner", "claude", "next", "workstreams", "updated_utc"])
+def test_a_workstream_record_missing_a_key_degrades_to_unknown_not_a_crash(missing):
+    ws = copy.deepcopy(json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8")))
+    ws.pop(missing)
+    live = cr.project(_obs(workstreams=ws))
+    sc = live["scenario"]
+    if missing == "owner":
+        assert sc["owner"][0] == "req" and "not recorded" in sc["owner"][1]["en"].lower()
+    if missing in ("claude", "next"):
+        assert "not recorded" in sc[missing]["en"].lower()
+    if missing == "workstreams":
+        assert live["project"]["workstreams"] == [] and "workstream" in _txt(sc["unknown"]).lower()
+    if missing == "updated_utc":
+        assert live["project"]["ws_updated"] == "—"
+    cr.build(live)
+
+
+def test_a_malformed_workstream_entry_is_unknown_not_dropped():
+    ws = copy.deepcopy(json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8")))
+    ws["workstreams"][0] = {"id": "PLN-00"}
+    ws["workstreams"][1]["status"] = "DONE"
+    rows = cr.project(_obs(workstreams=ws))["project"]["workstreams"]
+    assert rows[0][0] == "unk" and rows[0][3] == "UNKNOWN" and rows[1][0] == "unk" and len(rows) == 12
+
+
+def test_the_reboot_open_items_come_from_the_record_not_from_code():
+    ws = json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8"))
+    opened = ws["reboot"]["open"]
+    assert opened and all(o["en"] and o["ar"] for o in opened)
+    sc = cr.project(_obs())["scenario"]
+    assert [u["en"] for u in sc["unverified"]] == [o["en"] for o in opened]
+    # the PLN-04 evidence line names decisions G and H as open; the view lists both
+    assert "decision G" in _txt(opened) and "decision H" in _txt(opened)
+    for bad in (None, "G", [{"en": "x"}], [1]):
+        w = copy.deepcopy(ws)
+        if bad is None:
+            w["reboot"].pop("open")
+        else:
+            w["reboot"]["open"] = bad
+        sc = cr.project(_obs(workstreams=w))["scenario"]
+        assert cr.project(_obs(workstreams=w))["ops"]["reboot"][0] == "ok"
+        assert any("open items not recorded" in u["en"] for u in sc["unverified"])
+    w = copy.deepcopy(ws)
+    w["reboot"]["open"] = []
+    assert cr.project(_obs(workstreams=w))["scenario"]["unverified"] == []
+
+
+@pytest.mark.parametrize("variant", [
+    {"state": "OK"}, {"state": "ok", "en": ""}, {"state": "ok", "record": None}, {"state": "ok", "en": 3},
+    {"state": "fail"},
+])
+def test_reboot_record_variants_fail_closed(variant):
+    ws = copy.deepcopy(json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8")))
+    ws["reboot"].update(variant)
+    live = cr.project(_obs(workstreams=ws))
+    assert live["ops"]["reboot"][0] == "wait"
+    assert any("not yet exercised" in u["en"] for u in live["scenario"]["unverified"])
+
+
+def test_the_reboot_record_cites_a_record_in_this_repository():
+    ws = json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8"))
+    assert (REPO / ws["reboot"]["record"]).is_file()
+
+
+def test_stale_missing_or_malformed_health_findings_are_critical_not_reused(tmp_path):
+    now = 1_792_965_000.0
+    good = tmp_path / "health.json"
+    good.write_text(json.dumps({"findings": [{"check": "a", "severity": "INFO", "detail": "ok"}], "HEALTH": "INFO"}))
+    import os
+    os.utime(good, (now - 60, now - 60))
+    assert cr.load_findings(good, now=now) == [{"check": "a", "severity": "INFO", "detail": "ok"}]
+    os.utime(good, (now - cr.FINDINGS_MAX_AGE_S - 1,) * 2)
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps({"findings": []}))
+    os.utime(empty, (now, now))
+    for path in (good, tmp_path / "absent.json", bad, empty):
+        (f,) = cr.load_findings(path, now=now)
+        assert f["check"] == "health_input" and f["severity"] == "CRITICAL", path
+    cli = (REPO / "scripts" / "p3" / "control_room.py").read_text(encoding="utf-8")
+    assert "control_room.load_findings(args.findings_json" in cli
+
+
+def test_the_command_center_incident_summary_says_unknown_when_incidents_are_unproven():
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    inc = js[js.index("function incSummary()"):js.index("function activeCaps()")]
+    # "None open" may be said only once the incident source is bound (health findings present)
+    assert inc.index("st.state!=='bound'") < inc.index("None open.")
+    assert "chip('unk','unknown')" in inc
+
+
+def test_a_missing_fp_control_3_row_is_not_listed_as_p2_closed():
+    sc = cr.project(_obs(registry={"real_money_authorized": False, "instances": []}))["scenario"]
+    assert not any(k["en"].startswith("P2 CLOSED") for k in sc["known"])
+    assert "FP-CONTROL-3" in _txt(sc["unknown"])
+    assert any(k["en"].startswith("P2 CLOSED") for k in cr.project(_obs())["scenario"]["known"])
+
+
+def test_capability_rows_keep_their_projected_state_across_renders():
+    # The frozen prototype's syncCaps() runs on every render and sets rows 0-1 to ['ok','allowed'] whenever
+    # the runtime dimension is not 'off' — so an unknown runtime or a stale view read "Allowed · paper".
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    sync = js[js.index("function syncCaps()"):]
+    sync = sync[:sync.index("\n")]
+    assert "LIVE.caps" in sync and "'allowed'" not in sync and "['stale'" in sync and "'blocked'" in sync
+    for obs in (_obs(paper_containers=None, paper_error="x"), _obs(paper_containers={"tlos-h1-paper-cohort-1": "paused"})):
+        st = _caps(cr.project(obs))
+        assert st["Paper trading"][1] != "allowed" and st["Long entries"] == ["unk", "unknown"]

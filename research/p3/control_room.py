@@ -50,6 +50,12 @@ FRESHNESS_BUDGET_S = 2 * 3600
 # Slice 3 reads the sealed cohort named by the newest execution-audit record (read-only).
 SEALED_DECISIONS_SHOWN = 40   # newest notable decisions listed on the Decisions screen
 SEALED_CANDLES_SHOWN = 56     # bars per pair on the Market Workspace (the prototype's chart width)
+# The scheduled build reuses the findings health_check.py --json wrote moments before. A findings file older
+# than this (the health run failed and left the previous one behind) is not current and is never reused.
+FINDINGS_MAX_AGE_S = 15 * 60
+# Docker states in which a paper container is observed stopped; any other non-running state is degraded.
+_STOPPED_STATES = frozenset({"exited", "dead", "created"})
+_WS_STATUSES = ("ACCEPTED", "PARTIAL", "IN_PROGRESS", "PENDING")
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
 
@@ -117,6 +123,47 @@ def sealed_cohort(audits: list[dict]) -> dict | None:
                 timeframes=timeframes)
 
 
+# ---------------------------------------------------------------- inputs
+def parse_authorization(text: str) -> dict:
+    """The fields the projection needs from the Owner P3 authorization record. Fail-closed: a boundary
+    counts as explicit only when its NO line is present and no contradicting line is; an expiry is
+    trusted only when exactly one EXPIRES_UTC value is stated."""
+    def only_no(field: str) -> bool:
+        values = set(re.findall(rf"^{field} = (\S+)", text, re.M))
+        return values == {"NO"}
+    expiries = set(re.findall(r"^EXPIRES_UTC = (\S+)", text, re.M))
+    return {"present": bool(text), "expires_utc": expiries.pop() if len(expiries) == 1 else None,
+            "real_money": only_no("REAL_MONEY_AUTHORIZED"), "h1_launch": only_no("H1_LAUNCH_AUTHORIZED")}
+
+
+def _finding_ok(f) -> bool:
+    return isinstance(f, dict) and all(isinstance(f.get(k), str) for k in ("check", "severity", "detail"))
+
+
+def load_findings(path: Path, *, now: float | None = None) -> list[dict]:
+    """Findings from a health_check.py --json file, only when that file is current and well formed.
+
+    Otherwise one CRITICAL ``health_input`` finding: health that was not observed now is UNPROVEN, and
+    UNPROVEN blocks exactly as FAIL does (an old file is never shown as this hour's health)."""
+    now = time.time() if now is None else now
+
+    def unproven(why: str) -> list[dict]:
+        return [{"check": "health_input", "severity": health.CRITICAL,
+                 "detail": f"UNPROVEN: health findings {why}; not reused"}]
+    p = Path(path)
+    try:
+        age = now - p.stat().st_mtime
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return unproven(f"unreadable ({type(exc).__name__})")
+    if age > FINDINGS_MAX_AGE_S or age < -300:
+        return unproven(f"file is {age / 60:.0f} min old (budget {FINDINGS_MAX_AGE_S // 60} min)")
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list) or not findings or not all(_finding_ok(f) for f in findings):
+        return unproven("malformed or empty")
+    return findings
+
+
 # ---------------------------------------------------------------- collect
 def collect(*, runner: Runner = _run, now: float | None = None, registry_path: Path = REGISTRY,
             workstreams_path: Path = WORKSTREAMS, authorization_path: Path = AUTHORIZATION,
@@ -140,7 +187,6 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
         ledger_records = [json.loads(x) for x in Path(ledger_path).read_text(encoding="utf-8").splitlines() if x.strip()]
     restart_ok, restart_reason = recovery.may_restart("FP-CONTROL-3", registry, Path(ledger_path))
     auth_text = Path(authorization_path).read_text(encoding="utf-8") if Path(authorization_path).exists() else ""
-    expires = re.search(r"^EXPIRES_UTC = (\S+)", auth_text, re.M)
     closure = Path(p2_closure_path).read_text(encoding="utf-8") if Path(p2_closure_path).exists() else ""
     recon = re.search(r"reconcile\s+PASS · (\d+)/(\d+) findings", closure)
     merges = _out(runner, ["git", "-C", str(repo_root), "log", "--first-parent", "--merges", "-8", "--format=%H%x09%ct%x09%s", "HEAD"])
@@ -187,9 +233,7 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
                            "edge": (r.get("outcome") or {}).get("prospective_paper_edge")}
                           for r in registry.get("instances", [])],
         },
-        "authorization": {"present": bool(auth_text), "expires_utc": expires.group(1) if expires else None,
-                          "real_money": "REAL_MONEY_AUTHORIZED = NO" in auth_text,
-                          "h1_launch": "H1_LAUNCH_AUTHORIZED = NO" in auth_text},
+        "authorization": parse_authorization(auth_text),
         "p2_reconcile": {"passed": int(recon.group(1)), "total": int(recon.group(2))} if recon else None,
         "governance": {
             "main": _out(runner, ["git", "-C", str(repo_root), "rev-parse", "HEAD"]),
@@ -214,23 +258,63 @@ def _ws_chip(status: str) -> str:
     return {"ACCEPTED": "ok", "PARTIAL": "warn", "IN_PROGRESS": "info", "PENDING": "wait"}.get(status, "unk")
 
 
+def _bi(v) -> bool:
+    return isinstance(v, dict) and all(isinstance(v.get(k), str) and v.get(k) for k in ("en", "ar"))
+
+
+def _ws_text(ws: dict, key: str) -> dict:
+    """A bilingual text from the governed workstream record; a missing one says so (never a crash, never blank)."""
+    v = ws.get(key)
+    return b(v["en"], v["ar"]) if _bi(v) else b(f"Not recorded: the workstream record has no valid '{key}'",
+                                               f"غير مسجّل: لا يحتوي سجل مسارات العمل على '{key}' صالح")
+
+
+def _ws_rows(ws: dict) -> list | None:
+    items = ws.get("workstreams")
+    if not isinstance(items, list):
+        return None
+    rows = []
+    for w in items:
+        w = w if isinstance(w, dict) else {}
+        status = w.get("status") if isinstance(w.get("status"), str) and w.get("status") else "UNKNOWN"
+        wid = str(w.get("id") or "?")
+        rows.append([_ws_chip(status), wid, b(w["en"], w["ar"]) if _bi(w) else b(wid, wid), status,
+                     str(w.get("evidence") or "not recorded")])
+    return rows
+
+
+def _expiry_epoch(expires) -> float | None:
+    """Epoch of an ``EXPIRES_UTC`` value in the record's one format, or None when it cannot be read."""
+    if not isinstance(expires, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", expires):
+        return None
+    try:
+        return datetime.strptime(expires, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        return None
+
+
 def project(obs: dict) -> dict:
     """Map an observation onto the prototype's scenario schema. Pure: no I/O."""
     now = obs["observed_utc"]
-    sev = obs["health"]["overall"]
-    not_info = [f for f in obs["health"]["findings"] if f["severity"] != health.INFO]
+    findings = obs["health"]["findings"]
+    # No findings at all means the health run did not report: health is UNPROVEN, never healthy.
+    sev = obs["health"]["overall"] if findings else "UNKNOWN"
+    not_info = [f for f in findings if f["severity"] != health.INFO]
     exc: dict = {}
 
-    health_dim = {health.INFO: ["ok", "healthy"], health.WARNING: ["warn", "degraded"]}.get(
-        sev, ["inc", b("Critical", "حرج")])
+    health_dim = ["unk", "unknown"] if not findings else {health.INFO: ["ok", "healthy"], health.WARNING: [
+        "warn", "degraded"]}.get(sev, ["inc", b("Critical", "حرج")])
+    if not findings:
+        exc["health"] = b("No health findings in this observation: health is UNPROVEN.",
+                          "لا نتائج صحة في هذا الرصد: الصحة غير مثبتة.")
     if not_info:
         exc["health"] = b("; ".join(f"{f['check']}: {f['detail']}" for f in not_info),
                           "؛ ".join(f"{f['check']}: {f['detail']}" for f in not_info))
 
     auth = obs["authorization"]
-    expired = auth["expires_utc"] is None or auth["expires_utc"] < datetime.fromtimestamp(
-        obs["observed_epoch"], timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    authority_ok = auth["present"] and not expired and auth["real_money"] \
+    expires_epoch = _expiry_epoch(auth.get("expires_utc"))
+    expired = expires_epoch is None or expires_epoch < obs["observed_epoch"]
+    authority_ok = auth["present"] is True and not expired and auth["real_money"] is True \
         and obs["registry"]["real_money_authorized"] is False
     authority_dim = ["ok", "valid"] if authority_ok else ["fail", b("Not valid", "غير صالحة")]
     if not authority_ok:
@@ -251,14 +335,22 @@ def project(obs: dict) -> dict:
     if paper is None:
         runtime_dim = ["unk", "unknown"]
         exc["runtime"] = b(f"Docker could not be read: {obs['paper_error']}", f"تعذّرت قراءة Docker: {obs['paper_error']}")
+        runtime_label = b("Paper runtime state unknown", "حالة التشغيل الورقي غير معروفة")
     elif any(state == "running" for state in paper.values()):
         n = sum(state == "running" for state in paper.values())
         runtime_dim = ["ok", "running"]
         runtime_label = b(f"{n} paper runtime running", f"{n} تشغيل ورقي يعمل")
-    else:
+    elif all(state in _STOPPED_STATES for state in paper.values()):
         runtime_dim = ["off", "stopped"]
         exc["runtime"] = b("No paper cohort is running: P2 is closed and H1 is not launched (observed).",
                            "لا توجد مجموعة ورقية تعمل: P2 مغلقة وH1 لم تُطلق (مرصود).")
+    else:
+        # restarting / paused / removing: a paper runtime exists and is neither running nor stopped.
+        odd = ", ".join(f"{n} {s}" for n, s in sorted(paper.items()) if s not in _STOPPED_STATES)
+        runtime_dim = ["warn", "degraded"]
+        exc["runtime"] = b(f"Paper runtime neither running nor stopped: {odd}", f"تشغيل ورقي ليس عاملًا ولا متوقفًا: {odd}")
+        runtime_label = b(f"Paper runtime degraded ({odd})", f"تشغيل ورقي متدهور ({odd})")
+    runtime_off = runtime_dim[0] == "off"
 
     rec = obs["p2_reconcile"]
     recon_dim = ["ok", b(f"{rec['passed']}/{rec['total']} · P2 final", f"{rec['passed']}/{rec['total']} · P2 النهائية")] \
@@ -268,7 +360,12 @@ def project(obs: dict) -> dict:
             "freshness": ["ok", "fresh"], "runtime": runtime_dim, "recon": recon_dim}
 
     fp3 = next((i for i in obs["registry"]["instances"] if i["role"] == "FP-CONTROL-3"), {})
-    ws = obs["workstreams"]
+    ws = obs["workstreams"] if isinstance(obs["workstreams"], dict) else {}
+    owner_v = ws.get("owner")
+    owner = ([owner_v["state"], b(owner_v["en"], owner_v["ar"])]
+             if _bi(owner_v) and owner_v.get("state") in ("req", "info", "none")
+             else ["req", _ws_text({}, "owner")])  # an unreadable Owner line asks the Owner to look
+    ws_rows = _ws_rows(ws)
     merges = obs["governance"]["merges"]
     last_merge = merges[0] if merges else None
     pr_m = re.search(r"#(\d+)", last_merge["subject"]) if last_merge else None
@@ -279,13 +376,33 @@ def project(obs: dict) -> dict:
 
     newest = obs["backup_sets"][-1] if obs["backup_sets"] else None
     ledger_last = obs["ledger"]["last"]
-    known = [
-        b(f"P2 CLOSED / PASS · {fp3.get('cohort_id')} · {fp3.get('closed_utc')} (registry)",
-          f"P2 مغلقة / ناجحة · {fp3.get('cohort_id')} · {fp3.get('closed_utc')} (السجل)"),
-        b(f"P3 executing under 7b1b1fa1 · expires {auth['expires_utc']}",
-          f"P3 قيد التنفيذ بموجب 7b1b1fa1 · تنتهي {auth['expires_utc']}"),
-        b("Real money blocked · H1 launch not authorized", "المال الحقيقي محظور · إطلاق H1 غير مصرّح"),
-    ]
+    known, unknown, affected = [], [], []
+    if fp3.get("status") == "CLOSED":
+        known.append(b(f"P2 CLOSED / PASS · {fp3.get('cohort_id')} · {fp3.get('closed_utc')} (registry)",
+                       f"P2 مغلقة / ناجحة · {fp3.get('cohort_id')} · {fp3.get('closed_utc')} (السجل)"))
+    else:
+        unknown.append(b("FP-CONTROL-3 registry row not observed CLOSED", "صف FP-CONTROL-3 في السجل غير مرصود كمغلق"))
+    if authority_ok:
+        known.append(b(f"P3 executing under 7b1b1fa1 · expires {auth['expires_utc']}",
+                       f"P3 قيد التنفيذ بموجب 7b1b1fa1 · تنتهي {auth['expires_utc']}"))
+    else:
+        affected.append(b(f"P3 authorization not valid (missing, expired or unreadable expiry: {auth.get('expires_utc')})",
+                          f"تفويض P3 غير صالح (مفقود أو منتهٍ أو تاريخ انتهاء غير مقروء: {auth.get('expires_utc')})"))
+    rm_blocked = obs["registry"]["real_money_authorized"] is False and auth["real_money"] is True
+    h1_blocked = auth["h1_launch"] is True
+    if rm_blocked and h1_blocked:
+        known.append(b("Real money blocked · H1 launch not authorized", "المال الحقيقي محظور · إطلاق H1 غير مصرّح"))
+    else:
+        if rm_blocked:
+            known.append(b("Real money blocked", "المال الحقيقي محظور"))
+        else:
+            unknown.append(b("Real money boundary not proven by the registry and the authorization record (treated as blocked)",
+                             "حد المال الحقيقي غير مثبت في السجل وسجل التفويض (يُعامل كمحظور)"))
+        if h1_blocked:
+            known.append(b("H1 launch not authorized", "إطلاق H1 غير مصرّح"))
+        else:
+            unknown.append(b("H1 launch boundary not explicit in the authorization record (treated as not authorized)",
+                             "حد إطلاق H1 غير صريح في سجل التفويض (يُعامل كغير مصرّح)"))
     if backup_f:
         known.append(b(f"Backup: {backup_f['detail']} · verify {'PASS' if backup_f['severity'] == health.INFO else 'FAIL'}",
                        f"النسخ الاحتياطي: {backup_f['detail']} · التحقق {'ناجح' if backup_f['severity'] == health.INFO else 'فاشل'}"))
@@ -293,13 +410,18 @@ def project(obs: dict) -> dict:
                    f"سجل المشغّل: {obs['ledger']['records']} سجلات، السلسلة {'ناجحة' if ledger_ok else 'فاشلة'}"))
     known.append(b(f"FP-CONTROL-3 restart refused: {obs['fp_control_3_restart']['reason']}",
                    f"إعادة تشغيل FP-CONTROL-3 مرفوضة: {obs['fp_control_3_restart']['reason']}"))
-    unknown = [b("Off-host observation: not implemented (PLN-05 Tier 3 / PLN-06)",
-                 "الرصد من خارج الجهاز: غير منفّذ (PLN-05 المستوى 3 / PLN-06)")]
+    unknown.append(b("Off-host observation: not implemented (PLN-05 Tier 3 / PLN-06)",
+                     "الرصد من خارج الجهاز: غير منفّذ (PLN-05 المستوى 3 / PLN-06)"))
+    if ws_rows is None:
+        unknown.append(b("Workstream statuses: the workstream record lists none", "حالات مسارات العمل: لا يسرد السجل أيًا منها"))
     reboot = _reboot_acceptance(ws)
     if reboot:
         known.append(b(reboot["en"], reboot["ar"]))
-        unverified = [b("Power-loss posture (PLN-04): Owner decision G open",
-                        "وضع انقطاع الكهرباء (PLN-04): قرار المالك G مفتوح")]
+        # the open items are the record's, not code: a decision closed by a merged record leaves the view with it
+        unverified = _reboot_open(reboot)
+        if unverified is None:
+            unverified = [b("PLN-04 reboot acceptance: open items not recorded in the governed record",
+                            "قبول إعادة الإقلاع PLN-04: البنود المفتوحة غير مسجّلة في السجل المحكوم")]
     else:
         unverified = [b("Recovery after a host reboot (PLN-04): not yet exercised",
                         "التعافي بعد إعادة إقلاع الخادم (PLN-04): لم يُختبر بعد")]
@@ -316,13 +438,13 @@ def project(obs: dict) -> dict:
                        "c": "system", "d": b(f"Backup set {newest} written", f"كُتبت مجموعة النسخ {newest}"),
                        "src": b("backup record", "سجل النسخ")})
     events.sort(key=lambda e: e["t"])
-    events.append({"t": now, "s": "ok" if sev == health.INFO else "warn", "c": "system",
+    events.append({"t": now, "s": "unk" if not findings else "ok" if sev == health.INFO else "warn", "c": "system",
                    "d": b(f"Health check: {sev}", f"فحص الصحة: {sev}"), "src": b("health check", "فحص الصحة")})
 
     system_txt = b(
         f"No paper runtime. Backups daily (newest {newest or 'none'}); health hourly: {sev}.",
         f"لا تشغيل ورقي. النسخ يوميًا (الأحدث {newest or 'لا يوجد'})؛ الصحة كل ساعة: {sev}.")
-    if runtime_dim[0] == "ok":
+    if not runtime_off:
         system_txt = b(f"{runtime_label['en']}. Health hourly: {sev}.", f"{runtime_label['ar']}. الصحة كل ساعة: {sev}.")
 
     host = obs["host"]
@@ -334,9 +456,9 @@ def project(obs: dict) -> dict:
         "host": ["ok", b(f"Up · {up / 86400:.1f} d", f"يعمل · {up / 86400:.1f} يوم")] if up is not None else ["unk", "unknown"],
         "containers": ["unk", "unknown"] if running is None else
         (["off", b(f"No paper runtime · {len(others)} other running", f"لا تشغيل ورقي · {len(others)} أخرى تعمل")]
-         if runtime_dim[0] == "off" else ["ok", b(f"{len(running)} running", f"{len(running)} تعمل")]),
-        "feed": ["off", b("No feed · no runtime", "لا تغذية · لا تشغيل")] if runtime_dim[0] == "off" else ["unk", "unknown"],
-        "api": ["off", b("Not used · no runtime", "غير مستخدمة · لا تشغيل")] if runtime_dim[0] == "off" else ["unk", "unknown"],
+         if runtime_off else [runtime_dim[0], b(f"{len(running)} running", f"{len(running)} تعمل")]),
+        "feed": ["off", b("No feed · no runtime", "لا تغذية · لا تشغيل")] if runtime_off else ["unk", "unknown"],
+        "api": ["off", b("Not used · no runtime", "غير مستخدمة · لا تشغيل")] if runtime_off else ["unk", "unknown"],
         "monitor": ["ok", b("Health timer active", "مؤقت الصحة نشط")] if obs["health_timer"]["severity"] == health.INFO
         else ["warn", b(obs["health_timer"]["detail"], obs["health_timer"]["detail"])],
         "clock": {True: ["ok", b("Synced", "متزامنة")], False: ["warn", b("Not synced", "غير متزامنة")]}.get(
@@ -344,25 +466,33 @@ def project(obs: dict) -> dict:
         "boot": boot or "—",
     }
 
+    stage_en, stage_ar = ("P3 Paper Beta is executing", "النسخة التجريبية الورقية P3 قيد التنفيذ") if authority_ok \
+        else ("P3 authorization is not valid", "تفويض P3 غير صالح")
+    rt_en, rt_ar = ("No paper runtime is running.", "لا يعمل أي تشغيل ورقي.") if runtime_off \
+        else (f"{runtime_label['en']}.", f"{runtime_label['ar']}.")
     scenario = {
-        "label": "LIVE", "now": now, "step": 6, "sub": 6, "signal": "owner" if ws["owner"]["state"] == "req" else "events",
+        "label": "LIVE", "now": now, "step": 6, "sub": 6, "signal": "owner" if owner[0] == "req" else "events",
         "dims": dims, "exc": exc, "banner": None,
-        "verdict": b(f"P2 is closed (PASS). P3 Paper Beta is executing; health {sev}. No paper runtime is running.",
-                     f"أُغلقت P2 (ناجحة). النسخة التجريبية الورقية P3 قيد التنفيذ؛ الصحة {sev}. لا يعمل أي تشغيل ورقي."),
-        "owner": [ws["owner"]["state"], b(ws["owner"]["en"], ws["owner"]["ar"])],
-        "claude": b(ws["claude"]["en"], ws["claude"]["ar"]),
+        "verdict": b(f"P2 is closed (PASS). {stage_en}; health {sev}. {rt_en}",
+                     f"أُغلقت P2 (ناجحة). {stage_ar}؛ الصحة {sev}. {rt_ar}"),
+        "owner": owner,
+        "claude": _ws_text(ws, "claude"),
         "system": system_txt,
-        "next": b(ws["next"]["en"], ws["next"]["ar"]), "fromContract": True,
+        "next": _ws_text(ws, "next"), "fromContract": True,
         "lgc": lgc,
-        "lho": b(f"{now} · health {sev}", f"{now} · الصحة {sev}") if sev == health.INFO else b("Not current", "غير حالي"),
+        "lho": b(f"{now} · health {sev}", f"{now} · الصحة {sev}") if findings and sev == health.INFO
+        else b("Not current", "غير حالي"),
         "nowObs": b(f"Observed {now}", f"رُصد {now}"),
-        "known": known, "unknown": unknown, "affected": [], "unverified": unverified,
+        "known": known, "unknown": unknown, "affected": affected, "unverified": unverified,
         "events": events, "incidents": [], "viewerNew": 0, "viewStale": False,
         "extraForbid": [],
-        "dec": {"unv": False, "stale": False,
+        # Decisions and positions are known to be none only while the runtime is observed stopped; a running,
+        # degraded or unobserved runtime has decisions and positions this view does not read (unverified).
+        "dec": {"unv": not runtime_off, "stale": False,
                 "none": b(f"No paper cohort running; no decisions since the P2 closure ({fp3.get('closed_utc')}).",
-                          f"لا مجموعة ورقية تعمل؛ لا قرارات منذ إغلاق P2 ({fp3.get('closed_utc')}).")},
-        "pos": [], "posUnv": False, "risk": {"stale": False},
+                          f"لا مجموعة ورقية تعمل؛ لا قرارات منذ إغلاق P2 ({fp3.get('closed_utc')}).")
+                if runtime_off else None},
+        "pos": [], "posUnv": not runtime_off, "risk": {"stale": False},
         "ops": {"runtime": runtime_dim, "safe": ["off", "notEngaged"], "recovery": ["off", "none"], "rec": None,
                 "unresolved": 0,
                 "hist": b(f"Last operator record: {ledger_last.get('outcome')} · {ledger_last.get('utc')}",
@@ -382,9 +512,10 @@ def project(obs: dict) -> dict:
     blocked = ["blocked", "blocked"]
     cap_src = "registry + P3_CONTRACT §23"
     caps = [
-        {"k": b("Paper trading", "التداول الورقي"), "st": runtime_dim if runtime_dim[0] == "ok" else ["off", b("No cohort running", "لا مجموعة تعمل")],
+        {"k": b("Paper trading", "التداول الورقي"), "st": ["off", b("No cohort running", "لا مجموعة تعمل")] if runtime_off else runtime_dim,
          "scope": b("Governed cohorts only", "المجموعات المحكومة فقط"), "src": cap_src, "chg": b("Owner authorization", "تفويض المالك"), "exec": True},
-        {"k": b("Long entries", "صفقات الشراء"), "st": ["off", b("No cohort running", "لا مجموعة تعمل")], "scope": b("Paper only", "ورقي فقط"),
+        {"k": b("Long entries", "صفقات الشراء"), "st": ["off", b("No cohort running", "لا مجموعة تعمل")] if runtime_off else ["unk", "unknown"],
+         "scope": b("Paper only", "ورقي فقط"),
          "src": cap_src, "chg": b("Owner authorization", "تفويض المالك"), "exec": True},
         {"k": b("Shorts", "البيع على المكشوف"), "st": blocked, "scope": b("All", "الكل"), "src": cap_src, "chg": None, "exec": True},
         {"k": b("Leverage", "الرافعة المالية"), "st": blocked, "scope": b("All", "الكل"), "src": cap_src, "chg": None, "exec": True},
@@ -397,19 +528,21 @@ def project(obs: dict) -> dict:
     project_chips = [
         ["ok", b("P1 closed · PASS", "P1 مغلقة · ناجحة")],
         ["ok", b("P2 closed · PASS", "P2 مغلقة · ناجحة")],
-        ["info", b("P3 executing", "P3 قيد التنفيذ")],
+        ["info", b("P3 executing", "P3 قيد التنفيذ")] if authority_ok
+        else ["fail", b("P3 authorization not valid", "تفويض P3 غير صالح")],
     ]
     live = {
         "live_version": "P3_CONTROL_ROOM_LIVE_V1",
         "observed_utc": now, "observed_epoch": obs["observed_epoch"], "budget_s": FRESHNESS_BUDGET_S,
+        # the client re-checks expiry itself: a page generated before expiry must not say "valid" after it
+        "auth_expires_epoch": expires_epoch if authority_ok else None,
         "hostname": obs["hostname"],
-        "ident": {"stage": b("P3 · Paper Beta executing", "P3 · النسخة التجريبية الورقية قيد التنفيذ"),
-                  "ref": "7b1b1fa1"},
+        "ident": {"stage": b("P3 · Paper Beta executing", "P3 · النسخة التجريبية الورقية قيد التنفيذ") if authority_ok
+                  else b("P3 · authorization not valid", "P3 · التفويض غير صالح"), "ref": "7b1b1fa1"},
         "project": {"chips": project_chips,
-                    "gate": b(ws["next"]["en"], ws["next"]["ar"]),
-                    "workstreams": [[_ws_chip(w["status"]), w["id"], b(w["en"], w["ar"]), w["status"], w["evidence"]]
-                                    for w in ws["workstreams"]],
-                    "ws_updated": ws["updated_utc"]},
+                    "gate": _ws_text(ws, "next"),
+                    "workstreams": ws_rows or [],
+                    "ws_updated": ws.get("updated_utc") or "—"},
         "identity": {"runtime_pin": obs["runtime"]["pin"], "runtime_clean": obs["runtime"]["clean"],
                      "main": obs["governance"]["main"], "boot_id": obs["host"]["boot_id"]},
         "health_findings": obs["health"]["findings"],
@@ -455,9 +588,17 @@ def _reboot_acceptance(ws: dict) -> dict | None:
     """The reboot-correctness acceptance from the governed workstream record (PR #94), or None.
 
     Fail-closed: anything but a complete ``state == "ok"`` record keeps the reboot shown as not exercised."""
-    r = ws.get("reboot")
-    if isinstance(r, dict) and r.get("state") == "ok" and r.get("en") and r.get("ar") and r.get("record"):
+    r = ws.get("reboot") if isinstance(ws, dict) else None
+    if isinstance(r, dict) and r.get("state") == "ok" and _bi(r) and isinstance(r.get("record"), str) and r["record"]:
         return r
+    return None
+
+
+def _reboot_open(r: dict) -> list[dict] | None:
+    """The open items the accepted reboot record lists (each bilingual), or None when they are not readable."""
+    items = r.get("open")
+    if isinstance(items, list) and all(_bi(i) for i in items):
+        return [b(i["en"], i["ar"]) for i in items]
     return None
 
 
@@ -599,7 +740,7 @@ def _bind_screens(obs: dict, live: dict) -> None:
     live["brief"] = "\n".join([
         "TRADING LAB OS — RESUME BRIEF · LIVE PROJECTION · READ-ONLY · NOT EVIDENCE AUTHORITY",
         f"DERIVED: {now} on {obs['hostname']}",
-        f"STAGE: P3 Paper Beta executing · authorization 7b1b1fa1 (expires {obs['authorization']['expires_utc']}) · "
+        f"STAGE: {live['ident']['stage']['en']} · authorization 7b1b1fa1 (expires {obs['authorization']['expires_utc']}) · "
         f"main {(obs['governance']['main'] or '?')[:12]} · runtime pin {(obs['runtime']['pin'] or '?')[:12]}",
         f"LAST GOVERNED CHECKPOINT: {E(sc['lgc'])}",
         f"LAST HEALTHY OBSERVATION: {E(sc['lho'])}",
