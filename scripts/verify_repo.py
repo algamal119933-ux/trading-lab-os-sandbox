@@ -57,7 +57,7 @@ SECRET_CONTENT_PATTERNS = (
     (r"\bAKIA[0-9A-Z]{16}\b", "AWS access key id"),
     (r"\bxox[baprs]-[A-Za-z0-9-]{10,}", "Slack token"),
     (r"\bsk-[A-Za-z0-9]{32,}", "API secret key"),
-    (r"\b[0-9]{8,10}:AA[A-Za-z0-9_-]{33}\b", "Telegram bot token"),
+    (r"(?<![0-9])[0-9]{8,10}:AA[A-Za-z0-9_-]{33}(?![A-Za-z0-9_-])", "Telegram bot token"),
     (r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", "JWT"),
     (r"\"secret\"\s*:\s*\"(?!\s*\")[^\"]{8,}\"", "non-empty secret field"),
     (r"\"key\"\s*:\s*\"(?!\s*\")[A-Za-z0-9]{16,}\"", "non-empty exchange key field"),

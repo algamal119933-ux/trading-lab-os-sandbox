@@ -86,6 +86,8 @@ def test_env_example_is_allowed():
         "aws = AKIAIOSFODNN7EXAMPLE\n",  # allowlist-secret: detector fixture
         'cfg = {"secret": "0123456789abcdef"}\n',  # allowlist-secret: detector fixture
         "bot = 123456789:AAabcdefghijklmnopqrstuvwxyz0123456\n",  # allowlist-secret: detector fixture
+        "url = https://api.telegram.org/bot123456789:AAabcdefghijklmnopqrstuvwxyz0123456/sendMessage\n",  # allowlist-secret: detector fixture
+        "tok = 123456789:AAabcdefghijklmnopqrstuvwxyz012345- end\n",  # allowlist-secret: detector fixture
     ],
 )
 def test_secret_patterns_are_detected(tmp_path, monkeypatch, content):
