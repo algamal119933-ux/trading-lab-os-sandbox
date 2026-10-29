@@ -62,33 +62,55 @@ def test_a_config_file_moves_every_path_together(tmp_path):
 
 
 def test_the_config_env_variable_names_the_file(tmp_path):
-    p = _cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b")
+    p = _cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b", mount_uuid=UUID)
     assert storage.load(env={"TLOS_STORAGE_CONFIG": str(p)}).backup_mount == "/srv/x"
 
 
-def test_env_overrides_the_file_and_needs_both_paths(tmp_path):
-    p = _cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b")
-    s = storage.load(env={"TLOS_BACKUP_MOUNT": "/srv/y", "TLOS_BACKUP_TARGET": "/srv/y/b"}, config_path=p)
-    assert (s.backup_mount, s.source) == ("/srv/y", "env")
-    for one in ({"TLOS_BACKUP_MOUNT": "/srv/y"}, {"TLOS_BACKUP_TARGET": "/srv/y/b"}):
-        with pytest.raises(storage.StorageConfigError):
-            storage.load(env=one, config_path=p)
+def test_env_overrides_the_file_and_needs_all_three_values(tmp_path):
+    p = _cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b", mount_uuid=UUID)
+    full = {"TLOS_BACKUP_MOUNT": "/srv/y", "TLOS_BACKUP_TARGET": "/srv/y/b", "TLOS_BACKUP_MOUNT_UUID": UUID}
+    s = storage.load(env=full, config_path=p)
+    assert (s.backup_mount, s.mount_uuid, s.source) == ("/srv/y", UUID, "env")
+    for drop in full:
+        partial = {k: v for k, v in full.items() if k != drop}
+        with pytest.raises(storage.StorageConfigError, match="set together"):
+            storage.load(env=partial, config_path=p)
+
+
+def test_a_configuration_without_a_uuid_is_refused(tmp_path):
+    # Without the UUID any filesystem mounted at the path (a tmpfs, another disk) would pass as the store.
+    with pytest.raises(storage.StorageConfigError, match="mount_uuid is required"):
+        storage.load(env={}, config_path=_cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b"))
+    with pytest.raises(storage.StorageConfigError, match="mount_uuid is required"):
+        storage.load(env={}, config_path=_cfg(tmp_path, backup_mount="/srv/x", backup_target="/srv/x/b",
+                                              mount_uuid=UUID + "\n"))
+
+
+def test_a_config_that_is_not_a_regular_file_is_refused_without_blocking(tmp_path):
+    fifo = tmp_path / "storage.json"
+    os.mkfifo(fifo)
+    with pytest.raises(storage.StorageConfigError, match="not a regular file"):
+        storage.load(env={}, config_path=fifo)
+    d = tmp_path / "dir.json"
+    d.mkdir()
+    with pytest.raises(storage.StorageConfigError, match="not a regular file"):
+        storage.load(env={}, config_path=d)
 
 
 @pytest.mark.parametrize("data, why", [
-    ({"backup_mount": "/", "backup_target": "/tlos-backups"}, "system disk"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/other/b"}, "not inside"),
-    ({"backup_mount": "srv/x", "backup_target": "srv/x/b"}, "absolute"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/../etc"}, "'..'"),
+    ({"backup_mount": "/", "backup_target": "/tlos-backups", "mount_uuid": UUID}, "system disk"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/other/b", "mount_uuid": UUID}, "not inside"),
+    ({"backup_mount": "srv/x", "backup_target": "srv/x/b", "mount_uuid": UUID}, "absolute"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/../etc", "mount_uuid": UUID}, "'..'"),
     ({"backup_mount": "/srv/x", "backup_target": "/srv/x/b", "mount_uuid": "x; rm -rf /"}, "UUID"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/b", "extra": 1}, "unknown keys"),
-    ({"backup_mount": 5, "backup_target": "/srv/x/b"}, "strings"),
-    ({"backup_mount": "//srv/x", "backup_target": "//srv/x/b"}, "normalised"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/./b"}, "normalised"),
-    ({"backup_mount": "/srv//x", "backup_target": "/srv//x/b"}, "normalised"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/$(id)"}, "quotes"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/`id`"}, "quotes"),
-    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/b\nTLOS_STORAGE_TARGET=/"}, "quotes"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/b", "extra": 1, "mount_uuid": UUID}, "unknown keys"),
+    ({"backup_mount": 5, "backup_target": "/srv/x/b", "mount_uuid": UUID}, "strings"),
+    ({"backup_mount": "//srv/x", "backup_target": "//srv/x/b", "mount_uuid": UUID}, "normalised"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/./b", "mount_uuid": UUID}, "normalised"),
+    ({"backup_mount": "/srv//x", "backup_target": "/srv//x/b", "mount_uuid": UUID}, "normalised"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/$(id)", "mount_uuid": UUID}, "quotes"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/`id`", "mount_uuid": UUID}, "quotes"),
+    ({"backup_mount": "/srv/x", "backup_target": "/srv/x/b\nTLOS_STORAGE_TARGET=/", "mount_uuid": UUID}, "quotes"),
 ])
 def test_an_invalid_file_is_refused_never_defaulted(tmp_path, data, why):
     with pytest.raises(storage.StorageConfigError, match=why):
@@ -194,14 +216,15 @@ def test_preflight_checks_the_uuid_of_a_real_mountpoint():
     assert "not the configured" in storage.preflight(s, runner=lambda cmd: "1111-2222\n")[0]
     assert "cannot be read" in storage.preflight(s, runner=lambda cmd: (_ for _ in ()).throw(OSError()))[0]
     assert storage.preflight(s, runner=lambda cmd: UUID + "\n") == []
-    assert storage.preflight(storage.Storage("/proc", "/proc/tlos-not-here/b", None, "t")) == []
+    assert "identity is unproven" in storage.preflight(storage.Storage("/proc", "/proc/tlos-not-here/b", None, "t"))[0]
 
 
 def test_the_cli_preflight_exits_3_with_reasons(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
     r = subprocess.run([sys.executable, str(REPO / "research" / "p3" / "storage.py"), "--preflight"],
-                       env={**os.environ, "TLOS_BACKUP_MOUNT": str(plain), "TLOS_BACKUP_TARGET": str(plain / "b")},
+                       env={**os.environ, "TLOS_BACKUP_MOUNT": str(plain), "TLOS_BACKUP_TARGET": str(plain / "b"),
+                            "TLOS_BACKUP_MOUNT_UUID": UUID},
                        capture_output=True, text=True)
     assert r.returncode == 3 and "STORAGE_PREFLIGHT_FAIL" in r.stderr and "not mounted" in r.stderr
 
@@ -224,21 +247,27 @@ def _by_check(findings):
     return {f["check"]: f for f in findings}
 
 
-def test_health_reports_the_resolved_store_its_mount_and_its_target(tmp_path, monkeypatch):
+def test_health_reports_the_resolved_store_its_mount_its_uuid_and_its_target(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "device_problems", lambda store, root="/": [])  # tmp_path stands in for a separate disk
     m = tmp_path / "store"
-    (m / "tlos-backups").mkdir(parents=True)
-    store = storage.Storage(str(m), str(m / "tlos-backups"), None, "t")
+    (m / "tlos-backups").mkdir(parents=True, mode=0o700)
+    store = storage.Storage(str(m), str(m / "tlos-backups"), UUID, "t")
     monkeypatch.setattr(health.os.path, "ismount", lambda p: p == str(m))
-    f = health.storage_findings(R(), store)
-    assert [x["check"] for x in f] == ["backup_storage", f"mount:{m}", f"mount_uuid:{m}", "backup_target_on_store",
-                                       "backup_store_permissions"][:len(f)]
-    sev = {x["check"]: x["severity"] for x in f}
-    assert sev[f"mount_uuid:{m}"] == health.WARNING  # no UUID configured: identity UNPROVEN
-    assert sev["backup_target_on_store"] == health.INFO
+    f = health.storage_findings(R(UUID), store)
+    assert [x["check"] for x in f] == ["backup_storage", f"mount:{m}", f"mount_uuid:{m}", "backup_target_on_store"]
+    assert {x["severity"] for x in f} == {health.INFO}
     monkeypatch.setattr(health.os.path, "ismount", lambda p: False)
-    f = _by_check(health.storage_findings(R(), store))
+    f = _by_check(health.storage_findings(R(UUID), store))
     assert f[f"mount:{m}"]["severity"] == health.CRITICAL and "backup_target_on_store" not in f
+
+
+def test_a_store_without_a_uuid_is_critical_not_a_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(health.os.path, "ismount", lambda p: True)
+    m = tmp_path / "store"
+    m.mkdir()
+    f = _by_check(health.storage_findings(R(), storage.Storage(str(m), str(m / "b"), None, "t")))
+    assert f[f"mount_uuid:{m}"]["severity"] == health.CRITICAL and "UNPROVEN" in f[f"mount_uuid:{m}"]["detail"]
+    assert "backup_target_on_store" not in f
 
 
 def test_a_configured_uuid_must_match_and_unknown_is_unproven(tmp_path, monkeypatch):
@@ -255,7 +284,8 @@ def test_a_configured_uuid_must_match_and_unknown_is_unproven(tmp_path, monkeypa
     assert "backup_target_on_store" not in other
     for runner in (R(""), R(exc=FileNotFoundError("findmnt"))):
         f = _by_check(health.storage_findings(runner, store))
-        assert f[key]["severity"] == health.WARNING and "UNPROVEN" in f[key]["detail"]
+        assert f[key]["severity"] == health.CRITICAL and "UNPROVEN" in f[key]["detail"]
+        assert "backup_target_on_store" not in f
 
 
 def test_health_reports_a_target_off_the_store_as_critical(tmp_path, monkeypatch):
@@ -265,11 +295,11 @@ def test_health_reports_a_target_off_the_store_as_critical(tmp_path, monkeypatch
     elsewhere.mkdir()
     (m / "tlos-backups").symlink_to(elsewhere)
     monkeypatch.setattr(health.os.path, "ismount", lambda p: p == str(m))
-    f = {x["check"]: x for x in health.storage_findings(R(), storage.Storage(str(m), str(m / "tlos-backups"), None, "t"))}
+    f = {x["check"]: x for x in health.storage_findings(R(UUID), storage.Storage(str(m), str(m / "tlos-backups"), UUID, "t"))}
     assert f["backup_target_on_store"]["severity"] == health.CRITICAL
     (m / "tlos-backups").unlink()
     (m / "tlos-backups").mkdir()
-    f = {x["check"]: x for x in health.storage_findings(R(), storage.Storage(str(m), str(m / "tlos-backups"), None, "t"))}
+    f = {x["check"]: x for x in health.storage_findings(R(UUID), storage.Storage(str(m), str(m / "tlos-backups"), UUID, "t"))}
     assert f["backup_target_on_store"]["severity"] == health.INFO
 
 
@@ -283,22 +313,38 @@ def test_an_unusable_configuration_is_critical_in_the_standard_set(tmp_path, mon
     assert not any(k.startswith("mount:/mnt/tlos-wdc") for k in checks)
 
 
-def test_recency_is_read_from_the_configured_target(tmp_path, monkeypatch):
-    store = tmp_path / "store"
-    (store / "tlos-backups" / "20261029T220229Z").mkdir(parents=True)
-    (store / "tlos-backups" / "20261029T220229Z" / "BACKUP_RECORD.json").write_text("{}", encoding="utf-8")
+def _store_env(monkeypatch, store: Path):
     monkeypatch.setenv("TLOS_BACKUP_MOUNT", str(store))
     monkeypatch.setenv("TLOS_BACKUP_TARGET", str(store / "tlos-backups"))
+    monkeypatch.setenv("TLOS_BACKUP_MOUNT_UUID", UUID)
+
+
+def test_recency_is_read_from_the_configured_target_only_when_the_store_is_proven(tmp_path, monkeypatch):
+    store = tmp_path / "store"
+    (store / "tlos-backups" / "20261029T220229Z").mkdir(parents=True)
+    os.chmod(store / "tlos-backups", 0o700)
+    (store / "tlos-backups" / "20261029T220229Z" / "BACKUP_RECORD.json").write_text("{}", encoding="utf-8")
+    _store_env(monkeypatch, store)
+    monkeypatch.setattr(storage, "device_problems", lambda s, root="/": [])
+    monkeypatch.setattr(health.os.path, "ismount", lambda p: p == str(store))
     seen = []
 
     def verifier(path):
         seen.append(Path(path))
         return {"BACKUP_VERIFY": "PASS"}
 
-    findings = health.standard_findings({"instances": []}, runner=lambda cmd: R("enabled"), verifier=verifier,
-                                        lane=tmp_path, fp_lane_root=tmp_path)
+    def run(cmd):
+        return R(UUID) if cmd[0] == "findmnt" else R("enabled")
+    findings = _by_check(health.standard_findings({"instances": []}, runner=run, verifier=verifier,
+                                                  lane=tmp_path, fp_lane_root=tmp_path))
     assert seen and seen[0].parent == store / "tlos-backups"
-    assert any(f["check"] == f"mount:{store}" for f in findings)
+    assert findings[f"mount:{store}"]["severity"] == health.INFO
+    # The same sets on an unproven store (wrong UUID) are not measured at all.
+    seen.clear()
+    findings = _by_check(health.standard_findings({"instances": []}, runner=lambda cmd: R("ffff-0000"),
+                                                  verifier=verifier, lane=tmp_path, fp_lane_root=tmp_path))
+    assert not seen and findings["backup_recency"]["severity"] == health.CRITICAL
+    assert "not measured" in findings["backup_recency"]["detail"]
 
 
 # ---------------------------------------------------------------- backup wrapper, unit, snapshot
@@ -322,7 +368,8 @@ def test_the_wrapper_refuses_an_unusable_configuration(tmp_path):
 def test_the_wrapper_refuses_an_unmounted_configured_store(tmp_path):
     store = tmp_path / "not-a-mount"
     store.mkdir()
-    r = _wrapper({"TLOS_BACKUP_MOUNT": str(store), "TLOS_BACKUP_TARGET": str(store / "b")})
+    r = _wrapper({"TLOS_BACKUP_MOUNT": str(store), "TLOS_BACKUP_TARGET": str(store / "b"),
+                  "TLOS_BACKUP_MOUNT_UUID": UUID, "TLOS_STORE_WAIT_S": "0"})
     assert r.returncode == 3 and f"STORAGE_PREFLIGHT_FAIL: {store} is not mounted" in r.stderr
     assert not (store / "b").exists()
 
@@ -332,7 +379,7 @@ def test_the_wrapper_refuses_a_different_filesystem_uuid():
     if subprocess.run(["mountpoint", "-q", "/proc"]).returncode != 0:
         pytest.skip("/proc is not a mountpoint here")
     r = _wrapper({"TLOS_BACKUP_MOUNT": "/proc", "TLOS_BACKUP_TARGET": "/proc/tlos-backups",
-                  "TLOS_BACKUP_MOUNT_UUID": UUID})
+                  "TLOS_BACKUP_MOUNT_UUID": UUID, "TLOS_STORE_WAIT_S": "0"})
     assert r.returncode == 3 and "not the configured" in r.stderr and "BACKUP_REFUSED" in r.stderr
 
 
@@ -350,6 +397,7 @@ def test_the_reboot_snapshot_records_the_configured_store(tmp_path, monkeypatch)
     spec.loader.exec_module(mod)
     monkeypatch.setenv("TLOS_BACKUP_MOUNT", "/srv/project-data")
     monkeypatch.setenv("TLOS_BACKUP_TARGET", "/srv/project-data/tlos-backups")
+    monkeypatch.setenv("TLOS_BACKUP_MOUNT_UUID", UUID)
     assert mod._mounts() == ("/", "/srv/project-data")
     monkeypatch.setenv("TLOS_BACKUP_MOUNT", "/")
     monkeypatch.setenv("TLOS_BACKUP_TARGET", "/b")
@@ -357,14 +405,12 @@ def test_the_reboot_snapshot_records_the_configured_store(tmp_path, monkeypatch)
         mod._mounts()
 
 
-def test_the_control_room_keeps_a_path_constant_for_static_consumers_and_resolves_per_run(tmp_path, monkeypatch):
-    # PR #90's writer_watch derives its watch inventory from control_room.BACKUP_TARGET at import time.
+def test_the_control_room_has_no_fallback_store(tmp_path, monkeypatch):
     from p3 import control_room as cr
-    assert isinstance(cr.BACKUP_TARGET, Path)
-    monkeypatch.setenv("TLOS_STORAGE_CONFIG", str(_cfg(tmp_path, backup_mount="/", backup_target="/b")))
-    assert cr._store_target() == Path(storage.DEFAULT_TARGET)
-    with pytest.raises(storage.StorageConfigError):
-        storage.load()
+    monkeypatch.setenv("TLOS_STORAGE_CONFIG", str(_cfg(tmp_path, backup_mount="/", backup_target="/b", mount_uuid=UUID)))
+    assert cr._store_target() is None
+    _store_env(monkeypatch, tmp_path / "store")
+    assert cr._store_target() == tmp_path / "store" / "tlos-backups"
 
 
 def test_a_store_on_the_system_disk_is_refused(tmp_path):
@@ -395,3 +441,17 @@ def test_a_store_reachable_by_others_is_a_warning(tmp_path, monkeypatch):
 def test_the_backup_wrapper_and_unit_create_owner_only_files():
     assert "\numask 077" in (REPO / "scripts/p3/scheduled_backup.sh").read_text(encoding="utf-8")
     assert "\nUMask=0077\n" in (REPO / "scripts/p3/units/tlos-p3-backup.service").read_text(encoding="utf-8")
+
+
+def test_the_wrapper_waits_for_a_late_mount_but_not_for_other_failures(tmp_path):
+    store = tmp_path / "late"
+    store.mkdir()
+    env = {"TLOS_BACKUP_MOUNT": str(store), "TLOS_BACKUP_TARGET": str(store / "b"), "TLOS_BACKUP_MOUNT_UUID": UUID,
+           "TLOS_STORE_WAIT_S": "12"}
+    import time
+    t0 = time.time()
+    r = _wrapper(env)
+    assert r.returncode == 3 and r.stderr.count("is not mounted") >= 2 and time.time() - t0 >= 10
+    t0 = time.time()
+    r = _wrapper({**env, "TLOS_BACKUP_MOUNT_UUID": "not a uuid"})
+    assert r.returncode == 3 and "STORAGE_CONFIG_ERROR" in r.stderr and time.time() - t0 < 10

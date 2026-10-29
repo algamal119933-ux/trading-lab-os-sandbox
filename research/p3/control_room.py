@@ -43,13 +43,13 @@ AUTHORIZATION = REPO_ROOT / "docs" / "p3" / "OWNER_P3_EXECUTION_AUTHORIZATION.md
 P2_CLOSURE = REPO_ROOT / "docs" / "p2" / "P2_CLOSURE.md"
 RUNTIME_ROOT = Path("/home/hamza/projects/trading/trading_lab_os_final")
 LEDGER = Path("/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl")
-def _store_target() -> Path:
-    """Import-time view of the configured store for static consumers (e.g. a watch inventory). collect()
-    re-resolves it fail-closed on every run; only this constant falls back to the legacy path (never written)."""
+def _store_target() -> Path | None:
+    """Import-time view of the configured store for static consumers; None when nothing usable is configured
+    (there is no fallback path). collect() re-resolves it fail-closed on every run."""
     try:
         return storage.load().target
     except storage.StorageConfigError:
-        return Path(storage.DEFAULT_TARGET)
+        return None
 
 
 BACKUP_TARGET = _store_target()

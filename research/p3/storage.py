@@ -7,10 +7,9 @@ every one of those places must move together, or health reports a store that no 
 backups land somewhere unchecked.
 
 Resolution order, first match wins:
-1. environment: ``TLOS_BACKUP_MOUNT`` and ``TLOS_BACKUP_TARGET`` (both, or neither), optional
-   ``TLOS_BACKUP_MOUNT_UUID``;
-2. a host-local JSON file: ``$TLOS_STORAGE_CONFIG`` or ``~/.config/tlos-p3/storage.json``
-   ``{"backup_mount": "...", "backup_target": "...", "mount_uuid": "..."}`` (``mount_uuid`` optional);
+1. environment: ``TLOS_BACKUP_MOUNT``, ``TLOS_BACKUP_TARGET`` and ``TLOS_BACKUP_MOUNT_UUID`` (all, or none);
+2. a host-local JSON file (a regular file): ``$TLOS_STORAGE_CONFIG`` or ``~/.config/tlos-p3/storage.json``
+   ``{"backup_mount": "...", "backup_target": "...", "mount_uuid": "..."}`` (all three required);
 There is no implicit default. The historical PLN-03 store (``/mnt/tlos-wdc``) is only a documented
 legacy value: falling back to it silently would let a stale or re-mounted legacy disk receive backups.
 Nothing configured, or a configuration that cannot be read or is invalid, raises ``StorageConfigError``;
@@ -18,7 +17,8 @@ the health check turns that into a CRITICAL finding and the backup wrapper refus
 
 Rules: absolute, normalised paths (no ``..``, no ``.``, no ``//``); the mount is never ``/`` (a backup on
 the system disk is not a separate store); the target lies inside the mount; a UUID, when given, is a
-plain filesystem UUID string.
+plain filesystem UUID string and is **required**: without it any filesystem mounted at the path (a
+tmpfs, another disk) would be accepted as the store, and an unproven identity blocks exactly as a wrong one.
 
 ``preflight`` checks the live host before anything is written: the mount is a real mountpoint and not a
 symlink; the filesystem UUID matches when configured; and the target (or its deepest existing parent)
@@ -39,7 +39,6 @@ from pathlib import Path, PurePosixPath
 
 LEGACY_MOUNT = "/mnt/tlos-wdc"  # documented PLN-03 history only; never resolved implicitly
 LEGACY_TARGET = "/mnt/tlos-wdc/tlos-backups"
-DEFAULT_TARGET = LEGACY_TARGET  # import-time placeholder for static consumers (see control_room)
 CONFIG_ENV = "TLOS_STORAGE_CONFIG"
 DEFAULT_CONFIG = Path.home() / ".config" / "tlos-p3" / "storage.json"
 _UUID = re.compile(r"^[0-9A-Fa-f][0-9A-Fa-f-]{3,63}$")
@@ -53,7 +52,7 @@ class StorageConfigError(ValueError):
 class Storage:
     backup_mount: str
     backup_target: str
-    mount_uuid: str | None
+    mount_uuid: str | None  # always set by load(); None only in hand-built objects (treated as unproven)
     source: str  # "env" or the config file path
 
     @property
@@ -78,23 +77,27 @@ def _validate(mount: object, target: object, uuid: object, source: str) -> Stora
         raise StorageConfigError(f"{source}: backup_mount '/' is the system disk, not a separate store")
     if t != m and m not in t.parents:
         raise StorageConfigError(f"{source}: backup_target {t} is not inside backup_mount {m}")
-    if uuid is not None and (not isinstance(uuid, str) or not _UUID.match(uuid)):
-        raise StorageConfigError(f"{source}: mount_uuid must be a filesystem UUID string")
+    if not isinstance(uuid, str) or not _UUID.fullmatch(uuid):
+        raise StorageConfigError(f"{source}: mount_uuid is required and must be a filesystem UUID string "
+                                 f"(findmnt -no UUID --mountpoint <mount>)")
     return Storage(str(m), str(t), uuid or None, source)
 
 
 def load(env: dict | None = None, config_path: Path | None = None) -> Storage:
     """Resolve the backup storage location (see the module docstring for the order and rules)."""
     env = os.environ if env is None else env
-    em, et = env.get("TLOS_BACKUP_MOUNT"), env.get("TLOS_BACKUP_TARGET")
-    if em or et:
-        if not (em and et):
-            raise StorageConfigError("env: TLOS_BACKUP_MOUNT and TLOS_BACKUP_TARGET must be set together")
-        return _validate(em, et, env.get("TLOS_BACKUP_MOUNT_UUID") or None, "env")
+    em, et, eu = env.get("TLOS_BACKUP_MOUNT"), env.get("TLOS_BACKUP_TARGET"), env.get("TLOS_BACKUP_MOUNT_UUID")
+    if em or et or eu:
+        if not (em and et and eu):
+            raise StorageConfigError("env: TLOS_BACKUP_MOUNT, TLOS_BACKUP_TARGET and TLOS_BACKUP_MOUNT_UUID "
+                                     "must be set together")
+        return _validate(em, et, eu, "env")
     path = Path(config_path) if config_path is not None else Path(env.get(CONFIG_ENV) or DEFAULT_CONFIG)
     if not path.exists():
         raise StorageConfigError(f"no backup store configured: {path} does not exist and TLOS_BACKUP_MOUNT/"
                                  f"TLOS_BACKUP_TARGET are unset (see docs/p3/PLN_03_BACKUP_RESTORE.md)")
+    if not path.is_file():  # a directory, FIFO or device is refused before any read (a FIFO would block)
+        raise StorageConfigError(f"{path}: not a regular file")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -123,6 +126,8 @@ def preflight(store: Storage, runner=None) -> list[str]:
         return [f"{m} is a symlink, not the store's mountpoint"]
     if not os.path.ismount(m):
         return [f"{m} is not mounted"]
+    if not store.mount_uuid:
+        return [f"no mount_uuid configured for {m}: the store's identity is unproven"]
     if store.mount_uuid:
         try:
             got = (runner or _findmnt_uuid)(["findmnt", "-no", "UUID", "--mountpoint", m]).strip()
@@ -198,7 +203,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"STORAGE_CONFIG_ERROR: {exc}", file=sys.stderr)
         return 3
     if args.preflight:
-        problems = preflight(s)
+        try:
+            problems = preflight(s)
+        except OSError as exc:
+            problems = [f"preflight could not read the store ({type(exc).__name__})"]
         if problems:
             for p in problems:
                 print(f"STORAGE_PREFLIGHT_FAIL: {p}", file=sys.stderr)

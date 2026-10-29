@@ -134,19 +134,19 @@ def _store_checks(runner, store=None):
     out = [_finding("backup_storage", INFO, f"{store.backup_target} on {store.backup_mount} (source: {store.source})"),
            mounted(store.backup_mount)]
     if not store.mount_uuid and out[-1]["severity"] == INFO:
-        out.append(_finding(f"mount_uuid:{store.backup_mount}", WARNING,
+        out.append(_finding(f"mount_uuid:{store.backup_mount}", CRITICAL,
                             "UNPROVEN: no mount_uuid configured; any filesystem mounted here would be accepted"))
     if store.mount_uuid and out[-1]["severity"] == INFO:
         check = f"mount_uuid:{store.backup_mount}"
         try:
             got = runner(["findmnt", "-no", "UUID", "--mountpoint", store.backup_mount]).stdout.strip()
         except Exception as exc:  # noqa: BLE001 - an identity that cannot be read is not a proven identity
-            out.append(_finding(check, WARNING, f"UNPROVEN: findmnt could not be queried ({type(exc).__name__})"))
+            out.append(_finding(check, CRITICAL, f"UNPROVEN: findmnt could not be queried ({type(exc).__name__})"))
             got = None
         if got is None:
             pass
         elif not got:
-            out.append(_finding(check, WARNING, "UNPROVEN: findmnt gave no UUID"))
+            out.append(_finding(check, CRITICAL, "UNPROVEN: findmnt gave no UUID"))
         elif got.lower() != store.mount_uuid.lower():
             out.append(_finding(check, CRITICAL, f"UUID {got} is not the configured {store.mount_uuid}: "
                                                  f"another filesystem is mounted there"))
@@ -214,14 +214,16 @@ def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict
     ``backup_target`` None means the configured store (``p3.storage``); an explicit path overrides only
     where recency is read, and the store checks still follow the configuration."""
     store, store_findings = _store_checks(runner)
-    if backup_target is None and store is not None:
-        backup_target = store.target
+    store_proven = store is not None and not any(f["severity"] == CRITICAL for f in store_findings)
+    if backup_target is None:
+        # Recency is only measured on a proven store: sets "found" on a wrong or unproven store prove nothing.
+        backup_target = store.target if store_proven else None
     findings = [
         free_space(Path("/"), root_min_gib, "root"),
         free_space(lane, lane_min_gib, "h1_lane"),
         *store_findings,
         *([backup_recency(backup_target, rpo_hours, verifier=verifier)] if backup_target is not None else
-          [_finding("backup_recency", CRITICAL, "no usable backup store configured: recency not checked")]),
+          [_finding("backup_recency", CRITICAL, "backup store unconfigured or unproven: recency not measured")]),
         timer_expected("tlos-p3-backup.timer", want_active=True, runner=runner),
         timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=runner),
         monitor_timer("tlos-p3-health.timer", runner=runner),

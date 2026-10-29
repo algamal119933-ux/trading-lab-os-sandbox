@@ -109,8 +109,10 @@ The Owner-reported host migration of 2026-10-29 moved the TLOS backups to an int
 The backup unit no longer carries `RequiresMountsFor`.
 
 **Resolution order:**
-1. The environment variables `TLOS_BACKUP_MOUNT` and `TLOS_BACKUP_TARGET`, set together, plus the optional `TLOS_BACKUP_MOUNT_UUID`.
-2. A host-local file, `~/.config/tlos-p3/storage.json` or the file named by `$TLOS_STORAGE_CONFIG`.
+1. The environment variables `TLOS_BACKUP_MOUNT`, `TLOS_BACKUP_TARGET` and `TLOS_BACKUP_MOUNT_UUID`, all three set together.
+2. A host-local regular file, `~/.config/tlos-p3/storage.json` or the file named by `$TLOS_STORAGE_CONFIG`, holding all three keys.
+
+**The filesystem UUID is required.** Without it, any filesystem mounted at the path would be accepted as the store, for example a tmpfs or another disk (independent review, 2026-10-30).
 
 **There is no implicit default.** `/mnt/tlos-wdc` remains documented history only. Falling back to it silently would let a stale or re-mounted legacy disk receive backups.
 
@@ -122,12 +124,13 @@ The backup unit no longer carries `RequiresMountsFor`.
 - the mount is `/`;
 - the target is outside the mount;
 - the file has unknown keys;
-- the UUID is malformed.
+- the UUID is missing or malformed;
+- the config is not a regular file (a FIFO would block a reader).
 
-**Live preflight** (`storage.py --preflight`, run by the backup wrapper before every set). It refuses:
+**Live preflight** (`storage.py --preflight --shell`). The backup wrapper runs it before every set. That one call both checks the store and exports it, so the location written to is the location checked. The wrapper waits up to `TLOS_STORE_WAIT_S` (default 300 s) only for "not mounted", because a catch-up run at boot can start before the disk is mounted. The preflight refuses:
 - a mountpoint that is not mounted, or is a symlink;
 - a store on the same filesystem as `/` (a bind mount of a system-disk directory is not a separate store);
-- a filesystem UUID different from the configured one, or one that cannot be read;
+- a filesystem UUID that is missing, different from the configured one, or cannot be read;
 - a target, or its deepest existing parent, that resolves outside the mount or onto another device (a symlink or a nested mount);
 - an existing target that is not a plain directory.
 
@@ -137,13 +140,15 @@ This matters because `backup.py create` creates the target's parents and would f
 
 | Consumer | Behaviour |
 |---|---|
-| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch, WARNING `UNPROVEN` when unreadable **or not configured**; `backup_target_on_store` CRITICAL when the target resolves off the store or the store is the system disk; `backup_store_permissions` WARNING when group/other can reach the sets |
+| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch, and CRITICAL `UNPROVEN` when unreadable or not configured (an unproven identity blocks exactly as a wrong one does); `backup_target_on_store` CRITICAL when the target resolves off the store or the store is the system disk; `backup_store_permissions` WARNING when group/other can reach the sets; `backup_recency` is measured only on a proven store |
 | Backup wrapper | Refuses with exit 3 |
 | Reboot snapshot | Errors with exit 2 |
 
 **Permissions (security audit SEC-03).** Sets contain configuration, including the runtime `.env`, so the wrapper runs with `umask 077` and the unit with `UMask=0077`. Docker writes the volume tars as root inside the owner-only set directory, so nobody else can traverse to them. Whether to exclude `.env` from sets or encrypt them before offsite is an Owner decision. Host step: `chmod 700 <target>` on an existing store.
 
-Tests: `tests/test_p3_storage.py`. Residual: the preflight and `backup.py create` are separate steps, so the gap between them is a time-of-check window. The store is single-writer, so this is accepted.
+Tests: `tests/test_p3_storage.py`. **Residuals.**
+- The preflight and `backup.py create` are separate processes, so there is a time-of-check window between them. The store has a single writer, so this is accepted.
+- A manual `scripts/p3/backup.py create --target <dir>` does not run the preflight. It is an operator tool, also used for drills into scratch targets. The governed path is the wrapper.
 
 **Host steps (Owner; each needs authorization, nothing here has been run):**
 1. Write the host file. The values below are as reported for the migrated host; the mountpoint and UUID come from the host itself.
