@@ -43,7 +43,16 @@ AUTHORIZATION = REPO_ROOT / "docs" / "p3" / "OWNER_P3_EXECUTION_AUTHORIZATION.md
 P2_CLOSURE = REPO_ROOT / "docs" / "p2" / "P2_CLOSURE.md"
 RUNTIME_ROOT = Path("/home/hamza/projects/trading/trading_lab_os_final")
 LEDGER = Path("/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl")
-BACKUP_TARGET = None  # the configured store (p3.storage) unless a caller passes a path
+def _store_target() -> Path:
+    """Import-time view of the configured store for static consumers (e.g. a watch inventory). collect()
+    re-resolves it fail-closed on every run; only this constant falls back to the historical default."""
+    try:
+        return storage.load().target
+    except storage.StorageConfigError:
+        return Path(storage.DEFAULT_TARGET)
+
+
+BACKUP_TARGET = _store_target()
 EVIDENCE_DIR = Path("/home/hamza/tlos-paper/p3-evidence")  # drills/ and audits/ hold persisted proof records
 # The view is regenerated hourly with the health timer; past this age it is shown as stale.
 FRESHNESS_BUDGET_S = 2 * 3600
@@ -121,7 +130,7 @@ def sealed_cohort(audits: list[dict]) -> dict | None:
 def collect(*, runner: Runner = _run, now: float | None = None, registry_path: Path = REGISTRY,
             workstreams_path: Path = WORKSTREAMS, authorization_path: Path = AUTHORIZATION,
             p2_closure_path: Path = P2_CLOSURE, ledger_path: Path = LEDGER, repo_root: Path = REPO_ROOT,
-            runtime_root: Path = RUNTIME_ROOT, backup_target: Path | None = BACKUP_TARGET, evidence_dir: Path = EVIDENCE_DIR, findings: list[dict] | None = None,
+            runtime_root: Path = RUNTIME_ROOT, backup_target: Path | None = None, evidence_dir: Path = EVIDENCE_DIR, findings: list[dict] | None = None,
             docker: Runner | None = None) -> dict:
     """Observe the host. Read-only; each value records where it came from."""
     now = time.time() if now is None else now

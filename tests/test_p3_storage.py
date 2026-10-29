@@ -227,3 +227,13 @@ def test_the_reboot_snapshot_records_the_configured_store(tmp_path, monkeypatch)
     monkeypatch.setenv("TLOS_BACKUP_TARGET", "/b")
     with pytest.raises(storage.StorageConfigError):
         mod._mounts()
+
+
+def test_the_control_room_keeps_a_path_constant_for_static_consumers_and_resolves_per_run(tmp_path, monkeypatch):
+    # PR #90's writer_watch derives its watch inventory from control_room.BACKUP_TARGET at import time.
+    from p3 import control_room as cr
+    assert isinstance(cr.BACKUP_TARGET, Path)
+    monkeypatch.setenv("TLOS_STORAGE_CONFIG", str(_cfg(tmp_path, backup_mount="/", backup_target="/b")))
+    assert cr._store_target() == Path(storage.DEFAULT_TARGET)
+    with pytest.raises(storage.StorageConfigError):
+        storage.load()
