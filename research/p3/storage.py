@@ -95,7 +95,7 @@ def load(env: dict | None = None, config_path: Path | None = None) -> Storage:
     path = Path(config_path) if config_path is not None else Path(env.get(CONFIG_ENV) or DEFAULT_CONFIG)
     if not path.exists():
         raise StorageConfigError(f"no backup store configured: {path} does not exist and TLOS_BACKUP_MOUNT/"
-                                 f"TLOS_BACKUP_TARGET are unset (see docs/p3/PLN_03_BACKUP_RESTORE.md)")
+                                 f"TLOS_BACKUP_TARGET/TLOS_BACKUP_MOUNT_UUID are unset (see docs/p3/PLN_03_BACKUP_RESTORE.md)")
     if not path.is_file():  # a directory, FIFO or device is refused before any read (a FIFO would block)
         raise StorageConfigError(f"{path}: not a regular file")
     try:
