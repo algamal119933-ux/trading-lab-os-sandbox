@@ -111,27 +111,36 @@ The backup unit no longer carries `RequiresMountsFor`.
 **Resolution order:**
 1. The environment variables `TLOS_BACKUP_MOUNT` and `TLOS_BACKUP_TARGET`, set together, plus the optional `TLOS_BACKUP_MOUNT_UUID`.
 2. A host-local file, `~/.config/tlos-p3/storage.json` or the file named by `$TLOS_STORAGE_CONFIG`.
-3. The historical default, `/mnt/tlos-wdc` with sets under `/mnt/tlos-wdc/tlos-backups`.
 
-**Fail-closed.** A configuration that exists but cannot be read or is invalid is never replaced by the default. The file counts as invalid if:
-- any path is relative;
-- any path contains `..`;
+**There is no implicit default.** `/mnt/tlos-wdc` remains documented history only. Falling back to it silently would let a stale or re-mounted legacy disk receive backups.
+
+**Fail-closed.** Each of these is refused, never replaced by another location:
+- nothing is configured;
+- the configuration cannot be read;
+- a path is relative or not normalised (`..`, `.`, `//`);
+- a path contains a quote, `$`, `` ` ``, `\` or a control character;
 - the mount is `/`;
 - the target is outside the mount;
-- it has unknown keys;
+- the file has unknown keys;
 - the UUID is malformed.
 
-When that happens:
+**Live preflight** (`storage.py --preflight`, run by the backup wrapper before every set). It refuses:
+- a mountpoint that is not mounted, or is a symlink;
+- a filesystem UUID different from the configured one, or one that cannot be read;
+- a target, or its deepest existing parent, that resolves outside the mount or onto another device (a symlink or a nested mount);
+- an existing target that is not a plain directory.
+
+This matters because `backup.py create` creates the target's parents and would follow such a link.
+
+**Where each failure shows:**
 
 | Consumer | Behaviour |
 |---|---|
-| Health | `backup_storage` is CRITICAL, and so is `backup_recency` |
+| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch and WARNING `UNPROVEN` when unreadable; `backup_target_on_store` CRITICAL when the target resolves off the store |
 | Backup wrapper | Refuses with exit 3 |
 | Reboot snapshot | Errors with exit 2 |
 
-The backup wrapper also refuses, with exit 3, an unmounted store or a filesystem UUID different from the configured one.
-
-In health, a UUID that cannot be read is WARNING `UNPROVEN`, and a different UUID is CRITICAL. Tests: `tests/test_p3_storage.py`.
+Tests: `tests/test_p3_storage.py`. Residual: the preflight and `backup.py create` are separate steps, so the gap between them is a time-of-check window. The store is single-writer, so this is accepted.
 
 **Host steps (Owner; each needs authorization, nothing here has been run):**
 1. Write the host file. The values below are as reported for the migrated host; the mountpoint and UUID come from the host itself.
@@ -144,7 +153,7 @@ In health, a UUID that cannot be read is WARNING `UNPROVEN`, and a different UUI
    python3 ~/projects/trading/tlos-p3/research/p3/storage.py      # prints the resolved store; exit 0
    ```
 2. Do the controlled `tlos-p3` update to a main SHA that contains this change.
-3. Run one health check: `scripts/p3/health_check.py`. Expect `backup_storage` INFO, `mount:<M>` INFO, `mount_uuid:<M>` INFO, and `backup_recency` measured on the new store.
+3. Run one health check: `scripts/p3/health_check.py`. Expect `backup_storage`, `mount:<M>`, `mount_uuid:<M>` and `backup_target_on_store` all INFO, and `backup_recency` measured on the new store. Also run `python3 research/p3/storage.py --preflight`, which must exit 0.
 4. **Take a new reboot baseline** (`recovery.py snapshot`). The accepted baseline `42f0d28f…` records `/mnt/tlos-wdc`. A verify-boot against it now reports `mount:/mnt/tlos-wdc` missing, which is correct, because the store changed.
 5. The Owner-reported drop-in that points `tlos-p3-backup.service` at a host-local `backup.sh` is outside the repository. Bringing that wrapper into the repository is a separate change. It needs the host files, which Claude cannot read. It must cover:
    - the runtime volume aliases;

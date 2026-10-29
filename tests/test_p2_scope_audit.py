@@ -1652,7 +1652,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/recovery.py": f"{_STC} — the reboot snapshot records the configured store",
     "scripts/p3/scheduled_backup.sh": f"{_STC} — refuses an unusable configuration, an unmounted store or another UUID",
     "scripts/p3/units/tlos-p3-backup.service": f"{_STC} — no hard-coded RequiresMountsFor",
-    "tests/test_p3_storage.py": f"{_STC} — resolution, refusal and every consumer",
+    "tests/test_p3_storage.py": f"{_STC} — resolution, refusal, live preflight (symlink, nested mount, UUID) and every consumer",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_STC} — configuration section and host steps (NOT_RUN)",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",

@@ -11,13 +11,19 @@ Resolution order, first match wins:
    ``TLOS_BACKUP_MOUNT_UUID``;
 2. a host-local JSON file: ``$TLOS_STORAGE_CONFIG`` or ``~/.config/tlos-p3/storage.json``
    ``{"backup_mount": "...", "backup_target": "...", "mount_uuid": "..."}`` (``mount_uuid`` optional);
-3. the historical PLN-03 default (``/mnt/tlos-wdc``, ``/mnt/tlos-wdc/tlos-backups``).
+There is no implicit default. The historical PLN-03 store (``/mnt/tlos-wdc``) is only a documented
+legacy value: falling back to it silently would let a stale or re-mounted legacy disk receive backups.
+Nothing configured, or a configuration that cannot be read or is invalid, raises ``StorageConfigError``;
+the health check turns that into a CRITICAL finding and the backup wrapper refuses to run.
 
-Fail-closed: a config that exists but cannot be read or is invalid raises ``StorageConfigError``; it
-never falls back to the default. The health check turns that into a CRITICAL finding.
+Rules: absolute, normalised paths (no ``..``, no ``.``, no ``//``); the mount is never ``/`` (a backup on
+the system disk is not a separate store); the target lies inside the mount; a UUID, when given, is a
+plain filesystem UUID string.
 
-Rules: absolute paths; the mount is never ``/`` (a backup on the system disk is not a separate store);
-the target lies inside the mount; a UUID, when given, is a plain filesystem UUID string.
+``preflight`` checks the live host before anything is written: the mount is a real mountpoint and not a
+symlink; the filesystem UUID matches when configured; and the target (or its deepest existing parent)
+resolves inside the mount on the mount's own device, so a symlink or a nested mount cannot redirect a
+backup set to another disk.
 
 Read-only. PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 """
@@ -26,12 +32,14 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-DEFAULT_MOUNT = "/mnt/tlos-wdc"
-DEFAULT_TARGET = "/mnt/tlos-wdc/tlos-backups"
+LEGACY_MOUNT = "/mnt/tlos-wdc"  # documented PLN-03 history only; never resolved implicitly
+LEGACY_TARGET = "/mnt/tlos-wdc/tlos-backups"
+DEFAULT_TARGET = LEGACY_TARGET  # import-time placeholder for static consumers (see control_room)
 CONFIG_ENV = "TLOS_STORAGE_CONFIG"
 DEFAULT_CONFIG = Path.home() / ".config" / "tlos-p3" / "storage.json"
 _UUID = re.compile(r"^[0-9A-Fa-f][0-9A-Fa-f-]{3,63}$")
@@ -46,7 +54,7 @@ class Storage:
     backup_mount: str
     backup_target: str
     mount_uuid: str | None
-    source: str  # "default", "env", or the config file path
+    source: str  # "env" or the config file path
 
     @property
     def target(self) -> Path:
@@ -56,11 +64,16 @@ class Storage:
 def _validate(mount: object, target: object, uuid: object, source: str) -> Storage:
     if not isinstance(mount, str) or not isinstance(target, str):
         raise StorageConfigError(f"{source}: backup_mount and backup_target must be strings")
+    for v in (mount, target):
+        if not v.startswith("/"):
+            raise StorageConfigError(f"{source}: backup_mount and backup_target must be absolute paths")
+        if ".." in v.split("/"):
+            raise StorageConfigError(f"{source}: '..' is not allowed in storage paths")
+        if v.startswith("//") or posixpath.normpath(v) != (v.rstrip("/") or "/"):
+            raise StorageConfigError(f"{source}: {v!r} is not a normalised path")
+        if any(c in v for c in "\n\r\t\0'\"$`\\"):
+            raise StorageConfigError(f"{source}: storage paths must not contain quotes, '$', '`', '\\' or control characters")
     m, t = PurePosixPath(mount), PurePosixPath(target)
-    if not m.is_absolute() or not t.is_absolute():
-        raise StorageConfigError(f"{source}: backup_mount and backup_target must be absolute paths")
-    if ".." in m.parts or ".." in t.parts:
-        raise StorageConfigError(f"{source}: '..' is not allowed in storage paths")
     if str(m) == "/":
         raise StorageConfigError(f"{source}: backup_mount '/' is the system disk, not a separate store")
     if t != m and m not in t.parents:
@@ -79,11 +92,9 @@ def load(env: dict | None = None, config_path: Path | None = None) -> Storage:
             raise StorageConfigError("env: TLOS_BACKUP_MOUNT and TLOS_BACKUP_TARGET must be set together")
         return _validate(em, et, env.get("TLOS_BACKUP_MOUNT_UUID") or None, "env")
     path = Path(config_path) if config_path is not None else Path(env.get(CONFIG_ENV) or DEFAULT_CONFIG)
-    explicit = config_path is not None or bool(env.get(CONFIG_ENV))
     if not path.exists():
-        if explicit:
-            raise StorageConfigError(f"{path}: configured storage file does not exist")
-        return Storage(DEFAULT_MOUNT, DEFAULT_TARGET, None, "default")
+        raise StorageConfigError(f"no backup store configured: {path} does not exist and TLOS_BACKUP_MOUNT/"
+                                 f"TLOS_BACKUP_TARGET are unset (see docs/p3/PLN_03_BACKUP_RESTORE.md)")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -94,6 +105,54 @@ def load(env: dict | None = None, config_path: Path | None = None) -> Storage:
     if unknown:
         raise StorageConfigError(f"{path}: unknown keys {sorted(unknown)}")
     return _validate(data.get("backup_mount"), data.get("backup_target"), data.get("mount_uuid"), str(path))
+
+
+def _deepest_existing(path: str) -> str:
+    p = path
+    while not os.path.lexists(p):
+        p = posixpath.dirname(p)
+    return p
+
+
+def preflight(store: Storage, runner=None) -> list[str]:
+    """Live checks before a backup is written or a store is trusted. Returns problems; empty means OK.
+
+    ``runner(cmd) -> stdout`` reads the filesystem UUID (default: ``findmnt``). Read-only."""
+    m = store.backup_mount
+    if os.path.islink(m):
+        return [f"{m} is a symlink, not the store's mountpoint"]
+    if not os.path.ismount(m):
+        return [f"{m} is not mounted"]
+    if store.mount_uuid:
+        try:
+            got = (runner or _findmnt_uuid)(["findmnt", "-no", "UUID", "--mountpoint", m]).strip()
+        except Exception as exc:  # noqa: BLE001 - an identity that cannot be read is not proven
+            return [f"UUID of {m} cannot be read ({type(exc).__name__})"]
+        if got.lower() != store.mount_uuid.lower():
+            return [f"{m} has UUID {got or '(none)'!r}, not the configured {store.mount_uuid}"]
+    return target_problems(store)
+
+
+def target_problems(store: Storage) -> list[str]:
+    """The target, or its deepest existing parent, must resolve inside the mount on the mount's device,
+    and an existing target must be a plain directory (not a symlink, not a file). Read-only."""
+    problems: list[str] = []
+    m = store.backup_mount
+    probe = _deepest_existing(store.backup_target)
+    real_m, real_p = os.path.realpath(m), os.path.realpath(probe)
+    if real_p != real_m and not real_p.startswith(real_m.rstrip("/") + "/"):
+        problems.append(f"{store.backup_target} resolves outside the store ({probe} -> {real_p})")
+    elif os.stat(real_p).st_dev != os.stat(real_m).st_dev:
+        problems.append(f"{store.backup_target} is on another filesystem than {m} (nested mount at or above {probe})")
+    if os.path.lexists(store.backup_target) and (os.path.islink(store.backup_target)
+                                                 or not os.path.isdir(store.backup_target)):
+        problems.append(f"{store.backup_target} exists but is not a plain directory")
+    return problems
+
+
+def _findmnt_uuid(cmd: list[str]) -> str:
+    import subprocess
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False).stdout
 
 
 def shell_exports(storage: Storage) -> str:
@@ -112,12 +171,21 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Print the resolved P3 backup storage location.")
     parser.add_argument("--shell", action="store_true", help="print shell assignments for a wrapper to eval")
+    parser.add_argument("--preflight", action="store_true",
+                        help="also check the live store (mounted, UUID, target on the store); exit 3 on any problem")
     args = parser.parse_args(argv)
+    import sys
     try:
         s = load()
     except StorageConfigError as exc:
-        print(f"STORAGE_CONFIG_ERROR: {exc}", file=__import__("sys").stderr)
+        print(f"STORAGE_CONFIG_ERROR: {exc}", file=sys.stderr)
         return 3
+    if args.preflight:
+        problems = preflight(s)
+        if problems:
+            for p in problems:
+                print(f"STORAGE_PREFLIGHT_FAIL: {p}", file=sys.stderr)
+            return 3
     if args.shell:
         print(shell_exports(s), end="")
     else:

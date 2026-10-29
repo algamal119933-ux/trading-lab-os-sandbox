@@ -139,14 +139,23 @@ def _store_checks(runner, store=None):
             got = runner(["findmnt", "-no", "UUID", "--mountpoint", store.backup_mount]).stdout.strip()
         except Exception as exc:  # noqa: BLE001 - an identity that cannot be read is not a proven identity
             out.append(_finding(check, WARNING, f"UNPROVEN: findmnt could not be queried ({type(exc).__name__})"))
-            return store, out
-        if not got:
+            got = None
+        if got is None:
+            pass
+        elif not got:
             out.append(_finding(check, WARNING, "UNPROVEN: findmnt gave no UUID"))
         elif got.lower() != store.mount_uuid.lower():
             out.append(_finding(check, CRITICAL, f"UUID {got} is not the configured {store.mount_uuid}: "
                                                  f"another filesystem is mounted there"))
         else:
             out.append(_finding(check, INFO, f"UUID {got}"))
+    if out[1]["severity"] == INFO and not any(f["severity"] == CRITICAL for f in out):
+        try:
+            problems = _storage.target_problems(store)
+        except OSError as exc:
+            problems = [f"target cannot be resolved ({type(exc).__name__})"]
+        out.append(_finding("backup_target_on_store", CRITICAL if problems else INFO,
+                            "; ".join(problems)[:200] if problems else "target resolves inside the store's filesystem"))
     return store, out
 
 
