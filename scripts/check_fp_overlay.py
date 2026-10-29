@@ -27,8 +27,8 @@ merge produced — is checked for:
 * no execution endpoint appears anywhere in the rendered stack.
 
 Usage:
-    docker compose -f docker-compose.yml -f docker-compose.fp.yml config > rendered.yml
-    python3 scripts/check_fp_overlay.py rendered.yml FP-CONTROL-2
+    docker compose -f docker-compose.yml -f docker-compose.fp.yml config > "$(mktemp)"   # holds every secret: never in the tree
+    python3 scripts/check_fp_overlay.py <that file> FP-CONTROL-2
 """
 
 from __future__ import annotations
