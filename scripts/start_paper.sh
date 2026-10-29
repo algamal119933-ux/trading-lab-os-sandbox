@@ -3,7 +3,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 if [[ ! -f .env ]]; then
-  echo "Missing .env. Run: install -m 600 .env.example .env and change the placeholder passwords." >&2
+  echo "Missing .env. Run: cp .env.example .env and change the placeholder passwords." >&2
   exit 2
 fi
 

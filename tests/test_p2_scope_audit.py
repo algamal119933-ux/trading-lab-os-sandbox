@@ -1640,16 +1640,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-09 message, SEC-12, SEC-15).
+# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-12, SEC-15 .gitignore). scripts/*.py and
+# scripts/*.sh are the frozen runtime surface (research/fp/semantic_identity.py) and are not touched here.
 # Repository-only; no secret value anywhere; no host change.
 _SEC = "P3 security hardening"
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/start_paper.sh": f"{_SEC} — SEC-09: the refusal message tells the operator to create .env owner-only",
     "research/p3/backup.py": f"{_SEC} — SEC-12: the drill never restores ownership or setuid/setgid bits",
-    "scripts/check_fp_overlay.py": f"{_SEC} — SEC-15: rendered compose output (holds secrets) never in the tree",
-    "scripts/verify_repo.py": f"{_SEC} — SEC-15: Telegram token pattern; .tar.zst, .bundle, .db never tracked",
     ".gitignore": f"{_SEC} — SEC-15: backup/runtime artifacts and rendered compose output ignored",
-    "tests/test_repo_hygiene.py": f"{_SEC} — detector and ignore cases for SEC-15",
+    "tests/test_repo_hygiene.py": f"{_SEC} — ignore cases for SEC-15",
     "tests/test_p3_backup.py": f"{_SEC} — SEC-12 setuid/ownership regression (fails before the fix)",
     "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",

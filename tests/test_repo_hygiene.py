@@ -61,9 +61,6 @@ def test_manifest_is_current(repo_root):
         "certs/exchange.pem",
         "freqtrade/user_data/backtest_results/result.json",
         "archive.zip",
-        "set/roots/trading.tar.zst",
-        "set/git/trading.bundle",
-        "runtime/state.db",
     ],
 )
 def test_forbidden_paths_are_detected(path):
@@ -85,9 +82,6 @@ def test_env_example_is_allowed():
         "token = ghp_abcdefghijklmnopqrstuvwxyz0123456789\n",  # allowlist-secret: detector fixture
         "aws = AKIAIOSFODNN7EXAMPLE\n",  # allowlist-secret: detector fixture
         'cfg = {"secret": "0123456789abcdef"}\n',  # allowlist-secret: detector fixture
-        "bot = 123456789:AAabcdefghijklmnopqrstuvwxyz0123456\n",  # allowlist-secret: detector fixture
-        "url = https://api.telegram.org/bot123456789:AAabcdefghijklmnopqrstuvwxyz0123456/sendMessage\n",  # allowlist-secret: detector fixture
-        "tok = 123456789:AAabcdefghijklmnopqrstuvwxyz012345- end\n",  # allowlist-secret: detector fixture
     ],
 )
 def test_secret_patterns_are_detected(tmp_path, monkeypatch, content):
