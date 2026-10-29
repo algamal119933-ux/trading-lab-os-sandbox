@@ -126,6 +126,7 @@ The backup unit no longer carries `RequiresMountsFor`.
 
 **Live preflight** (`storage.py --preflight`, run by the backup wrapper before every set). It refuses:
 - a mountpoint that is not mounted, or is a symlink;
+- a store on the same filesystem as `/` (a bind mount of a system-disk directory is not a separate store);
 - a filesystem UUID different from the configured one, or one that cannot be read;
 - a target, or its deepest existing parent, that resolves outside the mount or onto another device (a symlink or a nested mount);
 - an existing target that is not a plain directory.
@@ -136,9 +137,11 @@ This matters because `backup.py create` creates the target's parents and would f
 
 | Consumer | Behaviour |
 |---|---|
-| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch and WARNING `UNPROVEN` when unreadable; `backup_target_on_store` CRITICAL when the target resolves off the store |
+| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch, WARNING `UNPROVEN` when unreadable **or not configured**; `backup_target_on_store` CRITICAL when the target resolves off the store or the store is the system disk; `backup_store_permissions` WARNING when group/other can reach the sets |
 | Backup wrapper | Refuses with exit 3 |
 | Reboot snapshot | Errors with exit 2 |
+
+**Permissions (security audit SEC-03).** Sets contain configuration, including the runtime `.env`, so the wrapper runs with `umask 077` and the unit with `UMask=0077`. Docker writes the volume tars as root inside the owner-only set directory, so nobody else can traverse to them. Whether to exclude `.env` from sets or encrypt them before offsite is an Owner decision. Host step: `chmod 700 <target>` on an existing store.
 
 Tests: `tests/test_p3_storage.py`. Residual: the preflight and `backup.py create` are separate steps, so the gap between them is a time-of-check window. The store is single-writer, so this is accepted.
 

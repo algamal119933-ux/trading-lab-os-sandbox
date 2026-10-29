@@ -130,7 +130,24 @@ def preflight(store: Storage, runner=None) -> list[str]:
             return [f"UUID of {m} cannot be read ({type(exc).__name__})"]
         if got.lower() != store.mount_uuid.lower():
             return [f"{m} has UUID {got or '(none)'!r}, not the configured {store.mount_uuid}"]
-    return target_problems(store)
+    return device_problems(store) or target_problems(store)
+
+
+def device_problems(store: Storage, root: str = "/") -> list[str]:
+    """The store must not be the system disk: a bind mount of a root-filesystem directory is a mountpoint
+    but not a separate store (it dies with the system disk). Read-only."""
+    if os.stat(store.backup_mount).st_dev == os.stat(root).st_dev:
+        return [f"{store.backup_mount} is on the same filesystem as {root} (the system disk), not a separate store"]
+    return []
+
+
+def permission_problems(store: Storage) -> list[str]:
+    """Backup sets contain configuration (including the runtime .env); the store directory must not be
+    readable or traversable by group or others. Reported, not enforced, so a fix is the Owner's chmod."""
+    t = store.backup_target
+    if os.path.isdir(t) and not os.path.islink(t) and os.stat(t).st_mode & 0o077:
+        return [f"{t} is mode {oct(os.stat(t).st_mode & 0o777)}: group/other can reach backup sets (want 0700)"]
+    return []
 
 
 def target_problems(store: Storage) -> list[str]:
@@ -187,7 +204,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"STORAGE_PREFLIGHT_FAIL: {p}", file=sys.stderr)
             return 3
     if args.shell:
-        print(shell_exports(s), end="")
+        try:
+            print(shell_exports(s), end="")
+        except StorageConfigError as exc:
+            print(f"STORAGE_CONFIG_ERROR: {exc}", file=sys.stderr)
+            return 3
     else:
         print(json.dumps({"backup_mount": s.backup_mount, "backup_target": s.backup_target,
                           "mount_uuid": s.mount_uuid, "source": s.source}, indent=2))

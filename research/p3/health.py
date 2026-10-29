@@ -133,6 +133,9 @@ def _store_checks(runner, store=None):
             return None, [_finding("backup_storage", CRITICAL, f"storage configuration unusable: {str(exc)[:160]}")]
     out = [_finding("backup_storage", INFO, f"{store.backup_target} on {store.backup_mount} (source: {store.source})"),
            mounted(store.backup_mount)]
+    if not store.mount_uuid and out[-1]["severity"] == INFO:
+        out.append(_finding(f"mount_uuid:{store.backup_mount}", WARNING,
+                            "UNPROVEN: no mount_uuid configured; any filesystem mounted here would be accepted"))
     if store.mount_uuid and out[-1]["severity"] == INFO:
         check = f"mount_uuid:{store.backup_mount}"
         try:
@@ -151,11 +154,17 @@ def _store_checks(runner, store=None):
             out.append(_finding(check, INFO, f"UUID {got}"))
     if out[1]["severity"] == INFO and not any(f["severity"] == CRITICAL for f in out):
         try:
-            problems = _storage.target_problems(store)
+            problems = _storage.device_problems(store) + _storage.target_problems(store)
         except OSError as exc:
             problems = [f"target cannot be resolved ({type(exc).__name__})"]
         out.append(_finding("backup_target_on_store", CRITICAL if problems else INFO,
                             "; ".join(problems)[:200] if problems else "target resolves inside the store's filesystem"))
+        try:
+            perms = _storage.permission_problems(store)
+        except OSError as exc:
+            perms = [f"permissions cannot be read ({type(exc).__name__})"]
+        if perms:
+            out.append(_finding("backup_store_permissions", WARNING, "; ".join(perms)[:200]))
     return store, out
 
 

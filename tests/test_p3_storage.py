@@ -225,19 +225,24 @@ def _by_check(findings):
 
 
 def test_health_reports_the_resolved_store_its_mount_and_its_target(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "device_problems", lambda store, root="/": [])  # tmp_path stands in for a separate disk
     m = tmp_path / "store"
     (m / "tlos-backups").mkdir(parents=True)
     store = storage.Storage(str(m), str(m / "tlos-backups"), None, "t")
     monkeypatch.setattr(health.os.path, "ismount", lambda p: p == str(m))
     f = health.storage_findings(R(), store)
-    assert [x["check"] for x in f] == ["backup_storage", f"mount:{m}", "backup_target_on_store"]
-    assert {x["severity"] for x in f} == {health.INFO}
+    assert [x["check"] for x in f] == ["backup_storage", f"mount:{m}", f"mount_uuid:{m}", "backup_target_on_store",
+                                       "backup_store_permissions"][:len(f)]
+    sev = {x["check"]: x["severity"] for x in f}
+    assert sev[f"mount_uuid:{m}"] == health.WARNING  # no UUID configured: identity UNPROVEN
+    assert sev["backup_target_on_store"] == health.INFO
     monkeypatch.setattr(health.os.path, "ismount", lambda p: False)
     f = _by_check(health.storage_findings(R(), store))
     assert f[f"mount:{m}"]["severity"] == health.CRITICAL and "backup_target_on_store" not in f
 
 
 def test_a_configured_uuid_must_match_and_unknown_is_unproven(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "device_problems", lambda store, root="/": [])  # tmp_path stands in for a separate disk
     m = tmp_path / "store"
     m.mkdir()
     store = storage.Storage(str(m), str(m / "b"), UUID, "t")
@@ -254,6 +259,7 @@ def test_a_configured_uuid_must_match_and_unknown_is_unproven(tmp_path, monkeypa
 
 
 def test_health_reports_a_target_off_the_store_as_critical(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "device_problems", lambda store, root="/": [])  # tmp_path stands in for a separate disk
     m, elsewhere = tmp_path / "store", tmp_path / "elsewhere"
     m.mkdir()
     elsewhere.mkdir()
@@ -359,3 +365,33 @@ def test_the_control_room_keeps_a_path_constant_for_static_consumers_and_resolve
     assert cr._store_target() == Path(storage.DEFAULT_TARGET)
     with pytest.raises(storage.StorageConfigError):
         storage.load()
+
+
+def test_a_store_on_the_system_disk_is_refused(tmp_path):
+    m = tmp_path / "store"
+    m.mkdir()
+    store = storage.Storage(str(m), str(m / "b"), None, "t")
+    assert "same filesystem" in storage.device_problems(store, root=str(tmp_path))[0]
+
+
+@needs_proc
+def test_a_separate_filesystem_is_not_the_system_disk():
+    assert storage.device_problems(storage.Storage("/proc", "/proc/x/b", None, "t")) == []
+
+
+def test_a_store_reachable_by_others_is_a_warning(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "device_problems", lambda store, root="/": [])
+    monkeypatch.setattr(health.os.path, "ismount", lambda p: True)
+    m = tmp_path / "store"
+    (m / "b").mkdir(parents=True)
+    os.chmod(m / "b", 0o755)
+    store = storage.Storage(str(m), str(m / "b"), UUID, "t")
+    f = _by_check(health.storage_findings(R(UUID), store))
+    assert f["backup_store_permissions"]["severity"] == health.WARNING and "0o755" in f["backup_store_permissions"]["detail"]
+    os.chmod(m / "b", 0o700)
+    assert "backup_store_permissions" not in _by_check(health.storage_findings(R(UUID), store))
+
+
+def test_the_backup_wrapper_and_unit_create_owner_only_files():
+    assert "\numask 077" in (REPO / "scripts/p3/scheduled_backup.sh").read_text(encoding="utf-8")
+    assert "\nUMask=0077\n" in (REPO / "scripts/p3/units/tlos-p3-backup.service").read_text(encoding="utf-8")

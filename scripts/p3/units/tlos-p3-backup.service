@@ -6,6 +6,7 @@ Documentation=file:///home/hamza/projects/trading/tlos-p3/docs/p3/PLN_03_BACKUP_
 
 [Service]
 Type=oneshot
+UMask=0077
 ExecStart=%h/projects/trading/tlos-p3/scripts/p3/scheduled_backup.sh
 Nice=10
 IOSchedulingClass=idle

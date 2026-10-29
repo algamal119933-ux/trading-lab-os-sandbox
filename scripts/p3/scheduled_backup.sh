@@ -5,6 +5,7 @@
 # target. It never deletes or overwrites a set; retention is a separate Owner decision. It needs no
 # network and starts no runtime. Exit status: that of `backup.py create` (0 = created and verified).
 set -euo pipefail
+umask 077  # sets hold configuration (including the runtime .env): owner-only (P3 security audit SEC-03)
 export PYTHONDONTWRITEBYTECODE=1
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PY="${TLOS_PYTHON:-/home/hamza/projects/trading/trading_lab_os_final/.venv/bin/python}"
