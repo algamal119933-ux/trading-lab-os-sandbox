@@ -8,9 +8,21 @@ set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PY="${TLOS_PYTHON:-/home/hamza/projects/trading/trading_lab_os_final/.venv/bin/python}"
-TARGET="${TLOS_BACKUP_TARGET:-/mnt/tlos-wdc/tlos-backups}"
 H=/home/hamza
-mountpoint -q /mnt/tlos-wdc || { echo "BACKUP_REFUSED: /mnt/tlos-wdc is not mounted" >&2; exit 3; }
+# The backup store is configured once (research/p3/storage.py: env, ~/.config/tlos-p3/storage.json, or the
+# historical PLN-03 default store). An unusable configuration, an unmounted store or a different filesystem
+# UUID refuses the run (exit 3); it never falls back to another location.
+STORE="$("$PY" "$REPO/research/p3/storage.py" --shell)" \
+  || { echo "BACKUP_REFUSED: backup storage configuration is unusable" >&2; exit 3; }
+eval "$STORE"
+TARGET="$TLOS_STORAGE_TARGET"
+mountpoint -q "$TLOS_STORAGE_MOUNT" \
+  || { echo "BACKUP_REFUSED: $TLOS_STORAGE_MOUNT is not mounted" >&2; exit 3; }
+if [ -n "$TLOS_STORAGE_UUID" ]; then
+  GOT="$(findmnt -no UUID --mountpoint "$TLOS_STORAGE_MOUNT" || true)"
+  [ "${GOT,,}" = "${TLOS_STORAGE_UUID,,}" ] \
+    || { echo "BACKUP_REFUSED: $TLOS_STORAGE_MOUNT has UUID '${GOT}', not the configured ${TLOS_STORAGE_UUID}" >&2; exit 3; }
+fi
 exec "$PY" "$REPO/scripts/p3/backup.py" create --target "$TARGET" \
   --root trading="$H/projects/trading" \
   --root tlos-paper="$H/tlos-paper" \

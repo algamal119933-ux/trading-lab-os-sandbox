@@ -92,3 +92,65 @@ PLN-02 re-run against this set: PASS on runtime, the 10 worktrees, the tools che
 PLN_03_ACCEPTANCE = PASS (the scheduled execution under systemd: verify PASS, drill PASS)
 ```
 The next run is the timer's own unattended 03:30 UTC run. The health check's `backup_recency` (RPO 26 h) alerts if any later run is missed.
+
+## Backup store configuration (2026-10-30)
+**Why.** The store path `/mnt/tlos-wdc` was hard-coded in five places: the backup wrapper, the backup unit, the health check, the Control Room and the reboot snapshot.
+
+The Owner-reported host migration of 2026-10-29 moved the TLOS backups to an internal HDD under `/srv/project-data/tlos-backups`. Label: HANDOFF_ONLY. Claude has not seen the host. After the move, the hard-coded path broke health in two ways:
+- the hourly health run reported the old store as CRITICAL;
+- the run never checked the store the backups actually went to.
+
+**What changed.** `research/p3/storage.py` is now the single source. Every consumer reads it:
+- `scheduled_backup.sh`;
+- `health.py` and `health_check.py`;
+- `control_room.py`;
+- `scripts/p3/recovery.py`.
+
+The backup unit no longer carries `RequiresMountsFor`.
+
+**Resolution order:**
+1. The environment variables `TLOS_BACKUP_MOUNT` and `TLOS_BACKUP_TARGET`, set together, plus the optional `TLOS_BACKUP_MOUNT_UUID`.
+2. A host-local file, `~/.config/tlos-p3/storage.json` or the file named by `$TLOS_STORAGE_CONFIG`.
+3. The historical default, `/mnt/tlos-wdc` with sets under `/mnt/tlos-wdc/tlos-backups`.
+
+**Fail-closed.** A configuration that exists but cannot be read or is invalid is never replaced by the default. The file counts as invalid if:
+- any path is relative;
+- any path contains `..`;
+- the mount is `/`;
+- the target is outside the mount;
+- it has unknown keys;
+- the UUID is malformed.
+
+When that happens:
+
+| Consumer | Behaviour |
+|---|---|
+| Health | `backup_storage` is CRITICAL, and so is `backup_recency` |
+| Backup wrapper | Refuses with exit 3 |
+| Reboot snapshot | Errors with exit 2 |
+
+The backup wrapper also refuses, with exit 3, an unmounted store or a filesystem UUID different from the configured one.
+
+In health, a UUID that cannot be read is WARNING `UNPROVEN`, and a different UUID is CRITICAL. Tests: `tests/test_p3_storage.py`.
+
+**Host steps (Owner; each needs authorization, nothing here has been run):**
+1. Write the host file. The values below are as reported for the migrated host; the mountpoint and UUID come from the host itself.
+   ```bash
+   install -d -m 700 ~/.config/tlos-p3
+   M=/srv/project-data            # the HDD mountpoint (confirm: findmnt -T /srv/project-data/tlos-backups)
+   U=$(findmnt -no UUID --mountpoint "$M")
+   printf '{"backup_mount": "%s", "backup_target": "%s/tlos-backups", "mount_uuid": "%s"}\n' "$M" "$M" "$U" \
+     > ~/.config/tlos-p3/storage.json
+   python3 ~/projects/trading/tlos-p3/research/p3/storage.py      # prints the resolved store; exit 0
+   ```
+2. Do the controlled `tlos-p3` update to a main SHA that contains this change.
+3. Run one health check: `scripts/p3/health_check.py`. Expect `backup_storage` INFO, `mount:<M>` INFO, `mount_uuid:<M>` INFO, and `backup_recency` measured on the new store.
+4. **Take a new reboot baseline** (`recovery.py snapshot`). The accepted baseline `42f0d28f…` records `/mnt/tlos-wdc`. A verify-boot against it now reports `mount:/mnt/tlos-wdc` missing, which is correct, because the store changed.
+5. The Owner-reported drop-in that points `tlos-p3-backup.service` at a host-local `backup.sh` is outside the repository. Bringing that wrapper into the repository is a separate change. It needs the host files, which Claude cannot read. It must cover:
+   - the runtime volume aliases;
+   - the short stop around the export;
+   - the SSD mirror.
+
+   Until then the governed wrapper (`scheduled_backup.sh`) is not what the timer runs on that host.
+
+PLN-03 stays **ACCEPTED** for its procedure and drills. This change touches only where the store is found, not how a set is made, verified or restored.

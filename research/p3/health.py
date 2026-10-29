@@ -6,7 +6,8 @@ CRITICAL) and checks the conditions P2 showed matter:
 - the age of the newest verified backup set against the recovery-point objective (RPO);
 - the backup timer installed and active;
 - the retired P2 restart timer still disabled (F-5);
-- the WDC store mounted;
+- the backup store mounted, and on the configured filesystem UUID when one is set (p3.storage: the
+  location is configured once; an unusable configuration is CRITICAL, never a silent default);
 - a cohort whose trade ledger already shows a completed lifecycle while its registry row still says
   RUNNING, which means the normal end was reached and a governed stop is due (F-3);
 - the master plan §19 CRITICAL conditions that a read-only host check can observe: a paper-guard
@@ -112,6 +113,43 @@ def clock_sync(runner) -> dict:
     return _finding("clock_sync", WARNING, f"UNPROVEN: timedatectl gave no NTP state ({out[:40]!r})")
 
 
+def storage_findings(runner, store=None) -> list[dict]:
+    """The backup-store checks alone (see ``_store_checks``)."""
+    return _store_checks(runner, store)[1]
+
+
+def _store_checks(runner, store=None):
+    """The backup store: its resolved location, mounted, and (if configured) the expected filesystem UUID.
+
+    ``store`` is a ``p3.storage.Storage``; None resolves it. An unusable configuration is CRITICAL with no
+    fallback (the health check must never judge a default store the backups are not written to). A
+    configured UUID that cannot be read is UNPROVEN (WARNING); a different UUID is CRITICAL.
+    Returns ``(store or None, findings)``."""
+    from p3 import storage as _storage
+    if store is None:
+        try:
+            store = _storage.load()
+        except _storage.StorageConfigError as exc:
+            return None, [_finding("backup_storage", CRITICAL, f"storage configuration unusable: {str(exc)[:160]}")]
+    out = [_finding("backup_storage", INFO, f"{store.backup_target} on {store.backup_mount} (source: {store.source})"),
+           mounted(store.backup_mount)]
+    if store.mount_uuid and out[-1]["severity"] == INFO:
+        check = f"mount_uuid:{store.backup_mount}"
+        try:
+            got = runner(["findmnt", "-no", "UUID", "--mountpoint", store.backup_mount]).stdout.strip()
+        except Exception as exc:  # noqa: BLE001 - an identity that cannot be read is not a proven identity
+            out.append(_finding(check, WARNING, f"UNPROVEN: findmnt could not be queried ({type(exc).__name__})"))
+            return store, out
+        if not got:
+            out.append(_finding(check, WARNING, "UNPROVEN: findmnt gave no UUID"))
+        elif got.lower() != store.mount_uuid.lower():
+            out.append(_finding(check, CRITICAL, f"UUID {got} is not the configured {store.mount_uuid}: "
+                                                 f"another filesystem is mounted there"))
+        else:
+            out.append(_finding(check, INFO, f"UUID {got}"))
+    return store, out
+
+
 def mounted(path: str) -> dict:
     return _finding(f"mount:{path}", INFO if os.path.ismount(path) else CRITICAL,
                     "mounted" if os.path.ismount(path) else "not mounted")
@@ -145,7 +183,7 @@ def overall(findings: list[dict]) -> str:
 
 def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict] | None,
                       root_min_gib: float = 20.0, lane: Path = Path("/home/hamza/tlos-paper/h1-paper-cohort-1"),
-                      lane_min_gib: float = 20.0, backup_target: Path = Path("/mnt/tlos-wdc/tlos-backups"),
+                      lane_min_gib: float = 20.0, backup_target: Path | None = None,
                       rpo_hours: float = 26.0,
                       fp_lane_root: Path = Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"),
                       s19: dict | None = None,
@@ -153,12 +191,19 @@ def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict
     """The host's standard check set, shared by the health CLI and the Control Room projection.
 
     ``s19`` carries the inputs of the §19 CRITICAL checks (see ``s19_findings``); None omits them, which
-    keeps callers that only want the capacity/recovery set (and older tests) unchanged."""
+    keeps callers that only want the capacity/recovery set (and older tests) unchanged.
+
+    ``backup_target`` None means the configured store (``p3.storage``); an explicit path overrides only
+    where recency is read, and the store checks still follow the configuration."""
+    store, store_findings = _store_checks(runner)
+    if backup_target is None and store is not None:
+        backup_target = store.target
     findings = [
         free_space(Path("/"), root_min_gib, "root"),
         free_space(lane, lane_min_gib, "h1_lane"),
-        mounted("/mnt/tlos-wdc"),
-        backup_recency(backup_target, rpo_hours, verifier=verifier),
+        *store_findings,
+        *([backup_recency(backup_target, rpo_hours, verifier=verifier)] if backup_target is not None else
+          [_finding("backup_recency", CRITICAL, "no usable backup store configured: recency not checked")]),
         timer_expected("tlos-p3-backup.timer", want_active=True, runner=runner),
         timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=runner),
         monitor_timer("tlos-p3-health.timer", runner=runner),
