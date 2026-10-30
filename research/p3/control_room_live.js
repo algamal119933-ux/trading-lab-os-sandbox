@@ -258,10 +258,17 @@ function mobile(){const s=sc();const d=s.dims;
  <nav class="mtabs" aria-label="${x('Mobile','الجوال')}">${tabs.map(([k,l,ic])=>`<button data-mtab="${k}" ${S.mtab===k&&!S.mdetail?'aria-current="page"':''}><span aria-hidden="true">${ic}</span>${L(l)}${k==='incidents'&&openIncs().length?` <span class="badge">${openIncs().length}</span>`:''}</button>`).join('')}</nav></div>`}
 /* device: the prototype's device toggle sits in the hidden prototype panel; a narrow viewport opens the
    mobile view, and #mobile / #desktop in the address override it (view state only, nothing stored) */
-function liveDevice(){const h=(location.hash||'').toLowerCase();if(h==='#mobile')return 'mobile';if(h==='#desktop')return 'desktop';
+/* address tokens: '#mobile', '#desktop', '#ar', '#en', combinable as '#mobile,ar'. Nothing is stored. */
+function hashTokens(){return (location.hash||'').toLowerCase().replace(/^#/,'').split(/[,&+]/).filter(Boolean)}
+function liveDevice(){const t=hashTokens(),h=t.length===1?'#'+t[0]:'';if(h==='#mobile'||t.includes('mobile'))return 'mobile';if(h==='#desktop'||t.includes('desktop'))return 'desktop';
  return window.matchMedia&&window.matchMedia('(max-width: 720px)').matches?'mobile':'desktop'}
-S.device=liveDevice();
-window.addEventListener('hashchange',()=>{S.device=liveDevice();S.mdetail=null;render()});
+/* language: the address wins ('#ar' / '#en'); otherwise the browser's language. The phone layout has no
+   language toggle of its own (the prototype's sits in the desktop header), so without this a phone could
+   never show Arabic. */
+function liveLang(){const t=hashTokens();if(t.includes('ar'))return 'ar';if(t.includes('en'))return 'en';
+ const n=((navigator.languages&&navigator.languages[0])||navigator.language||'').toLowerCase();return n.startsWith('ar')?'ar':'en'}
+S.device=liveDevice();S.lang=liveLang();
+window.addEventListener('hashchange',()=>{S.device=liveDevice();S.lang=liveLang();S.mdetail=null;render()});
 
 /* ---------- route: bound screens live, unbound screens keep their body under the notice ---------- */
 Object.keys(SCREENS).forEach(k=>{if(LIVE_BOUND.includes(k))return;const f=SCREENS[k];SCREENS[k]=()=>unboundNotice()+f()});

@@ -731,3 +731,16 @@ def test_capability_rows_keep_their_projected_state_across_renders():
     for obs in (_obs(paper_containers=None, paper_error="x"), _obs(paper_containers={"tlos-h1-paper-cohort-1": "paused"})):
         st = _caps(cr.project(obs))
         assert st["Paper trading"][1] != "allowed" and st["Long entries"] == ["unk", "unknown"]
+
+
+
+def test_the_language_follows_the_address_or_the_browser_and_stores_nothing():
+    """A phone has no language toggle of its own (the prototype's is in the desktop header), so the language
+    comes from the address ('#ar', '#en', combinable with the device, e.g. '#mobile,ar') or the browser."""
+    js = cr.ADAPTER_JS.read_text(encoding="utf-8")
+    lang = js[js.index("function liveLang()"):js.index("/* ---------- route")]
+    assert "t.includes('ar')" in lang and "t.includes('en')" in lang and "navigator.language" in lang
+    assert "S.lang=liveLang()" in lang and lang.count("S.lang=liveLang()") == 2  # at load and on hashchange
+    assert "localStorage" not in lang and "sessionStorage" not in lang and "document.cookie" not in lang
+    dev = js[js.index("function liveDevice()"):js.index("function liveLang()")]
+    assert "t.includes('mobile')" in dev and "t.includes('desktop')" in dev
