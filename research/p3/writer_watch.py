@@ -22,7 +22,11 @@ the auditd-first design in docs/p3/PLN_06_UNEXPECTED_WRITER.md:
 
 The protected paths are not a new list: they are derived from the constants the health job and the
 Control Room already use (``health.RUNTIME_ROOT``, ``health.OPERATOR_LEDGER``, ``health.H1_LANE``,
-``control_room.EVIDENCE_DIR``, ``control_room.BACKUP_TARGET``), so a moved path moves here too.
+``control_room.EVIDENCE_DIR``) and the backup store, so a moved path moves here too. The store comes from
+``p3.storage`` when that module exists (PR #98: configured once, no fallback): with no usable store the backup
+and second-device paths are not watched, the rules are refused and the finding is UNPROVEN, so the watch never
+guards a fallback path instead of the real store. Before #98 is merged the store is ``control_room.BACKUP_TARGET``,
+exactly as on main. Either merge order of #90 and #98 is therefore correct without a follow-up patch.
 
 Read-only. It installs nothing, starts nothing and is not yet part of the hourly health run.
 Until the Owner installs auditd and the acceptance tests in the design document pass on the host,
@@ -66,14 +70,28 @@ LEDGER_DIR = health.OPERATOR_LEDGER.parent                          # hash-chain
 PAPER_ROOT = LEDGER_DIR.parent                                      # ~/tlos-paper
 H1_LANE = health.H1_LANE                                            # H1 lane (absent while not authorized)
 EVIDENCE_DIR = control_room.EVIDENCE_DIR                            # P3 evidence (health textfile, records)
-BACKUP_TARGET = control_room.BACKUP_TARGET                          # append-only backup sets (WDC)
-WDC_ROOT = BACKUP_TARGET.parent                                     # the second device's mount point
-SECOND_DEVICE_REPLICA = WDC_ROOT / "trading-lab-os-evidence"        # scripts/replicate_to_second_device.REPLICA_ROOT_NAME
+try:                                                                # PR #98: the configured backup store
+    from p3 import storage  # noqa: E402
+except ImportError:                                                 # main before #98: the Control Room's constant
+    storage = None
+STORE_ERROR: str | None = None
+if storage is not None:
+    try:
+        _STORE = storage.load()
+    except storage.StorageConfigError as _exc:
+        _STORE, STORE_ERROR = None, str(_exc)
+    BACKUP_TARGET = _STORE.target if _STORE else None               # append-only backup sets
+    STORE_ROOT = Path(_STORE.backup_mount) if _STORE else None      # the store's mount point
+else:
+    BACKUP_TARGET = control_room.BACKUP_TARGET
+    STORE_ROOT = BACKUP_TARGET.parent
+SECOND_DEVICE_REPLICA = (STORE_ROOT / "trading-lab-os-evidence"     # scripts/replicate_to_second_device.REPLICA_ROOT_NAME
+                         if STORE_ROOT else None)
 SEALED_ARTIFACTS = RUNTIME_ROOT / "artifacts"                       # sealed P2 archives
 REGISTRY_DIR = RUNTIME_ROOT / "research" / "fp" / "records"         # runtime checkout's governed records
 # One canary per watched filesystem (root fs and the WDC). A watch on a path under a mount point that
 # is mounted after the rules load can attach to the wrong inode, so each filesystem proves itself.
-CANARIES = (PAPER_ROOT / "writer-canary", WDC_ROOT / "tlos-writer-canary")
+CANARIES = (PAPER_ROOT / "writer-canary",) + ((STORE_ROOT / "tlos-writer-canary",) if STORE_ROOT else ())
 
 
 @dataclass(frozen=True)
@@ -113,7 +131,7 @@ class ProtectedClass:
 PY = ("python", "python3", "python3.*")
 DEFAULT_INVENTORY: tuple[ProtectedClass, ...] = (
     ProtectedClass(
-        "sealed", (str(SEALED_ARTIFACTS), str(SECOND_DEVICE_REPLICA)),
+        "sealed", (str(SEALED_ARTIFACTS),) + ((str(SECOND_DEVICE_REPLICA),) if SECOND_DEVICE_REPLICA else ()),
         (), "sealed P2 archives and their second-device copies: once sealed, nothing may write (a new governed "
             "archive is pre-announced and its events reviewed)"),
     ProtectedClass(
@@ -126,7 +144,7 @@ DEFAULT_INVENTORY: tuple[ProtectedClass, ...] = (
          Writer("scheduled_health.sh `mkdir -p` of the Control Room dir (owner)", ("mkdir",))),
         "P3 evidence: hourly health textfile, Control Room build, reboot snapshots and verify records"),
     ProtectedClass(
-        "backups", (str(BACKUP_TARGET),),
+        "backups", (str(BACKUP_TARGET),) if BACKUP_TARGET else (),
         (Writer("backup.py (python, owner)", PY),
          *(Writer(f"backup.py helper {prog} (owner)", (prog,)) for prog in ("tar", "zstd", "git", "sha256sum")),
          Writer("volume export helper container (tar as root, no login session)", ("tar",), uids=("0",),
@@ -413,7 +431,8 @@ def missing_watches(rules_listing: str, inventory: tuple[ProtectedClass, ...] = 
 
 def finding(classified: list[dict] | None, *, status: dict[str, int] | None, rules_listing: str | None,
             inventory: tuple[ProtectedClass, ...] = DEFAULT_INVENTORY, lost_baseline: int | None = None,
-            gaps: list[str] | None = None, heartbeat_keys: tuple[str, ...] = HEARTBEAT_KEYS) -> dict:
+            gaps: list[str] | None = None, heartbeat_keys: tuple[str, ...] = HEARTBEAT_KEYS,
+            store_error: str | None = STORE_ERROR) -> dict:
     """INFO only if everything is proven: every watch loaded, auditd enabled and connected, a lost baseline
     recorded and no event lost since it, the backlog not saturated, no coverage gap in the window, every watched event attributed
     to a declared writer, and each heartbeat class seen at least once."""
@@ -426,6 +445,9 @@ def finding(classified: list[dict] | None, *, status: dict[str, int] | None, rul
         return f(CRITICAL, f"{len(unexpected)} unexpected write(s); first: key={first['key']} comm={first['comm']!r} "
                            f"exe={first.get('exe')!r} uid={first['uid']} auid={first.get('auid')} "
                            f"path={(first['paths'] or ['?'])[0]}")
+    if store_error is not None:
+        return f(WARNING, f"UNPROVEN: backup store not configured, so the backup and second-device paths are not "
+                          f"watched ({store_error[:120]})")
     if rules_listing is None or status is None or classified is None:
         return f(WARNING, "UNPROVEN: audit data unavailable (auditd not installed, not readable, or not queried)")
     missing = missing_watches(rules_listing, inventory)
@@ -533,6 +555,9 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--fixture", type=Path, default=SELFTEST_FIXTURE)
     args = parser.parse_args(argv)
     if args.command == "rules":
+        if STORE_ERROR is not None:
+            print(f"RULES_REFUSED: backup store not configured ({STORE_ERROR})", file=sys.stderr)
+            return 3
         sys.stdout.write(render_rules())
         return 0
     if args.command == "self-test":

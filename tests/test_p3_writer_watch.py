@@ -16,8 +16,26 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT / "research") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "research"))
 
+import os  # noqa: E402
+
 from p3 import control_room, health  # noqa: E402
-from p3 import writer_watch as ww  # noqa: E402
+
+# With PR #98 present, writer_watch takes the backup store from p3.storage at import time (no fallback path).
+# The tests pin a synthetic store for the import only, then restore the environment, so no other test sees
+# it. Before #98 the variables are simply unused and the store is control_room.BACKUP_TARGET (same paths).
+SYNTH_STORE = {"TLOS_BACKUP_MOUNT": "/mnt/tlos-wdc", "TLOS_BACKUP_TARGET": "/mnt/tlos-wdc/tlos-backups",
+               "TLOS_BACKUP_MOUNT_UUID": "0f3c5a2e-9b1d-4c7e-8a6f-2d4b1e9c7a10"}
+_saved = {k: os.environ.get(k) for k in (*SYNTH_STORE, "TLOS_STORAGE_CONFIG")}
+os.environ.update(SYNTH_STORE)
+os.environ.pop("TLOS_STORAGE_CONFIG", None)
+try:
+    from p3 import writer_watch as ww  # noqa: E402
+finally:
+    for _k, _v in _saved.items():
+        if _v is None:
+            os.environ.pop(_k, None)
+        else:
+            os.environ[_k] = _v
 
 LEDGER = "/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl"
 SEALED = "/home/hamza/projects/trading/trading_lab_os_final/artifacts/l2-cohort-x/MANIFEST.sha256"
@@ -63,14 +81,14 @@ def test_inventory_is_derived_from_the_existing_repository_constants_not_a_new_l
     assert str(health.OPERATOR_LEDGER.parent) == paths["ledger"][0]
     assert str(health.H1_LANE) == paths["h1_lane"][0]
     assert str(control_room.EVIDENCE_DIR) == paths["p3_evidence"][0]
-    assert str(control_room.BACKUP_TARGET) == paths["backups"][0]
+    assert str(ww.BACKUP_TARGET) == paths["backups"][0] == "/mnt/tlos-wdc/tlos-backups"
     assert control_room.LEDGER == health.OPERATOR_LEDGER and control_room.RUNTIME_ROOT == health.RUNTIME_ROOT
     # the second-device replica root is the one scripts/replicate_to_second_device.py writes
     spec = importlib.util.spec_from_file_location("replicate", REPO_ROOT / "scripts" / "replicate_to_second_device.py")
     replicate = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
     spec.loader.exec_module(replicate)
-    assert str(control_room.BACKUP_TARGET.parent / replicate.REPLICA_ROOT_NAME) in paths["sealed"]
+    assert str(ww.STORE_ROOT / replicate.REPLICA_ROOT_NAME) in paths["sealed"]
     # the health textfile the alert rules watch lives in the watched evidence directory
     sh = (REPO_ROOT / "scripts" / "p3" / "scheduled_health.sh").read_text(encoding="utf-8")
     assert f"{control_room.EVIDENCE_DIR}/tlos_p3_health.prom" in sh
@@ -331,8 +349,9 @@ def test_check_rules_reports_loaded_or_names_the_missing_watches(tmp_path, capsy
 
 
 def test_the_script_runs_standalone_from_a_checkout_as_the_runbook_invokes_it():
+    env = {**{k: v for k, v in os.environ.items() if k != "TLOS_STORAGE_CONFIG"}, **SYNTH_STORE}
     out = subprocess.run([sys.executable, str(REPO_ROOT / "research" / "p3" / "writer_watch.py"), "rules"],
-                         capture_output=True, text=True, timeout=60, cwd=REPO_ROOT)
+                         capture_output=True, text=True, timeout=60, cwd=REPO_ROOT, env=env)
     assert out.returncode == 0, out.stderr
     assert out.stdout.count("-k tlos_") == 9 and "-e 2" not in out.stdout
 
@@ -544,3 +563,25 @@ def test_the_self_test_runs_standalone_as_the_acceptance_runbook_invokes_it():
     out = subprocess.run([sys.executable, str(REPO_ROOT / "research" / "p3" / "writer_watch.py"), "self-test"],
                          capture_output=True, text=True, timeout=60, cwd=REPO_ROOT)
     assert out.returncode == 0 and "SELFTEST = PASS" in out.stdout, out.stdout + out.stderr
+
+
+
+def test_an_unconfigured_store_is_not_replaced_by_a_fallback_watch(tmp_path):
+    """With PR #98 present (p3.storage): no usable backup store means the watch never guards a legacy path instead
+    of the real store; the backup and second-device paths are absent, the rules are refused, the finding UNPROVEN.
+    Before #98 is merged this case does not exist (the store is control_room.BACKUP_TARGET) and is skipped."""
+    if not (REPO_ROOT / "research" / "p3" / "storage.py").exists():
+        import pytest
+        pytest.skip("p3.storage (PR #98) not in this tree; the store is control_room.BACKUP_TARGET here")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TLOS_BACKUP_")}
+    env["TLOS_STORAGE_CONFIG"] = str(tmp_path / "missing.json")
+    code = ("import sys; sys.path.insert(0, %r)\n"
+            "from p3 import writer_watch as w\n"
+            "keys = {c.key: c.paths for c in w.DEFAULT_INVENTORY}\n"
+            "assert w.BACKUP_TARGET is None and w.STORE_ROOT is None and w.STORE_ERROR\n"
+            "assert keys['backups'] == () and not any('tlos-wdc' in p for ps in keys.values() for p in ps)\n"
+            "f = w.finding([], status={'enabled': 1, 'pid': 1, 'lost': 0}, rules_listing=w.render_rules(), lost_baseline=0)\n"
+            "assert f['severity'] == w.WARNING and 'backup store not configured' in f['detail'], f\n"
+            "raise SystemExit(w.main(['rules']))\n") % str(REPO_ROOT / "research")
+    r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    assert r.returncode == 3 and "RULES_REFUSED: backup store not configured" in r.stderr, r.stderr
