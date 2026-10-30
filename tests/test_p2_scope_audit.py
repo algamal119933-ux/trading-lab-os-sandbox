@@ -1660,6 +1660,12 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
     "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
                                           "frozen-universe config pin",
+    "research/p3/recovery.py": f"{_R0407} — reboot check judges REQUIRED_AT_BOOT units (enabled/active) and "
+                               "linger, and the snapshot reports boot_posture; read-only",
+    "tests/test_p3_recovery.py": f"{_R0407} — boot-posture cases incl. the 2026-10-30 hand-started runtime "
+                                 "that did not return after a power loss",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_R0407} — boot-posture finding and rule (2026-10-30); RUN 3 verdict not "
+                                  "re-evaluated",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
