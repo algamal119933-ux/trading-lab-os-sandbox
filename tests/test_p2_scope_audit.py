@@ -1565,6 +1565,29 @@ P3_PLN_04_07_REBOOT_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #90, merged. Two parents: f584cd43 (main before) + 7dc59b6e
+# (P3-PLN-06 unexpected writer). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_WRITER_MERGE = "257272c4e854a6e232cb79d51884876d1281e15c"
+
+# P3-PLN-06 §19 "unexpected writer": auditd-first evaluation and design, a read-only rules generator and
+# audit-log classifier (fail-closed finding), synthetic tests only. Nothing installed; not wired into the hourly
+# health run. No runtime, strategy, risk, dataset, registry or evidence change.
+_P06UW = "P3-PLN-06 unexpected writer"
+P3_PLN_06_WRITER_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_06_UNEXPECTED_WRITER.md": f"{_P06UW} — auditd-first design, protected paths, writers, acceptance tests AT-1..AT-7",
+    "research/p3/writer_watch.py": f"{_P06UW} — auditd rules generator + read-only classifier; UNEXPECTED → CRITICAL, unknown → UNPROVEN",
+    "tests/test_p3_writer_watch.py": f"{_P06UW} — synthetic audit records only; fail-closed mapping",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06UW} — cross-reference PR #90; record the routing and label tests",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06UW} — promtool: unexpected_writer 2/1 pages via the generic rules",
+    "tests/test_p3_alerting.py": f"{_P06UW} — amtool routing: null until chosen; watchdog → deadman; critical/warning → channel",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+    "tests/fixtures/p3_writer_watch_selftest.audit": f"{_P06UW} — round 3: synthetic AT-0 self-test fixture (EXPECT lines)",
+    "research/p3/health.py": f"{_P06UW} — round 3: five §19/health fail-opens fixed (unknown state is never INFO)",
+    "tests/test_p3_health_s19.py": f"{_P06UW} — round 3: regression tests for the health fail-opens + textfile-write failure",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06UW} — round 3: the Owner edit sets the root receiver too",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1633,6 +1656,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
     "P3_PLN_06_DELIVERY": (P3_PLN_06_DELIVERY_MERGE, P3_PLN_06_DELIVERY_SCOPE),
     "P3_PLN_04_07_REBOOT": (P3_PLN_04_07_REBOOT_MERGE, P3_PLN_04_07_REBOOT_SCOPE),
+    "P3_PLN_06_WRITER": (P3_PLN_06_WRITER_MERGE, P3_PLN_06_WRITER_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1654,9 +1678,10 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/units/tlos-p3-backup.service": f"{_STC} — no hard-coded RequiresMountsFor",
     "tests/test_p3_storage.py": f"{_STC} — resolution, refusal, live preflight (symlink, nested mount, UUID) and every consumer",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_STC} — configuration section and host steps (NOT_RUN)",
-    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 unexpected writer (PR #90) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
+
 
 def _git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
