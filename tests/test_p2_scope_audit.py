@@ -1686,6 +1686,24 @@ P3_PLN_04_07_RESIDUALS_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #91, merged. Two parents: fd1ba8ab (main before) + 67f4ab53
+# (P3-PLN-10 acceptance program). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_10_ACCEPTANCE_MERGE = "972099a6501edd26cf52a0895cae2e19a8b0a4be"
+
+# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix (reusing the merged PLN-02..09 procedures),
+# the evidence schema, the run configuration that blocks until the five Owner decisions are set, and fail-closed
+# validators, developed against synthetic evidence. No run, no cohort, no T0, no launch, no acceptance claim.
+_P10 = "P3-PLN-10 acceptance program"
+P3_PLN_10_ACCEPTANCE_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, evidence, safety, procedure, stops, rollback",
+    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
+    "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
+    "docs/p3/PLN_10_OWNER_DECISION_PACKET.md": f"{_P10} — round 3: D1–D5 options, consequences, validator requirements; nothing chosen",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 residuals (PR #96) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1759,6 +1777,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_SECURITY_HARDENING": (P3_SECURITY_HARDENING_MERGE, P3_SECURITY_HARDENING_SCOPE),
     "P3_PLN_05_DESTINATION": (P3_PLN_05_DESTINATION_MERGE, P3_PLN_05_DESTINATION_SCOPE),
     "P3_PLN_04_07_RESIDUALS": (P3_PLN_04_07_RESIDUALS_MERGE, P3_PLN_04_07_RESIDUALS_SCOPE),
+    "P3_PLN_10_ACCEPTANCE": (P3_PLN_10_ACCEPTANCE_MERGE, P3_PLN_10_ACCEPTANCE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1766,17 +1785,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix (reusing the merged PLN-02..09 procedures),
-# the evidence schema, the run configuration that blocks until the five Owner decisions are set, and fail-closed
-# validators, developed against synthetic evidence. No run, no cohort, no T0, no launch, no acceptance claim.
-_P10 = "P3-PLN-10 acceptance program"
+# P3-PLN-11 execution pack structure (DRAFT / NOT FROZEN): the pack layout and a generator that reads Git
+# objects at a commit. No freeze, no PASS, no P3 closure.
+_P11 = "P3-PLN-11 execution pack structure"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, evidence, safety, procedure, stops, rollback",
-    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
-    "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
-    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
-    "docs/p3/PLN_10_OWNER_DECISION_PACKET.md": f"{_P10} — round 3: D1–D5 options, consequences, validator requirements; nothing chosen",
-    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 residuals (PR #96) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md": f"{_P11} — pack contents, reproducibility, later freeze rule",
+    "research/p3/exec_pack.py": f"{_P11} — draft generator; evidence index keyed by the PLN-10 evidence ids",
+    "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: byte-identical, never frozen, missing recorded, one id space",
+    "tests/test_p2_scope_audit.py": "P3-PLN-10 acceptance program (PR #91) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
