@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from p3 import backup, health, kill_switch, recovery
+from p3 import backup, health, kill_switch, recovery, storage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROTOTYPE = REPO_ROOT / "docs" / "p3" / "product_shape" / "Trading_Lab_OS_Prototype_v0.2.5_FINAL.html"
@@ -43,7 +43,16 @@ AUTHORIZATION = REPO_ROOT / "docs" / "p3" / "OWNER_P3_EXECUTION_AUTHORIZATION.md
 P2_CLOSURE = REPO_ROOT / "docs" / "p2" / "P2_CLOSURE.md"
 RUNTIME_ROOT = Path("/home/hamza/projects/trading/trading_lab_os_final")
 LEDGER = Path("/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl")
-BACKUP_TARGET = Path("/mnt/tlos-wdc/tlos-backups")
+def _store_target() -> Path | None:
+    """Import-time view of the configured store for static consumers; None when nothing usable is configured
+    (there is no fallback path). collect() re-resolves it fail-closed on every run."""
+    try:
+        return storage.load().target
+    except storage.StorageConfigError:
+        return None
+
+
+BACKUP_TARGET = _store_target()
 EVIDENCE_DIR = Path("/home/hamza/tlos-paper/p3-evidence")  # drills/ and audits/ hold persisted proof records
 # The view is regenerated hourly with the health timer; past this age it is shown as stale.
 FRESHNESS_BUDGET_S = 2 * 3600
@@ -168,7 +177,7 @@ def load_findings(path: Path, *, now: float | None = None) -> list[dict]:
 def collect(*, runner: Runner = _run, now: float | None = None, registry_path: Path = REGISTRY,
             workstreams_path: Path = WORKSTREAMS, authorization_path: Path = AUTHORIZATION,
             p2_closure_path: Path = P2_CLOSURE, ledger_path: Path = LEDGER, repo_root: Path = REPO_ROOT,
-            runtime_root: Path = RUNTIME_ROOT, backup_target: Path = BACKUP_TARGET, evidence_dir: Path = EVIDENCE_DIR, findings: list[dict] | None = None,
+            runtime_root: Path = RUNTIME_ROOT, backup_target: Path | None = None, evidence_dir: Path = EVIDENCE_DIR, findings: list[dict] | None = None,
             docker: Runner | None = None) -> dict:
     """Observe the host. Read-only; each value records where it came from."""
     now = time.time() if now is None else now
@@ -194,8 +203,13 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
     boot_id = _out(runner, ["cat", str(recovery.BOOT_ID)])
     ntp = _out(runner, ["timedatectl", "show", "-p", "NTPSynchronized", "--value"])
     health_timer = health.timer_expected("tlos-p3-health.timer", want_active=True, runner=runner)
+    if backup_target is None:
+        try:
+            backup_target = storage.load().target
+        except storage.StorageConfigError:
+            backup_target = None  # unusable configuration: no sets are listed; health carries the CRITICAL
     sets = sorted(p.name for p in Path(backup_target).glob("*") if (p / "BACKUP_RECORD.json").is_file()) \
-        if Path(backup_target).is_dir() else []
+        if backup_target is not None and Path(backup_target).is_dir() else []
     drills, audits = [], []
     for kind, out in (("drills", drills), ("audits", audits)):
         for f in sorted(Path(evidence_dir, kind).glob("*.json"), key=lambda q: q.stat().st_mtime):

@@ -92,3 +92,82 @@ PLN-02 re-run against this set: PASS on runtime, the 10 worktrees, the tools che
 PLN_03_ACCEPTANCE = PASS (the scheduled execution under systemd: verify PASS, drill PASS)
 ```
 The next run is the timer's own unattended 03:30 UTC run. The health check's `backup_recency` (RPO 26 h) alerts if any later run is missed.
+
+## Backup store configuration (2026-10-30)
+**Why.** The store path `/mnt/tlos-wdc` was hard-coded in five places: the backup wrapper, the backup unit, the health check, the Control Room and the reboot snapshot.
+
+The Owner-reported host migration of 2026-10-29 moved the TLOS backups to an internal HDD under `/srv/project-data/tlos-backups`. Label: HANDOFF_ONLY. Claude has not seen the host. After the move, the hard-coded path broke health in two ways:
+- the hourly health run reported the old store as CRITICAL;
+- the run never checked the store the backups actually went to.
+
+**What changed.** `research/p3/storage.py` is now the single source. Every consumer reads it:
+- `scheduled_backup.sh`;
+- `health.py` and `health_check.py`;
+- `control_room.py`;
+- `scripts/p3/recovery.py`.
+
+The backup unit no longer carries `RequiresMountsFor`.
+
+**Resolution order:**
+1. The environment variables `TLOS_BACKUP_MOUNT`, `TLOS_BACKUP_TARGET` and `TLOS_BACKUP_MOUNT_UUID`, all three set together.
+2. A host-local regular file, `~/.config/tlos-p3/storage.json` or the file named by `$TLOS_STORAGE_CONFIG`, holding all three keys.
+
+**The filesystem UUID is required.** Without it, any filesystem mounted at the path would be accepted as the store, for example a tmpfs or another disk (independent review, 2026-10-30).
+
+**There is no implicit default.** `/mnt/tlos-wdc` remains documented history only. Falling back to it silently would let a stale or re-mounted legacy disk receive backups.
+
+**Fail-closed.** Each of these is refused, never replaced by another location:
+- nothing is configured;
+- the configuration cannot be read;
+- a path is relative or not normalised (`..`, `.`, `//`);
+- a path contains a quote, `$`, `` ` ``, `\` or a control character;
+- the mount is `/`;
+- the target is outside the mount;
+- the file has unknown keys;
+- the UUID is missing or malformed;
+- the config is not a regular file (a FIFO would block a reader).
+
+**Live preflight** (`storage.py --preflight --shell`). The backup wrapper runs it before every set. That one call both checks the store and exports it, so the location written to is the location checked. The wrapper waits up to `TLOS_STORE_WAIT_S` (default 300 s) only for "not mounted", because a catch-up run at boot can start before the disk is mounted. The preflight refuses:
+- a mountpoint that is not mounted, or is a symlink;
+- a store on the same filesystem as `/` (a bind mount of a system-disk directory is not a separate store);
+- a filesystem UUID that is missing, different from the configured one, or cannot be read;
+- a target, or its deepest existing parent, that resolves outside the mount or onto another device (a symlink or a nested mount);
+- an existing target that is not a plain directory.
+
+This matters because `backup.py create` creates the target's parents and would follow such a link.
+
+**Where each failure shows:**
+
+| Consumer | Behaviour |
+|---|---|
+| Health | `backup_storage` CRITICAL when the configuration is unusable (and `backup_recency` CRITICAL with it); `mount:<store>` CRITICAL when not mounted; `mount_uuid:<store>` CRITICAL on mismatch, and CRITICAL `UNPROVEN` when unreadable or not configured (an unproven identity blocks exactly as a wrong one does); `backup_target_on_store` CRITICAL when the target resolves off the store or the store is the system disk; `backup_store_permissions` WARNING when group/other can reach the sets; `backup_recency` is measured only on a proven store |
+| Backup wrapper | Refuses with exit 3 |
+| Reboot snapshot | Errors with exit 2 |
+
+**Permissions (security audit SEC-03).** Sets contain configuration, including the runtime `.env`, so the wrapper runs with `umask 077` and the unit with `UMask=0077`. Docker writes the volume tars as root inside the owner-only set directory, so nobody else can traverse to them. Whether to exclude `.env` from sets or encrypt them before offsite is an Owner decision. Host step: `chmod 700 <target>` on an existing store.
+
+Tests: `tests/test_p3_storage.py`. **Residuals.**
+- The preflight and `backup.py create` are separate processes, so there is a time-of-check window between them. The store has a single writer, so this is accepted.
+- A manual `scripts/p3/backup.py create --target <dir>` does not run the preflight. It is an operator tool, also used for drills into scratch targets. The governed path is the wrapper.
+
+**Host steps (Owner; each needs authorization, nothing here has been run):**
+1. Write the host file. The values below are as reported for the migrated host; the mountpoint and UUID come from the host itself.
+   ```bash
+   install -d -m 700 ~/.config/tlos-p3
+   M=/srv/project-data            # the HDD mountpoint (confirm: findmnt -T /srv/project-data/tlos-backups)
+   U=$(findmnt -no UUID --mountpoint "$M")
+   printf '{"backup_mount": "%s", "backup_target": "%s/tlos-backups", "mount_uuid": "%s"}\n' "$M" "$M" "$U" \
+     > ~/.config/tlos-p3/storage.json
+   python3 ~/projects/trading/tlos-p3/research/p3/storage.py      # prints the resolved store; exit 0
+   ```
+2. Do the controlled `tlos-p3` update to a main SHA that contains this change.
+3. Run one health check: `scripts/p3/health_check.py`. Expect `backup_storage`, `mount:<M>`, `mount_uuid:<M>` and `backup_target_on_store` all INFO, and `backup_recency` measured on the new store. Also run `python3 research/p3/storage.py --preflight`, which must exit 0.
+4. **Take a new reboot baseline** (`recovery.py snapshot`). The accepted baseline `42f0d28f…` records `/mnt/tlos-wdc`. A verify-boot against it now reports `mount:/mnt/tlos-wdc` missing, which is correct, because the store changed.
+5. The Owner-reported drop-in that points `tlos-p3-backup.service` at a host-local `backup.sh` is outside the repository. Bringing that wrapper into the repository is a separate change. It needs the host files, which Claude cannot read. It must cover:
+   - the runtime volume aliases;
+   - the short stop around the export;
+   - the SSD mirror.
+
+   Until then the governed wrapper (`scheduled_backup.sh`) is not what the timer runs on that host.
+
+PLN-03 stays **ACCEPTED** for its procedure and drills. This change touches only where the store is found, not how a set is made, verified or restored.
