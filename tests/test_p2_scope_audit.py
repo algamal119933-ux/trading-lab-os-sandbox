@@ -1588,6 +1588,28 @@ P3_PLN_06_WRITER_SCOPE: dict[str, str] = {
     "scripts/p3/ops/alertmanager.yml.template": f"{_P06UW} — round 3: the Owner edit sets the root receiver too",
 }
 
+# PR #98, merged. Two parents: 257272c4 (main before) + 0e2d4b12
+# (P3 backup store configuration). These entries were BRANCH_SCOPE while it was in flight.
+P3_STORAGE_CONFIG_MERGE = "3e1dca8bee2406eab38da1e4ce166d53d839f422"
+
+# P3 backup store configuration: one governed source (research/p3/storage.py) for the backup mount and target,
+# read by the backup wrapper, the health check, the Control Room and the reboot snapshot; fail-closed. Follows the
+# Owner-reported 2026-10-29 move of the backup store off /mnt/tlos-wdc. No host change.
+_STC = "P3 backup store configuration"
+P3_STORAGE_CONFIG_SCOPE: dict[str, str] = {
+    "research/p3/storage.py": f"{_STC} — resolution (env, host file, historical default) and fail-closed validation",
+    "research/p3/health.py": f"{_STC} — backup_storage / mount / mount_uuid findings from the configured store",
+    "research/p3/control_room.py": f"{_STC} — backup sets listed from the configured store",
+    "scripts/p3/health_check.py": f"{_STC} — --backup-target defaults to the configured store",
+    "scripts/p3/recovery.py": f"{_STC} — the reboot snapshot records the configured store",
+    "scripts/p3/scheduled_backup.sh": f"{_STC} — refuses an unusable configuration, an unmounted store or another UUID",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_STC} — no hard-coded RequiresMountsFor",
+    "tests/test_p3_storage.py": f"{_STC} — resolution, refusal, live preflight (symlink, nested mount, UUID) and every consumer",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_STC} — configuration section and host steps (NOT_RUN)",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 unexpected writer (PR #90) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1657,6 +1679,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_06_DELIVERY": (P3_PLN_06_DELIVERY_MERGE, P3_PLN_06_DELIVERY_SCOPE),
     "P3_PLN_04_07_REBOOT": (P3_PLN_04_07_REBOOT_MERGE, P3_PLN_04_07_REBOOT_SCOPE),
     "P3_PLN_06_WRITER": (P3_PLN_06_WRITER_MERGE, P3_PLN_06_WRITER_SCOPE),
+    "P3_STORAGE_CONFIG": (P3_STORAGE_CONFIG_MERGE, P3_STORAGE_CONFIG_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1664,21 +1687,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 backup store configuration: one governed source (research/p3/storage.py) for the backup mount and target,
-# read by the backup wrapper, the health check, the Control Room and the reboot snapshot; fail-closed. Follows the
-# Owner-reported 2026-10-29 move of the backup store off /mnt/tlos-wdc. No host change.
-_STC = "P3 backup store configuration"
+# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-12, SEC-15 .gitignore). scripts/*.py and
+# scripts/*.sh are the frozen runtime surface (research/fp/semantic_identity.py) and are not touched here.
+# Repository-only; no secret value anywhere; no host change.
+_SEC = "P3 security hardening"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/storage.py": f"{_STC} — resolution (env, host file, historical default) and fail-closed validation",
-    "research/p3/health.py": f"{_STC} — backup_storage / mount / mount_uuid findings from the configured store",
-    "research/p3/control_room.py": f"{_STC} — backup sets listed from the configured store",
-    "scripts/p3/health_check.py": f"{_STC} — --backup-target defaults to the configured store",
-    "scripts/p3/recovery.py": f"{_STC} — the reboot snapshot records the configured store",
-    "scripts/p3/scheduled_backup.sh": f"{_STC} — refuses an unusable configuration, an unmounted store or another UUID",
-    "scripts/p3/units/tlos-p3-backup.service": f"{_STC} — no hard-coded RequiresMountsFor",
-    "tests/test_p3_storage.py": f"{_STC} — resolution, refusal, live preflight (symlink, nested mount, UUID) and every consumer",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_STC} — configuration section and host steps (NOT_RUN)",
-    "tests/test_p2_scope_audit.py": "P3-PLN-06 unexpected writer (PR #90) pinned to its merge; this branch's scope",
+    "research/p3/backup.py": f"{_SEC} — SEC-12: the drill never restores ownership or setuid/setgid bits",
+    ".gitignore": f"{_SEC} — SEC-15: backup/runtime artifacts and rendered compose output ignored",
+    "tests/test_repo_hygiene.py": f"{_SEC} — ignore cases for SEC-15",
+    "tests/test_p3_backup.py": f"{_SEC} — SEC-12 setuid/ownership regression (fails before the fix)",
+    "tests/test_p2_scope_audit.py": "P3 backup store configuration (PR #98) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

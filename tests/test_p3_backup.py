@@ -8,6 +8,7 @@ archive that no longer verifies, and a failed config load.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -187,3 +188,16 @@ def test_symlinks_are_backed_up_and_verified_by_target(tmp_path, source):
     assert report["checks"]["root:runtime"]["status"] == "PASS"
     assert (tmp_path / "scratch" / "roots" / "runtime" / "lock").is_symlink()
 
+
+
+def test_the_drill_never_restores_setuid_bits_or_foreign_ownership(tmp_path, source):
+    """Security audit SEC-12: the scratch restore drops setuid/setgid and never chowns."""
+    tool = source / "tool"
+    tool.write_text("#!/bin/sh\n")
+    os.chmod(tool, 0o4755)
+    set_dir = make(tmp_path, source)
+    report = backup.restore_drill(set_dir, tmp_path / "scratch", archive_verifier=lambda p: None,
+                                  config_check=lambda root: (True, "ok"))
+    assert report["PLN_03_RESTORE_DRILL"] == "PASS", report
+    restored = tmp_path / "scratch" / "roots" / "runtime" / "tool"
+    assert not os.stat(restored).st_mode & 0o6000
