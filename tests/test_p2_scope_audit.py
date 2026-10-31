@@ -1610,6 +1610,23 @@ P3_STORAGE_CONFIG_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #99, merged. Two parents: 3e1dca8b (main before) + 38628122
+# (P3 security hardening). These entries were BRANCH_SCOPE while it was in flight.
+P3_SECURITY_HARDENING_MERGE = "741e3118653d0ffd422f5093bf99b0ab0b4e98a1"
+
+# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-12, SEC-15 .gitignore). scripts/*.py and
+# scripts/*.sh are the frozen runtime surface (research/fp/semantic_identity.py) and are not touched here.
+# Repository-only; no secret value anywhere; no host change.
+_SEC = "P3 security hardening"
+P3_SECURITY_HARDENING_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_SEC} — SEC-12: the drill never restores ownership or setuid/setgid bits",
+    ".gitignore": f"{_SEC} — SEC-15: backup/runtime artifacts and rendered compose output ignored",
+    "tests/test_repo_hygiene.py": f"{_SEC} — ignore cases for SEC-15",
+    "tests/test_p3_backup.py": f"{_SEC} — SEC-12 setuid/ownership regression (fails before the fix)",
+    "tests/test_p2_scope_audit.py": "P3 backup store configuration (PR #98) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1680,6 +1697,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_04_07_REBOOT": (P3_PLN_04_07_REBOOT_MERGE, P3_PLN_04_07_REBOOT_SCOPE),
     "P3_PLN_06_WRITER": (P3_PLN_06_WRITER_MERGE, P3_PLN_06_WRITER_SCOPE),
     "P3_STORAGE_CONFIG": (P3_STORAGE_CONFIG_MERGE, P3_STORAGE_CONFIG_SCOPE),
+    "P3_SECURITY_HARDENING": (P3_SECURITY_HARDENING_MERGE, P3_SECURITY_HARDENING_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1687,16 +1705,25 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-12, SEC-15 .gitignore). scripts/*.py and
-# scripts/*.sh are the frozen runtime surface (research/fp/semantic_identity.py) and are not touched here.
-# Repository-only; no secret value anywhere; no host change.
-_SEC = "P3 security hardening"
+# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decisions that the Toshiba USB disk is personal,
+# portable storage holding an Owner-carried copy that is not Tier-3, and that the second Windows PC only reads
+# and checks that copy (its earlier evaluation as a Tier-3 destination is withdrawn). Documents only; PLN-05
+# stays OPEN; nothing run on any machine.
+_R05D = "P3-PLN-05 destination decisions"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_SEC} — SEC-12: the drill never restores ownership or setuid/setgid bits",
-    ".gitignore": f"{_SEC} — SEC-15: backup/runtime artifacts and rendered compose output ignored",
-    "tests/test_repo_hygiene.py": f"{_SEC} — ignore cases for SEC-15",
-    "tests/test_p3_backup.py": f"{_SEC} — SEC-12 setuid/ownership regression (fails before the fix)",
-    "tests/test_p2_scope_audit.py": "P3 backup store configuration (PR #98) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — portable copy is not Tier-3; Windows PC withdrawn as a "
+                                               "destination; unresolved Tier-3 requirements and destination classes",
+    "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
+                                             "portable copy on the Windows PC (NOT_RUN)",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer; hardened §4 gate (injection fix); §6 anchor to the "
+                                         "original; §10 testable Tier-3 requirements",
+    "research/p3/backup.py": f"{_R05D} — compare_hash_export: a Windows Get-FileHash export of the portable copy "
+                             "checked with verify_backup's rules",
+    "scripts/p3/backup.py": f"{_R05D} — compare-export subcommand (read-only; refuses to write into the set)",
+    "tests/test_p3_portable_copy.py": f"{_R05D} — compare_hash_export negative controls on synthetic sets",
+    "tests/test_p3_offsite_gate.py": f"{_R05D} — the §4 forced-command gate, run from the procedure text: "
+                                     "refusals and the commands offsite.py issues",
+    "tests/test_p2_scope_audit.py": "P3 security hardening (PR #99) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

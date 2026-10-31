@@ -7,12 +7,15 @@
         [--volume trading_lab_os_final_grafana_data ...]
     scripts/p3/backup.py verify --set /mnt/tlos-wdc/tlos-backups/<stamp>
     scripts/p3/backup.py drill  --set /mnt/tlos-wdc/tlos-backups/<stamp> --scratch <empty dir> [--config-load trading/trading_lab_os_final]
+    scripts/p3/backup.py compare-export --set <dir with the set's SHA256SUMS + BACKUP_RECORD.json> \\
+        --export <Get-FileHash CSV of the copy> --export-root 'E:\\tlos-backups\\<stamp>' [--json out.json]
 
 See research/p3/backup.py. `create` writes only under --target, in a new <stamp> directory, and
 never overwrites one. `drill` writes only under --scratch. `--config-load <runtime>` runs the pinned
 Freqtrade image with --network none and the restored user_data mounted read-only. It issues
 only list-strategies and show-config, exactly as CI's freqtrade-load job does, and no trading
-command. Exit codes: 0 PASS · 1 FAIL · 2 error.
+command. `compare-export` (PLN-05 portable copy) reads two manifests and a CSV and writes nothing but
+--json. Exit codes: 0 PASS · 1 FAIL · 2 error (and, for compare-export, UNPROVEN).
 
 PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 """
@@ -88,7 +91,24 @@ def main(argv: list[str] | None = None) -> int:
     drill.add_argument("--config-load", action="append", default=[], metavar="ROOT[/SUBDIR]",
                        help="the restored runtime whose config and strategies must load, e.g. trading/trading_lab_os_final")
     drill.add_argument("--json", type=Path)
+    compare = sub.add_parser("compare-export")
+    compare.add_argument("--set", required=True, type=Path, dest="set_dir")
+    compare.add_argument("--export", required=True, type=Path)
+    compare.add_argument("--export-root", required=True)
+    compare.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
+    if args.command == "compare-export":
+        report = backup.compare_hash_export(args.set_dir, args.export, args.export_root)
+        if args.json:
+            if args.json.resolve().parent == args.set_dir.resolve() or args.set_dir.resolve() in args.json.resolve().parents:
+                print("P3_BACKUP_REFUSED: --json would write inside the backup set", file=sys.stderr)
+                return 2
+            args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        for name, check in report["checks"].items():
+            print(f"  {name:22} {check['status']}")
+        verdict = report["PORTABLE_COPY_MATCHES_SET"]
+        print(f"PORTABLE_COPY_MATCHES_SET = {verdict}")
+        return {"PASS": 0, "FAIL": 1}.get(verdict, 2)
     try:
         if args.command == "create":
             record = backup.create_backup(args.target, roots=_pairs(args.root), repos=_pairs(args.repo),
