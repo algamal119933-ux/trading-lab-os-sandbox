@@ -10,11 +10,13 @@
 # Routing (master plan §19): critical → page now and repeat every 1 h; warning → grouped, repeat
 # every 12 h; the always-firing TLOSWatchdog → the off-host dead-man receiver only.
 # Until the Owner chooses a channel, everything goes to the "null" receiver: nothing is sent.
+# When choosing, set the ROOT receiver to the channel too: an alert with no or an unknown severity
+# label otherwise falls through to "null" and is silently dropped (tests/test_p3_alerting.py).
 global:
   resolve_timeout: 2h
 
 route:
-  receiver: "null"
+  receiver: "null"                # OWNER CHOICE: the same channel as critical/warning (never "deadman")
   group_by: ["alertname", "check"]
   group_wait: 30s
   group_interval: 5m

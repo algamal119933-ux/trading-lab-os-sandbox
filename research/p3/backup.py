@@ -177,8 +177,9 @@ def restore_drill(set_dir: Path, scratch: Path, *, archive_verifier: Callable[[P
     for name in record["roots"]:
         dest = scratch / "roots" / name
         dest.mkdir(parents=True)
+        # Never restore ownership or setuid/setgid bits into the scratch copy (security audit SEC-12).
         _run(["tar", "--zstd", "-xf", str(set_dir / "roots" / f"{name}.tar.zst"), "--numeric-owner",
-              "-C", str(dest)])
+              "--no-same-owner", "--no-same-permissions", "-C", str(dest)])
         expected = _read_manifest(set_dir / "roots" / f"{name}.files.sha256")
         restored = source_manifest(dest)
         differ = sorted(k for k in expected if restored.get(k) != expected[k])

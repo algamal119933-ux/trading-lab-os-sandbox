@@ -12,6 +12,11 @@
 *.keystore
 secrets/
 *.secret
+# Backup and runtime artifacts that carry state or secrets (security audit SEC-15).
+*.db
+*.bundle
+*.tar.zst
+rendered*.yml
 
 # ---------------------------------------------------------------------------
 # Freqtrade runtime state.

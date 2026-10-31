@@ -103,6 +103,10 @@ def test_secret_patterns_are_detected(tmp_path, monkeypatch, content):
         "mlruns/0/meta.yaml",
         "freqtrade/user_data/backtest_results/x.json",
         "private.pem",
+        "state.db",
+        "set.bundle",
+        "set/roots/x.tar.zst",
+        "rendered.yml",
     ],
 )
 def test_gitignore_covers_local_only_artifacts(repo_root, path):

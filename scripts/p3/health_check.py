@@ -2,7 +2,7 @@
 """P3-PLN-06 operational health check (master plan §19 severities). Read-only.
 
     scripts/p3/health_check.py [--root-min-gib 20] [--lane /home/hamza/tlos-paper/h1-paper-cohort-1]
-        [--backup-target /mnt/tlos-wdc/tlos-backups] [--rpo-hours 26] [--json out.json]
+        [--backup-target <override; default: p3.storage>] [--rpo-hours 26] [--json out.json]
 
 Exit codes: 0 all INFO · 1 any WARNING · 2 any CRITICAL.
 PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
@@ -61,7 +61,8 @@ def _run(argv: list[str] | None = None) -> int:
     parser.add_argument("--root-min-gib", type=float, default=20.0)
     parser.add_argument("--lane", type=Path, default=Path("/home/hamza/tlos-paper/h1-paper-cohort-1"))
     parser.add_argument("--lane-min-gib", type=float, default=20.0)
-    parser.add_argument("--backup-target", type=Path, default=Path("/mnt/tlos-wdc/tlos-backups"))
+    parser.add_argument("--backup-target", type=Path, default=None,
+                        help="read recency here instead of the configured store (p3.storage); diagnosis only")
     parser.add_argument("--rpo-hours", type=float, default=26.0)
     parser.add_argument("--fp-lane-root", type=Path,
                         default=Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"))
