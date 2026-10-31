@@ -24,11 +24,14 @@ for _extra in (str(REPO_ROOT / "research"), str(REPO_ROOT / "scripts")):
     if _extra not in sys.path:
         sys.path.insert(0, _extra)
 
-from p3 import kill_switch, recovery  # noqa: E402
+from p3 import kill_switch, recovery, storage  # noqa: E402
 
 REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 LEDGER = Path(os.environ.get("TLOS_OPERATOR_LEDGER", "/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl"))
-MOUNTS = ("/", "/mnt/tlos-wdc")
+def _mounts() -> tuple[str, ...]:
+    """The root filesystem and the configured backup store (p3.storage). An unusable storage
+    configuration is an error here, not a silent default: a snapshot must record the real store."""
+    return ("/", storage.load().backup_mount)
 UNITS = ("tlos-p3-backup.timer", "tlos-p2-window-fp-control-3.timer")
 
 
@@ -59,14 +62,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"RESUME_AUTHORIZED {args.role} seq {record['seq']} digest {record['digest'][:16]}")
             return 0
         if args.command == "snapshot":
-            snap = recovery.snapshot(MOUNTS, UNITS)
+            snap = recovery.snapshot(_mounts(), UNITS)
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
             print(f"SNAPSHOT boot_id {snap['boot_id'][:8]} · {len(snap['containers'])} containers → {args.out}")
             return 0
         before = json.loads(args.before.read_text(encoding="utf-8"))
-        report = recovery.verify_after_boot(before, recovery.snapshot(MOUNTS, UNITS))
-    except (kill_switch.KillSwitchError, OSError, json.JSONDecodeError) as exc:
+        report = recovery.verify_after_boot(before, recovery.snapshot(_mounts(), UNITS))
+    except (kill_switch.KillSwitchError, storage.StorageConfigError, OSError, json.JSONDecodeError) as exc:
         print(f"P3_RECOVERY_ERROR: {exc}", file=sys.stderr)
         return 2
     if args.json:
