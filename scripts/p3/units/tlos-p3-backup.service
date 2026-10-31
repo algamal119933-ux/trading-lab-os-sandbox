@@ -1,10 +1,12 @@
 [Unit]
 Description=Trading Lab OS P3-PLN-03 scheduled backup (append-only, verified)
 Documentation=file:///home/hamza/projects/trading/tlos-p3/docs/p3/PLN_03_BACKUP_RESTORE.md
-RequiresMountsFor=/mnt/tlos-wdc
+# No RequiresMountsFor: the store is configured (research/p3/storage.py), and scheduled_backup.sh refuses an
+# unmounted store or a different filesystem UUID (exit 3).
 
 [Service]
 Type=oneshot
+UMask=0077
 ExecStart=%h/projects/trading/tlos-p3/scripts/p3/scheduled_backup.sh
 Nice=10
 IOSchedulingClass=idle

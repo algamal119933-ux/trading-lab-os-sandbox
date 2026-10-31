@@ -1,0 +1,88 @@
+# Trading Lab OS P3-PLN-06 writer_watch self-test fixture (AT-0). SYNTHETIC: hand-built raw auditd records,
+# not from any host. `python3 research/p3/writer_watch.py self-test` classifies every event and compares it
+# with its EXPECT line (event id, verdict, case). IGNORED = not a protected write. Do not edit by hand without
+# updating tests/test_p3_writer_watch.py; PAPER / RESEARCH ONLY.
+# EXPECT 1793000100.001:4001 AUTHORIZED hourly health job writes the textfile (heartbeat)
+type=SYSCALL msg=audit(1793000100.001:4001): arch=c000003e syscall=82 success=yes exit=0 ppid=1 pid=3001 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_p3_evidence"
+type=CWD msg=audit(1793000100.001:4001): cwd="/home/hamza"
+type=PATH msg=audit(1793000100.001:4001): item=0 name="/home/hamza/tlos-paper/p3-evidence/" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=PARENT cap_fp=0
+type=PATH msg=audit(1793000100.001:4001): item=1 name="/home/hamza/tlos-paper/p3-evidence/tlos_p3_health.prom.tmp" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=DELETE cap_fp=0
+type=PATH msg=audit(1793000100.001:4001): item=2 name="/home/hamza/tlos-paper/p3-evidence/tlos_p3_health.prom" inode=502 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.001:4001): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.002:4002 AUTHORIZED kill switch appends to the operator ledger
+type=SYSCALL msg=audit(1793000100.002:4002): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3002 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_ledger"
+type=CWD msg=audit(1793000100.002:4002): cwd="/home/hamza"
+type=PATH msg=audit(1793000100.002:4002): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.002:4002): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.003:4003 AUTHORIZED volume-export container tar as root, no login session
+type=SYSCALL msg=audit(1793000100.003:4003): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3003 auid=4294967295 uid=0 gid=0 euid=0 ses=3 comm="tar" exe="/usr/bin/tar" key="tlos_backups"
+type=CWD msg=audit(1793000100.003:4003): cwd="/"
+type=PATH msg=audit(1793000100.003:4003): item=0 name="/out/" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=PARENT cap_fp=0
+type=PATH msg=audit(1793000100.003:4003): item=1 name="/out/v.tar" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.003:4003): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.004:4004 AUTHORIZED multi-key rule, hex-encoded key list
+type=SYSCALL msg=audit(1793000100.004:4004): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3004 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key=746C6F735F6C6564676572016F7073
+type=CWD msg=audit(1793000100.004:4004): cwd="/"
+type=PATH msg=audit(1793000100.004:4004): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.004:4004): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.005:4005 UNEXPECTED touch on the root-fs canary
+type=SYSCALL msg=audit(1793000100.005:4005): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3005 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="touch" exe="/usr/bin/touch" key="tlos_canary"
+type=CWD msg=audit(1793000100.005:4005): cwd="/"
+type=PATH msg=audit(1793000100.005:4005): item=0 name="/home/hamza/tlos-paper/writer-canary/" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=PARENT cap_fp=0
+type=PATH msg=audit(1793000100.005:4005): item=1 name="/home/hamza/tlos-paper/writer-canary/probe" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.005:4005): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.006:4006 UNEXPECTED rename from p3-evidence into the H1 lane via a relative name
+type=SYSCALL msg=audit(1793000100.006:4006): arch=c000003e syscall=82 success=yes exit=0 ppid=1 pid=3006 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_p3_evidence"
+type=CWD msg=audit(1793000100.006:4006): cwd="/home/hamza/tlos-paper/p3-evidence"
+type=PATH msg=audit(1793000100.006:4006): item=0 name="x" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=DELETE cap_fp=0
+type=PATH msg=audit(1793000100.006:4006): item=1 name="../h1-paper-cohort-1/x" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.006:4006): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.007:4007 UNEXPECTED hard link of the ledger out of the watched tree
+type=SYSCALL msg=audit(1793000100.007:4007): arch=c000003e syscall=265 success=yes exit=0 ppid=1 pid=3007 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_ledger"
+type=CWD msg=audit(1793000100.007:4007): cwd="/"
+type=PATH msg=audit(1793000100.007:4007): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PATH msg=audit(1793000100.007:4007): item=1 name="/tmp/" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=PARENT cap_fp=0
+type=PATH msg=audit(1793000100.007:4007): item=2 name="/tmp/l" inode=502 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.007:4007): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.008:4008 UNEXPECTED comm python3 from /usr/bin/perl
+type=SYSCALL msg=audit(1793000100.008:4008): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3008 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/perl" key="tlos_ledger"
+type=CWD msg=audit(1793000100.008:4008): cwd="/"
+type=PATH msg=audit(1793000100.008:4008): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.008:4008): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.009:4009 UNEXPECTED owner uid under a root login (auid=0)
+type=SYSCALL msg=audit(1793000100.009:4009): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3009 auid=0 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_ledger"
+type=CWD msg=audit(1793000100.009:4009): cwd="/"
+type=PATH msg=audit(1793000100.009:4009): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.009:4009): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.010:4010 UNEXPECTED setuid escalation (euid=0)
+type=SYSCALL msg=audit(1793000100.010:4010): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3010 auid=1000 uid=1000 gid=1000 euid=0 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_ledger"
+type=CWD msg=audit(1793000100.010:4010): cwd="/"
+type=PATH msg=audit(1793000100.010:4010): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.010:4010): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.011:4011 UNEXPECTED sealed archive write with no comm/uid (no lawful writer)
+type=SYSCALL msg=audit(1793000100.011:4011): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3011 auid=1000 ses=3 exe="/usr/bin/python3.12" key="tlos_sealed"
+type=CWD msg=audit(1793000100.011:4011): cwd="/"
+type=PATH msg=audit(1793000100.011:4011): item=0 name="/home/hamza/projects/trading/trading_lab_os_final/artifacts/l2-cohort-x/MANIFEST.sha256" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.011:4011): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.012:4012 UNEXPECTED create in the H1 lane under another rule's key
+type=SYSCALL msg=audit(1793000100.012:4012): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3012 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="ops_all_writes"
+type=CWD msg=audit(1793000100.012:4012): cwd="/"
+type=PATH msg=audit(1793000100.012:4012): item=0 name="/home/hamza/tlos-paper/h1-paper-cohort-1/" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=PARENT cap_fp=0
+type=PATH msg=audit(1793000100.012:4012): item=1 name="/home/hamza/tlos-paper/h1-paper-cohort-1/x" inode=501 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=CREATE cap_fp=0
+type=PROCTITLE msg=audit(1793000100.012:4012): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.013:4013 UNATTRIBUTED p3-evidence write lacking euid
+type=SYSCALL msg=audit(1793000100.013:4013): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3013 auid=1000 uid=1000 gid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_p3_evidence"
+type=CWD msg=audit(1793000100.013:4013): cwd="/"
+type=PATH msg=audit(1793000100.013:4013): item=0 name="/home/hamza/tlos-paper/p3-evidence/x" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.013:4013): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.014:4014 UNATTRIBUTED unknown tlos_ key
+type=SYSCALL msg=audit(1793000100.014:4014): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3014 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="tlos_nonsense"
+type=CWD msg=audit(1793000100.014:4014): cwd="/"
+type=PATH msg=audit(1793000100.014:4014): item=0 name="/srv/x" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.014:4014): proctitle=707974686F6E33002D63
+# EXPECT 1793000100.015:4015 IGNORED a read audited by another rule
+type=SYSCALL msg=audit(1793000100.015:4015): arch=c000003e syscall=257 success=yes exit=0 ppid=1 pid=3015 auid=1000 uid=1000 gid=1000 euid=1000 ses=3 comm="python3" exe="/usr/bin/python3.12" key="ops_reads"
+type=CWD msg=audit(1793000100.015:4015): cwd="/"
+type=PATH msg=audit(1793000100.015:4015): item=0 name="/home/hamza/tlos-paper/operator-ledger/operator_ledger.jsonl" inode=500 dev=08:02 mode=0100644 ouid=1000 ogid=1000 rdev=00:00 nametype=NORMAL cap_fp=0
+type=PROCTITLE msg=audit(1793000100.015:4015): proctitle=707974686F6E33002D63
+type=DAEMON_ROTATE msg=audit(1793000200.000:4100): op=rotate-logs auid=0 pid=1 res=success

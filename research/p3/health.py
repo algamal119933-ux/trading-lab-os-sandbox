@@ -6,7 +6,8 @@ CRITICAL) and checks the conditions P2 showed matter:
 - the age of the newest verified backup set against the recovery-point objective (RPO);
 - the backup timer installed and active;
 - the retired P2 restart timer still disabled (F-5);
-- the WDC store mounted;
+- the backup store mounted, and on the configured filesystem UUID when one is set (p3.storage: the
+  location is configured once; an unusable configuration is CRITICAL, never a silent default);
 - a cohort whose trade ledger already shows a completed lifecycle while its registry row still says
   RUNNING, which means the normal end was reached and a governed stop is due (F-3);
 - the master plan §19 CRITICAL conditions that a read-only host check can observe: a paper-guard
@@ -61,8 +62,21 @@ def backup_recency(target: Path, rpo_hours: float, verifier: Callable[[Path], di
     age_h = ((now or time.time()) - (newest / "BACKUP_RECORD.json").stat().st_mtime) / 3600
     if verifier is not None and verifier(newest).get("status") != "PASS":
         return _finding("backup_recency", CRITICAL, f"newest set {newest.name} does not verify")
+    if age_h < -FUTURE_SKEW_H:  # written while the clock was ahead, or the clock went back: its age is unknown
+        return _finding("backup_recency", WARNING, f"UNPROVEN: newest set {newest.name} is dated {-age_h:.1f} h in the "
+                                                   f"future; its real age cannot be read (clock skew)")
     sev = INFO if age_h <= rpo_hours else WARNING
     return _finding("backup_recency", sev, f"newest set {newest.name}, {age_h:.1f} h old (RPO {rpo_hours} h)")
+
+
+FUTURE_SKEW_H = 5 / 60  # tolerated clock skew for a record dated in the future
+
+# `systemctl is-enabled` / `is-active` vocabularies. A retired timer is INFO only in a state known to be off;
+# a state known to be on is CRITICAL; anything else (static, linked, bad, a new word) is UNPROVEN.
+UNIT_OFF_ENABLED = frozenset({"disabled", "masked", "masked-runtime", "not-found", "absent"})
+UNIT_ON_ENABLED = frozenset({"enabled", "enabled-runtime", "alias", "indirect", "generated", "transient"})
+UNIT_OFF_ACTIVE = frozenset({"inactive", "failed"})
+UNIT_ON_ACTIVE = frozenset({"active", "activating", "reloading", "refreshing", "deactivating"})
 
 
 def _unit_state(unit: str, runner) -> tuple[str, str]:
@@ -83,9 +97,15 @@ def timer_expected(unit: str, *, want_active: bool, runner) -> dict:
                                                   f"({type(exc).__name__}); expected {want}")
     if active == "unknown":
         return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: systemctl gave no state ({enabled}/?); expected {want}")
-    ok = (enabled == "enabled" and active == "active") if want_active else (enabled != "enabled" and active != "active")
-    sev = INFO if ok else (WARNING if want_active else CRITICAL)
-    return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
+    if want_active:
+        sev = INFO if (enabled == "enabled" and active == "active") else WARNING
+        return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
+    if enabled in UNIT_OFF_ENABLED and active in UNIT_OFF_ACTIVE:
+        return _finding(f"timer:{unit}", INFO, f"{enabled}/{active} (expected {want})")
+    if enabled in UNIT_ON_ENABLED or active in UNIT_ON_ACTIVE:
+        return _finding(f"timer:{unit}", CRITICAL, f"{enabled}/{active} (expected {want})")
+    return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: {enabled}/{active} is not a known off state "
+                                              f"(expected {want})")
 
 
 def monitor_timer(unit: str, *, runner) -> dict:
@@ -112,6 +132,61 @@ def clock_sync(runner) -> dict:
     return _finding("clock_sync", WARNING, f"UNPROVEN: timedatectl gave no NTP state ({out[:40]!r})")
 
 
+def storage_findings(runner, store=None) -> list[dict]:
+    """The backup-store checks alone (see ``_store_checks``)."""
+    return _store_checks(runner, store)[1]
+
+
+def _store_checks(runner, store=None):
+    """The backup store: its resolved location, mounted, and (if configured) the expected filesystem UUID.
+
+    ``store`` is a ``p3.storage.Storage``; None resolves it. An unusable configuration is CRITICAL with no
+    fallback (the health check must never judge a default store the backups are not written to). A
+    configured UUID that cannot be read is UNPROVEN (WARNING); a different UUID is CRITICAL.
+    Returns ``(store or None, findings)``."""
+    from p3 import storage as _storage
+    if store is None:
+        try:
+            store = _storage.load()
+        except _storage.StorageConfigError as exc:
+            return None, [_finding("backup_storage", CRITICAL, f"storage configuration unusable: {str(exc)[:160]}")]
+    out = [_finding("backup_storage", INFO, f"{store.backup_target} on {store.backup_mount} (source: {store.source})"),
+           mounted(store.backup_mount)]
+    if not store.mount_uuid and out[-1]["severity"] == INFO:
+        out.append(_finding(f"mount_uuid:{store.backup_mount}", CRITICAL,
+                            "UNPROVEN: no mount_uuid configured; any filesystem mounted here would be accepted"))
+    if store.mount_uuid and out[-1]["severity"] == INFO:
+        check = f"mount_uuid:{store.backup_mount}"
+        try:
+            got = runner(["findmnt", "-no", "UUID", "--mountpoint", store.backup_mount]).stdout.strip()
+        except Exception as exc:  # noqa: BLE001 - an identity that cannot be read is not a proven identity
+            out.append(_finding(check, CRITICAL, f"UNPROVEN: findmnt could not be queried ({type(exc).__name__})"))
+            got = None
+        if got is None:
+            pass
+        elif not got:
+            out.append(_finding(check, CRITICAL, "UNPROVEN: findmnt gave no UUID"))
+        elif got.lower() != store.mount_uuid.lower():
+            out.append(_finding(check, CRITICAL, f"UUID {got} is not the configured {store.mount_uuid}: "
+                                                 f"another filesystem is mounted there"))
+        else:
+            out.append(_finding(check, INFO, f"UUID {got}"))
+    if out[1]["severity"] == INFO and not any(f["severity"] == CRITICAL for f in out):
+        try:
+            problems = _storage.device_problems(store) + _storage.target_problems(store)
+        except OSError as exc:
+            problems = [f"target cannot be resolved ({type(exc).__name__})"]
+        out.append(_finding("backup_target_on_store", CRITICAL if problems else INFO,
+                            "; ".join(problems)[:200] if problems else "target resolves inside the store's filesystem"))
+        try:
+            perms = _storage.permission_problems(store)
+        except OSError as exc:
+            perms = [f"permissions cannot be read ({type(exc).__name__})"]
+        if perms:
+            out.append(_finding("backup_store_permissions", WARNING, "; ".join(perms)[:200]))
+    return store, out
+
+
 def mounted(path: str) -> dict:
     return _finding(f"mount:{path}", INFO if os.path.ismount(path) else CRITICAL,
                     "mounted" if os.path.ismount(path) else "not mounted")
@@ -122,9 +197,16 @@ def normal_end_due(registry: dict, lane_root: Path) -> list[dict]:
     for row in registry.get("instances", []):
         if row.get("status") != "RUNNING":
             continue
-        evidence = row.get("runtime_identity", {}).get("evidence_dir", "")
+        evidence = (row.get("runtime_identity") or {}).get("evidence_dir", "")
         ledger = Path(lane_root) / Path(evidence).relative_to("/freqtrade/user_data") / "paper_trade_ledger.jsonl" \
-            if evidence.startswith("/freqtrade/user_data") else None
+            if evidence.startswith("/freqtrade/user_data/") else None
+        if ledger is None or not ledger.parent.is_dir():
+            # the evidence cannot be located (no mapping, or the lane directory is absent): a normal end
+            # that cannot be read is not "no lifecycle yet"
+            findings.append(_finding(f"normal_end:{row.get('role')}", WARNING,
+                                     f"UNPROVEN: {row.get('role')} is RUNNING but its evidence directory "
+                                     f"{evidence or '(none)'} cannot be located under {lane_root}"))
+            continue
         closed = 0
         if ledger and ledger.is_file():
             closed = sum(1 for line in ledger.read_text(encoding="utf-8").splitlines()
@@ -139,13 +221,19 @@ def normal_end_due(registry: dict, lane_root: Path) -> list[dict]:
 
 
 def overall(findings: list[dict]) -> str:
-    sevs = {f["severity"] for f in findings}
+    """Worst severity. A finding without one of the three severities is a monitor defect and counts as
+    CRITICAL (as a crashed run does); a run with no finding at all proved nothing and is WARNING."""
+    if not findings:
+        return WARNING
+    sevs = {f.get("severity") for f in findings}
+    if not sevs <= {INFO, WARNING, CRITICAL}:
+        return CRITICAL
     return CRITICAL if CRITICAL in sevs else WARNING if WARNING in sevs else INFO
 
 
 def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict] | None,
                       root_min_gib: float = 20.0, lane: Path = Path("/home/hamza/tlos-paper/h1-paper-cohort-1"),
-                      lane_min_gib: float = 20.0, backup_target: Path = Path("/mnt/tlos-wdc/tlos-backups"),
+                      lane_min_gib: float = 20.0, backup_target: Path | None = None,
                       rpo_hours: float = 26.0,
                       fp_lane_root: Path = Path("/home/hamza/projects/trading/trading_lab_os_final/freqtrade/user_data"),
                       s19: dict | None = None,
@@ -153,12 +241,21 @@ def standard_findings(registry: dict, *, runner, verifier: Callable[[Path], dict
     """The host's standard check set, shared by the health CLI and the Control Room projection.
 
     ``s19`` carries the inputs of the §19 CRITICAL checks (see ``s19_findings``); None omits them, which
-    keeps callers that only want the capacity/recovery set (and older tests) unchanged."""
+    keeps callers that only want the capacity/recovery set (and older tests) unchanged.
+
+    ``backup_target`` None means the configured store (``p3.storage``); an explicit path overrides only
+    where recency is read, and the store checks still follow the configuration."""
+    store, store_findings = _store_checks(runner)
+    store_proven = store is not None and not any(f["severity"] == CRITICAL for f in store_findings)
+    if backup_target is None:
+        # Recency is only measured on a proven store: sets "found" on a wrong or unproven store prove nothing.
+        backup_target = store.target if store_proven else None
     findings = [
         free_space(Path("/"), root_min_gib, "root"),
         free_space(lane, lane_min_gib, "h1_lane"),
-        mounted("/mnt/tlos-wdc"),
-        backup_recency(backup_target, rpo_hours, verifier=verifier),
+        *store_findings,
+        *([backup_recency(backup_target, rpo_hours, verifier=verifier)] if backup_target is not None else
+          [_finding("backup_recency", CRITICAL, "backup store unconfigured or unproven: recency not measured")]),
         timer_expected("tlos-p3-backup.timer", want_active=True, runner=runner),
         timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=runner),
         monitor_timer("tlos-p3-health.timer", runner=runner),
@@ -191,7 +288,7 @@ def prometheus_text(findings: list[dict]) -> str:
              "# TYPE tlos_p3_health_check gauge"]
     for f in findings:
         check = f["check"].replace("\\", "\\\\").replace('"', "'")
-        lines.append(f'tlos_p3_health_check{{check="{check}"}} {SEVERITY_VALUE[f["severity"]]}')
+        lines.append(f'tlos_p3_health_check{{check="{check}"}} {SEVERITY_VALUE.get(f.get("severity"), 2)}')
     lines += ["# HELP tlos_p3_health_overall Worst severity across all checks",
               "# TYPE tlos_p3_health_overall gauge", f"tlos_p3_health_overall {SEVERITY_VALUE[overall(findings)]}"]
     return "\n".join(lines) + "\n"
@@ -340,6 +437,15 @@ def sealed_archives(roots: list[Path], verifier: Callable[[Path], object]) -> di
     return _finding("evidence_chain:sealed_archives", INFO, f"{len(archives)} sealed archive(s) ARCHIVE_VERIFIED")
 
 
+# Docker container states in which no process of the container can run. Every other state (running,
+# restarting, paused, removing, or a word docker does not document) counts as executing: fail-closed.
+CONTAINER_STOPPED_STATES = frozenset({"created", "exited", "dead"})
+
+
+def _executing(state: str) -> bool:
+    return state not in CONTAINER_STOPPED_STATES
+
+
 def paper_runtime_vs_registry(registry: dict, containers: dict[str, str] | None) -> list[dict]:
     """§19 'unauthorized execution' and 'FP-CONTROL stopped': the paper containers that run against the
     registry's RUNNING cohorts. ``containers`` is {name: state} of paper-runtime containers, or None when
@@ -348,8 +454,10 @@ def paper_runtime_vs_registry(registry: dict, containers: dict[str, str] | None)
         return [_finding("paper_runtime", WARNING, "docker could not be queried; paper runtime state UNKNOWN")]
     running_roles = {row.get("role") for row in registry.get("instances", []) if row.get("status") == "RUNNING"}
     running = sorted(n for n, s in containers.items() if s == "running")
+    executing = sorted(n for n, s in containers.items() if _executing(s))
     findings = []
-    unauthorized = [n for n in running if not any(r and r.lower() in n.lower() for r in running_roles)]
+    unauthorized = [f"{n} ({containers[n]})" for n in executing
+                    if not any(r and r.lower() in n.lower() for r in running_roles)]
     if unauthorized:
         findings.append(_finding("unauthorized_execution", CRITICAL,
                                  f"paper runtime running with no RUNNING registry cohort: {_short(unauthorized)}"))
@@ -392,8 +500,8 @@ def s19_findings(registry: dict, *, paper_configs: list[Path], env_files: list[P
                  docker_runner) -> list[dict]:
     """The §19 CRITICAL checks, every dependency injected (tests pass fakes; the host passes defaults)."""
     containers = _default_container_lister(docker_runner) if docker_runner is not None else None
-    running = [n for n, s in (containers or {}).items() if s == "running"]
-    envs, uninspectable = _container_envs(running, docker_runner) if docker_runner else ({}, [])
+    executing = [n for n, s in (containers or {}).items() if _executing(s)]
+    envs, uninspectable = _container_envs(executing, docker_runner) if docker_runner else ({}, [])
     return [
         paper_guard_configs(paper_configs, config_checker),
         real_money_state(paper_configs, env_files, envs, containers_known=containers is not None,
