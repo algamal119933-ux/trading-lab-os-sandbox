@@ -61,8 +61,21 @@ def backup_recency(target: Path, rpo_hours: float, verifier: Callable[[Path], di
     age_h = ((now or time.time()) - (newest / "BACKUP_RECORD.json").stat().st_mtime) / 3600
     if verifier is not None and verifier(newest).get("status") != "PASS":
         return _finding("backup_recency", CRITICAL, f"newest set {newest.name} does not verify")
+    if age_h < -FUTURE_SKEW_H:  # written while the clock was ahead, or the clock went back: its age is unknown
+        return _finding("backup_recency", WARNING, f"UNPROVEN: newest set {newest.name} is dated {-age_h:.1f} h in the "
+                                                   f"future; its real age cannot be read (clock skew)")
     sev = INFO if age_h <= rpo_hours else WARNING
     return _finding("backup_recency", sev, f"newest set {newest.name}, {age_h:.1f} h old (RPO {rpo_hours} h)")
+
+
+FUTURE_SKEW_H = 5 / 60  # tolerated clock skew for a record dated in the future
+
+# `systemctl is-enabled` / `is-active` vocabularies. A retired timer is INFO only in a state known to be off;
+# a state known to be on is CRITICAL; anything else (static, linked, bad, a new word) is UNPROVEN.
+UNIT_OFF_ENABLED = frozenset({"disabled", "masked", "masked-runtime", "not-found", "absent"})
+UNIT_ON_ENABLED = frozenset({"enabled", "enabled-runtime", "alias", "indirect", "generated", "transient"})
+UNIT_OFF_ACTIVE = frozenset({"inactive", "failed"})
+UNIT_ON_ACTIVE = frozenset({"active", "activating", "reloading", "refreshing", "deactivating"})
 
 
 def _unit_state(unit: str, runner) -> tuple[str, str]:
@@ -83,9 +96,15 @@ def timer_expected(unit: str, *, want_active: bool, runner) -> dict:
                                                   f"({type(exc).__name__}); expected {want}")
     if active == "unknown":
         return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: systemctl gave no state ({enabled}/?); expected {want}")
-    ok = (enabled == "enabled" and active == "active") if want_active else (enabled != "enabled" and active != "active")
-    sev = INFO if ok else (WARNING if want_active else CRITICAL)
-    return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
+    if want_active:
+        sev = INFO if (enabled == "enabled" and active == "active") else WARNING
+        return _finding(f"timer:{unit}", sev, f"{enabled}/{active} (expected {want})")
+    if enabled in UNIT_OFF_ENABLED and active in UNIT_OFF_ACTIVE:
+        return _finding(f"timer:{unit}", INFO, f"{enabled}/{active} (expected {want})")
+    if enabled in UNIT_ON_ENABLED or active in UNIT_ON_ACTIVE:
+        return _finding(f"timer:{unit}", CRITICAL, f"{enabled}/{active} (expected {want})")
+    return _finding(f"timer:{unit}", WARNING, f"UNPROVEN: {enabled}/{active} is not a known off state "
+                                              f"(expected {want})")
 
 
 def monitor_timer(unit: str, *, runner) -> dict:
@@ -122,9 +141,16 @@ def normal_end_due(registry: dict, lane_root: Path) -> list[dict]:
     for row in registry.get("instances", []):
         if row.get("status") != "RUNNING":
             continue
-        evidence = row.get("runtime_identity", {}).get("evidence_dir", "")
+        evidence = (row.get("runtime_identity") or {}).get("evidence_dir", "")
         ledger = Path(lane_root) / Path(evidence).relative_to("/freqtrade/user_data") / "paper_trade_ledger.jsonl" \
-            if evidence.startswith("/freqtrade/user_data") else None
+            if evidence.startswith("/freqtrade/user_data/") else None
+        if ledger is None or not ledger.parent.is_dir():
+            # the evidence cannot be located (no mapping, or the lane directory is absent): a normal end
+            # that cannot be read is not "no lifecycle yet"
+            findings.append(_finding(f"normal_end:{row.get('role')}", WARNING,
+                                     f"UNPROVEN: {row.get('role')} is RUNNING but its evidence directory "
+                                     f"{evidence or '(none)'} cannot be located under {lane_root}"))
+            continue
         closed = 0
         if ledger and ledger.is_file():
             closed = sum(1 for line in ledger.read_text(encoding="utf-8").splitlines()
@@ -139,7 +165,13 @@ def normal_end_due(registry: dict, lane_root: Path) -> list[dict]:
 
 
 def overall(findings: list[dict]) -> str:
-    sevs = {f["severity"] for f in findings}
+    """Worst severity. A finding without one of the three severities is a monitor defect and counts as
+    CRITICAL (as a crashed run does); a run with no finding at all proved nothing and is WARNING."""
+    if not findings:
+        return WARNING
+    sevs = {f.get("severity") for f in findings}
+    if not sevs <= {INFO, WARNING, CRITICAL}:
+        return CRITICAL
     return CRITICAL if CRITICAL in sevs else WARNING if WARNING in sevs else INFO
 
 
@@ -191,7 +223,7 @@ def prometheus_text(findings: list[dict]) -> str:
              "# TYPE tlos_p3_health_check gauge"]
     for f in findings:
         check = f["check"].replace("\\", "\\\\").replace('"', "'")
-        lines.append(f'tlos_p3_health_check{{check="{check}"}} {SEVERITY_VALUE[f["severity"]]}')
+        lines.append(f'tlos_p3_health_check{{check="{check}"}} {SEVERITY_VALUE.get(f.get("severity"), 2)}')
     lines += ["# HELP tlos_p3_health_overall Worst severity across all checks",
               "# TYPE tlos_p3_health_overall gauge", f"tlos_p3_health_overall {SEVERITY_VALUE[overall(findings)]}"]
     return "\n".join(lines) + "\n"
@@ -340,6 +372,15 @@ def sealed_archives(roots: list[Path], verifier: Callable[[Path], object]) -> di
     return _finding("evidence_chain:sealed_archives", INFO, f"{len(archives)} sealed archive(s) ARCHIVE_VERIFIED")
 
 
+# Docker container states in which no process of the container can run. Every other state (running,
+# restarting, paused, removing, or a word docker does not document) counts as executing: fail-closed.
+CONTAINER_STOPPED_STATES = frozenset({"created", "exited", "dead"})
+
+
+def _executing(state: str) -> bool:
+    return state not in CONTAINER_STOPPED_STATES
+
+
 def paper_runtime_vs_registry(registry: dict, containers: dict[str, str] | None) -> list[dict]:
     """§19 'unauthorized execution' and 'FP-CONTROL stopped': the paper containers that run against the
     registry's RUNNING cohorts. ``containers`` is {name: state} of paper-runtime containers, or None when
@@ -348,8 +389,10 @@ def paper_runtime_vs_registry(registry: dict, containers: dict[str, str] | None)
         return [_finding("paper_runtime", WARNING, "docker could not be queried; paper runtime state UNKNOWN")]
     running_roles = {row.get("role") for row in registry.get("instances", []) if row.get("status") == "RUNNING"}
     running = sorted(n for n, s in containers.items() if s == "running")
+    executing = sorted(n for n, s in containers.items() if _executing(s))
     findings = []
-    unauthorized = [n for n in running if not any(r and r.lower() in n.lower() for r in running_roles)]
+    unauthorized = [f"{n} ({containers[n]})" for n in executing
+                    if not any(r and r.lower() in n.lower() for r in running_roles)]
     if unauthorized:
         findings.append(_finding("unauthorized_execution", CRITICAL,
                                  f"paper runtime running with no RUNNING registry cohort: {_short(unauthorized)}"))
@@ -392,8 +435,8 @@ def s19_findings(registry: dict, *, paper_configs: list[Path], env_files: list[P
                  docker_runner) -> list[dict]:
     """The §19 CRITICAL checks, every dependency injected (tests pass fakes; the host passes defaults)."""
     containers = _default_container_lister(docker_runner) if docker_runner is not None else None
-    running = [n for n, s in (containers or {}).items() if s == "running"]
-    envs, uninspectable = _container_envs(running, docker_runner) if docker_runner else ({}, [])
+    executing = [n for n, s in (containers or {}).items() if _executing(s)]
+    envs, uninspectable = _container_envs(executing, docker_runner) if docker_runner else ({}, [])
     return [
         paper_guard_configs(paper_configs, config_checker),
         real_money_state(paper_configs, env_files, envs, containers_known=containers is not None,
