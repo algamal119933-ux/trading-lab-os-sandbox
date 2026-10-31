@@ -14,6 +14,13 @@ guard. ``may_restart`` is that guard, for any recovery automation. It allows a r
 ``snapshot`` / ``verify_after_boot`` prove a reboot actually happened (the boot id changed) and that
 what must come back did, and that what must stay stopped did.
 
+Boot posture (2026-10-30 finding). "What must come back" is judged against ``REQUIRED_AT_BOOT``, not
+against the state a unit happened to be in before the reboot. A runtime that was started by hand but
+never enabled is preserved state, not reboot correctness: it does not return after a power loss (seen on
+the host on 2026-10-30). Every snapshot therefore records the required units and the user's linger
+setting (without linger, enabled user units do not start until a login), and reports ``boot_posture``
+so the gap shows *before* a planned reboot.
+
 Read-only, apart from ``authorize_resume``, which appends one attributable ledger record.
 PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 """
@@ -23,6 +30,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import pwd
 import socket
 import subprocess
 from datetime import datetime, timezone
@@ -31,6 +39,10 @@ from pathlib import Path
 from p3 import kill_switch
 
 BOOT_ID = Path("/proc/sys/kernel/random/boot_id")
+
+# User units that must start by themselves on every boot: the monitoring runtime and the two P3 timers.
+# Never a paper runtime: paper cohorts restart only under ``may_restart`` and their own authority.
+REQUIRED_AT_BOOT = ("tlos-runtime.service", "tlos-p3-backup.timer", "tlos-p3-health.timer")
 
 
 def _ledger(path: Path) -> list[dict]:
@@ -83,18 +95,42 @@ def _run(cmd: list[str]) -> str:
     return result.stdout.strip()
 
 
+def _user() -> str:
+    return os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
+
+
+def boot_posture(units: dict, linger: str) -> dict:
+    """Would this host bring the required stack back by itself after a reboot or a power loss?
+    Fail-closed: an unknown linger value or a missing unit is NOT_READY."""
+    problems = []
+    for unit in REQUIRED_AT_BOOT:
+        enabled, active = units.get(unit, ["absent", "inactive"])
+        if enabled != "enabled":
+            problems.append(f"{unit} is {enabled}, not enabled: it will not start at boot")
+        if active != "active":
+            problems.append(f"{unit} is {active}, not active")
+    if linger != "yes":
+        problems.append(f"linger is {linger!r}, not 'yes': user units wait for a login after boot")
+    return {"status": "READY" if not problems else "NOT_READY", "problems": problems}
+
+
 def snapshot(mounts: tuple[str, ...], units: tuple[str, ...], runner=_run) -> dict:
     containers = {}
     for line in runner(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.State}}"]).splitlines():
         name, _, state = line.partition("\t")
         containers[name] = state
+    units = tuple(units) + tuple(u for u in REQUIRED_AT_BOOT if u not in units)
+    unit_states = {u: [runner(["systemctl", "--user", "is-enabled", u]) or "absent",
+                       runner(["systemctl", "--user", "is-active", u]) or "inactive"] for u in units}
+    linger = runner(["loginctl", "show-user", _user(), "-p", "Linger", "--value"]) or "unknown"
     return {
         "snapshot_version": "P3_REBOOT_SNAPSHOT_V1",
         "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "boot_id": BOOT_ID.read_text().strip() if BOOT_ID.exists() else "",
         "mounts": {m: os.path.ismount(m) for m in mounts},
-        "units": {u: [runner(["systemctl", "--user", "is-enabled", u]) or "absent",
-                      runner(["systemctl", "--user", "is-active", u]) or "inactive"] for u in units},
+        "units": unit_states,
+        "linger": linger,
+        "boot_posture": boot_posture(unit_states, linger),
         "containers": containers,
     }
 
@@ -108,9 +144,19 @@ def verify_after_boot(before: dict, after: dict) -> dict:
             ok = after["mounts"].get(mount, False)
             checks[f"mount:{mount}"] = {"status": "PASS" if ok else "FAIL", "detail": "back" if ok else "missing"}
     for unit, (enabled, _active) in before["units"].items():
+        if unit in REQUIRED_AT_BOOT:
+            continue  # judged by its required boot posture below, not by its state before the reboot
         now = after["units"].get(unit, ["absent", "inactive"])
         ok = now[0] == enabled and (now[1] == "active") == (enabled == "enabled")
         checks[f"unit:{unit}"] = {"status": "PASS" if ok else "FAIL", "detail": f"{enabled} -> {now[0]}/{now[1]}"}
+    for unit in REQUIRED_AT_BOOT:
+        was = before["units"].get(unit, ["absent", "inactive"])
+        now = after["units"].get(unit, ["absent", "inactive"])
+        ok = now[0] == "enabled" and now[1] == "active"
+        checks[f"boot_required:{unit}"] = {"status": "PASS" if ok else "FAIL",
+                                           "detail": f"{'/'.join(was)} -> {'/'.join(now)} (must be enabled/active)"}
+    linger = after.get("linger", "unknown")
+    checks["linger"] = {"status": "PASS" if linger == "yes" else "FAIL", "detail": f"Linger={linger}"}
     for name, state in before["containers"].items():
         now = after["containers"].get(name)
         paper = any(fnmatch.fnmatchcase(name, p) for p in kill_switch.PAPER_RUNTIME_PATTERNS)

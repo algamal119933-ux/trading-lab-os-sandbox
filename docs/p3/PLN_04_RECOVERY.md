@@ -211,3 +211,37 @@ The next reboot is the first one under the new NVIDIA modules. Its verify-boot s
 3. The freeze then lifts **only** for the controlled `tlos-p3` update (the Owner's host acceptance packet, step 7) to an **Owner-chosen** main SHA. Recommended: the SHA after #92 and #90 are merged, so the host runs the final health code once.
 4. **Every later host-changing step needs its own explicit Owner authorization.** That covers node-exporter, Alertmanager, auditd, the Tier-3 key, and anything else.
 5. **Next baseline:** the recovery `UNITS` do not yet include `tlos-p3-health.timer`. Adding it is a separate change, and it requires a new baseline afterwards.
+
+### Boot posture: the verifier now judges required units, not preserved state (2026-10-30)
+**Finding (host, 2026-10-30; host-session evidence `host_ops_20261030T130638Z.md`).**
+- Two consecutive boots ended without a shutdown sequence (unclean power loss).
+- After the second, `tlos-runtime.service` (Grafana, Prometheus, MLflow) **did not return**: it had been started by hand and was never enabled. The P3 timers did return.
+- The verifier at that point would have **passed** this, for two reasons:
+  - its unit rule compared each unit with its own pre-reboot state. "disabled/active → disabled/inactive" counts as preserved;
+  - its unit list did not contain `tlos-runtime.service` or `tlos-p3-health.timer` (§ Host-freeze lift conditions, item 5).
+
+**Change** (`research/p3/recovery.py`; the CLI is unchanged):
+
+| | Before | Now |
+|---|---|---|
+| Units recorded | the caller's list (`tlos-p3-backup.timer`, the P2 timer) | the caller's list **plus** `REQUIRED_AT_BOOT` = `tlos-runtime.service`, `tlos-p3-backup.timer`, `tlos-p3-health.timer` |
+| Rule for a required unit | same enabled state as before, active iff enabled | `boot_required:<unit>` PASS only if it is **enabled and active** after the boot, whatever it was before |
+| Linger | not recorded | `linger` recorded (`loginctl show-user <user> -p Linger --value`). It must be `yes`, since enabled user units do not start without a login otherwise. Unknown means FAIL. |
+| Before the reboot | — | `snapshot` writes `boot_posture` (`READY` / `NOT_READY`, with each problem), so a planned reboot can be refused before it starts |
+| Other units | unchanged | unchanged (the P2 timer must still stay disabled) |
+
+- No paper runtime is ever in `REQUIRED_AT_BOOT`; a test pins this.
+- Old baselines still verify: the required units are judged on the after-boot state alone.
+
+**Consequences:**
+- The accepted 2026-10-27 RUN 3 verdict is not re-evaluated (§ Reboot record). It stands as the record of that reboot under the rule of its time.
+- The **next** reboot check (a new baseline after #98, `storage.json` and the boot fixes) uses this rule, which closes item 5 above.
+- It can pass only when the runtime is enabled at boot and linger is on.
+
+**Before any planned reboot:**
+
+```bash
+scripts/p3/recovery.py snapshot --out ~/tlos-paper/p3-evidence/pre_reboot_snapshot_$(date -u +%Y%m%dT%H%M%SZ).json
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["boot_posture"]; print(p["status"]); [print(" -", x) for x in p["problems"]]' <that file>
+```
+Reboot only when the result is `READY`. `NOT_READY` lists exactly what will not come back by itself.

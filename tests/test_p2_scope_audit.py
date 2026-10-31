@@ -1627,6 +1627,32 @@ P3_SECURITY_HARDENING_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #95, merged. Two parents: 741e3118 (main before) + 776fffd8
+# (P3-PLN-05 destination decisions). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_05_DESTINATION_MERGE = "c6815443fd158ec70672529ecf0628ab6f8855e3"
+
+# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decisions that the Toshiba USB disk is personal,
+# portable storage holding an Owner-carried copy that is not Tier-3, and that the second Windows PC only reads
+# and checks that copy (its earlier evaluation as a Tier-3 destination is withdrawn). Documents only; PLN-05
+# stays OPEN; nothing run on any machine.
+_R05D = "P3-PLN-05 destination decisions"
+P3_PLN_05_DESTINATION_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — portable copy is not Tier-3; Windows PC withdrawn as a "
+                                               "destination; unresolved Tier-3 requirements and destination classes",
+    "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
+                                             "portable copy on the Windows PC (NOT_RUN)",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer; hardened §4 gate (injection fix); §6 anchor to the "
+                                         "original; §10 testable Tier-3 requirements",
+    "research/p3/backup.py": f"{_R05D} — compare_hash_export: a Windows Get-FileHash export of the portable copy "
+                             "checked with verify_backup's rules",
+    "scripts/p3/backup.py": f"{_R05D} — compare-export subcommand (read-only; refuses to write into the set)",
+    "tests/test_p3_portable_copy.py": f"{_R05D} — compare_hash_export negative controls on synthetic sets",
+    "tests/test_p3_offsite_gate.py": f"{_R05D} — the §4 forced-command gate, run from the procedure text: "
+                                     "refusals and the commands offsite.py issues",
+    "tests/test_p2_scope_audit.py": "P3 security hardening (PR #99) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1698,6 +1724,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_06_WRITER": (P3_PLN_06_WRITER_MERGE, P3_PLN_06_WRITER_SCOPE),
     "P3_STORAGE_CONFIG": (P3_STORAGE_CONFIG_MERGE, P3_STORAGE_CONFIG_SCOPE),
     "P3_SECURITY_HARDENING": (P3_SECURITY_HARDENING_MERGE, P3_SECURITY_HARDENING_SCOPE),
+    "P3_PLN_05_DESTINATION": (P3_PLN_05_DESTINATION_MERGE, P3_PLN_05_DESTINATION_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1705,25 +1732,32 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decisions that the Toshiba USB disk is personal,
-# portable storage holding an Owner-carried copy that is not Tier-3, and that the second Windows PC only reads
-# and checks that copy (its earlier evaluation as a Tier-3 destination is withdrawn). Documents only; PLN-05
-# stays OPEN; nothing run on any machine.
-_R05D = "P3-PLN-05 destination decisions"
+# P3-PLN-04/07 residuals: §13 data-truth coverage evidence, the PLN-04 power-loss (UPS) decision packet
+# and decision H (unattended upgrades). Repository-only; nothing run or changed on the host.
+_R47R = "P3-PLN-04/07 residuals"
+# P3-PLN-04/07 residuals: the PLN-07 §13 data-truth coverage record with tests for the live-feed validators,
+# the PLN-04 power-loss decision packet (G) and decision H (unattended upgrades). Documents and tests only;
+# no production code, no host change.
+_R0407 = "P3-PLN-04/07 residuals"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — portable copy is not Tier-3; Windows PC withdrawn as a "
-                                               "destination; unresolved Tier-3 requirements and destination classes",
-    "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
-                                             "portable copy on the Windows PC (NOT_RUN)",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer; hardened §4 gate (injection fix); §6 anchor to the "
-                                         "original; §10 testable Tier-3 requirements",
-    "research/p3/backup.py": f"{_R05D} — compare_hash_export: a Windows Get-FileHash export of the portable copy "
-                             "checked with verify_backup's rules",
-    "scripts/p3/backup.py": f"{_R05D} — compare-export subcommand (read-only; refuses to write into the set)",
-    "tests/test_p3_portable_copy.py": f"{_R05D} — compare_hash_export negative controls on synthetic sets",
-    "tests/test_p3_offsite_gate.py": f"{_R05D} — the §4 forced-command gate, run from the procedure text: "
-                                     "refusals and the commands offsite.py issues",
-    "tests/test_p2_scope_audit.py": "P3 security hardening (PR #99) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_R0407} — §13 item → control → test → evidence class; PLN-07 PARTIAL",
+    "tests/test_p3_data_truth.py": f"{_R0407} — the live-feed validators (fp/market.py) and the never-filled rule, "
+                                   "exercised on synthetic data",
+    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_R0407} — decision packet G: UPS / accepted-risk / hybrid options",
+    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
+                                                           "policy, procedures NOT_RUN",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05 destination decisions (PR #95) pinned to its merge; this branch's scope",
+    "research/p3/data_truth.py": f"{_R0407} — G-1 captured-ledger missing-bar audit and G-2 exact L-vs-F "
+                                 "comparator; read-only, fail-closed",
+    "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
+    "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
+                                          "frozen-universe config pin",
+    "research/p3/recovery.py": f"{_R0407} — reboot check judges REQUIRED_AT_BOOT units (enabled/active) and "
+                               "linger, and the snapshot reports boot_posture; read-only",
+    "tests/test_p3_recovery.py": f"{_R0407} — boot-posture cases incl. the 2026-10-30 hand-started runtime "
+                                 "that did not return after a power loss",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_R0407} — boot-posture finding and rule (2026-10-30); RUN 3 verdict not "
+                                  "re-evaluated",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
