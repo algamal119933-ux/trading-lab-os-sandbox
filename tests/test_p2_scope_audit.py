@@ -1653,6 +1653,39 @@ P3_PLN_05_DESTINATION_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #96, merged. Two parents: c6815443 (main before) + bbf7f379
+# (P3-PLN-04/07 residuals). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_07_RESIDUALS_MERGE = "fd1ba8ab57796f03cd2ec610b4a9b7cd7760156e"
+
+# P3-PLN-04/07 residuals: §13 data-truth coverage evidence, the PLN-04 power-loss (UPS) decision packet
+# and decision H (unattended upgrades). Repository-only; nothing run or changed on the host.
+_R47R = "P3-PLN-04/07 residuals"
+# P3-PLN-04/07 residuals: the PLN-07 §13 data-truth coverage record with tests for the live-feed validators,
+# the PLN-04 power-loss decision packet (G) and decision H (unattended upgrades). Documents and tests only;
+# no production code, no host change.
+_R0407 = "P3-PLN-04/07 residuals"
+P3_PLN_04_07_RESIDUALS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_R0407} — §13 item → control → test → evidence class; PLN-07 PARTIAL",
+    "tests/test_p3_data_truth.py": f"{_R0407} — the live-feed validators (fp/market.py) and the never-filled rule, "
+                                   "exercised on synthetic data",
+    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_R0407} — decision packet G: UPS / accepted-risk / hybrid options",
+    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
+                                                           "policy, procedures NOT_RUN",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05 destination decisions (PR #95) pinned to its merge; this branch's scope",
+    "research/p3/data_truth.py": f"{_R0407} — G-1 captured-ledger missing-bar audit and G-2 exact L-vs-F "
+                                 "comparator; read-only, fail-closed",
+    "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
+    "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
+                                          "frozen-universe config pin",
+    "research/p3/recovery.py": f"{_R0407} — reboot check judges REQUIRED_AT_BOOT units (enabled/active) and "
+                               "linger, and the snapshot reports boot_posture; read-only",
+    "tests/test_p3_recovery.py": f"{_R0407} — boot-posture cases incl. the 2026-10-30 hand-started runtime "
+                                 "that did not return after a power loss",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_R0407} — boot-posture finding and rule (2026-10-30); RUN 3 verdict not "
+                                  "re-evaluated",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1725,6 +1758,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_STORAGE_CONFIG": (P3_STORAGE_CONFIG_MERGE, P3_STORAGE_CONFIG_SCOPE),
     "P3_SECURITY_HARDENING": (P3_SECURITY_HARDENING_MERGE, P3_SECURITY_HARDENING_SCOPE),
     "P3_PLN_05_DESTINATION": (P3_PLN_05_DESTINATION_MERGE, P3_PLN_05_DESTINATION_SCOPE),
+    "P3_PLN_04_07_RESIDUALS": (P3_PLN_04_07_RESIDUALS_MERGE, P3_PLN_04_07_RESIDUALS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1732,32 +1766,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-04/07 residuals: §13 data-truth coverage evidence, the PLN-04 power-loss (UPS) decision packet
-# and decision H (unattended upgrades). Repository-only; nothing run or changed on the host.
-_R47R = "P3-PLN-04/07 residuals"
-# P3-PLN-04/07 residuals: the PLN-07 §13 data-truth coverage record with tests for the live-feed validators,
-# the PLN-04 power-loss decision packet (G) and decision H (unattended upgrades). Documents and tests only;
-# no production code, no host change.
-_R0407 = "P3-PLN-04/07 residuals"
+# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix (reusing the merged PLN-02..09 procedures),
+# the evidence schema, the run configuration that blocks until the five Owner decisions are set, and fail-closed
+# validators, developed against synthetic evidence. No run, no cohort, no T0, no launch, no acceptance claim.
+_P10 = "P3-PLN-10 acceptance program"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_R0407} — §13 item → control → test → evidence class; PLN-07 PARTIAL",
-    "tests/test_p3_data_truth.py": f"{_R0407} — the live-feed validators (fp/market.py) and the never-filled rule, "
-                                   "exercised on synthetic data",
-    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_R0407} — decision packet G: UPS / accepted-risk / hybrid options",
-    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
-                                                           "policy, procedures NOT_RUN",
-    "tests/test_p2_scope_audit.py": "P3-PLN-05 destination decisions (PR #95) pinned to its merge; this branch's scope",
-    "research/p3/data_truth.py": f"{_R0407} — G-1 captured-ledger missing-bar audit and G-2 exact L-vs-F "
-                                 "comparator; read-only, fail-closed",
-    "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
-    "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
-                                          "frozen-universe config pin",
-    "research/p3/recovery.py": f"{_R0407} — reboot check judges REQUIRED_AT_BOOT units (enabled/active) and "
-                               "linger, and the snapshot reports boot_posture; read-only",
-    "tests/test_p3_recovery.py": f"{_R0407} — boot-posture cases incl. the 2026-10-30 hand-started runtime "
-                                 "that did not return after a power loss",
-    "docs/p3/PLN_04_RECOVERY.md": f"{_R0407} — boot-posture finding and rule (2026-10-30); RUN 3 verdict not "
-                                  "re-evaluated",
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, evidence, safety, procedure, stops, rollback",
+    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
+    "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
+    "docs/p3/PLN_10_OWNER_DECISION_PACKET.md": f"{_P10} — round 3: D1–D5 options, consequences, validator requirements; nothing chosen",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 residuals (PR #96) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
