@@ -1704,6 +1704,21 @@ P3_PLN_10_ACCEPTANCE_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #93, merged. Two parents: 972099a6 (main before) + fa88e4e2
+# (P3-PLN-11 execution pack structure). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_11_EXEC_PACK_MERGE = "d272a75c02283f56b1dd7609678f2fa3955f18c2"
+
+# P3-PLN-11 execution pack structure (DRAFT / NOT FROZEN): the pack layout and a generator that reads Git
+# objects at a commit. No freeze, no PASS, no P3 closure.
+_P11 = "P3-PLN-11 execution pack structure"
+P3_PLN_11_EXEC_PACK_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md": f"{_P11} — pack contents, reproducibility, later freeze rule",
+    "research/p3/exec_pack.py": f"{_P11} — draft generator; evidence index keyed by the PLN-10 evidence ids",
+    "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: byte-identical, never frozen, missing recorded, one id space",
+    "tests/test_p2_scope_audit.py": "P3-PLN-10 acceptance program (PR #91) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1778,6 +1793,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_05_DESTINATION": (P3_PLN_05_DESTINATION_MERGE, P3_PLN_05_DESTINATION_SCOPE),
     "P3_PLN_04_07_RESIDUALS": (P3_PLN_04_07_RESIDUALS_MERGE, P3_PLN_04_07_RESIDUALS_SCOPE),
     "P3_PLN_10_ACCEPTANCE": (P3_PLN_10_ACCEPTANCE_MERGE, P3_PLN_10_ACCEPTANCE_SCOPE),
+    "P3_PLN_11_EXEC_PACK": (P3_PLN_11_EXEC_PACK_MERGE, P3_PLN_11_EXEC_PACK_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1785,14 +1801,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3-PLN-11 execution pack structure (DRAFT / NOT FROZEN): the pack layout and a generator that reads Git
-# objects at a commit. No freeze, no PASS, no P3 closure.
-_P11 = "P3-PLN-11 execution pack structure"
+# P3 status reconciliation (coordinator): the governed workstream record brought current after PR #94 and the
+# round-2 lane PRs, and the Control Room reboot row derived from that record (finding F-CR-1). No host change.
+_RST = "P3 status reconciliation"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md": f"{_P11} — pack contents, reproducibility, later freeze rule",
-    "research/p3/exec_pack.py": f"{_P11} — draft generator; evidence index keyed by the PLN-10 evidence ids",
-    "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: byte-identical, never frozen, missing recorded, one id space",
-    "tests/test_p2_scope_audit.py": "P3-PLN-10 acceptance program (PR #91) pinned to its merge; this branch's scope",
+    "research/p3/records/p3_workstreams.json": f"{_RST} — PLN-04/05/06/07/09/10/11 evidence, Owner/next texts, reboot acceptance record",
+    "research/p3/control_room.py": f"{_RST} — F-CR-1: reboot row and unverified list follow the accepted record, fail-closed",
+    "tests/test_p3_control_room.py": f"{_RST} — F-CR-1 test, including the fail-closed cases",
+    "research/p3/control_room_live.js": "P3-PLN-09 round 3 — adapter fail-open fixes: caps, exposure, positions, incidents, expiry",
+    "scripts/p3/control_room.py": "P3-PLN-09 round 3 — a stale or malformed health findings file is never reused",
+    "tests/test_p2_scope_audit.py": "P3-PLN-11 execution pack structure (PR #93) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

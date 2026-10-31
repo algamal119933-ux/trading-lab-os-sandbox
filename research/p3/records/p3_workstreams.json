@@ -8,26 +8,37 @@
     {"id": "PLN-01", "status": "ACCEPTED", "en": "Contract freeze", "ar": "تجميد العقد", "evidence": "PR #72 merge fcd06b21"},
     {"id": "PLN-02", "status": "ACCEPTED", "en": "State & recovery inventory", "ar": "جرد الحالة والتعافي", "evidence": "docs/p3/PLN_02_STATE_INVENTORY.md; 14 roots PASS"},
     {"id": "PLN-03", "status": "ACCEPTED", "en": "Backup & restore", "ar": "النسخ الاحتياطي والاستعادة", "evidence": "scheduled set 20261025T211956Z verify + drill PASS (PR #79)"},
-    {"id": "PLN-04", "status": "PARTIAL", "en": "Restart / reboot / host recovery", "ar": "إعادة التشغيل والإقلاع وتعافي الخادم", "evidence": "restart guard + drill PASS; reboot correctness PASS (verify-boot 10/10 + gap attestation 2026-10-27 clean; accepted on merge of PR #94); open: power-loss posture (UPS decision)"},
-    {"id": "PLN-05", "status": "PARTIAL", "en": "Evidence durability", "ar": "متانة الأدلة", "evidence": "offsite tool ready; Tier 3 needs an independent host"},
-    {"id": "PLN-06", "status": "PARTIAL", "en": "Monitoring & hardening", "ar": "المراقبة والتقوية", "evidence": "hourly health + §19 checks (paper guard, real-money, evidence chains, unauthorized execution) in PR #85; alert rules tested; delivery needs node-exporter + channel; unexpected-writer not covered"},
-    {"id": "PLN-07", "status": "PARTIAL", "en": "Verification", "ar": "التحقق", "evidence": "per-execution audit + failure matrix PASS incl. reboot row (gap attestation 2026-10-27 clean; accepted on merge of PR #94); open: §13 data-truth checks evidence"},
+    {"id": "PLN-04", "status": "PARTIAL", "en": "Restart / reboot / host recovery", "ar": "إعادة التشغيل والإقلاع وتعافي الخادم", "evidence": "restart guard + host-recovery drill PASS; reboot correctness PASS (PR #94: RUN 3 verify-boot 10/10, gap attestation clean); open: power-loss posture (decision G) and unattended-upgrades policy (decision H), packets in PR #96"},
+    {"id": "PLN-05", "status": "PARTIAL", "en": "Evidence durability", "ar": "متانة الأدلة", "evidence": "offsite tool + Tier-3 procedure ready; HOST_LOSS_REDUNDANCY NOT_PROVEN; no independent destination chosen; portable Toshiba copy OWNER-REPORTED, not Tier-3 (PR #95)"},
+    {"id": "PLN-06", "status": "PARTIAL", "en": "Monitoring & hardening", "ar": "المراقبة والتقوية", "evidence": "hourly health + §19 checks (PR #85); delivery runbook, timer self-check, NTP (PR #92); unexpected-writer auditd design + fail-closed classifier, AT-1..AT-7 specified NOT_RUN, routing/label tests (PR #90); host: auditd, alert channel, dead-man pending Owner"},
+    {"id": "PLN-07", "status": "PARTIAL", "en": "Verification", "ar": "التحقق", "evidence": "per-execution audit + failure matrix PASS incl. reboot row (PR #94); §13 data truth PARTIAL: 12/14 tested, gaps G-1..G-4, host checks NOT_RUN (PR #96)"},
     {"id": "PLN-08", "status": "ACCEPTED", "en": "Operator controls", "ar": "تحكم المشغّل", "evidence": "kill switch drill 0.162 s; ledger PASS"},
-    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "12 of 12 screens bound (PRs #80, #81, #87); mobile tabs bound; Owner acceptance checklist PENDING"},
-    {"id": "PLN-10", "status": "PENDING", "en": "Paper Beta acceptance", "ar": "قبول النسخة التجريبية الورقية", "evidence": "needs PLN-02..PLN-09"},
-    {"id": "PLN-11", "status": "PENDING", "en": "Freeze & execution pack", "ar": "التجميد وحزمة التنفيذ", "evidence": "after PLN-10"}
+    {"id": "PLN-09", "status": "IN_PROGRESS", "en": "Control Room", "ar": "غرفة التحكم", "evidence": "12 of 12 screens + mobile bound (PRs #80, #81, #87, #88); Owner walkthrough checklist PENDING (after the tlos-p3 update)"},
+    {"id": "PLN-10", "status": "PENDING", "en": "Paper Beta acceptance", "ar": "قبول النسخة التجريبية الورقية", "evidence": "acceptance program DRAFT (PR #91); LAUNCH_BLOCKED until Owner decisions D1–D5; needs PLN-02..PLN-09"},
+    {"id": "PLN-11", "status": "PENDING", "en": "Freeze & execution pack", "ar": "التجميد وحزمة التنفيذ", "evidence": "execution pack structure DRAFT, NOT FROZEN (PR #93); freezes after PLN-10 acceptance"}
   ],
   "owner": {
     "state": "req",
-    "en": "Merge PR #85 (alerting + §19 checks). Open host gates: a planned reboot window (PLN-04/07), an independent host (PLN-05), prometheus-node-exporter (PLN-06).",
-    "ar": "ادمج طلب الدمج #85 (التنبيهات وفحوص §19). بوابات الخادم المفتوحة: نافذة إعادة إقلاع مخططة (PLN-04/07)، خادم مستقل (PLN-05)، prometheus-node-exporter (PLN-06)."
+    "en": "Merge in order: #90 → #95 → #96 → #91 → #93 → this status record (each reconciled after the previous merge). Decide: G power-loss posture, H unattended upgrades, a Tier-3 destination class, auditd install, alert channel and dead-man. Then choose the SHA for the controlled tlos-p3 update.",
+    "ar": "ادمج بالترتيب: ‎#90 ثم ‎#95 ثم ‎#96 ثم ‎#91 ثم ‎#93 ثم سجل الحالة هذا (تُطابَق كل واحدة بعد دمج السابقة). قرّر: G وضع انقطاع الكهرباء، H التحديثات التلقائية، فئة وجهة المستوى 3، تثبيت auditd، قناة التنبيه وفحص الرجل الميت. ثم اختر الـ SHA لتحديث tlos-p3 المضبوط."
   },
   "claude": {
-    "en": "Bind the PLN-09 mobile tabs from the same live scenario. No runtime, strategy or risk change.",
-    "ar": "ربط تبويبات الجوال لـ PLN-09 من نفس العرض المباشر. لا تغيير في التشغيل أو الاستراتيجية أو المخاطر."
+    "en": "Reconcile every open PR after each Owner merge and keep this record current. No host, runtime, strategy or risk change.",
+    "ar": "مطابقة كل طلب دمج مفتوح بعد كل دمج من المالك وتحديث هذا السجل. لا تغيير في الخادم أو التشغيل أو الاستراتيجية أو المخاطر."
   },
   "next": {
-    "en": "Owner merges #87; the PLN-09 mobile tabs then proceed on main.",
-    "ar": "يدمج المالك #87؛ ثم تتقدم تبويبات الجوال لـ PLN-09 على الفرع الرئيسي."
+    "en": "Owner merges #90; the coordinator then reconciles #95, #96, #91 and #93 against the new main.",
+    "ar": "يدمج المالك ‎#90؛ ثم يطابق المنسق ‎#95 و‎#96 و‎#91 و‎#93 مع الفرع الرئيسي الجديد."
+  },
+  "reboot": {
+    "state": "ok",
+    "en": "Reboot correctness PASS · RUN 3 verify-boot 10/10 · gap attestation clean · accepted by PR #94",
+    "ar": "صحة إعادة الإقلاع ناجحة · فحص الإقلاع 10/10 · شهادة الفجوة نظيفة · مقبولة بدمج ‎#94",
+    "record": "docs/p3/PLN_04_RECOVERY.md",
+    "open": [
+      {"en": "Power-loss posture (PLN-04): Owner decision G open", "ar": "وضع انقطاع الكهرباء (PLN-04): قرار المالك G مفتوح"},
+      {"en": "Unattended-upgrades policy (PLN-04): Owner decision H open", "ar": "سياسة التحديثات التلقائية (PLN-04): قرار المالك H مفتوح"}
+    ],
+    "merge": "f584cd4363c38627625970cbc25176fe1caa7823"
   }
 }

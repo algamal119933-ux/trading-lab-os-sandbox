@@ -11,6 +11,10 @@ const LD=t=>tm(t);
 /* the live scenario rides on the prototype's closed-family scenario, overridden field by field */
 SC.live=Object.assign({},SC.closed,LIVE.scenario);
 CAPS.splice(0,CAPS.length,...LIVE.caps);
+/* the prototype's syncCaps (run by every render) sets Paper trading and Long entries to "Allowed · paper"
+   whenever the runtime dimension is not 'off' (unknown, degraded or a stale view included). Here the rows
+   keep their projected state; on a stale view every row that is not blocked is shown stale. */
+function syncCaps(){const st=SC.live.viewStale;LIVE.caps.forEach((c,i)=>{CAPS[i].st=st&&c.st[0]!=='blocked'?['stale',c.st[1]]:c.st})}
 FORBID.splice(0,FORBID.length,...LIVE.forbid);
 Object.keys(LIVE.prov).forEach(k=>{PROV[k]=LIVE.prov[k]});
 S.scenario='live';
@@ -18,7 +22,7 @@ document.title='Trading Lab OS — Control Room (live projection, read-only)';
 /* client-side freshness: past the budget the view says it is stale, as the frozen viewStale state does */
 const LIVE_AGE_S=()=>Math.max(0,Math.round(Date.now()/1000-LIVE.observed_epoch));
 const ageTxt=s=>s<90?`${s}s`:s<5400?`${Math.round(s/60)}m`:`${Math.round(s/3600)}h`;
-function liveFreshness(){const s=SC.live,a=LIVE_AGE_S();
+function liveFreshness(){const s=SC.live,a=LIVE_AGE_S();liveAuthority();
   if(a<=LIVE.budget_s){s.viewStale=false;s.dims.freshness=['ok','fresh',b(ageTxt(a),ageTxt(a))];return}
   if(s.viewStale)return;
   s.viewStale=true;const age=b(ageTxt(a),ageTxt(a));
@@ -27,6 +31,10 @@ function liveFreshness(){const s=SC.live,a=LIVE_AGE_S();
   s.banner=['stale',b(`This view was generated ${ageTxt(a)} ago and has not been regenerated since. What you see may no longer be true. The trading system cannot be judged from this view.`,`أُنشئت هذه الشاشة قبل ${ageTxt(a)} ولم يُعَد إنشاؤها منذ ذلك. ما تراه قد لا يكون صحيحًا الآن. لا يمكن الحكم على نظام التداول من هذه الشاشة.`)];
   s.verdict=b(`Status unknown since ${LIVE.observed_utc}.`,`الحالة غير معروفة منذ ${LIVE.observed_utc}.`);
   s.nowObs=b('No current observation','لا يوجد رصد حالي')}
+/* the authorization expires at a fixed instant: a page generated before it and read after it says "not valid" */
+function liveAuthority(){const s=SC.live,e=LIVE.auth_expires_epoch;if(e!=null&&Date.now()/1000<=e)return;
+  s.dims.authority=['fail',b('Not valid','غير صالحة')];
+  s.exc.authority=b('The P3 authorization has expired, or its expiry could not be read.','انتهى تفويض P3، أو تعذّرت قراءة تاريخ انتهائه.')}
 
 /* ---------- shell ---------- */
 function proto(){const p=document.getElementById('proto');if(p){p.innerHTML='';p.hidden=true}}
@@ -54,16 +62,19 @@ function projectNow(){const p=LIVE.project;
   <div class="pnow" style="margin-top:8px">${p.workstreams.map(w=>`<span title="${esc(w[4])}">${chip(w[0],b(`${w[1]} · ${w[3]}`,`${w[1]} · ${w[3]}`))}</span>`).join('')}</div>
   <div class="cd" style="margin-top:8px">${x('Last governed checkpoint','آخر نقطة تحقق محكومة')}: ${L(sc().lgc)} · ${x('Workstream record','سجل مسارات العمل')} ${LD(p.ws_updated)} · <button class="lnk" data-go="continuity">${x('Open Project & Continuity','فتح المشروع والاستمرارية')}</button></div></div></section>`}
 function decCol(){const s=sc();const h=`<div class="ptitle"><button data-go="decisions">${x('Latest decision','آخر قرار')}</button></div>`;
-  return `<div class="col">${h}<p class="quiet">${L(s.dec.none)}</p></div>`}
-function riskCol(){const s=sc(),off=s.dims.runtime[0]!=='ok',st=s.viewStale;
+  return `<div class="col">${h}<p class="quiet">${s.dec.none?L(s.dec.none):`${chip('unk','unknown')} ${x('This view does not read the decisions of a runtime that is not observed stopped.','لا تقرأ هذه الشاشة قرارات تشغيل غير مرصود كمتوقف.')}`}</p></div>`}
+/* exposure is 0% only while the runtime is observed stopped (the prototype's expoTxt says 0% whenever pos is empty) */
+function expoTxt(){const s=sc();return s.dims.runtime[0]==='off'?`${tm('0%')} ${chip('ok',b('No open positions','لا مراكز مفتوحة'))}`:chip('unk','unknown')}
+function riskCol(){const s=sc(),off=s.dims.runtime[0]==='off',st=s.viewStale;
   const na=chip('off',b('Not applicable · runtime stopped','لا ينطبق · التشغيل متوقف'));
   return `<div class="col ${st?'stl':''}"><div class="ptitle"><button data-go="risk">${x('Risk & exposure','المخاطر والانكشاف')}</button>${st?chip('stale','stale'):''}</div>
   <div class="sec small">${x('Exposure','الانكشاف')}</div><div class="big num">${off?tm('0%'):'—'}</div>${off?chip('ok',b('No open positions','لا مراكز مفتوحة')):chip('unk','unknown')}
   ${row(x('Daily loss','الخسارة اليومية'),off?na:chip('unk','unknown'))}${row(x('Vetoes (24h)','الاعتراضات (24 س)'),off?na:chip('unk','unknown'))}${row(x('Real money','المال الحقيقي'),chip('blocked','blocked'),{insp:'cap:6'})}</div>`}
 function posCol(){const s=sc();
   return `<div class="col"><div class="ptitle"><button data-go="trades">${x('Open positions','المراكز المفتوحة')}</button></div>
-  <div class="sec">${s.pos.length?x(`${s.pos.length} open`,`${s.pos.length} مفتوح`):x('None open','لا مراكز مفتوحة')}</div></div>`}
-function incSummary(){const o=openIncs();
+  <div class="sec">${s.posUnv?chip('unk','unknown'):s.pos.length?x(`${s.pos.length} open`,`${s.pos.length} مفتوح`):x('None open','لا مراكز مفتوحة')}</div></div>`}
+function incSummary(){const o=openIncs();const st=LIVE.incidents_state||{state:'unknown',why:b('Incident source not observed.','مصدر الحوادث غير مرصود.')};
+  if(st.state!=='bound')return `<p class="quiet">${chip('unk','unknown')} ${L(st.why)}</p>`;
   return o.length?o.map(i=>`<button class="exrow" data-inc="${i.id}">${gl(i.s==='recovering'?'rec':'inc')}<b>${id(i.id)}</b><span>${L(i.title)}</span><span class="ol">${x('Open','فتح')}</span></button>`).join(''):`<p class="quiet">${gl('ok')} ${x('None open.','لا حوادث مفتوحة.')} <span class="muted">${x('No incident is recorded for P3.','لا توجد حادثة مسجلة لـ P3.')}</span></p>`}
 function activeCaps(){const pick=[0,1,2,3,6].map(i=>CAPS[i]);const unk=CAPS.filter(c=>c.st[0]==='unk').length;
   return `<h2 class="bandlabel">${x('Active capabilities','القدرات الفعّالة')}</h2><section class="band c1"><div class="col"><div class="pnow">${pick.map((c,i)=>`<button class="capb" data-insp="cap:${[0,1,2,3,6][i]}">${L(c.k)} ${chip(...c.st)}</button>`).join('')}${unk?`<span>${chip('unk',b(`${unk} unknown — treated as blocked`,`${unk} غير معروف — يُعامل كمحظور`))}</span>`:''}<button class="lnk" data-go="risk">${x('Full matrix in Risk & Authority','المصفوفة الكاملة في المخاطر والصلاحيات')}</button></div></div></section>`}
@@ -139,7 +150,7 @@ function operations(){const s=sc(),o=s.ops,P=LIVE.ops;
  <button class="btn2" aria-disabled="true" id="kill">${x('Kill Switch','مفتاح الإيقاف الكلي')} · ${x('not in this view','ليس في هذه الشاشة')}</button></section>`}
 
 /* ---------- Risk & Authority ---------- */
-function risk(){const s=sc(),off=s.dims.runtime[0]!=='ok',na=chip('off',b('Not applicable · runtime stopped','لا ينطبق · التشغيل متوقف'));
+function risk(){const s=sc(),off=s.dims.runtime[0]==='off',na=chip('off',b('Not applicable · runtime stopped','لا ينطبق · التشغيل متوقف'));
  return `${bannerHTML()}${shead('risk')}
  <section class="band c2"><div class="col"><div class="ptitle"><span>${x('Current state','الحالة الحالية')}</span></div>${row(x('Current exposure','الانكشاف الحالي'),off?`${tm('0%')} ${chip('ok',b('No open positions','لا مراكز مفتوحة'))}`:chip('unk','unknown'))}${row(x('Daily loss','الخسارة اليومية'),off?na:chip('unk','unknown'))}${row(x('Vetoes (24h)','الاعتراضات (24 س)'),off?na:chip('unk','unknown'))}${row(x('Open positions','المراكز المفتوحة'),tm(String(s.pos.length)))}</div>
  <div class="col"><div class="ptitle"><span>${x('Governed configuration','الإعداد المحكوم')}</span><span class="asof">${x('contract / config fact, not current state','حقيقة عقد / إعداد، وليست حالة حالية')}</span></div>${row(x('Risk limits','حدود المخاطر'),L(LIVE.risk_cfg.limits))}${row(x('Limits source','مصدر الحدود'),id(LIVE.risk_cfg.src))}</div></section>
@@ -154,7 +165,7 @@ function evidencep(){const s=sc(),d=s.dims.recon,R=LIVE.evidence_rows.slice().so
  <section class="band c1"><div class="col twrap"><table><thead><tr><th>${x('Check','الفحص')}</th><th>${x('Result','النتيجة')}</th><th>${x('Source','المصدر')}</th></tr></thead><tbody>${R.map(r=>`<tr class="click" data-insp="recon" tabindex="0"><td>${L(r[0])}</td><td>${chip(...r[1])}</td><td class="sec">${id(r[2])}</td></tr>`).join('')}</tbody></table></div></section>`}
 
 /* ---------- slice 3: sealed cohort (read-only) ---------- */
-function sealedNote(o){if(o.state==='bound')return `<p class="cd">${x(`Sealed cohort ${o.cohort} · read-only record · no paper cohort is running now`,`المجموعة المختومة ${o.cohort} · سجل للقراءة فقط · لا مجموعة ورقية تعمل الآن`)}</p>`;
+function sealedNote(o){if(o.state==='bound')return `<p class="cd">${sc().dims.runtime[0]==='off'?x(`Sealed cohort ${o.cohort} · read-only record · no paper cohort is running now`,`المجموعة المختومة ${o.cohort} · سجل للقراءة فقط · لا مجموعة ورقية تعمل الآن`):x(`Sealed cohort ${o.cohort} · read-only record · the current runtime is not shown here`,`المجموعة المختومة ${o.cohort} · سجل للقراءة فقط · التشغيل الحالي لا يُعرض هنا`)}</p>`;
  return `<div class="banner b-info" role="status"><span class="bg" aria-hidden="true">${G.unk}</span><p>${chip('unk','unknown')} ${L(o.why)}</p></div>`}
 /* ---------- Decisions ---------- */
 function decisions(){const s=sc(),D3=LIVE.decisions,V=D3.rows;
@@ -166,7 +177,7 @@ function decisions(){const s=sc(),D3=LIVE.decisions,V=D3.rows;
  <p class="sec small">${x('Reason','السبب')}: ${L(d.r)}</p>${row(x('Market / Data Truth context','سياق حقيقة السوق / البيانات'),`${id(d.tf||'—')} · ${id(d.t0||'—')}`)}${row(x('Evidence refs','مراجع الأدلة'),id(d.refs))}${row(x('Runtime / source identity','هوية التشغيل / المصدر'),id(d.ident))}<p class="cd">${x('Per-stage outputs are shown only where the runtime logged them; a stage it does not log reads "not logged".','تُعرض مخرجات كل مرحلة فقط حيث سجّلها التشغيل؛ والمرحلة غير المسجّلة تظهر "غير مسجّل".')}</p></div></section>`}
 /* ---------- Trades & Positions ---------- */
 function trades(){const s=sc(),T=LIVE.trades_closed;const ex=CAPS.filter(c=>c.exec);
- const open=s.pos.length?'':`<tr><td colspan="8" class="sec">${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}</td></tr>`;
+ const open=s.posUnv?`<tr><td colspan="8" class="sec">${chip('unk','unknown')} ${x('Open positions of a runtime that is not observed stopped are not read by this view.','لا تقرأ هذه الشاشة المراكز المفتوحة لتشغيل غير مرصود كمتوقف.')}</td></tr>`:s.pos.length?'':`<tr><td colspan="8" class="sec">${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}</td></tr>`;
  const body=T.state!=='bound'?`<p class="quiet">${chip('unk','unknown')} ${L(T.why)}</p>`:T.rows.length?`<table><thead><tr><th>${x('Pair','الزوج')}</th><th>${x('Side','الاتجاه')}</th><th class="r">${x('Entry','الدخول')}</th><th class="r">${x('Exit','الخروج')}</th><th>${x('Exit reason','سبب الخروج')}</th><th>${x('Reconciliation','المطابقة')}</th><th>${x('Verified outcome','النتيجة المتحقق منها')}</th><th class="r">${x('PnL','الربح/الخسارة')}</th></tr></thead><tbody>${T.rows.map(r=>`<tr><td>${id(r.pair)} <span class="muted">#${r.trade_id}</span></td><td>${x('Long','شراء')}</td><td class="r">${id(r.entry)}</td><td class="r">${id(r.exit)}</td><td>${id(r.reason)}</td><td>${chip(...r.recon)}</td><td>${chip(...r.outcome)}</td><td class="r">${r.pnl===null?chip('unk','unknown'):tm(r.pnl)}</td></tr>`).join('')}</tbody></table>`:`<p class="quiet">${chip('off','noData')} ${x('No completed trade lifecycle in the sealed record.','لا توجد دورة صفقة مكتملة في السجل المختوم.')}</p>`;
  return `${bannerHTML()}${shead('trades')}
  <div class="capstrip"><span class="sec">${x('Execution capabilities','قدرات التنفيذ')}:</span>${ex.map(c=>`${L(c.k)} ${chip(...c.st)}`).join(' ')}<span class="cd">${x('rows supplied by authority truth','الصفوف مصدرها حقيقة الصلاحيات')}</span></div>
@@ -180,10 +191,10 @@ function liveCandles(pair){const M=LIVE.market,bars=(M.candles[pair]||[]);if(!ba
  const t0=bars[0][0],step=n>1?(bars[n-1][0]-t0)/(n-1):3600000;
  (M.marks[pair]||[]).forEach(m=>{const ms=Date.parse(m[0].replace(' ','T')+(m[0].endsWith('Z')?'':'Z'));const i=Math.round((ms-t0)/step);if(i<0||i>=n)return;const mX=i*cw+cw/2;out+=`<path d="M${mX-6} ${h-4} L${mX+6} ${h-4} L${mX} ${h-14}Z" fill="var(--warn)"/><text x="${mX+10}" y="${h-6}" fill="var(--tx2)" font-size="11" font-family="var(--sans)">${m[1]}</text>`});
  const svg=`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${x(`Candle chart, sealed record ${pair}`,`رسم الشموع، السجل المختوم ${pair}`)}">${out}</svg>`;
- const t=b(`CURRENT MARKET STATE UNKNOWN · no runtime, no feed · chart shows the sealed P2 record ending ${M.end_utc}`,`حالة السوق الحالية غير معروفة · لا تشغيل ولا تغذية · يعرض الرسم السجل المختوم لـ P2 المنتهي ${M.end_utc}`);
+ const t=b(`CURRENT MARKET STATE UNKNOWN · no feed in this view · chart shows the sealed P2 record ending ${M.end_utc}`,`حالة السوق الحالية غير معروفة · لا تغذية في هذا العرض · يعرض الرسم السجل المختوم لـ P2 المنتهي ${M.end_utc}`);
  return `<div class="chartwrap unkchart">${svg}<div class="chartov s-unk" dir="${S.lang==='ar'?'rtl':'ltr'}" role="status">${gl('unk')} ${L(t)}</div></div>`}
 function market(){const M=LIVE.market;
- if(M.state!=='bound'||!M.pairs.length)return `${bannerHTML()}${shead('market')}${sealedNote(M.state==='bound'?{state:'none',why:b('The sealed record holds no candles.','لا يحتوي السجل المختوم على شموع.')}:M)}<section class="band c1"><div class="col"><p class="quiet">${chip('unk','unknown')} ${x('Current market state unknown: no runtime, no feed.','حالة السوق الحالية غير معروفة: لا تشغيل ولا تغذية.')}</p></div></section>`;
+ if(M.state!=='bound'||!M.pairs.length)return `${bannerHTML()}${shead('market')}${sealedNote(M.state==='bound'?{state:'none',why:b('The sealed record holds no candles.','لا يحتوي السجل المختوم على شموع.')}:M)}<section class="band c1"><div class="col"><p class="quiet">${chip('unk','unknown')} ${x('Current market state unknown: no feed in this view.','حالة السوق الحالية غير معروفة: لا تغذية في هذا العرض.')}</p></div></section>`;
  if(!M.pairs.includes(S.pair))S.pair=M.pairs[0];if(!M.timeframes.includes(S.tf))S.tf=M.timeframes[0];
  const caps=[[b('Candles (OHLCV)','الشموع (OHLCV)'),'off',b('No live feed · sealed record only','لا تغذية مباشرة · السجل المختوم فقط')],[b('Order book depth','عمق دفتر الأوامر'),'na','notProvided'],[b('Regime / higher-timeframe context','نظام السوق / سياق الإطار الأعلى'),'unk','unkInv']];
  return `${bannerHTML()}${shead('market')}
@@ -211,7 +222,7 @@ function settings(){const T=LIVE.settings;
    Risk, Evidence, History, System and Market keep the prototype's own bodies over the live scenario. */
 function mStatus(){const s=sc();const exc=Object.keys(s.dims).filter(k=>s.dims[k][0]!=='ok');const o=openIncs();
  return `${bannerHTML()}<p class="vs">${L(s.verdict)}</p>${mResp()}<div class="mcard small">${x('Project','المشروع')}: ${L(LIVE.ident.stage)}<br>${LIVE.project.chips.map(c=>chip(c[0],c[1])).join(' ')}<br>${x('Next Owner gate','بوابة المالك التالية')}: ${L(LIVE.project.gate)}</div>
- <div class="mcard small">${s.dec.none?L(s.dec.none):`${x('Last decision','آخر قرار')} ${chip('unk','unknown')}`}<br>${x('Exposure','الانكشاف')} ${expoTxt()} · ${s.pos.length?chip('unk','unknown'):x('no open positions','لا مراكز مفتوحة')}<br>${x('Open incidents','حوادث مفتوحة')}: ${tm(String(o.length))}</div>
+ <div class="mcard small">${s.dec.none?L(s.dec.none):`${x('Last decision','آخر قرار')} ${chip('unk','unknown')}`}<br>${x('Exposure','الانكشاف')} ${expoTxt()} · ${s.posUnv||s.pos.length?chip('unk','unknown'):x('no open positions','لا مراكز مفتوحة')}<br>${x('Open incidents','حوادث مفتوحة')}: ${tm(String(o.length))}</div>
  ${exc.length?`<div class="mcard">${exc.map(k=>`<div class="mrow"><span class="k">${gl(s.dims[k][0])} ${L(DIMN[k])}</span><span>${L(s.exc[k]||'')}</span></div>`).join('')}</div>`:''}`}
 function mDetail(k){const s=sc();
  if(k.startsWith('inc:')){const i=s.incidents.find(v=>v.id===k.slice(4));if(!i)return `<div class="mcard small">${chip('unk','unknown')}</div>`;const f=i.f;return `<div class="mcard"><b>${id(i.id)}</b> ${chip(...ISTATE[i.s])}<br>${L(i.title)}</div><div class="mcard small">${[['ok','Known','معروف',f.known],['ok','Remained safe','بقي آمنًا',f.safe],['unk','Unknown','غير معروف',f.unknown],['warn','Affected','متأثر',f.affected],['unver','Unverified','غير متحقق',f.unverified]].filter(r=>r[3]).map(r=>`<div class="mrow"><span class="k">${gl(r[0])} ${x(r[1],r[2])}</span><span>${L(r[3])}</span></div>`).join('')}${f.next?`<div class="mrow"><span class="k">${x('Next','التالي')}</span><span>${L(f.next)} <span class="fc">${x('from contract','من العقد')}</span></span></div>`:''}</div><p class="cd">${x('Acknowledge: not in this view; the operator CLI records it.','الإقرار: ليس في هذا العرض؛ يسجّله سطر أوامر المشغّل.')}</p>`}
@@ -222,7 +233,7 @@ function mDetail(k){const s=sc();
   const d=V[V.length-1];
   return `<div class="mcard small">${L(s.dec.none)}<br>${x('Last sealed decision','آخر قرار مختوم')} ${chip(...d.o)} ${id(d.p)} · ${LD(d.t)} ${chip('unver',b('Sealed record','سجل مختوم'))}</div>${PIPE.map((p,i)=>`<div class="mrow"><span class="k">${L(p)}</span><span>${gl(d.tr[i][0])} ${L(d.tr[i][1])}</span></div>`).join('')}`}
  if(k==='trades'){const T=LIVE.trades_closed;
-  const open=`<div class="mcard small">${s.pos.length?chip('unk','unknown'):`${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}`}</div>`;
+  const open=`<div class="mcard small">${s.posUnv||s.pos.length?chip('unk','unknown'):`${x('No open positions.','لا مراكز مفتوحة.')} ${x('No paper cohort is running.','لا مجموعة ورقية تعمل.')}`}</div>`;
   const closed=T.state!=='bound'?`<div class="mcard small">${chip('unk','unknown')} ${T.why?L(T.why):''}</div>`:T.rows.length?T.rows.map(r=>`<div class="mcard small">${id(r.pair)} <span class="muted">#${r.trade_id}</span> · ${chip(...r.recon)} · ${r.pnl===null?chip('unk','unknown'):tm(r.pnl)}</div>`).join(''):`<div class="mcard small">${chip('off','noData')} ${x('No completed trade lifecycle in the sealed record.','لا توجد دورة صفقة مكتملة في السجل المختوم.')}</div>`;
   return open+closed}
  if(k==='risk')return `<div class="mcard small">${CAPS.map(c=>`<div class="mrow"><span class="k">${typeof c.k==='string'?id(c.k):L(c.k)}</span><span>${chip(...c.st)}</span></div>`).join('')}</div>`;
@@ -247,10 +258,17 @@ function mobile(){const s=sc();const d=s.dims;
  <nav class="mtabs" aria-label="${x('Mobile','الجوال')}">${tabs.map(([k,l,ic])=>`<button data-mtab="${k}" ${S.mtab===k&&!S.mdetail?'aria-current="page"':''}><span aria-hidden="true">${ic}</span>${L(l)}${k==='incidents'&&openIncs().length?` <span class="badge">${openIncs().length}</span>`:''}</button>`).join('')}</nav></div>`}
 /* device: the prototype's device toggle sits in the hidden prototype panel; a narrow viewport opens the
    mobile view, and #mobile / #desktop in the address override it (view state only, nothing stored) */
-function liveDevice(){const h=(location.hash||'').toLowerCase();if(h==='#mobile')return 'mobile';if(h==='#desktop')return 'desktop';
+/* address tokens: '#mobile', '#desktop', '#ar', '#en', combinable as '#mobile,ar'. Nothing is stored. */
+function hashTokens(){return (location.hash||'').toLowerCase().replace(/^#/,'').split(/[,&+]/).filter(Boolean)}
+function liveDevice(){const t=hashTokens(),h=t.length===1?'#'+t[0]:'';if(h==='#mobile'||t.includes('mobile'))return 'mobile';if(h==='#desktop'||t.includes('desktop'))return 'desktop';
  return window.matchMedia&&window.matchMedia('(max-width: 720px)').matches?'mobile':'desktop'}
-S.device=liveDevice();
-window.addEventListener('hashchange',()=>{S.device=liveDevice();S.mdetail=null;render()});
+/* language: the address wins ('#ar' / '#en'); otherwise the browser's language. The phone layout has no
+   language toggle of its own (the prototype's sits in the desktop header), so without this a phone could
+   never show Arabic. */
+function liveLang(){const t=hashTokens();if(t.includes('ar'))return 'ar';if(t.includes('en'))return 'en';
+ const n=((navigator.languages&&navigator.languages[0])||navigator.language||'').toLowerCase();return n.startsWith('ar')?'ar':'en'}
+S.device=liveDevice();S.lang=liveLang();
+window.addEventListener('hashchange',()=>{S.device=liveDevice();S.lang=liveLang();S.mdetail=null;render()});
 
 /* ---------- route: bound screens live, unbound screens keep their body under the notice ---------- */
 Object.keys(SCREENS).forEach(k=>{if(LIVE_BOUND.includes(k))return;const f=SCREENS[k];SCREENS[k]=()=>unboundNotice()+f()});
@@ -258,5 +276,5 @@ SCREENS.command=liveCommand;SCREENS.system=system;SCREENS.continuity=continuity;
 SCREENS.operations=operations;SCREENS.risk=risk;SCREENS.evidencep=evidencep;SCREENS.history=historyScr;
 SCREENS.decisions=decisions;SCREENS.trades=trades;SCREENS.market=market;SCREENS.settings=settings;
 liveFreshness();
-setInterval(()=>{const was=SC.live.viewStale;liveFreshness();if(SC.live.viewStale!==was)render()},30000);
+setInterval(()=>{const was=`${SC.live.viewStale}${SC.live.dims.authority[0]}`;liveFreshness();if(`${SC.live.viewStale}${SC.live.dims.authority[0]}`!==was)render()},30000);
 render();

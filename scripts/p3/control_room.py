@@ -39,7 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         findings = None
         if args.findings_json:
-            findings = json.loads(args.findings_json.read_text(encoding="utf-8"))["findings"]
+            # only a current, well-formed findings file is reused; an old one left by a failed health run
+            # becomes one CRITICAL UNPROVEN finding instead of being shown as this hour's health
+            findings = control_room.load_findings(args.findings_json)
         obs = control_room.collect(findings=findings)
         live = control_room.project(obs)
         html = control_room.build(live)
