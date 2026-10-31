@@ -8,6 +8,7 @@ that came back running, and a new paper runtime each fail the reboot check.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import subprocess
 import sys
@@ -82,9 +83,11 @@ def test_a_resume_needs_operator_and_reason(tmp_path):
         recovery.authorize_resume("FP-CONTROL-9", reason=" ", operator="owner", ledger=tmp_path / "l.jsonl")
 
 
-def snap(boot, mounts=True, timer=("enabled", "active"), containers=None):
+def snap(boot, mounts=True, timer=("enabled", "active"), containers=None, runtime=("enabled", "active"), linger="yes"):
     return {"boot_id": boot, "mounts": {"/": True, "/mnt/tlos-wdc": mounts},
-            "units": {"tlos-p3-backup.timer": list(timer), "tlos-p2-window-fp-control-3.timer": ["disabled", "inactive"]},
+            "units": {"tlos-p3-backup.timer": list(timer), "tlos-p2-window-fp-control-3.timer": ["disabled", "inactive"],
+                      "tlos-p3-health.timer": ["enabled", "active"], "tlos-runtime.service": list(runtime)},
+            "linger": linger,
             "containers": containers if containers is not None else
             {"niche-finder-worker": "running", "tradinglab-fp-control-3-freqtrade": "exited"}}
 
@@ -96,7 +99,10 @@ def test_a_clean_reboot_passes():
 @pytest.mark.parametrize("after,failing", [
     (snap("a"), "rebooted"),
     (snap("b", mounts=False), "mount:/mnt/tlos-wdc"),
-    (snap("b", timer=("enabled", "inactive")), "unit:tlos-p3-backup.timer"),
+    (snap("b", timer=("enabled", "inactive")), "boot_required:tlos-p3-backup.timer"),
+    (snap("b", runtime=("enabled", "inactive")), "boot_required:tlos-runtime.service"),
+    (snap("b", linger="no"), "linger"),
+    (snap("b", linger="unknown"), "linger"),
     (snap("b", containers={"niche-finder-worker": "exited", "tradinglab-fp-control-3-freqtrade": "exited"}),
      "container:niche-finder-worker"),
     (snap("b", containers={"niche-finder-worker": "running", "tradinglab-fp-control-3-freqtrade": "running"}),
@@ -134,3 +140,69 @@ def test_a_disabled_unit_is_recorded_as_disabled_not_absent(monkeypatch):
     monkeypatch.setattr(recovery.subprocess, "run", fake_run)
     assert recovery._run(["systemctl", "--user", "is-enabled", "x.timer"]) == "disabled"
 
+
+
+# --- Boot posture (2026-10-30: the monitoring runtime did not return after an unclean power loss) ---
+
+def test_a_hand_started_runtime_that_was_never_enabled_fails_the_reboot_check():
+    """The host case of 2026-10-30: tlos-runtime.service was started by hand (active) but not enabled.
+    Its state was 'preserved' across the power loss (disabled -> disabled/inactive), which the old
+    preserved-state rule passed. Reboot correctness requires it to come back."""
+    before = snap("a", runtime=("disabled", "active"))
+    after = snap("b", runtime=("disabled", "inactive"))
+    report = recovery.verify_after_boot(before, after)
+    assert report["PLN_04_REBOOT_CHECK"] == "FAIL"
+    assert report["checks"]["boot_required:tlos-runtime.service"]["status"] == "FAIL"
+    assert "unit:tlos-runtime.service" not in report["checks"]
+
+
+def test_a_required_unit_missing_from_an_older_baseline_is_still_judged():
+    before = snap("a")
+    for unit in ("tlos-runtime.service", "tlos-p3-health.timer"):
+        del before["units"][unit]
+    before.pop("linger")
+    assert recovery.verify_after_boot(before, snap("b"))["PLN_04_REBOOT_CHECK"] == "PASS"
+    after = snap("b")
+    del after["units"]["tlos-p3-health.timer"]
+    report = recovery.verify_after_boot(before, after)
+    assert report["checks"]["boot_required:tlos-p3-health.timer"]["status"] == "FAIL"
+
+
+def _fake_host(enabled, active, linger):
+    def runner(cmd):
+        if cmd[0] == "docker":
+            return "tlos_runtime-grafana-1\trunning"
+        if cmd[0] == "loginctl":
+            assert cmd == ["loginctl", "show-user", recovery._user(), "-p", "Linger", "--value"]
+            return linger
+        if cmd[:2] == ["systemctl", "--user"]:
+            return {"is-enabled": enabled, "is-active": active}[cmd[2]].get(cmd[3], "")
+        raise AssertionError(cmd)
+    return runner
+
+
+def test_every_snapshot_records_the_required_units_and_linger_whatever_the_caller_passes():
+    on = {u: "enabled" for u in recovery.REQUIRED_AT_BOOT}
+    up = {u: "active" for u in recovery.REQUIRED_AT_BOOT}
+    s = recovery.snapshot(("/",), ("tlos-p2-window-fp-control-3.timer",), runner=_fake_host(on, up, "yes"))
+    assert set(recovery.REQUIRED_AT_BOOT) <= set(s["units"]) and "tlos-p2-window-fp-control-3.timer" in s["units"]
+    assert s["linger"] == "yes" and s["boot_posture"] == {"status": "READY", "problems": []}
+
+
+@pytest.mark.parametrize("enabled,active,linger,needle", [
+    ({"tlos-runtime.service": "disabled"}, {}, "yes", "tlos-runtime.service is disabled"),
+    ({}, {"tlos-p3-health.timer": "inactive"}, "yes", "tlos-p3-health.timer is inactive"),
+    ({}, {}, "no", "linger is 'no'"),
+    ({}, {}, "", "linger is 'unknown'"),
+])
+def test_the_snapshot_shows_a_bad_boot_posture_before_the_reboot(enabled, active, linger, needle):
+    on = {u: "enabled" for u in recovery.REQUIRED_AT_BOOT} | enabled
+    up = {u: "active" for u in recovery.REQUIRED_AT_BOOT} | active
+    posture = recovery.snapshot(("/",), (), runner=_fake_host(on, up, linger))["boot_posture"]
+    assert posture["status"] == "NOT_READY" and any(needle in p for p in posture["problems"])
+
+
+def test_no_paper_runtime_is_ever_required_at_boot():
+    for unit in recovery.REQUIRED_AT_BOOT:
+        assert not any(fnmatch.fnmatchcase(unit, p) for p in kill_switch.PAPER_RUNTIME_PATTERNS)
+        assert "freqtrade" not in unit and "cohort" not in unit and "fp-control" not in unit

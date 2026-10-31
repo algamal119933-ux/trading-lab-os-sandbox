@@ -406,5 +406,106 @@ def test_standard_findings_include_the_monitor_self_check_and_clock_sync(tmp_pat
 
 def test_the_promtool_rule_tests_cover_the_monitor_self_check_and_clock_sync():
     text = RULE_TESTS.read_text(encoding="utf-8")
-    for label in ("timer:tlos-p3-health.timer", "clock_sync"):
+    for label in ("timer:tlos-p3-health.timer", "clock_sync", "health_run"):  # health_run: the crashed-run label
         assert f'check="{label}"' in text and f'check: "{label}"' in text
+
+
+# -- round 3 (Lane A): unknown states and malformed findings are never INFO ------------------------------
+
+
+def test_overall_never_reports_info_for_an_unknown_severity_or_an_empty_run():
+    assert health.overall([{"check": "x", "severity": "OK", "detail": ""}]) == health.CRITICAL
+    assert health.overall([{"check": "x", "severity": "info", "detail": ""},
+                           {"check": "y", "severity": health.INFO, "detail": ""}]) == health.CRITICAL
+    assert health.overall([{"check": "x", "detail": "no severity"}]) == health.CRITICAL
+    assert health.overall([]) == health.WARNING  # nothing was checked: unproven, not healthy
+    assert health.overall([{"check": "x", "severity": health.INFO, "detail": ""}]) == health.INFO
+    text = health.prometheus_text([{"check": "x", "severity": "OK", "detail": ""}])  # the label still pages
+    assert 'tlos_p3_health_check{check="x"} 2' in text and "tlos_p3_health_overall 2" in text
+
+
+@pytest.mark.parametrize("enabled,active,want", [
+    ("disabled", "inactive", health.INFO), ("masked", "inactive", health.INFO), ("absent", "inactive", health.INFO),
+    ("not-found", "inactive", health.INFO), ("disabled", "failed", health.INFO),
+    ("enabled", "inactive", health.CRITICAL), ("enabled-runtime", "inactive", health.CRITICAL),
+    ("disabled", "active", health.CRITICAL), ("disabled", "activating", health.CRITICAL),
+    ("disabled", "reloading", health.CRITICAL),
+    ("static", "inactive", health.WARNING), ("linked", "inactive", health.WARNING), ("bad", "inactive", health.WARNING),
+    ("disabled", "maintenance", health.WARNING),
+])
+def test_a_retired_timer_is_info_only_in_a_known_off_state(enabled, active, want):
+    run = _answers({"is-enabled": enabled, "is-active": active})
+    f = health.timer_expected("tlos-p2-window-fp-control-3.timer", want_active=False, runner=run)
+    assert f["severity"] == want, (enabled, active, f)
+    if want == health.WARNING:
+        assert "UNPROVEN" in f["detail"]
+
+
+def test_a_backup_set_dated_in_the_future_is_unproven_not_fresh(tmp_path):
+    s = tmp_path / "b" / "20261025T000000Z"
+    s.mkdir(parents=True)
+    (s / "BACKUP_RECORD.json").write_text("{}")
+    mtime = (s / "BACKUP_RECORD.json").stat().st_mtime
+    f = health.backup_recency(tmp_path / "b", 26, now=mtime - 6 * 3600)  # the record is 6 h in the future
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+    assert health.backup_recency(tmp_path / "b", 26, now=mtime - 60)["severity"] == health.INFO  # < 5 min skew
+
+
+def test_a_running_cohort_whose_evidence_cannot_be_located_is_unproven(tmp_path):
+    reg = {"instances": [{"role": "FP-CONTROL-9", "status": "RUNNING", "runtime_identity": {"evidence_dir": "/elsewhere/x"}}]}
+    f = health.normal_end_due(reg, tmp_path)[0]
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+    reg["instances"][0]["runtime_identity"] = {}
+    assert health.normal_end_due(reg, tmp_path)[0]["severity"] == health.WARNING
+    reg["instances"][0]["runtime_identity"] = {"evidence_dir": "/freqtrade/user_data/lanes/x"}
+    f = health.normal_end_due(reg, tmp_path)[0]  # the lane directory itself is absent (wrong root, unmounted)
+    assert f["severity"] == health.WARNING and "UNPROVEN" in f["detail"]
+    (tmp_path / "lanes" / "x").mkdir(parents=True)  # present, no ledger yet: no lifecycle completed
+    assert health.normal_end_due(reg, tmp_path)[0]["severity"] == health.INFO
+
+
+@pytest.mark.parametrize("state", ["restarting", "paused", "removing", "weird"])
+def test_a_paper_container_that_is_not_cleanly_stopped_counts_as_executing(state):
+    f = health.paper_runtime_vs_registry({"instances": []}, {"tradinglab-fp-control-3-x": state})
+    assert f[0]["check"] == "unauthorized_execution" and f[0]["severity"] == health.CRITICAL, state
+    for stopped in ("exited", "created", "dead"):
+        f = health.paper_runtime_vs_registry({"instances": []}, {"tradinglab-fp-control-3-x": stopped})
+        assert f[0]["severity"] == health.INFO, stopped
+
+
+def test_a_restarting_paper_container_has_its_env_inspected_for_live_switches(tmp_path):
+    calls = []
+
+    def docker(cmd):
+        calls.append(cmd)
+        if cmd[0] == "ps":
+            return subprocess.CompletedProcess(cmd, 0, "tradinglab-fp-control-3-x\trestarting\n", "")
+        return subprocess.CompletedProcess(cmd, 0, "FREQTRADE__DRY_RUN=false\n", "")
+    out = health.s19_findings({"instances": []}, paper_configs=[_cfg(tmp_path)], env_files=[], ledger=tmp_path / "l",
+                              archive_roots=[], config_checker=lambda c: [], ledger_verifier=lambda p: [],
+                              archive_verifier=lambda a: {}, docker_runner=docker)
+    rm = next(f for f in out if f["check"] == "real_money")
+    assert rm["severity"] == health.CRITICAL and "FREQTRADE__DRY_RUN" in rm["detail"]
+    assert any(c[0] == "inspect" for c in calls)
+
+
+def test_a_textfile_that_cannot_be_written_is_critical_and_leaves_the_old_file_to_go_stale(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("hc_textfile", REPO_ROOT / "scripts" / "p3" / "health_check.py")
+    hc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hc)
+    prom = tmp_path / "tlos_p3_health.prom"
+    prom.write_text("tlos_p3_health_overall 0\n", encoding="utf-8")
+    old = prom.stat().st_mtime_ns
+    monkeypatch.setattr(hc.health, "standard_findings",
+                        lambda *a, **k: [{"check": "clock_sync", "severity": health.INFO, "detail": "ok"}])
+    monkeypatch.setattr(hc.health, "default_s19_inputs", lambda root: {})
+
+    def disk_full(findings, path):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(hc.health, "write_textfile", disk_full)
+    assert hc.main(["--prom-textfile", str(prom)]) == 2
+    out = capsys.readouterr().out
+    assert "health_run" in out and "HEALTH = CRITICAL" in out
+    # the previous file is untouched: its mtime stops advancing and TLOSHealthTextfileStale takes over
+    assert prom.stat().st_mtime_ns == old and prom.read_text(encoding="utf-8") == "tlos_p3_health_overall 0\n"

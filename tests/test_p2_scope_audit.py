@@ -1565,6 +1565,145 @@ P3_PLN_04_07_REBOOT_SCOPE: dict[str, str] = {
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
+# PR #90, merged. Two parents: f584cd43 (main before) + 7dc59b6e
+# (P3-PLN-06 unexpected writer). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_06_WRITER_MERGE = "257272c4e854a6e232cb79d51884876d1281e15c"
+
+# P3-PLN-06 §19 "unexpected writer": auditd-first evaluation and design, a read-only rules generator and
+# audit-log classifier (fail-closed finding), synthetic tests only. Nothing installed; not wired into the hourly
+# health run. No runtime, strategy, risk, dataset, registry or evidence change.
+_P06UW = "P3-PLN-06 unexpected writer"
+P3_PLN_06_WRITER_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_06_UNEXPECTED_WRITER.md": f"{_P06UW} — auditd-first design, protected paths, writers, acceptance tests AT-1..AT-7",
+    "research/p3/writer_watch.py": f"{_P06UW} — auditd rules generator + read-only classifier; UNEXPECTED → CRITICAL, unknown → UNPROVEN",
+    "tests/test_p3_writer_watch.py": f"{_P06UW} — synthetic audit records only; fail-closed mapping",
+    "docs/p3/PLN_06_ALERTING.md": f"{_P06UW} — cross-reference PR #90; record the routing and label tests",
+    "scripts/p3/ops/rules/tlos_p3_alerts.test.yml": f"{_P06UW} — promtool: unexpected_writer 2/1 pages via the generic rules",
+    "tests/test_p3_alerting.py": f"{_P06UW} — amtool routing: null until chosen; watchdog → deadman; critical/warning → channel",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+    "tests/fixtures/p3_writer_watch_selftest.audit": f"{_P06UW} — round 3: synthetic AT-0 self-test fixture (EXPECT lines)",
+    "research/p3/health.py": f"{_P06UW} — round 3: five §19/health fail-opens fixed (unknown state is never INFO)",
+    "tests/test_p3_health_s19.py": f"{_P06UW} — round 3: regression tests for the health fail-opens + textfile-write failure",
+    "scripts/p3/ops/alertmanager.yml.template": f"{_P06UW} — round 3: the Owner edit sets the root receiver too",
+}
+
+# PR #98, merged. Two parents: 257272c4 (main before) + 0e2d4b12
+# (P3 backup store configuration). These entries were BRANCH_SCOPE while it was in flight.
+P3_STORAGE_CONFIG_MERGE = "3e1dca8bee2406eab38da1e4ce166d53d839f422"
+
+# P3 backup store configuration: one governed source (research/p3/storage.py) for the backup mount and target,
+# read by the backup wrapper, the health check, the Control Room and the reboot snapshot; fail-closed. Follows the
+# Owner-reported 2026-10-29 move of the backup store off /mnt/tlos-wdc. No host change.
+_STC = "P3 backup store configuration"
+P3_STORAGE_CONFIG_SCOPE: dict[str, str] = {
+    "research/p3/storage.py": f"{_STC} — resolution (env, host file, historical default) and fail-closed validation",
+    "research/p3/health.py": f"{_STC} — backup_storage / mount / mount_uuid findings from the configured store",
+    "research/p3/control_room.py": f"{_STC} — backup sets listed from the configured store",
+    "scripts/p3/health_check.py": f"{_STC} — --backup-target defaults to the configured store",
+    "scripts/p3/recovery.py": f"{_STC} — the reboot snapshot records the configured store",
+    "scripts/p3/scheduled_backup.sh": f"{_STC} — refuses an unusable configuration, an unmounted store or another UUID",
+    "scripts/p3/units/tlos-p3-backup.service": f"{_STC} — no hard-coded RequiresMountsFor",
+    "tests/test_p3_storage.py": f"{_STC} — resolution, refusal, live preflight (symlink, nested mount, UUID) and every consumer",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_STC} — configuration section and host steps (NOT_RUN)",
+    "tests/test_p2_scope_audit.py": "P3-PLN-06 unexpected writer (PR #90) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #99, merged. Two parents: 3e1dca8b (main before) + 38628122
+# (P3 security hardening). These entries were BRANCH_SCOPE while it was in flight.
+P3_SECURITY_HARDENING_MERGE = "741e3118653d0ffd422f5093bf99b0ab0b4e98a1"
+
+# P3 security hardening from the 2026-10-30 pre-CI security audit (SEC-12, SEC-15 .gitignore). scripts/*.py and
+# scripts/*.sh are the frozen runtime surface (research/fp/semantic_identity.py) and are not touched here.
+# Repository-only; no secret value anywhere; no host change.
+_SEC = "P3 security hardening"
+P3_SECURITY_HARDENING_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_SEC} — SEC-12: the drill never restores ownership or setuid/setgid bits",
+    ".gitignore": f"{_SEC} — SEC-15: backup/runtime artifacts and rendered compose output ignored",
+    "tests/test_repo_hygiene.py": f"{_SEC} — ignore cases for SEC-15",
+    "tests/test_p3_backup.py": f"{_SEC} — SEC-12 setuid/ownership regression (fails before the fix)",
+    "tests/test_p2_scope_audit.py": "P3 backup store configuration (PR #98) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #95, merged. Two parents: 741e3118 (main before) + 776fffd8
+# (P3-PLN-05 destination decisions). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_05_DESTINATION_MERGE = "c6815443fd158ec70672529ecf0628ab6f8855e3"
+
+# P3-PLN-05 destination decisions: the Owner's 2026-10-27 decisions that the Toshiba USB disk is personal,
+# portable storage holding an Owner-carried copy that is not Tier-3, and that the second Windows PC only reads
+# and checks that copy (its earlier evaluation as a Tier-3 destination is withdrawn). Documents only; PLN-05
+# stays OPEN; nothing run on any machine.
+_R05D = "P3-PLN-05 destination decisions"
+P3_PLN_05_DESTINATION_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_R05D} — portable copy is not Tier-3; Windows PC withdrawn as a "
+                                               "destination; unresolved Tier-3 requirements and destination classes",
+    "docs/p3/PLN_05_PORTABLE_COPY_DRILL.md": f"{_R05D} — read-only integrity check and optional restore drill of the "
+                                             "portable copy on the Windows PC (NOT_RUN)",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_R05D} — §2 pointer; hardened §4 gate (injection fix); §6 anchor to the "
+                                         "original; §10 testable Tier-3 requirements",
+    "research/p3/backup.py": f"{_R05D} — compare_hash_export: a Windows Get-FileHash export of the portable copy "
+                             "checked with verify_backup's rules",
+    "scripts/p3/backup.py": f"{_R05D} — compare-export subcommand (read-only; refuses to write into the set)",
+    "tests/test_p3_portable_copy.py": f"{_R05D} — compare_hash_export negative controls on synthetic sets",
+    "tests/test_p3_offsite_gate.py": f"{_R05D} — the §4 forced-command gate, run from the procedure text: "
+                                     "refusals and the commands offsite.py issues",
+    "tests/test_p2_scope_audit.py": "P3 security hardening (PR #99) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #96, merged. Two parents: c6815443 (main before) + bbf7f379
+# (P3-PLN-04/07 residuals). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_04_07_RESIDUALS_MERGE = "fd1ba8ab57796f03cd2ec610b4a9b7cd7760156e"
+
+# P3-PLN-04/07 residuals: §13 data-truth coverage evidence, the PLN-04 power-loss (UPS) decision packet
+# and decision H (unattended upgrades). Repository-only; nothing run or changed on the host.
+_R47R = "P3-PLN-04/07 residuals"
+# P3-PLN-04/07 residuals: the PLN-07 §13 data-truth coverage record with tests for the live-feed validators,
+# the PLN-04 power-loss decision packet (G) and decision H (unattended upgrades). Documents and tests only;
+# no production code, no host change.
+_R0407 = "P3-PLN-04/07 residuals"
+P3_PLN_04_07_RESIDUALS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_R0407} — §13 item → control → test → evidence class; PLN-07 PARTIAL",
+    "tests/test_p3_data_truth.py": f"{_R0407} — the live-feed validators (fp/market.py) and the never-filled rule, "
+                                   "exercised on synthetic data",
+    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_R0407} — decision packet G: UPS / accepted-risk / hybrid options",
+    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_R0407} — decision H: governed unattended-upgrade "
+                                                           "policy, procedures NOT_RUN",
+    "tests/test_p2_scope_audit.py": "P3-PLN-05 destination decisions (PR #95) pinned to its merge; this branch's scope",
+    "research/p3/data_truth.py": f"{_R0407} — G-1 captured-ledger missing-bar audit and G-2 exact L-vs-F "
+                                 "comparator; read-only, fail-closed",
+    "scripts/p3/data_truth.py": f"{_R0407} — CLI for the G-1/G-2 data-truth audits; refuses to write into evidence",
+    "tests/test_p3_data_truth_audits.py": f"{_R0407} — G-1/G-2 synthetic negative controls and the G-4 "
+                                          "frozen-universe config pin",
+    "research/p3/recovery.py": f"{_R0407} — reboot check judges REQUIRED_AT_BOOT units (enabled/active) and "
+                               "linger, and the snapshot reports boot_posture; read-only",
+    "tests/test_p3_recovery.py": f"{_R0407} — boot-posture cases incl. the 2026-10-30 hand-started runtime "
+                                 "that did not return after a power loss",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_R0407} — boot-posture finding and rule (2026-10-30); RUN 3 verdict not "
+                                  "re-evaluated",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+# PR #91, merged. Two parents: fd1ba8ab (main before) + 67f4ab53
+# (P3-PLN-10 acceptance program). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN_10_ACCEPTANCE_MERGE = "972099a6501edd26cf52a0895cae2e19a8b0a4be"
+
+# P3-PLN-10 Paper Beta Acceptance Program (DRAFT): the acceptance matrix (reusing the merged PLN-02..09 procedures),
+# the evidence schema, the run configuration that blocks until the five Owner decisions are set, and fail-closed
+# validators, developed against synthetic evidence. No run, no cohort, no T0, no launch, no acceptance claim.
+_P10 = "P3-PLN-10 acceptance program"
+P3_PLN_10_ACCEPTANCE_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_P10} — DRAFT: matrix, evidence, safety, procedure, stops, rollback",
+    "research/p3/acceptance.py": f"{_P10} — matrix, evidence schema, run config (Owner decisions), fail-closed validators",
+    "tests/test_p3_acceptance.py": f"{_P10} — synthetic positive/negative cases; never PASS by default",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_P10} — walkthrough only: current preconditions, F-CR-1, RUN_ID for S-UI reuse",
+    "docs/p3/PLN_10_OWNER_DECISION_PACKET.md": f"{_P10} — round 3: D1–D5 options, consequences, validator requirements; nothing chosen",
+    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 residuals (PR #96) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
 
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
@@ -1633,6 +1772,12 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_04_05_RUNBOOKS": (P3_PLN_04_05_RUNBOOKS_MERGE, P3_PLN_04_05_RUNBOOKS_SCOPE),
     "P3_PLN_06_DELIVERY": (P3_PLN_06_DELIVERY_MERGE, P3_PLN_06_DELIVERY_SCOPE),
     "P3_PLN_04_07_REBOOT": (P3_PLN_04_07_REBOOT_MERGE, P3_PLN_04_07_REBOOT_SCOPE),
+    "P3_PLN_06_WRITER": (P3_PLN_06_WRITER_MERGE, P3_PLN_06_WRITER_SCOPE),
+    "P3_STORAGE_CONFIG": (P3_STORAGE_CONFIG_MERGE, P3_STORAGE_CONFIG_SCOPE),
+    "P3_SECURITY_HARDENING": (P3_SECURITY_HARDENING_MERGE, P3_SECURITY_HARDENING_SCOPE),
+    "P3_PLN_05_DESTINATION": (P3_PLN_05_DESTINATION_MERGE, P3_PLN_05_DESTINATION_SCOPE),
+    "P3_PLN_04_07_RESIDUALS": (P3_PLN_04_07_RESIDUALS_MERGE, P3_PLN_04_07_RESIDUALS_SCOPE),
+    "P3_PLN_10_ACCEPTANCE": (P3_PLN_10_ACCEPTANCE_MERGE, P3_PLN_10_ACCEPTANCE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1647,7 +1792,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "docs/p3/PLN_11_EXECUTION_PACK_STRUCTURE.md": f"{_P11} — pack contents, reproducibility, later freeze rule",
     "research/p3/exec_pack.py": f"{_P11} — draft generator; evidence index keyed by the PLN-10 evidence ids",
     "tests/test_p3_exec_pack.py": f"{_P11} — synthetic repos: byte-identical, never frozen, missing recorded, one id space",
-    "tests/test_p2_scope_audit.py": "P3-PLN-04/07 reboot record (PR #94) pinned to its merge; this branch's scope",
+    "tests/test_p2_scope_audit.py": "P3-PLN-10 acceptance program (PR #91) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

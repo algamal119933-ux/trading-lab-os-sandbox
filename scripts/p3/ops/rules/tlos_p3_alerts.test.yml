@@ -184,6 +184,9 @@ tests:
         values: '0 2 2'
       - series: 'tlos_p3_health_check{check="clock_sync"}'
         values: '1 1 1'
+      # a health run that raised (scripts/p3/health_check.py main): the only label its textfile carries
+      - series: 'tlos_p3_health_check{check="health_run"}'
+        values: '0 2 2'
     alert_rule_test:
       - eval_time: 2m
         alertname: TLOSHealthCritical
@@ -192,6 +195,10 @@ tests:
             exp_annotations:
               summary: "TLOS health CRITICAL: timer:tlos-p3-health.timer"
               description: "P3 health check timer:tlos-p3-health.timer is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+          - exp_labels: {severity: critical, check: "health_run"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: health_run"
+              description: "P3 health check health_run is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
       - eval_time: 2m
         alertname: TLOSHealthWarning
         exp_alerts:
@@ -199,3 +206,27 @@ tests:
             exp_annotations:
               summary: "TLOS health WARNING: clock_sync"
               description: "P3 health check clock_sync is WARNING."
+  # PLN-06 unexpected writer (PR #90): the label research/p3/writer_watch.py will emit once wired pages through the
+  # generic rules with no rule change — CRITICAL (an UNEXPECTED write) and WARNING (UNPROVEN watch state).
+  - interval: 1m
+    input_series:
+      - series: 'tlos_p3_health_check{check="unexpected_writer"}'
+        values: '0 2 2 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: TLOSHealthCritical
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: TLOSHealthCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, check: "unexpected_writer"}
+            exp_annotations:
+              summary: "TLOS health CRITICAL: unexpected_writer"
+              description: "P3 health check unexpected_writer is CRITICAL (§19: immediate Owner attention). Read the journal: journalctl --user -u tlos-p3-health.service -n 20"
+      - eval_time: 4m
+        alertname: TLOSHealthWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, check: "unexpected_writer"}
+            exp_annotations:
+              summary: "TLOS health WARNING: unexpected_writer"
+              description: "P3 health check unexpected_writer is WARNING."
