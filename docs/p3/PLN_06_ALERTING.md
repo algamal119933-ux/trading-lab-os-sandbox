@@ -15,8 +15,8 @@ tlos-p3-health.timer (hourly, exists) → scheduled_health.sh → ~/tlos-paper/p
   → prometheus-node-exporter textfile collector (Ubuntu package, 127.0.0.1:9100)       [OWNER: install]
   → tlos-p3-prometheus (prom/prometheus:v3.14.0, the FP stack's image, 127.0.0.1:9091) rules: scripts/p3/ops/rules/
   → tlos-p3-alertmanager (prom/alertmanager:v0.28.1, 127.0.0.1:9093)                 [OWNER: channel + secrets]
-  → Telegram or ntfy (critical: now, repeat 1 h · warning: grouped, repeat 12 h)
-  → TLOSWatchdog (always firing) → healthchecks.io / remote Uptime Kuma push URL       [OWNER: optional account]
+  → ntfy, Owner decision 2026-11-03 (critical: now, repeat 1 h · warning: grouped, repeat 12 h)
+  → TLOSWatchdog (always firing) → healthchecks.io dead-man, Owner decision 2026-11-03   [OWNER: account; mandatory, §3 step 7]
 ```
 - `scripts/p3/ops/docker-compose.p3-ops.yml` is a **separate compose project** (`tlos-p3-ops`). It is not the FP runtime, has no
   trading component, no exchange credential and no published port: host networking with every listener on 127.0.0.1.
@@ -94,7 +94,7 @@ Classification: COVERED · PARTIAL · NOT_COVERED · NOT_APPLICABLE · UNPROVEN.
 | Condition | What covers it | Classification |
 |---|---|---|
 | **Database integrity** | Sealed `tradesv3.sqlite` files are covered by `evidence_chain:sealed_archives`, which rehashes them hourly. No live trading DB exists while no cohort runs. The Prometheus/Grafana/MLflow volumes are non-authoritative; they are backed up but not integrity-checked | **PARTIAL.** Sealed: COVERED. Live DB: NOT_APPLICABLE now; it belongs to the runtime that owns it (H1 lane / PLN-10). Monitoring volumes: NOT_COVERED, non-authoritative |
-| **Evidence writers** (who writes protected paths) | auditd-first design and classifier, [`PLN_06_UNEXPECTED_WRITER.md`](PLN_06_UNEXPECTED_WRITER.md) (PR #90). Content tampering on sealed evidence is caught by the rehash; the ledger chain is checked hourly | **NOT_COVERED** on the host until auditd is installed and AT-1..AT-7 pass. The repository side is prepared |
+| **Evidence writers** (who writes protected paths) | auditd-first design and classifier, [`PLN_06_UNEXPECTED_WRITER.md`](PLN_06_UNEXPECTED_WRITER.md) (PR #90). Content tampering on sealed evidence is caught by the rehash; the ledger chain is checked hourly | **NOT_COVERED** on the host until auditd is installed and AT-0..AT-7 pass. The repository side is prepared |
 | **Monitoring self-failure** | `health_run` CRITICAL when the run raises (exit 2 plus a CRITICAL textfile). `timer:tlos-p3-health.timer` CRITICAL when the hourly timer is not scheduled (new). `TLOSHealthTextfileStale` / `TLOSHealthTextfileMissing` when the job silently stops. `TLOSNodeExporterDown`. `TLOSWatchdog` goes to the off-host dead-man | **PARTIAL / UNPROVEN.** The in-run checks are COVERED in tests. The unattended rule leg (stale textfile, exporter down, watchdog) is UNPROVEN until node-exporter, the ops plane and a channel are installed and the §3 acceptance passes |
 | **Monitoring blind spots** | Host down, power loss, network loss or a dead Alertmanager. Only an off-host dead-man (healthchecks.io / remote Uptime Kuma receiving `TLOSWatchdog`) can report these | **NOT_COVERED** until §3 step 7 (dead-man) is done; that step is mandatory for PLN-06 acceptance (see §4). The desktop notification from `scheduled_health.sh` reaches the Owner only while logged in at the host |
 | **Startup after reboot** | Hourly `mount:/mnt/tlos-wdc` (CRITICAL), the timer checks, `clock_sync` (new), and `TLOSHealthTextfileStale` if the first post-boot run does not happen. Formal correctness comes from PLN-04 `verify-boot` (reboot runbook) | **PARTIAL / UNPROVEN.** The hourly checks are COVERED in tests. Post-boot correctness waits on the planned reboot acceptance (PLN-04/07, Owner) |
@@ -138,6 +138,12 @@ What the system shows and does when a link of the alert path itself fails, and w
   "round 3"). §1.4 records what each alert-path failure shows and how the Owner recovers.
 
 ## 3. Owner runbook: installation and delivery acceptance (exact steps)
+**Owner decision (2026-11-03).** Channel = **ntfy** (a private topic; `secrets/ntfy_url`), so step 4 takes the ntfy
+branch. Dead-man = **healthchecks.io** (period 5 min, grace 15 min; `secrets/deadman_url`), so step 7 takes that
+branch. The Owner selected both in the 2026-11-03 coordinator session; this record is their written form. The
+accounts, the secrets and every install step still need the Owner, step by step. The channel-failure residual
+(§1.4) is covered by repeating step 6 on a schedule the Owner sets.
+
 **Preconditions (all of them, in order):**
 1. The planned reboot acceptance (PLN-04/07, [`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), record in [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) has PASSED. The host freeze is lifted by the Owner.
 2. `~/projects/trading/tlos-p3` is updated to a main that contains this document, by an Owner action.

@@ -21,16 +21,16 @@ every acceptance to hold in the same continuous run. Nothing is waived.
 
 ## 1. Prerequisites. All must hold before T0
 1. **PLN-02 to PLN-09 are each accepted by their own merged record** (contract §5: PLN-10 "needs PLN-02..PLN-09").
-   State on main `f584cd43`, from `research/p3/records/p3_workstreams.json`:
+   State on main `82a53a16` (2026-11-03), from `research/p3/records/p3_workstreams.json`:
 
    | WS | State | What is still open |
    |---|---|---|
    | PLN-02 | ACCEPTED | — |
    | PLN-03 | ACCEPTED | — |
-   | PLN-04 | PARTIAL | Reboot correctness **PASS** ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) reboot record, RUN 3 10/10 with a clean gap attestation, accepted by the merge of PR #94). Open: the power-loss posture (UPS or an accepted posture), an Owner decision |
-   | PLN-05 | PARTIAL | HOST_LOSS_REDUNDANCY = NOT_PROVEN. Needs the independent host and the [`PLN_05_TIER3_PROCEDURE.md`](PLN_05_TIER3_PROCEDURE.md) run |
-   | PLN-06 | PARTIAL | The delivery runbook is merged ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §3, PR #92). The Owner steps 1–8 are pending. The unexpected-writer row is NOT_COVERED |
-   | PLN-07 | PARTIAL | Failure/recovery matrix PASS for every row, including the reboot row (#94). Open: the §13 data-truth evidence |
+   | PLN-04 | PARTIAL | Reboot correctness **PASS** ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) reboot record, RUN 3 10/10 with a clean gap attestation, accepted by the merge of PR #94). Open: the power-loss posture is DECIDED as Option C ([`PLN_04_POWER_LOSS_DECISION.md`](PLN_04_POWER_LOSS_DECISION.md) §6); its UPS leg must be accepted **before T0** |
+   | PLN-05 | PARTIAL | HOST_LOSS_REDUNDANCY = NOT_PROVEN. Destination class A with client-side encryption DECIDED ([`PLN_05_DESTINATION_DECISIONS.md`](PLN_05_DESTINATION_DECISIONS.md) §8). Needs the encryption tool, the VPS and the [`PLN_05_TIER3_PROCEDURE.md`](PLN_05_TIER3_PROCEDURE.md) run |
+   | PLN-06 | PARTIAL | The delivery runbook is merged ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §3, PR #92). Channel ntfy and dead-man healthchecks.io DECIDED (§3). The Owner steps 1–8 are pending. The unexpected-writer row is NOT_COVERED |
+   | PLN-07 | PARTIAL | Failure/recovery matrix PASS for every row, including the reboot row (#94). Open: the §13 data-truth evidence. Its pre-T0 scope and the G-1/G-2/G-3 decisions are recorded in [`PLN_07_DATA_TRUTH_COVERAGE.md`](PLN_07_DATA_TRUTH_COVERAGE.md) §9 |
    | PLN-08 | ACCEPTED | — |
    | PLN-09 | IN_PROGRESS | 12 of 12 screens and the mobile tabs are bound. The Owner walkthrough ([`PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md`](PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md) §6) is PENDING |
 2. **A complete run configuration** (§8). All five Owner decisions are set in `docs/p3/PLN_10_RUN_CONFIG.json`, by the

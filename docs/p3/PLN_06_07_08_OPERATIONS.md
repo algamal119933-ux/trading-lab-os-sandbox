@@ -64,6 +64,8 @@ HEALTH = WARNING
 The only warning is the uninstalled backup timer. That is an Owner action from PLN-03.
 
 ## Acceptance status (honest)
+*Historical table from this record's merge. Superseded for PLN-06 by [`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4 (delivery path decided: node-exporter textfile, ntfy, healthchecks.io), and for PLN-07 by [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) (failure/recovery matrix PASS, F-4 row included) and [`PLN_07_DATA_TRUTH_COVERAGE.md`](PLN_07_DATA_TRUTH_COVERAGE.md). The current status is `research/p3/records/p3_workstreams.json`.*
+
 | WS | Implemented | Verified | Acceptance |
 |---|---|---|---|
 | PLN-06 | health check, normal-end detection, capacity and RPO alerts | 17 tests + real run | **PARTIAL**. The §19 alert *delivery* (to Prometheus/Grafana) is not done yet. The exporter is in the FP runtime tree; a safe path is a node-exporter textfile or a P3 exporter, to be decided |

@@ -24,6 +24,8 @@ PLN-07 DATA-TRUTH CHECKS (§13)   = PARTIAL
   named gaps                      G-1, G-2, G-4 have a repository control and synthetic tests (§3, §7);
                                   G-3 needs an Owner/design decision (§8); G-5 research-only
   host-side checks                NOT_RUN in P3 (§4)
+  Owner decisions (§9)            DECIDED 2026-11-03: G-3 = (b) recorder; G-2 exact; G-1 host-down rule;
+                                  pre-T0 acceptance split. The G-3 recorder and the G-1 rule are NOT YET BUILT
 PLN-07 overall                   PARTIAL — the failure/recovery matrix is PASS (PLN_04_RECOVERY.md);
                                  the data-truth leg is not complete
 ```
@@ -169,3 +171,24 @@ paper config; it is not asserted here.
 - **G-2 tolerance.** None is stated; the comparator is exact. Any tolerance (for example on volume of the last bar
   read near its close) needs an explicit Owner decision recorded in the contract chain, not a tool default.
 - **Host-side runs.** The §4 checks need the Owner's host and a paper cohort (`PAPER_LAUNCH_AUTHORIZED = NO`).
+
+## 9. Owner decisions (2026-11-03)
+The Owner accepted the recommended package in the 2026-11-03 coordinator session, then chose (b) for G-3 once told
+that (a) presupposes a recording of the engine's bars that does not exist. This record is the written form; the
+Owner's merge of it is the decision. It decides tolerances and sequencing only. It changes no strategy, risk,
+dataset or frozen trading semantics.
+
+| Item | Decision | Consequence |
+|---|---|---|
+| **G-3** engine feed | **(b)**: record F's bars per cycle through the **read-only** Freqtrade API into a separate host-side file, outside the evidence lane and outside `RUNTIME_TREE` | New code, `BUILD_SMALL_MISSING_LAYER`, in its own PR with tests. It must never write into a lane, never call a mutating endpoint, and fail closed (an unreadable or partial recording is UNPROVEN). Its output feeds the existing G-2 comparator |
+| **G-2** tolerance | **None: exact equality**, as the comparator already enforces | No change |
+| **G-1** host-down bars | A bar missed while the host was down counts as explained **only** when an out-of-lane host record covers its whole opportunity: the journal's boot boundaries (`journalctl --list-boots`: the last entry of one boot and the first of the next), a NUT event, or the health/power-event record. Otherwise it stays `UNEXPLAINED` = FAIL | A new class, for example `EXPLAINED_HOST_DOWN`, ranked after the in-lane classes and fed by a host-record input. It needs a small change to `data_truth.audit_input_ledger`, with negative tests (a record that does not cover the whole opportunity explains nothing). It ships in the same PR as the G-3 recorder |
+| **Pre-T0 standalone record** (PLN-10 §1) | PLN-07's data-truth leg is accepted **before T0** on: (1) the repository controls (§7); (2) host runs of the dataset `--lock` audit, NTP (`clock_sync`), and G-1 on the **sealed P2 FP-CONTROL-3 input ledger** (the only real cohort ledger); (3) the G-3 recorder and G-1 rule merged and tested. The live-cohort G-1 and the real L-vs-F G-2 run **inside the PLN-10 window** (S-AUDIT, `PLN-07.data_truth`), where they were always going to be re-executed | This resolves the sequencing conflict: PLN-10 §1 needs PLN-07 accepted before T0, but a live ledger and engine bars exist only after T0. Nothing is waived: a FAIL in the window fails the run |
+
+**What the P2 run proves, and what it cannot.** The sealed P2 ledger is expected to contain the 74 host-down
+bar-hours per pair recorded in `P2_CLOSURE` §4. P2 is CLOSED, so the run on it is an **execution check of the
+tool on real data**, not a re-judgement of P2. Its findings are recorded exactly as reported, never repaired. Bars
+covered by attached boot boundaries are `EXPLAINED_HOST_DOWN`; any others stay `UNEXPLAINED` and are listed with
+their intervals. A historical `UNEXPLAINED` interval does not block T0. A tool defect does: a finding that
+contradicts `P2_CLOSURE` §4–§5, an UNPROVEN result on a readable ledger, or a broken chain. The live-cohort run
+in the PLN-10 window gets no such allowance: there, `UNEXPLAINED` is FAIL.

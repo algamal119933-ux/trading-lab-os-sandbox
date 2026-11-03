@@ -9,8 +9,10 @@ power posture (UPS) is an Owner decision". The acceptance record is
 PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO
 
 ```text
-PLN-04 POWER-LOSS POSTURE  = OPEN (this packet; the Owner decides)
-PLN-04                     = not CLOSED until a posture is recorded
+PLN-04 POWER-LOSS POSTURE  = DECIDED: Option C (Owner, 2026-11-03; §6). In force when this record is merged
+  B leg (accepted risk)    = IN FORCE for the current non-trading state; post-power-loss procedure after each unclean boot
+  A leg (UPS + NUT)        = REQUIRED BEFORE PLN-10 T0; NOT_RUN (purchase, install and FSD test pending)
+PLN-04                     = not CLOSED: the A leg is open, and PLN-10 needs it
 ```
 
 Every command here is `NOT_RUN`. Each is a host change or a host read that needs the Owner's explicit
@@ -155,3 +157,19 @@ Two Owner facts could change this:
 
 **This recommendation decides nothing.** PLN-04's power-loss posture stays OPEN until the Owner records A, B
 or C.
+
+## 6. Owner decision (2026-11-03)
+| Field | Value |
+|---|---|
+| Decision | **Option C**: B now, A before the PLN-10 acceptance run |
+| How it was given | The Owner selected "UPS before T0 (recommended)" in the 2026-11-03 coordinator session, from the options of this packet. **This record is the decision's written form; the Owner's merge of it is the signature** |
+| B leg scope | Accepted risk of unclean power loss **for the current non-trading state only** (`PAPER_LAUNCH_AUTHORIZED = NO`). It does not cover a paper runtime |
+| B leg obligations | The §3 Option B post-power-loss procedure after **every** unexpected boot, and a §4 power-event register row for each, from attached output only |
+| A leg | A UPS with NUT clean shutdown, accepted by the §3 Option A criteria (1)–(3), **before PLN-10 T0**. If it is not accepted by then, the PLN-10 record must say the run went under B (§3 Option C). The A leg's FSD test is planned as the single controlled pre-T0 reboot, so it also serves the next verify-boot baseline |
+| Owner inputs still needed (A leg) | UPS make/model and VA/W; the measured workstation load (GPU included); runtime at that load ≥ 10 min; the BIOS "Restore on AC power loss" setting, checked first; that the store HDD is on a protected outlet |
+| Host changes | None by this record. `apt install nut`, its configuration and the FSD test window each need their own Owner authorization |
+
+**Path note for the procedure in §3 Option B.** It was written when backups lived under `/mnt/tlos-wdc`. Since the
+2026-10-29 store migration, the store is resolved by `research/p3/storage.py` (`~/.config/tlos-p3/storage.json`;
+there is no implicit default). Replace the two `/mnt/tlos-wdc/tlos-backups` paths with the configured
+`backup_target` when running it.
