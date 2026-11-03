@@ -1976,6 +1976,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/backup.py": f"{_HI} — coverage --json report, create --coverage-report, mirror, runtime-check",
     "tests/test_p3_backup_host_integration.py": f"{_HI} — binding refusals, concurrency, mirror interruptions, runtime",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_HI} — host integration support and its limits",
+    "scripts/p3/ops/tlos_runtime_backup.sh": f"{_HI} — the host's effective backup wrapper, governed: verbatim, then patched",
     "tests/test_p2_scope_audit.py": "P3 Control Room backup truth (PR #108) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
