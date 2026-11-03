@@ -67,8 +67,9 @@ PLN-04  terminal-state guard         PASS (negative tests + real refusal of FP-C
         host-recovery drill          PASS (restore drill, newest set)
         reboot correctness           PASS — planned reboot 2026-10-27 verify-boot PASS 10/10; gap attestation
                                      2026-10-27 clean (record below); accepted by the Owner's merge of this record
-        power-loss posture           OPEN — contract §4 PLN-04 lists it; UPS or an accepted posture is an Owner
-                                     decision (decision packet G). PLN-04 is not CLOSED until it is recorded
+        power-loss posture           DECIDED 2026-11-03: Option C (PLN_04_POWER_LOSS_DECISION.md §6) — accepted
+                                     risk now for the non-trading state; UPS + NUT accepted before PLN-10 T0.
+                                     PLN-04 is not CLOSED until the UPS leg is accepted
 PLN-07  failure/recovery matrix      PASS for every row, including the reboot row (as above)
         data-truth checks (§13)      not evidenced in docs/p3 by this record; PLN-07 stays PARTIAL until they are
 PLN-06  alert delivery               Prometheus textfile implemented; wiring it into a scrape (node-exporter

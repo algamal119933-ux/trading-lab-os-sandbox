@@ -11,7 +11,8 @@ PLN-05 TIER-3 ACCEPTANCE   = OPEN
 HOST_LOSS_REDUNDANCY       = NOT_PROVEN
 PORTABLE_COPY (Toshiba)    = EXISTS (OWNER-REPORTED) · supplementary · NOT Tier-3
 WINDOWS_SIDE_SHA256_CHECK  = NOT_RUN
-TIER3_DESTINATION          = NONE CHOSEN (the Windows PC is WITHDRAWN as a destination, §3)
+TIER3_DESTINATION          = CLASS A (VPS, Owner root) CHOSEN 2026-11-03 (§8) · provider NOT PROVISIONED
+DATA_AT_REST (item 7)      = CLIENT-SIDE ENCRYPTION BEFORE UPLOAD (§8) · tool NOT YET BUILT (separate PR)
 ```
 
 Claude ran nothing on any machine for this record. It has not seen the host output behind any OWNER-REPORTED
@@ -119,3 +120,22 @@ Owner's sites, which only the Owner can weigh.
 
 Until a destination is chosen, pushed to and restored from, PLN-05 Tier-3 stays **OPEN** and
 `HOST_LOSS_REDUNDANCY = NOT_PROVEN`.
+
+## 8. Owner decision (2026-11-03)
+The Owner selected "VPS + encryption before upload (recommended)" in the 2026-11-03 coordinator session. This
+record is its written form; the Owner's merge of it is the decision.
+
+| Item (§5) | Decision | Still needed |
+|---|---|---|
+| 1. Destination | **Class A**: a VPS or cloud VM on which the Owner has root (§6). The Windows PC stays withdrawn; the Toshiba copy stays supplementary, not Tier-3 | Provider, region and account (Owner); the §9 inputs of the procedure |
+| 2. Capacity | ≥ 30 GB, 50 GB recommended (unchanged) | Sized when provisioned |
+| 3. Transport | Unchanged: the `tlos-offsite` account and the forced-command gate (procedure §4) | Gate install by the Owner |
+| 7. Data at rest | **Client-side encryption before upload.** The workstation encrypts each verified set to a public key; only ciphertext and its sha256 leave the host. The decryption key is **never** stored on the workstation or the destination; it is kept by the Owner off the host (for example the Windows PC plus an offline copy) and is brought only to a restore drill | The encryption tool: a new reuse decision, `AUDIT_BEFORE_USE`, delivered with tests in its own PR. Until it is merged and installed, **no set is uploaded** |
+
+Effects:
+- **Nothing is uploaded unencrypted.** The current `offsite.py` push (plaintext rsync) must not be pointed at the
+  destination until the encryption step is merged; procedure T3-R8 reads this record.
+- The restore proof (T3-R7) gains one step: pull the ciphertext, verify its sha256, decrypt into an empty scratch
+  directory on the drill machine with the off-host key, then run the unchanged `backup.py verify` and `drill`.
+- The provider then holds only ciphertext. The residual risks are key loss (mitigated by two Owner-held copies)
+  and a compromised workstation encrypting bad data, which the restore drill detects.

@@ -9,14 +9,14 @@ The Owner performs this walkthrough. It is **preparation only**. This file grant
 
 This walkthrough needs **no runtime and no trading authority**. It reads one static, offline page. It never starts, stops or changes anything, and it does not need, imply or grant any paper or live launch (`PAPER_LAUNCH_AUTHORIZED = NO`).
 
-Preconditions, as of main `f584cd43`:
+Preconditions, as of main `82a53a16` (2026-11-03):
 
 | # | Precondition | State |
 |---|---|---|
 | P1 | The planned reboot and its `verify-boot` check ([`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), PLN-04/07) | **Done.** RUN 3 PASS 10/10, gap attestation clean, accepted by the merge of PR #94 ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) |
 | P2 | The Control Room mobile slice and this checklist merged | **Done** (PR #88) |
-| P3 | The Owner lifts the host freeze for the controlled `tlos-p3` update only, and updates `~/projects/trading/tlos-p3` to an Owner-chosen main SHA ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions", item 3; item 2 was met by the merge of PR #94) | **Open (Owner)** |
-| P4 | The first hourly health run after that update has been read; a CRITICAL there is handled first ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4, last paragraph) | **Open** |
+| P3 | The Owner lifts the host freeze for the controlled `tlos-p3` update only, and updates `~/projects/trading/tlos-p3` to an Owner-chosen main SHA ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions", item 3; item 2 was met by the merge of PR #94) | **Done (OWNER-REPORTED):** the tools checkout was updated to main `6d2f2075` on 2026-10-31. Record its `git rev-parse HEAD` at `PLN09-W-ID` |
+| P4 | The first hourly health run after that update has been read; a CRITICAL there is handled first ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4, last paragraph) | **Done (OWNER-REPORTED):** first run read, HEALTH = INFO. Re-read the latest run before the walkthrough |
 
 > **Not before P3 and P4.** Until then, do not update `tlos-p3`, do not restart any service, and do not start any runtime.
 >
@@ -99,7 +99,7 @@ CI green is not host acceptance. A merged PR is not operational closure.
 - No off-host observation exists yet (PLN-05 Tier 3 / PLN-06).
 - Until node-exporter and an alert channel are installed (PLN-06), a CRITICAL finding is visible here and in the journal/desktop notification, but is not pushed to the phone.
 - Incidents have no acknowledge/close workflow in the view (operator CLI only, by design).
-- **F-CR-1 (integration finding; fixed by PR #97, open until that PR is merged):** the host-reboot recovery state is a fixed text in `research/p3/control_room.py` (`LIVE.ops.reboot` and the Resume "unverified" list), not read from the PLN-04 record. Since PR #94 it understates the evidence. It is conservative (never shows green without evidence), but it is not accurate, and it is fixed only by a Control Room PR.
+- **F-CR-1 (integration finding; fixed by PR #97, merged as `6d2f2075`, so S10 must now show the record-backed text):** the host-reboot recovery state is a fixed text in `research/p3/control_room.py` (`LIVE.ops.reboot` and the Resume "unverified" list), not read from the PLN-04 record. Since PR #94 it understates the evidence. It is conservative (never shows green without evidence), but it is not accurate, and it is fixed only by a Control Room PR.
 
 ## 6. Owner sign-off (filled by the Owner in the Owner's own PR)
 ```text
