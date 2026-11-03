@@ -192,3 +192,20 @@ covered by attached boot boundaries are `EXPLAINED_HOST_DOWN`; any others stay `
 their intervals. A historical `UNEXPLAINED` interval does not block T0. A tool defect does: a finding that
 contradicts `P2_CLOSURE` §4–§5, an UNPROVEN result on a readable ledger, or a broken chain. The live-cohort run
 in the PLN-10 window gets no such allowance: there, `UNEXPLAINED` is FAIL.
+
+## 10. Implementation of the §9 decisions (G-3 recorder, G-1 host-down rule)
+Repository only. Nothing is installed or scheduled on the host, and nothing runs without a paper engine (`PAPER_LAUNCH_AUTHORIZED = NO`).
+
+| Item | Implementation | Fail-closed behaviour |
+|---|---|---|
+| **G-1 `EXPLAINED_HOST_DOWN`** | `audit_input_ledger(..., host_down=[…])`, after the in-lane classes. Inputs: `host_down_from_journal_boots` (output of `journalctl --list-boots -o json`: the last entry of one boot to the first entry of the next, rounded **inward** from µs) or records `{start, end, source}` with `source ∈ {journal_boot_boundary, nut, health}`. CLI: `ledger-bars --host-boots F --host-down F` | Explains a bar only when one record covers its **whole** opportunity (close → the lane's next capture). Partial cover, an open-ended opportunity, a foreign source, inverted, unreadable or out-of-calendar times all explain nothing. Rejected records are listed in `host_down_records.rejected` |
+| **G-3 recorder** | `research/p3/engine_bars.py` + `scripts/p3/engine_bars.py`: one cycle per call; `GET /api/v1/pair_candles` per frozen pair; **closed** bars only, appended to a JSONL file. G-2 reads it via `feed-compare --engine-recording F` | GET on `pair_candles` only, and the source holds no mutating verb. The output is refused inside any `evidence` path, the runtime checkout, `research/fp`, the H1 lane or the operator ledger (resolved, so symlinks are caught). The write is atomic per cycle: any unreadable pair means nothing is written (UNPROVEN). A revision is appended, never overwritten, so the comparator reports the conflict. One writer (flock). Credentials come from the environment and are never printed |
+
+**Reading of "covers its whole opportunity" (§9), for the Owner to confirm.** It is implemented literally, with the
+opportunity as §7 defines it. In practice a boot-boundary interval rarely covers the stretch between the host coming
+back and the lane's next capture, so few historical bars will be `EXPLAINED_HOST_DOWN`. That is the strict,
+fail-closed reading. Any looser reading, for example cover up to the restart only, needs an explicit Owner decision
+and is not a tool default.
+
+Tests: `tests/test_p3_data_truth_g1_g3.py`. Mutations: replacing whole-cover with any-overlap is caught, and so is
+recording the forming bar.
