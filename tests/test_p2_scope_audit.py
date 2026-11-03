@@ -1771,6 +1771,31 @@ P3_STATUS_RECONCILE_101_SCOPE: dict[str, str] = {
 }
 
 
+# PR #103, merged. Two parents: 82a53a16 (main before) + b12f3a87
+# (P3 Owner decisions 2026-11-03). These entries were BRANCH_SCOPE while it was in flight.
+P3_OWNER_DECISIONS_MERGE = "5a12a7804ecfe0a3e7fea5ce0c9608e9144b0cd4"
+
+# P3 Owner decisions 2026-11-03 (records only): decision G = option C, the Tier-3 destination class A with
+# client-side encryption before upload, the alert channel ntfy and dead-man healthchecks.io, the PLN-07 G-1/G-2/G-3
+# decisions and pre-T0 scope; stale status texts brought current. Documents and the status record only; no host,
+# runtime, strategy, risk, dataset or code change.
+_OD = "P3 Owner decisions 2026-11-03"
+P3_OWNER_DECISIONS_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_OD} — decision G = option C recorded (§6); the UPS leg before PLN-10 T0",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_OD} — acceptance status: power-loss posture DECIDED (C)",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_OD} — class A destination and client-side encryption before upload (§8)",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_OD} — T3-R8 status: client-side encryption decided",
+    "docs/p3/PLN_06_ALERTING.md": f"{_OD} — channel ntfy, dead-man healthchecks.io (mandatory); AT-0 named",
+    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_OD} — the historical acceptance table marked superseded",
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_OD} — G-3 (b), G-2 exact, G-1 host-down rule, pre-T0 scope (§9)",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_OD} — preconditions P3/P4 and F-CR-1 brought current",
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_OD} — §1 prerequisite table brought current",
+    "research/p3/records/p3_workstreams.json": f"{_OD} — PLN-04/05/06/07 evidence, Owner/next texts (statuses unchanged)",
+    "tests/test_p2_scope_audit.py": "P3 status reconciliation after #101 (PR #102) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1848,6 +1873,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_STATUS_RECONCILE": (P3_STATUS_RECONCILE_MERGE, P3_STATUS_RECONCILE_SCOPE),
     "P3_DECISION_H_APPLIED": (P3_DECISION_H_APPLIED_MERGE, P3_DECISION_H_APPLIED_SCOPE),
     "P3_STATUS_RECONCILE_101": (P3_STATUS_RECONCILE_101_MERGE, P3_STATUS_RECONCILE_101_SCOPE),
+    "P3_OWNER_DECISIONS": (P3_OWNER_DECISIONS_MERGE, P3_OWNER_DECISIONS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1855,23 +1881,20 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 Owner decisions 2026-11-03 (records only): decision G = option C, the Tier-3 destination class A with
-# client-side encryption before upload, the alert channel ntfy and dead-man healthchecks.io, the PLN-07 G-1/G-2/G-3
-# decisions and pre-T0 scope; stale status texts brought current. Documents and the status record only; no host,
-# runtime, strategy, risk, dataset or code change.
-_OD = "P3 Owner decisions 2026-11-03"
+# P3 Tier-3 client-side encryption, the tool the Owner decision of 2026-11-03 requires (PLN_05_DESTINATION_DECISIONS.md
+# §8): offsite.py gains seal / verify_sealed / open_sealed (GnuPG, WRAP_EXISTING) and refuses a remote push of an
+# unsealed set; the procedure documents the key pair, sealing and opening. No host change; nothing is uploaded.
+_T3E = "P3 Tier-3 client-side encryption"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_04_POWER_LOSS_DECISION.md": f"{_OD} — decision G = option C recorded (§6); the UPS leg before PLN-10 T0",
-    "docs/p3/PLN_04_RECOVERY.md": f"{_OD} — acceptance status: power-loss posture DECIDED (C)",
-    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_OD} — class A destination and client-side encryption before upload (§8)",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_OD} — T3-R8 status: client-side encryption decided",
-    "docs/p3/PLN_06_ALERTING.md": f"{_OD} — channel ntfy, dead-man healthchecks.io (mandatory); AT-0 named",
-    "docs/p3/PLN_06_07_08_OPERATIONS.md": f"{_OD} — the historical acceptance table marked superseded",
-    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_OD} — G-3 (b), G-2 exact, G-1 host-down rule, pre-T0 scope (§9)",
-    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_OD} — preconditions P3/P4 and F-CR-1 brought current",
-    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_OD} — §1 prerequisite table brought current",
-    "research/p3/records/p3_workstreams.json": f"{_OD} — PLN-04/05/06/07 evidence, Owner/next texts (statuses unchanged)",
-    "tests/test_p2_scope_audit.py": "P3 status reconciliation after #101 (PR #102) pinned to its merge; this branch's scope",
+    "research/p3/offsite.py": f"{_T3E} — seal / verify_sealed / open_sealed; remote push of an unsealed set refused",
+    "scripts/p3/offsite.py": f"{_T3E} — CLI --seal and --open modes; push unchanged",
+    "tests/test_p3_offsite_seal.py": f"{_T3E} — ciphertext only, key off host, fingerprint, tamper, wrong key, drill, CLI",
+    "tests/test_p3_offsite_and_units.py": f"{_T3E} — the remote target only ever receives a sealed set",
+    "tests/test_p3_offsite_gate.py": f"{_T3E} — the gate round trip now pushes, pulls and opens a sealed set",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_T3E} — §8 and the status line name the tool",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_T3E} — §4 step 6 key pair off host, §5 seal + push, §6 open; T3-R8 row",
+    "research/p3/records/p3_workstreams.json": f"{_T3E} — PLN-05 line; Owner/next texts",
+    "tests/test_p2_scope_audit.py": "P3 Owner decisions 2026-11-03 (PR #103) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

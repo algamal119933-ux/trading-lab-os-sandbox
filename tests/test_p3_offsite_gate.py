@@ -23,6 +23,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "research"))
 
 from p3 import backup, offsite  # noqa: E402
+from test_p3_offsite_seal import drop_keys, make_keys  # noqa: E402
 
 PROCEDURE = REPO / "docs" / "p3" / "PLN_05_TIER3_PROCEDURE.md"
 STAMP = "20261026T033318Z"
@@ -122,7 +123,7 @@ def test_the_verify_form_checks_the_set_and_reports_tampering(env):
     assert run(env, command).returncode != 0
 
 
-def test_the_commands_offsite_push_issues_are_the_ones_the_gate_accepts(env, tmp_path):
+def test_the_commands_offsite_push_issues_are_the_ones_the_gate_accepts(env, tmp_path, request):
     """Drive offsite.push with a runner that sends every ssh command through the gate, and every rsync through
     the local rsync with the gate standing in for the remote side, as ``command=`` would."""
     if shutil.which("rsync") is None:
@@ -131,7 +132,10 @@ def test_the_commands_offsite_push_issues_are_the_ones_the_gate_accepts(env, tmp
     root.mkdir()
     (root / "f.txt").write_text("x\n")
     backup.create_backup(tmp_path / "sets", roots={"r": root}, repos={}, stamp=STAMP)
-    source = tmp_path / "sets" / STAMP
+    keys = make_keys()   # only a sealed set may go remote (PLN_05_DESTINATION_DECISIONS.md §8)
+    request.addfinalizer(lambda: drop_keys(keys))
+    offsite.seal(tmp_path / "sets" / STAMP, tmp_path / "sealed", keys["fpr"], keys["host"])
+    source = tmp_path / "sealed" / STAMP
     rsh = tmp_path / "rsh.sh"   # ssh stand-in: drop the host, hand the remote command to the gate
     rsh.write_text(f'#!/bin/sh\nshift\nSSH_ORIGINAL_COMMAND="$*" exec sh {env["gate"]}\n')
     rsh.chmod(0o755)
@@ -156,7 +160,14 @@ def test_the_commands_offsite_push_issues_are_the_ones_the_gate_accepts(env, tmp
     pulled = subprocess.run(["rsync", "-a", "-e", str(rsh), f"h:{env['base']}/{STAMP}/", f"{scratch}/"],
                             capture_output=True, text=True, timeout=120)
     assert pulled.returncode == 0, pulled.stderr
-    assert backup.verify_backup(scratch)["status"] == "PASS"
+    assert offsite.verify_sealed(scratch)["status"] == "FAIL"   # pulled into a dir not named like the set
+    named = tmp_path / "pulled" / STAMP
+    named.parent.mkdir()
+    scratch.rename(named)
+    assert offsite.verify_sealed(named)["status"] == "PASS"
+    opened = offsite.open_sealed(named, tmp_path / "open", keys["owner"])
+    assert opened["status"] == "PASS", opened
+    assert backup.verify_backup(Path(opened["restored_set"]))["status"] == "PASS"
 
 
 def test_a_push_cannot_overwrite_an_existing_artifact(env, tmp_path):

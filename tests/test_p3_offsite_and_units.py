@@ -55,17 +55,13 @@ def test_an_unverified_source_is_never_pushed(tmp_path, backup_set):
     assert not (tmp_path / "offsite").exists()
 
 
-def test_a_remote_target_is_verified_on_the_remote_host(tmp_path, backup_set):
+def test_a_remote_target_only_ever_receives_a_sealed_set(backup_set):
+    """Owner decision 2026-11-03 (PLN_05_DESTINATION_DECISIONS.md §8): nothing leaves the host unencrypted.
+    The sealed push and its exact remote commands are tested in test_p3_offsite_seal."""
     calls = []
-
-    def runner(cmd):
-        calls.append(cmd)
-        rc = 1 if cmd[:2] == ["ssh", "u@h"] and cmd[2:4] == ["test", "-d"] else 0
-        return subprocess.CompletedProcess(cmd, rc, "", "")
-    report = offsite.push(backup_set, "u@h:/srv/off", runner=runner)
-    assert report["remote"] is True and report["host_loss_redundancy"] == "CANDIDATE"
-    assert ["rsync", "-a", "--ignore-existing", f"{backup_set}/", "u@h:/srv/off/s1/"] in calls
-    assert calls[-1] == ["ssh", "u@h", "cd /srv/off/s1 && sha256sum -c --quiet SHA256SUMS"]
+    with pytest.raises(offsite.OffsiteError, match="not sealed"):
+        offsite.push(backup_set, "u@h:/srv/off", runner=lambda cmd: calls.append(cmd))
+    assert calls == []
 
 
 @pytest.mark.parametrize("dest,remote", [("u@h:/x", True), ("/mnt/x", False), ("relative/dir", False)])

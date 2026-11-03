@@ -112,14 +112,38 @@ These are steps on the **destination**, done by the Owner. Claude has no access 
    It was never installed (this procedure is NOT_RUN). The test above keeps the injection as a negative control.
 5. On the workstation, add an `~/.ssh/config` entry `Host tlos-offsite`. It sets `HostName`, `User tlos-offsite`, `IdentityFile ~/.ssh/tlos_offsite_ed25519`, `IdentitiesOnly yes`, and `StrictHostKeyChecking yes`, with the host key pinned on first contact by the Owner.
 
+6. **The encryption key pair (Owner decision 2026-11-03, decisions record §8).** The pair is created **off the
+   host**: on the Windows PC with Gpg4win, or on an offline machine, with a passphrase. Only the public key comes to
+   the workstation, into a dedicated keyring that holds nothing else:
+   ```bash
+   G=~/.config/tlos-p3/offsite-gnupg; mkdir -p "$G" && chmod 700 "$G"
+   gpg --homedir "$G" --import owner-tlos-offsite.pub.asc      # the public key file the Owner exported
+   gpg --homedir "$G" --with-colons --list-keys | grep '^fpr' # record the 40-hex fingerprint
+   gpg --homedir "$G" --list-secret-keys                      # must print nothing
+   ```
+   The Owner keeps the secret key in two places, neither of them the workstation or the destination (for example the
+   Windows PC and an offline copy). `offsite.py --seal` refuses to run when the secret key is in its keyring.
+   Losing both copies makes every offsite set unreadable; the local tiers are unaffected.
+
 Destination-side retention pruning is the Owner's manual act, done in a separate shell. The gate forbids deletes, so a compromised workstation cannot erase the offsite history.
 
 ## 5. Push and integrity (repeatable)
+Only a **sealed** set leaves the host (decisions record §8); `offsite.py` refuses a remote push of an unsealed set.
+Sealing streams `tar | gpg --encrypt` to the Owner's fingerprint into `<sealed root>/<stamp>`: the ciphertext
+`SET.tar.gpg`, the hash-only `SEAL_RECORD.json` (the original set's `SHA256SUMS` and `BACKUP_RECORD.json` digests,
+the payload digest and the recipient), and a `SHA256SUMS` over both. No plaintext copy is written. The destination
+gate and its `sha256sum -c` are unchanged, because the sealed directory carries the same stamp and the same check.
 ```bash
 d=~/projects/trading/tlos-p3      # after the planned reboot verify and the tlos-p3 update
-last=$(ls -1d /mnt/tlos-wdc/tlos-backups/2* | tail -1)
+store=$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.config/tlos-p3/storage.json")))["backup_target"])')
+sealed_root="$store-sealed"; FPR=<the 40-hex fingerprint recorded in §4 step 6>
+last=$(ls -1d "$store"/2* | tail -1)
 out=~/tlos-paper/p3-evidence/offsite_push_$(date +%Y%m%dT%H%M%S).json
-[ -e "$out" ] && echo STOP || { (cd "$d" && python3 scripts/p3/offsite.py --set "$last" --dest tlos-offsite:/srv/tlos-offsite) > "$out"; echo "offsite_exit=$?"; cat "$out"; }
+[ -e "$out" ] && echo STOP || { (cd "$d" &&
+  python3 scripts/p3/offsite.py --seal --set "$last" --out-root "$sealed_root" --recipient "$FPR" \
+     --gnupghome ~/.config/tlos-p3/offsite-gnupg &&
+  python3 scripts/p3/offsite.py --set "$sealed_root/$(basename "$last")" --dest tlos-offsite:/srv/tlos-offsite) > "$out"
+  echo "offsite_exit=$?"; cat "$out"; }
 ```
 
 Expected output:
@@ -134,18 +158,26 @@ The drill runs on a machine **other than the workstation** wherever possible. Th
 
 If only the workstation is available, the pull runs **from the remote** into an empty scratch directory on the workstation. That proves the bytes on the independent host restore. Record which machine ran the drill.
 
+The pulled directory is ciphertext. The Owner's secret key is brought to the drill machine for the drill only, in a
+temporary keyring that is deleted afterwards, and never to the destination.
 ```bash
 scratch=~/tlos-restore-drill-offsite-$(date +%Y%m%dT%H%M%S); mkdir "$scratch"
 set_name=<stamp>        # the set pushed in §5
-rsync -a tlos-offsite:/srv/tlos-offsite/$set_name/ "$scratch/set/"
-(cd ~/projects/trading/tlos-p3 && python3 scripts/p3/backup.py verify --set "$scratch/set") ; echo "verify_exit=$?"
-sha256sum "$scratch/set/SHA256SUMS" "$scratch/set/BACKUP_RECORD.json" \
-  /mnt/tlos-wdc/tlos-backups/$set_name/SHA256SUMS /mnt/tlos-wdc/tlos-backups/$set_name/BACKUP_RECORD.json
-(cd ~/projects/trading/tlos-p3 && python3 scripts/p3/backup.py drill --set "$scratch/set" --scratch "$scratch/restore" \
+rsync -a tlos-offsite:/srv/tlos-offsite/$set_name/ "$scratch/sealed/$set_name/"
+KH=$(mktemp -d); chmod 700 "$KH"; gpg --homedir "$KH" --import <owner secret key file>
+(cd ~/projects/trading/tlos-p3 && python3 scripts/p3/offsite.py --open --sealed "$scratch/sealed/$set_name" \
+   --scratch "$scratch/open" --gnupghome "$KH") > "$scratch/open.json"; echo "open_exit=$?"; cat "$scratch/open.json"
+gpgconf --homedir "$KH" --kill gpg-agent; rm -rf "$KH"
+(cd ~/projects/trading/tlos-p3 && python3 scripts/p3/backup.py verify --set "$scratch/open/$set_name") ; echo "verify_exit=$?"
+sha256sum "$scratch/open/$set_name/SHA256SUMS" "$scratch/open/$set_name/BACKUP_RECORD.json" \
+  "$store/$set_name/SHA256SUMS" "$store/$set_name/BACKUP_RECORD.json"
+(cd ~/projects/trading/tlos-p3 && python3 scripts/p3/backup.py drill --set "$scratch/open/$set_name" --scratch "$scratch/restore" \
    --config-load trading/trading_lab_os_final --json "$scratch/drill.json"); echo "drill_exit=$?"
 ```
 
 **PROVEN only if all hold:**
+- `open_exit=0`: the sealed directory verifies, decrypts with the Owner's key, and the decrypted set's
+  `SHA256SUMS` and `BACKUP_RECORD.json` match the digests sealed into `SEAL_RECORD.json`;
 - `verify_exit=0`;
 - the pulled `SHA256SUMS` and `BACKUP_RECORD.json` hash equal to the original set's on the WDC (the destination's
   `sha256sum -c` only proves the copy is self-consistent; this proves it is the set that was pushed). On a machine
@@ -191,7 +223,7 @@ destination or the Owner; `NOT_COVERED` means no control exists yet. `PLN-05 = O
 | **T3-R5 Schedule and recency** | Redundancy stays current after acceptance | Once a schedule is approved and installed: the newest `offsite_push_*.json` with `destination_verify = PASS` is younger than 26 h | §5, §7 | none (timer is an Owner-approved install) | NOT_RUN · NOT_COVERED |
 | **T3-R6 Alerting** | A stale, divergent or full destination is seen without anyone looking | `offsite_recency` (WARNING > 26 h, CRITICAL > 72 h), `offsite_integrity` (CRITICAL on `destination_verify = FAIL` or a divergent copy) and `offsite_capacity` (WARNING < 2× newest set) each raise in a test, as PLN-06 does for §19 | §7 | none yet (PLN-06 `research/p3/health.py`, separate change) | NOT_COVERED |
 | **T3-R7 Restore proof** | The bytes on the independent host restore into a working runtime | `verify_exit=0`; the pulled `SHA256SUMS` and `BACKUP_RECORD.json` hash equal to the original's; `drill_exit=0` with every check PASS (each root byte-identical, ARCHIVE_VERIFIED, git fsck clean with the recorded HEAD, config load in dry-run); evidence per §8 | §6, §8 | `test_p3_backup` (drill semantics), `test_p3_offsite_and_units` (push, remote verify, unverified source never pushed) | NOT_RUN. **The only act that can set `HOST_LOSS_REDUNDANCY = PROVEN`** |
-| **T3-R8 Data-at-rest exposure** | A set holds the runtime `.env`, `config.json` and service volumes; who can read them at the destination is a decision, not an accident | An Owner record states one of: an Owner-controlled destination with disk encryption (state recorded), acceptance of a provider's encryption and access, or client-side encryption (a new reuse decision, AUDIT_BEFORE_USE). And no set holds a private exchange key (paper boundary; the PLN-06 health check reports credential key names only) | decisions record §5 item 7 | `test_p3_health_s19::test_container_env_is_parsed_by_name_only`, `test_p3_alerting::test_secrets_live_outside_every_backup_root` | **DECIDED 2026-11-03: client-side encryption before upload**, decryption key off the host (decisions record §8). Tool NOT YET BUILT; no upload until it is merged · NOT_RUN |
+| **T3-R8 Data-at-rest exposure** | A set holds the runtime `.env`, `config.json` and service volumes; who can read them at the destination is a decision, not an accident | An Owner record states one of: an Owner-controlled destination with disk encryption (state recorded), acceptance of a provider's encryption and access, or client-side encryption (a new reuse decision, AUDIT_BEFORE_USE). And no set holds a private exchange key (paper boundary; the PLN-06 health check reports credential key names only) | decisions record §5 item 7 | `test_p3_health_s19::test_container_env_is_parsed_by_name_only`, `test_p3_alerting::test_secrets_live_outside_every_backup_root` | **DECIDED 2026-11-03: client-side encryption before upload**, decryption key off the host (decisions record §8). Tool: `offsite.py --seal/--open` (GnuPG, WRAP_EXISTING), tested by `test_p3_offsite_seal`; no upload before it is merged · NOT_RUN on the host |
 
 Requirements are not ranked or chosen here; the destination class (decisions record §6) determines which of them are
 cheap or costly, and that choice is the Owner's.
