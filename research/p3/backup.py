@@ -26,6 +26,8 @@ PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -33,6 +35,7 @@ import shutil
 import stat
 import subprocess
 import tarfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -120,41 +123,58 @@ def create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path
                   volume_exporter: Callable[[str, Path], None] | None = None,
                   data: dict[str, str] | None = None, compose_project: str | None = None,
                   inspector: Callable[[str], list[dict]] | None = None,
-                  data_lister: Callable[[str], dict[str, str]] | None = None) -> dict:
-    """Write one private backup set (see ``_create_backup``). The process umask is 077 for the whole creation,
+                  data_lister: Callable[[str], dict[str, str]] | None = None,
+                  coverage_report: Path | None = None) -> dict:
+    """Write one private backup set (see ``_create_backup``). One run at a time per target: an exclusive lock
+    on ``<target>/.backup.lock`` refuses a concurrent run. The process umask is 077 for the whole creation,
     whatever the caller's, so every directory, archive, bundle and manifest the set holds is owner-only.
     The set holds the runtime ``.env`` and Grafana's database (P3 security audit SEC-03). Before the set is
     published, any entry still open to group or other refuses it. Other (historical) sets are never touched."""
+    # Every refusal that needs no lock comes first, so a refused run writes nothing at all.
+    data, coverage = _preflight(roots=roots, data=data, compose_project=compose_project, inspector=inspector,
+                                coverage_report=coverage_report)
     old = os.umask(PRIVATE_UMASK)
     try:
-        return _create_backup(target, roots=roots, repos=repos, volumes=volumes, stamp=stamp,
-                              volume_exporter=volume_exporter, data=data, compose_project=compose_project,
-                              inspector=inspector, data_lister=data_lister)
+        Path(target).mkdir(parents=True, exist_ok=True)
+        with exclusive_lock(Path(target) / LOCK_NAME):
+            return _create_backup(target, roots=roots, repos=repos, volumes=volumes, stamp=stamp,
+                                  volume_exporter=volume_exporter, data=data, coverage=coverage,
+                                  data_lister=data_lister)
     finally:
         os.umask(old)
+
+
+def _preflight(*, roots: dict[str, Path], data: dict[str, str] | None, compose_project: str | None,
+               inspector: Callable[[str], list[dict]] | None, coverage_report: Path | None) -> tuple[dict, dict | None]:
+    data = dict(data or {})
+    for name, source in data.items():
+        _check_name(name)
+        _helper_mount(source)  # refuse a malformed source before anything is written
+    if compose_project is not None and coverage_report is not None:
+        raise BackupError("give --compose-project (observe now) or --coverage-report (observed before the stop), not both")
+    coverage = None
+    if coverage_report is not None:
+        coverage = bind_coverage_report(coverage_report, data=data, roots=roots)
+    if compose_project is not None:
+        coverage = {**live_data_coverage((inspector or _docker_project_mounts)(compose_project), data=data,
+                                         roots=roots), "compose_project": compose_project, "observed": "at_create",
+                    "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        if coverage["LIVE_DATA_COVERAGE"] != "PASS":
+            raise BackupError("LIVE_DATA_COVERAGE = FAIL: "
+                              f"uncovered writable mounts {coverage['uncovered_rw']}; "
+                              f"declared data sources no container uses {coverage['stale_data_sources']}")
+    return data, coverage
 
 
 def _create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path],
                    volumes: tuple[str, ...], stamp: str | None,
                    volume_exporter: Callable[[str, Path], None] | None,
-                   data: dict[str, str] | None, compose_project: str | None,
-                   inspector: Callable[[str], list[dict]] | None,
+                   data: dict[str, str], coverage: dict | None,
                    data_lister: Callable[[str], dict[str, str]] | None) -> dict:
     """Write one backup set. ``data`` maps a name to a live data source, either an absolute host directory
     (a bind mount) or a named volume. With ``compose_project``, the project's containers are inspected first,
     and the set is refused unless every writable mount they use is backed up and no declared data source is
     unused (LIVE_DATA_COVERAGE)."""
-    data = dict(data or {})
-    for name, source in data.items():
-        _check_name(name)
-        _helper_mount(source)  # refuse a malformed source before anything is written
-    coverage = None
-    if compose_project is not None:
-        coverage = live_data_coverage((inspector or _docker_project_mounts)(compose_project), data=data, roots=roots)
-        if coverage["LIVE_DATA_COVERAGE"] != "PASS":
-            raise BackupError("LIVE_DATA_COVERAGE = FAIL: "
-                              f"uncovered writable mounts {coverage['uncovered_rw']}; "
-                              f"declared data sources no container uses {coverage['stale_data_sources']}")
     stamp = stamp or utc_stamp()
     set_dir = Path(target) / stamp
     if set_dir.exists():
@@ -375,6 +395,78 @@ def _docker_project_mounts(project: str) -> list[dict]:
 
 def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+LOCK_NAME = ".backup.lock"
+COVERAGE_REPORT_VERSION = "P3_LIVE_DATA_COVERAGE_REPORT_V1"
+COVERAGE_MAX_AGE_S = 1800       # a pre-stop observation older than this does not describe this backup
+COVERAGE_FUTURE_SKEW_S = 300
+
+
+@contextlib.contextmanager
+def exclusive_lock(path: Path):
+    """Hold an exclusive, non-blocking flock on ``path`` (created 0600) for the block; refuse if another run holds it.
+    The kernel releases it when the holder exits, however it exits (SIGKILL and power loss included)."""
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise BackupError(f"{path} is held by another run; two runs never overlap") from None
+        yield
+    finally:
+        os.close(fd)
+
+
+def _resolved_roots(roots: dict[str, Path]) -> dict[str, str]:
+    return {name: os.path.realpath(str(path)) for name, path in sorted(roots.items())}
+
+
+def coverage_report(project: str, *, data: dict[str, str], roots: dict[str, Path],
+                    mounts: list[dict] | None = None) -> dict:
+    """LIVE_DATA_COVERAGE for ``project`` now, with the provenance ``bind_coverage_report`` needs."""
+    report = live_data_coverage(mounts if mounts is not None else _docker_project_mounts(project), data=data, roots=roots)
+    now = time.time()
+    return {"report_version": COVERAGE_REPORT_VERSION, **report, "compose_project": project,
+            "data": dict(sorted(data.items())), "roots": _resolved_roots(roots), "generated_epoch": now,
+            "generated_utc": datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def write_coverage_report(report: dict, path: Path) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(report, indent=2) + "\n")
+
+
+def bind_coverage_report(path: Path, *, data: dict[str, str], roots: dict[str, Path],
+                         now: float | None = None) -> dict:
+    """Accept a coverage report observed before the runtime stop only if it describes *this* backup: PASS, the
+    current report version, exactly this create's data sources and roots, and observed within the last
+    COVERAGE_MAX_AGE_S. The record then carries it with its observation phase and the report file's sha256."""
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+        report = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        raise BackupError(f"coverage report {path} is unreadable: {exc}") from None
+    problems = []
+    if report.get("report_version") != COVERAGE_REPORT_VERSION:
+        problems.append(f"report_version {report.get('report_version')!r}")
+    if report.get("LIVE_DATA_COVERAGE") != "PASS":
+        problems.append(f"LIVE_DATA_COVERAGE = {report.get('LIVE_DATA_COVERAGE')}")
+    if not report.get("compose_project"):
+        problems.append("no compose_project")
+    if report.get("data") != dict(sorted(data.items())):
+        problems.append(f"data sources {report.get('data')} differ from this backup's {dict(sorted(data.items()))}")
+    if report.get("roots") != _resolved_roots(roots):
+        problems.append(f"roots {report.get('roots')} differ from this backup's {_resolved_roots(roots)}")
+    age = (now if now is not None else time.time()) - float(report.get("generated_epoch") or 0)
+    if not -COVERAGE_FUTURE_SKEW_S <= age <= COVERAGE_MAX_AGE_S:
+        problems.append(f"observed {age:.0f} s ago (allowed 0..{COVERAGE_MAX_AGE_S} s)")
+    if problems:
+        raise BackupError("coverage report does not bind to this backup: " + "; ".join(problems))
+    return {**report, "observed": "before_runtime_stop", "report_path": str(path),
+            "report_sha256": hashlib.sha256(raw).hexdigest()}
 
 
 def _root_archives(source: str, root_paths: list[str]) -> bool:
@@ -610,3 +702,171 @@ def compare_hash_export(set_dir: Path, export_csv: Path, export_root: str) -> di
     report["PORTABLE_COPY_MATCHES_SET"] = ("FAIL" if "FAIL" in statuses
                                            else "UNPROVEN" if statuses != {"PASS"} else "PASS")
     return report
+
+
+# --------------------------------------------------------------------------------------------------
+# Second-device (SSD) mirror: verified full-set generations, published without ever destroying the
+# last verified one
+# --------------------------------------------------------------------------------------------------
+
+MIRROR_LOCK = ".mirror.lock"
+MIRROR_SETS = "sets"
+MIRROR_CURRENT = "current"
+MIRROR_MARGIN_BYTES = 20 * 1024 ** 3
+
+
+def _set_files(path: Path) -> list[str]:
+    return sorted(p.relative_to(path).as_posix() for p in Path(path).rglob("*") if p.is_file() or p.is_symlink())
+
+
+def _tree_bytes(path: Path) -> int:
+    return sum(p.lstat().st_size for p in Path(path).rglob("*") if p.is_file() and not p.is_symlink())
+
+
+def _privatize(path: Path) -> None:
+    for entry in [path, *path.rglob("*")]:
+        if not entry.is_symlink():
+            entry.chmod(0o700 if entry.is_dir() else 0o600)
+
+
+def mirror_generations(mirror_root: Path) -> list[str]:
+    """Published (therefore verified) full generations, oldest first. Dot-names are staging or retiring."""
+    sets = Path(mirror_root) / MIRROR_SETS
+    return sorted(p.name for p in sets.iterdir() if p.is_dir() and not p.name.startswith(".")) if sets.is_dir() else []
+
+
+def publish_mirror(set_dir: Path, mirror_root: Path, *, keep: int = 2, margin_bytes: int = MIRROR_MARGIN_BYTES,
+                   _step: Callable[[str], None] = lambda step: None) -> dict:
+    """Copy a verified backup set to ``<mirror_root>/sets/<stamp>`` and point ``<mirror_root>/current`` at it.
+
+    Invariant: the last verified full generation is never destroyed while a replacement is published.
+    - The copy is staged as ``sets/.incoming-<stamp>``. It becomes ``sets/<stamp>`` (one rename) only after
+      ``verify_backup`` passes on the copy, the copy's file list equals the source's, its record is byte-identical,
+      and no entry is open to group or other. A non-dot name under ``sets/`` therefore always means verified.
+    - ``current`` is switched by an atomic symlink replace, only to a published generation.
+    - Only then are generations beyond ``keep`` retired, oldest first and never the current one. Each is renamed to
+      ``.retiring-<name>`` before it is deleted, so an interrupted deletion never leaves a half-deleted generation
+      under a verified name.
+    - Space is never made by deleting: too little free space refuses the copy.
+    - Anything else in ``mirror_root`` (the legacy ``latest``/``previous``/``.incoming`` partial copies) is not touched.
+    Interrupted at any point, a re-run completes it: dot-name leftovers are discarded, published generations kept.
+    """
+    if keep < 1:
+        raise BackupError("keep must be at least 1: the newest verified generation is always kept")
+    set_dir, mirror_root = Path(set_dir), Path(mirror_root)
+    source = verify_backup(set_dir)
+    if source["status"] != "PASS":
+        raise BackupError(f"source set {set_dir} does not verify; nothing is mirrored")
+    stamp = json.loads((set_dir / RECORD).read_text(encoding="utf-8"))["stamp"]
+    _check_name(stamp)
+    old = os.umask(PRIVATE_UMASK)
+    try:
+        mirror_root.mkdir(parents=True, exist_ok=True)
+        sets = mirror_root / MIRROR_SETS
+        sets.mkdir(mode=0o700, exist_ok=True)
+        with exclusive_lock(mirror_root / MIRROR_LOCK):
+            for leftover in sorted(p for p in sets.iterdir() if p.name.startswith((".incoming-", ".retiring-"))):
+                shutil.rmtree(leftover)  # never a published generation: dot-names are not verified
+            final = sets / stamp
+            if final.exists():
+                if verify_backup(final)["status"] != "PASS":
+                    raise BackupError(f"{final} exists and does not verify; it is not overwritten")
+            else:
+                need = _tree_bytes(set_dir) + margin_bytes
+                free = shutil.disk_usage(mirror_root).free
+                if free < need:
+                    raise BackupError(f"mirror refused: {free} bytes free, {need} needed (set + margin); "
+                                      "nothing is deleted to make room")
+                incoming = sets / f".incoming-{stamp}"
+                _step("copy")
+                shutil.copytree(set_dir, incoming, symlinks=True, copy_function=shutil.copy2)
+                _privatize(incoming)
+                _step("verify")
+                problems = []
+                if verify_backup(incoming)["status"] != "PASS":
+                    problems.append("verify FAIL")
+                if _set_files(incoming) != _set_files(set_dir):
+                    problems.append("file list differs")
+                if (incoming / RECORD).read_bytes() != (set_dir / RECORD).read_bytes():
+                    problems.append("record differs")
+                if group_or_other_accessible(incoming):
+                    problems.append("entries open to group/other")
+                if problems:
+                    raise BackupError(f"mirror copy of {stamp} not published: {', '.join(problems)}")
+                _step("publish")
+                os.rename(incoming, final)
+            _step("pointer")
+            link = mirror_root / f".{MIRROR_CURRENT}.tmp"
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            os.symlink(f"{MIRROR_SETS}/{stamp}", link)
+            os.replace(link, mirror_root / MIRROR_CURRENT)
+            retired = []
+            for name in mirror_generations(mirror_root)[:-keep]:
+                if name == stamp:
+                    continue
+                _step("retire")
+                retiring = sets / f".retiring-{name}"
+                os.rename(sets / name, retiring)
+                _step("delete")
+                shutil.rmtree(retiring)
+                retired.append(name)
+            legacy = sorted(p.name for p in mirror_root.iterdir()
+                            if p.name not in (MIRROR_SETS, MIRROR_CURRENT, MIRROR_LOCK))
+            return {"mirror_version": "P3_SSD_MIRROR_V1", "published": stamp, "current": f"{MIRROR_SETS}/{stamp}",
+                    "generations": mirror_generations(mirror_root), "retired": retired, "keep": keep,
+                    "bytes": _tree_bytes(final), "legacy_untouched": legacy, "SSD_MIRROR": "PASS"}
+    finally:
+        os.umask(old)
+
+
+# --------------------------------------------------------------------------------------------------
+# Runtime restoration: each compose service individually
+# --------------------------------------------------------------------------------------------------
+
+def _docker_service_state(project: str, service: str) -> list[dict]:
+    ids = _run(["docker", "ps", "-a", "-q", "--filter", f"label=com.docker.compose.project={project}",
+                "--filter", f"label=com.docker.compose.service={service}"]).stdout.split()
+    return json.loads(_run(["docker", "inspect", *ids]).stdout) if ids else []
+
+
+def _started_epoch(text: str) -> float | None:
+    try:
+        return datetime.strptime(text[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def runtime_check(project: str, services: tuple[str, ...], *, started_after: float | None = None,
+                  wait_s: float = 0, poll_s: float = 2,
+                  state_of: Callable[[str, str], list[dict]] | None = None,
+                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time) -> dict:
+    """Is each named service of the compose project back? Per service: exactly one container, running, not
+    restarting, healthy when it defines a healthcheck, and (with ``started_after``) started by this restoration.
+    Polls for up to ``wait_s`` seconds; whatever is not OK by then is FAIL (an incomplete recovery is a failure)."""
+    if not services:
+        raise BackupError("runtime_check needs the services that must be back")
+    state_of = state_of or _docker_service_state
+    deadline = clock() + wait_s
+    while True:
+        results = {}
+        for service in services:
+            containers = state_of(project, service)
+            problems = []
+            if len(containers) != 1:
+                problems.append(f"{len(containers)} containers")
+            else:
+                st = containers[0].get("State") or {}
+                if st.get("Status") != "running" or st.get("Restarting"):
+                    problems.append(f"status {st.get('Status')}{' restarting' if st.get('Restarting') else ''}")
+                health = (st.get("Health") or {}).get("Status")
+                if health is not None and health != "healthy":
+                    problems.append(f"health {health}")
+                started = _started_epoch(st.get("StartedAt", ""))
+                if started_after is not None and (started is None or started + 1 < started_after):
+                    problems.append(f"started {st.get('StartedAt')} before this restoration")
+            results[service] = {"status": "FAIL" if problems else "PASS", "problems": problems}
+        ok = all(r["status"] == "PASS" for r in results.values())
+        if ok or clock() >= deadline:
+            return {"compose_project": project, "services": results, "RUNTIME_RECOVERY": "PASS" if ok else "FAIL"}
+        sleep(poll_s)

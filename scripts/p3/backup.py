@@ -6,7 +6,10 @@
         --repo runtime=/home/hamza/projects/trading/trading_lab_os_final \\
         [--volume trading_lab_os_final_grafana_data ...] \\
         [--data grafana=/srv/project-data/trading-data/runtime/data/grafana ...] [--compose-project tlos_runtime]
-    scripts/p3/backup.py coverage --compose-project tlos_runtime --data NAME=SOURCE ... [--root NAME=PATH ...]
+    scripts/p3/backup.py coverage --compose-project tlos_runtime --data NAME=SOURCE ... [--root NAME=PATH ...] [--json F]
+    scripts/p3/backup.py create ... --data NAME=SOURCE ... --coverage-report F   (F written by `coverage` before the stop)
+    scripts/p3/backup.py mirror --set <set> --mirror <dir> [--keep 2] [--margin-gib 20] [--json F]
+    scripts/p3/backup.py runtime-check --compose-project tlos_runtime --service grafana ... [--wait 120] [--started-after EPOCH]
     scripts/p3/backup.py verify --set /mnt/tlos-wdc/tlos-backups/<stamp>
     scripts/p3/backup.py drill  --set /mnt/tlos-wdc/tlos-backups/<stamp> --scratch <empty dir> [--config-load trading/trading_lab_os_final]
     scripts/p3/backup.py compare-export --set <dir with the set's SHA256SUMS + BACKUP_RECORD.json> \\
@@ -19,8 +22,11 @@ only list-strategies and show-config, exactly as CI's freqtrade-load job does, a
 command. `--data` archives a live data source (a bind-mounted host directory, or a named volume) through
 the read-only root helper and proves the archive equal to the source. `--compose-project` first
 refuses the set unless the project's containers' writable mounts are all covered and no declared
-data source is stale (LIVE_DATA_COVERAGE). `coverage` runs that check alone, read-only, and writes
-nothing. `compare-export` (PLN-05 portable copy) reads two manifests and a CSV and writes nothing but
+data source is stale (LIVE_DATA_COVERAGE). `coverage` runs that check alone, read-only; with --json it
+writes its report (0600, never overwritten), which `create --coverage-report` binds into the set when the
+runtime is stopped before the backup (compose down removes the containers). `mirror` publishes a verified
+full copy to a second device without ever destroying the last verified one. `runtime-check` reports each
+service of the compose project individually after a restoration (exit 1 if any is not back). `compare-export` (PLN-05 portable copy) reads two manifests and a CSV and writes nothing but
 --json. Exit codes: 0 PASS · 1 FAIL · 2 error (and, for compare-export, UNPROVEN).
 
 PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
@@ -95,12 +101,25 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--data", action="append", default=[], metavar="NAME=SOURCE",
                         help="a live data source: an absolute host directory (bind mount) or a volume name")
     create.add_argument("--compose-project", help="refuse the set unless LIVE_DATA_COVERAGE passes for this project")
+    create.add_argument("--coverage-report", type=Path,
+                        help="a `coverage --json` report observed before the runtime stop; it must bind to this backup")
     create.add_argument("--stamp")
     coverage = sub.add_parser("coverage")
     coverage.add_argument("--compose-project", required=True)
     coverage.add_argument("--data", action="append", default=[], metavar="NAME=SOURCE")
     coverage.add_argument("--root", action="append", default=[])
     coverage.add_argument("--json", type=Path)
+    mirror = sub.add_parser("mirror")
+    mirror.add_argument("--set", required=True, type=Path, dest="set_dir")
+    mirror.add_argument("--mirror", required=True, type=Path)
+    mirror.add_argument("--keep", type=int, default=2)
+    mirror.add_argument("--margin-gib", type=float, default=20.0)
+    mirror.add_argument("--json", type=Path)
+    rcheck = sub.add_parser("runtime-check")
+    rcheck.add_argument("--compose-project", required=True)
+    rcheck.add_argument("--service", action="append", required=True)
+    rcheck.add_argument("--wait", type=float, default=0.0)
+    rcheck.add_argument("--started-after", type=float)
     verify = sub.add_parser("verify")
     verify.add_argument("--set", required=True, type=Path, dest="set_dir")
     drill = sub.add_parser("drill")
@@ -131,16 +150,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "create":
             record = backup.create_backup(args.target, roots=_pairs(args.root), repos=_pairs(args.repo),
                                           volumes=tuple(args.volume), stamp=args.stamp,
-                                          data=_sources(args.data), compose_project=args.compose_project)
+                                          data=_sources(args.data), compose_project=args.compose_project,
+                                          coverage_report=args.coverage_report)
             print(json.dumps(record, indent=2))
             verdict = backup.verify_backup(args.target / record["stamp"])
             print(f"BACKUP_SET = {record['stamp']} · VERIFY = {verdict['status']}")
             return 0 if verdict["status"] == "PASS" else 1
         if args.command == "coverage":
-            report = backup.live_data_coverage(backup._docker_project_mounts(args.compose_project),
-                                               data=_sources(args.data), roots=_pairs(args.root))
+            report = backup.coverage_report(args.compose_project, data=_sources(args.data), roots=_pairs(args.root))
             if args.json:
-                args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+                backup.write_coverage_report(report, args.json)
             for row in report["mounts"]:
                 print(f"  {row['container']}:{row['destination']} <- {row['type']} {row['source']} "
                       f"rw={row['rw']} covered_by={row['covered_by']}")
@@ -150,6 +169,22 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  STALE_DATA_SOURCE {item}")
             print(f"LIVE_DATA_COVERAGE = {report['LIVE_DATA_COVERAGE']}")
             return 0 if report["LIVE_DATA_COVERAGE"] == "PASS" else 1
+        if args.command == "mirror":
+            report = backup.publish_mirror(args.set_dir, args.mirror, keep=args.keep,
+                                           margin_bytes=int(args.margin_gib * 1024 ** 3))
+            if args.json:
+                backup.write_coverage_report(report, args.json)  # same 0600, never-overwrite writer
+            print(f"published {report['current']} · generations {report['generations']} · retired {report['retired']} "
+                  f"· legacy untouched {report['legacy_untouched']}")
+            print(f"SSD_MIRROR = {report['SSD_MIRROR']}")
+            return 0
+        if args.command == "runtime-check":
+            report = backup.runtime_check(args.compose_project, tuple(args.service), wait_s=args.wait,
+                                          started_after=args.started_after)
+            for name, result in report["services"].items():
+                print(f"  {name:12} {result['status']} {'; '.join(result['problems'])}")
+            print(f"RUNTIME_RECOVERY = {report['RUNTIME_RECOVERY']}")
+            return 0 if report["RUNTIME_RECOVERY"] == "PASS" else 1
         if args.command == "verify":
             verdict = backup.verify_backup(args.set_dir)
             print(f"VERIFY = {verdict['status']} {verdict.get('mismatched', '')}")

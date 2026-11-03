@@ -51,6 +51,36 @@ Design rules:
 - `compare-export` (portable copy) expects 2 artifacts per root and per data source, 1 per repository and 1 per
   volume (`expected_artifact_count`). A record without `data_sources` counts as before.
 
+- **Host integration support (PR-A, 2026-11-04).** The host stops its runtime with `docker compose down`, which removes the
+  containers, so coverage can only be observed while the runtime still runs.
+  - **Bound pre-stop coverage.** `coverage --json F` writes a report, 0600 and never overwritten, with
+    `report_version`, `generated_utc`, `compose_project`, the exact `data` and the resolved `roots`.
+    `create --coverage-report F` refuses the set, writing nothing, unless the report says PASS, names exactly this
+    create's data and roots, and was observed 0–1800 s ago. The record carries the report with
+    `observed: before_runtime_stop` and `report_sha256`. `--compose-project` (observed at create) and
+    `--coverage-report` are mutually exclusive. Without either, the record's coverage is `null` (UNPROVEN), and
+    such a set counts toward no gate.
+  - **One run at a time.** `create` holds an exclusive flock on `<target>/.backup.lock` and `mirror` one on
+    `<mirror>/.mirror.lock`. A second run is refused and writes nothing. The kernel releases a lock when its holder
+    dies, SIGKILL included. The wrapper's runtime stop/start needs its own lock in the wrapper.
+  - **Second-device mirror (`mirror`).** It publishes a verified full copy as `sets/<stamp>` and points `current` at
+    it.
+    - Invariant: the last verified full generation is never destroyed while a replacement is published.
+    - The copy is staged under a dot-name and renamed only after verify, file-list, record and permission checks,
+      so a non-dot name always means verified.
+    - `current` is switched atomically; older generations beyond `--keep` are retired by rename, then deleted.
+    - No space is ever made by deleting.
+    - Legacy partial copies (`latest`, `previous`, `.incoming`) are never touched. Their removal is a separate
+      Owner decision.
+    - Interruption at every step, including mid-copy, is tested.
+  - **`runtime-check`.** Each compose service individually: exactly one container, running, not restarting,
+    healthy if it has a healthcheck, and started after the restoration began. It polls up to `--wait`, then
+    FAILs; it never hangs. An incomplete recovery exits 1.
+  - **Limits.** No EXIT trap survives power loss or SIGKILL. After power loss, `tlos-runtime.service` starts at boot.
+    After a SIGKILL during a backup, the runtime stays down until the next start. The governed wrapper therefore
+    records a marker before stopping the runtime and restores the runtime on its next run (after the H1 inputs).
+    Tests: `tests/test_p3_backup_host_integration.py`.
+
 ### What the drill proves, and what it does not
 | Property | Proven by | Status |
 |---|---|---|
