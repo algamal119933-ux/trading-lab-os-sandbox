@@ -47,6 +47,9 @@ def _obs(**over) -> dict:
         "runtime": {"pin": "c" * 40, "clean": True},
         "host": {"uptime_s": 172800.0, "boot_id": "boot-1", "ntp_synced": True},
         "backup_sets": ["20261025T211956Z"],
+        # a healthy host: its newest set carries live-data coverage (the PR-B tests below take it away)
+        "newest_backup": {"stamp": "20261025T211956Z", "coverage": "PASS", "observed": "before_runtime_stop",
+                          "data_sources": ["grafana", "mlflow", "prometheus"]},
         "workstreams": json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8")),
     }
     for key, value in over.items():
@@ -199,7 +202,7 @@ def test_a_non_info_finding_opens_an_incident_and_nothing_else_does():
 
 def test_restore_readiness_comes_only_from_a_persisted_drill_record():
     assert cr.project(_obs())["ops"]["restore"] == ["unk", "notRecorded"]
-    passed = {"backup_set": "S", "PLN_03_RESTORE_DRILL": "PASS", "_file": "d.json", "_mtime": 1_792_960_000.0,
+    passed = {"backup_set": "20261025T211956Z", "PLN_03_RESTORE_DRILL": "PASS", "_file": "d.json", "_mtime": 1_792_960_000.0,
               "checks": {"sealed:x": {"status": "PASS", "archives": [["a", "ARCHIVE_VERIFIED"], ["b", "ARCHIVE_VERIFIED"]]}}}
     failed = dict(passed, PLN_03_RESTORE_DRILL="FAIL")
     live = cr.project(_obs(drills=[passed]))
@@ -744,3 +747,68 @@ def test_the_language_follows_the_address_or_the_browser_and_stores_nothing():
     assert "localStorage" not in lang and "sessionStorage" not in lang and "document.cookie" not in lang
     dev = js[js.index("function liveDevice()"):js.index("function liveLang()")]
     assert "t.includes('mobile')" in dev and "t.includes('desktop')" in dev
+
+
+# ---- PR-B: integrity, live-data coverage and restore are separate claims ----
+
+def test_a_drill_of_an_older_set_never_proves_the_newest_one():
+    older = {"backup_set": "20261024T000000Z", "PLN_03_RESTORE_DRILL": "PASS", "_file": "d.json", "_mtime": 1.0,
+             "checks": {}}
+    restore = cr.project(_obs(drills=[older]))["ops"]["restore"]
+    assert restore[0] == "warn"
+    assert "older set 20261024T000000Z" in restore[1]["en"] and "20261025T211956Z not drilled" in restore[1]["en"]
+
+
+@pytest.mark.parametrize("newest", [None, {"stamp": "20261025T211956Z", "coverage": None, "observed": None,
+                                           "data_sources": []},
+                                    {"stamp": "20261025T211956Z", "unreadable": True},
+                                    {"stamp": "20261024T000000Z", "coverage": "PASS", "observed": "at_create",
+                                     "data_sources": ["grafana"]}])
+def test_a_verified_set_without_live_data_coverage_is_integrity_only_never_pass(newest):
+    live = cr.project(_obs(newest_backup=newest))
+    sc = live["scenario"]
+    assert sc["dims"]["evidence"][0] == "warn" and sc["dims"]["evidence"][1]["en"] == "Integrity only"
+    assert "Integrity is not recoverability" in sc["exc"]["evidence"]["en"]
+    assert live["ops"]["backup"][0] == "warn" and "integrity PASS" in live["ops"]["backup"][1]["en"]
+    assert "live-data coverage UNPROVEN" in live["ops"]["backup"][1]["en"]
+    assert any("live-data coverage UNPROVEN" in k["en"] for k in sc["known"])
+
+
+def test_a_covered_and_verified_set_passes_evidence_and_names_its_observation_phase():
+    live = cr.project(_obs())
+    assert live["scenario"]["dims"]["evidence"] == ["ok", "pass"]
+    assert live["ops"]["backup"][0] == "ok"
+    assert "live-data coverage PASS (before_runtime_stop; grafana, mlflow, prometheus)" in live["ops"]["backup"][1]["en"]
+
+
+def test_a_failed_verify_stays_a_failure_whatever_the_coverage_says():
+    obs = _obs()
+    obs["health"] = {"findings": [{"check": "backup_recency", "severity": "CRITICAL",
+                                   "detail": "newest set S does not verify"}], "overall": "CRITICAL"}
+    live = cr.project(obs)
+    assert live["scenario"]["dims"]["evidence"] == ["fail", "fail"] and live["ops"]["backup"][0] == "inc"
+
+
+def test_identity_says_the_sha_is_this_hosts_tools_checkout_beside_its_record_date():
+    live = cr.project(_obs())
+    assert live["identity"]["main"] == "a" * 40
+    assert live["identity"]["record_updated"] == json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8"))["updated_utc"]
+    js = (REPO / "research" / "p3" / "control_room_live.js").read_text(encoding="utf-8")
+    assert "Tools checkout HEAD (this host)" in js and "Governance main" not in js
+    assert "it may be behind GitHub main" in js
+
+
+def test_collect_reads_the_newest_sets_own_coverage(tmp_path):
+    target = tmp_path / "backups"
+    for stamp, cov in (("20261103T183447Z", None),
+                       ("20261104T050000Z", {"LIVE_DATA_COVERAGE": "PASS", "observed": "before_runtime_stop"})):
+        (target / stamp).mkdir(parents=True)
+        (target / stamp / "BACKUP_RECORD.json").write_text(json.dumps(
+            {"stamp": stamp, "live_data_coverage": cov, "data_sources": {"grafana": {}} if cov else {}}))
+    def runner(cmd):
+        out = "enabled" if "is-enabled" in cmd else "active" if cmd[:2] == ["systemctl", "--user"] else ""
+        return subprocess.CompletedProcess(cmd, 0, out, "")
+    obs = cr.collect(runner=runner, backup_target=target, evidence_dir=tmp_path / "ev", findings=[],
+                     docker=lambda cmd: subprocess.CompletedProcess(cmd, 0, "", ""), ledger_path=tmp_path / "none")
+    assert obs["newest_backup"] == {"stamp": "20261104T050000Z", "coverage": "PASS", "observed": "before_runtime_stop",
+                                    "data_sources": ["grafana"]}

@@ -1836,6 +1836,29 @@ P3_VOLUME_ARCHIVE_PERMS_SCOPE: dict[str, str] = {
 }
 
 
+# PR #106, merged. Two parents: 5ea03493 (main before) + 99891141
+# (P3 backup live data coverage). These entries were BRANCH_SCOPE while it was in flight.
+P3_LIVE_DATA_COVERAGE_MERGE = "66a30de33d553d91a4801f3e54944e2ad6399a90"
+
+# P3 backup live data coverage, 2026-11-03 host finding: the runtime containers bind-mount
+# /srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}, but the backup exported named volumes no
+# container uses. backup.py gains live data sources (bind or volume) proven equal to the source, a LIVE_DATA_COVERAGE
+# check against the compose project's containers, and drill restoration of the data. No host change.
+_LDC = "P3 backup live data coverage"
+P3_LIVE_DATA_COVERAGE_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_LDC} — data sources, archive == live source, LIVE_DATA_COVERAGE, drill restores data; "
+                             "compare-export counts data artifacts; owner-only sets",
+    "scripts/p3/backup.py": f"{_LDC} — create --data/--compose-project; coverage subcommand (read-only)",
+    "tests/test_p3_backup_live_data.py": f"{_LDC} — live binds byte for byte, drill, compare-export, stale/uncovered "
+                                         "refused, running writer, private sets, production image, real Docker",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_LDC} — design rules, the 2026-11-03 finding and correction, drill limits",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_LDC} — correction: the old named-volume exports do not prove live data",
+    "tests/test_p3_backup_volume_export.py": f"{_LDC} — real-Docker readiness: helper image pulled on GitHub Actions only",
+    "tests/test_p2_scope_audit.py": "P3 backup volume-archive permissions (PR #105) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1916,6 +1939,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_OWNER_DECISIONS": (P3_OWNER_DECISIONS_MERGE, P3_OWNER_DECISIONS_SCOPE),
     "P3_TIER3_ENCRYPTION": (P3_TIER3_ENCRYPTION_MERGE, P3_TIER3_ENCRYPTION_SCOPE),
     "P3_VOLUME_ARCHIVE_PERMS": (P3_VOLUME_ARCHIVE_PERMS_MERGE, P3_VOLUME_ARCHIVE_PERMS_SCOPE),
+    "P3_LIVE_DATA_COVERAGE": (P3_LIVE_DATA_COVERAGE_MERGE, P3_LIVE_DATA_COVERAGE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1923,21 +1947,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 backup live data coverage, 2026-11-03 host finding: the runtime containers bind-mount
-# /srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}, but the backup exported named volumes no
-# container uses. backup.py gains live data sources (bind or volume) proven equal to the source, a LIVE_DATA_COVERAGE
-# check against the compose project's containers, and drill restoration of the data. No host change.
-_LDC = "P3 backup live data coverage"
+# P3 Control Room backup truth (PR-B, PLN-09): integrity, live-data coverage and restore are shown as separate claims;
+# a drill of an older set never proves the newest one; the identity SHA is labelled as this host's tools checkout with
+# its governed record date; the workstream record's Owner/next texts brought current after #104-#106, with the
+# PLN-02/PLN-03 limitations found on 2026-11-03 recorded (statuses unchanged). Read-only view; no host change.
+_CRT = "P3 Control Room backup truth"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_LDC} — data sources, archive == live source, LIVE_DATA_COVERAGE, drill restores data; "
-                             "compare-export counts data artifacts; owner-only sets",
-    "scripts/p3/backup.py": f"{_LDC} — create --data/--compose-project; coverage subcommand (read-only)",
-    "tests/test_p3_backup_live_data.py": f"{_LDC} — live binds byte for byte, drill, compare-export, stale/uncovered "
-                                         "refused, running writer, private sets, production image, real Docker",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_LDC} — design rules, the 2026-11-03 finding and correction, drill limits",
-    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_LDC} — correction: the old named-volume exports do not prove live data",
-    "tests/test_p3_backup_volume_export.py": f"{_LDC} — real-Docker readiness: helper image pulled on GitHub Actions only",
-    "tests/test_p2_scope_audit.py": "P3 backup volume-archive permissions (PR #105) pinned to its merge; this branch's scope",
+    "research/p3/control_room.py": f"{_CRT} — backup_truth(); evidence dimension, ops and known list; identity provenance",
+    "research/p3/control_room_live.js": f"{_CRT} — identity rows: tools checkout HEAD and governed record date",
+    "tests/test_p3_control_room.py": f"{_CRT} — older drill, integrity-only, covered PASS, failed verify, provenance",
+    "research/p3/records/p3_workstreams.json": f"{_CRT} — Owner/next current after #104-#106; PLN-02/03 limitations",
+    "tests/test_p2_scope_audit.py": "P3 backup live data coverage (PR #106) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

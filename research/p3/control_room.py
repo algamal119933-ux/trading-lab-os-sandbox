@@ -210,6 +210,15 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
             backup_target = None  # unusable configuration: no sets are listed; health carries the CRITICAL
     sets = sorted(p.name for p in Path(backup_target).glob("*") if (p / "BACKUP_RECORD.json").is_file()) \
         if backup_target is not None and Path(backup_target).is_dir() else []
+    newest_backup = None
+    if sets:
+        try:
+            rec = json.loads((Path(backup_target) / sets[-1] / "BACKUP_RECORD.json").read_text(encoding="utf-8"))
+            cov = rec.get("live_data_coverage") or {}
+            newest_backup = {"stamp": sets[-1], "coverage": cov.get("LIVE_DATA_COVERAGE"),
+                             "observed": cov.get("observed"), "data_sources": sorted(rec.get("data_sources") or {})}
+        except (OSError, ValueError, AttributeError):
+            newest_backup = {"stamp": sets[-1], "unreadable": True}
     drills, audits = [], []
     for kind, out in (("drills", drills), ("audits", audits)):
         for f in sorted(Path(evidence_dir, kind).glob("*.json"), key=lambda q: q.stat().st_mtime):
@@ -259,11 +268,46 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
         "host": {"uptime_s": float(uptime.split()[0]) if uptime else None, "boot_id": boot_id,
                  "ntp_synced": {"yes": True, "no": False}.get(ntp or "")},
         "backup_sets": sets,
+        "newest_backup": newest_backup,
         "workstreams": json.loads(Path(workstreams_path).read_text(encoding="utf-8")),
     }
 
 
 # ---------------------------------------------------------------- project
+def backup_truth(obs: dict) -> dict:
+    """Three separate claims about the newest backup set; none implies another.
+    integrity: the set verifies (health backup_recency, which also bounds its age by the RPO).
+    coverage:  the set's own record carries LIVE_DATA_COVERAGE = PASS (sets before the live-data change carry none).
+    restore:   a persisted drill of *this* set passed. A drill of an older set never proves the newest one."""
+    backup_f = _finding(obs, "backup_recency")
+    sets = obs.get("backup_sets") or []
+    newest = sets[-1] if sets else None
+    nb = obs.get("newest_backup") or {}
+    integrity = bool(backup_f) and backup_f["severity"] == health.INFO
+    if nb.get("coverage") == "PASS" and nb.get("stamp") == newest:
+        coverage = ["ok", b(f"live-data coverage PASS ({nb.get('observed') or 'phase not recorded'}; "
+                            f"{', '.join(nb.get('data_sources') or []) or 'no data sources'})",
+                            f"تغطية البيانات الحية ناجحة ({nb.get('observed') or 'المرحلة غير مسجلة'}؛ "
+                            f"{'، '.join(nb.get('data_sources') or []) or 'لا مصادر بيانات'})")]
+    else:
+        why = "its record is unreadable" if nb.get("unreadable") else "its record carries no live-data coverage"
+        coverage = ["warn", b(f"live-data coverage UNPROVEN: set {newest or 'none'}: {why}",
+                              f"تغطية البيانات الحية غير مثبتة: المجموعة {newest or 'لا يوجد'}: "
+                              f"{'سجلها غير مقروء' if nb.get('unreadable') else 'سجلها لا يحمل تغطية للبيانات الحية'}")]
+    drill = next((d for d in reversed(obs.get("drills", [])) if not d.get("unreadable")), None)
+    if not drill:
+        restore = ["unk", "notRecorded"]
+    elif drill.get("PLN_03_RESTORE_DRILL") != "PASS":
+        restore = ["fail", "fail"]
+    elif drill.get("backup_set") == newest:
+        restore = ["ok", b(f"Drill PASS · {newest}", f"التمرين ناجح · {newest}")]
+    else:
+        restore = ["warn", b(f"Drill PASS on older set {drill.get('backup_set')}; newest set {newest or 'none'} not drilled",
+                             f"التمرين ناجح على مجموعة أقدم {drill.get('backup_set')}؛ "
+                             f"المجموعة الأحدث {newest or 'لا يوجد'} لم تُمرَّن")]
+    return {"integrity": integrity, "coverage": coverage, "restore": restore, "drill": drill, "finding": backup_f}
+
+
 def _finding(obs: dict, check: str) -> dict | None:
     return next((f for f in obs["health"]["findings"] if f["check"] == check), None)
 
@@ -335,10 +379,16 @@ def project(obs: dict) -> dict:
         exc["authority"] = b("P3 authorization record missing, expired, or the real-money boundary is not explicit.",
                              "سجل تفويض P3 مفقود أو منتهٍ، أو حد المال الحقيقي غير صريح.")
 
-    backup_f = _finding(obs, "backup_recency")
+    truth = backup_truth(obs)
+    backup_f = truth["finding"]
     ledger_ok = not obs["ledger"]["problems"]
-    evidence_ok = bool(backup_f) and backup_f["severity"] == health.INFO and ledger_ok
-    evidence_dim = ["ok", "pass"] if evidence_ok else ["fail", "fail"]
+    evidence_ok = truth["integrity"] and ledger_ok
+    covered = truth["coverage"][0] == "ok"
+    evidence_dim = (["ok", "pass"] if evidence_ok and covered else
+                    ["warn", b("Integrity only", "السلامة فقط")] if evidence_ok else ["fail", "fail"])
+    if evidence_ok and not covered:
+        exc["evidence"] = b(f"Backup verifies, but {truth['coverage'][1]['en']}. Integrity is not recoverability.",
+                            f"النسخة سليمة، لكن {truth['coverage'][1]['ar']}. السلامة ليست قابلية الاستعادة.")
     if not evidence_ok:
         exc["evidence"] = b(f"Backup: {backup_f['detail'] if backup_f else 'no finding'}; operator ledger: "
                             f"{'PASS' if ledger_ok else '; '.join(obs['ledger']['problems'])}",
@@ -418,8 +468,10 @@ def project(obs: dict) -> dict:
             unknown.append(b("H1 launch boundary not explicit in the authorization record (treated as not authorized)",
                              "حد إطلاق H1 غير صريح في سجل التفويض (يُعامل كغير مصرّح)"))
     if backup_f:
-        known.append(b(f"Backup: {backup_f['detail']} · verify {'PASS' if backup_f['severity'] == health.INFO else 'FAIL'}",
-                       f"النسخ الاحتياطي: {backup_f['detail']} · التحقق {'ناجح' if backup_f['severity'] == health.INFO else 'فاشل'}"))
+        known.append(b(f"Backup: {backup_f['detail']} · verify {'PASS' if backup_f['severity'] == health.INFO else 'FAIL'}"
+                       f" · {truth['coverage'][1]['en']}",
+                       f"النسخ الاحتياطي: {backup_f['detail']} · التحقق {'ناجح' if backup_f['severity'] == health.INFO else 'فاشل'}"
+                       f" · {truth['coverage'][1]['ar']}"))
     known.append(b(f"Operator ledger: {obs['ledger']['records']} records, chain {'PASS' if ledger_ok else 'FAIL'}",
                    f"سجل المشغّل: {obs['ledger']['records']} سجلات، السلسلة {'ناجحة' if ledger_ok else 'فاشلة'}"))
     known.append(b(f"FP-CONTROL-3 restart refused: {obs['fp_control_3_restart']['reason']}",
@@ -557,8 +609,11 @@ def project(obs: dict) -> dict:
                     "gate": _ws_text(ws, "next"),
                     "workstreams": ws_rows or [],
                     "ws_updated": ws.get("updated_utc") or "—"},
+        # "main" is this host's tools checkout HEAD, not GitHub main; the view labels it so, beside the date of the
+        # governed record that checkout carries (an old checkout shows old Owner instructions).
         "identity": {"runtime_pin": obs["runtime"]["pin"], "runtime_clean": obs["runtime"]["clean"],
-                     "main": obs["governance"]["main"], "boot_id": obs["host"]["boot_id"]},
+                     "main": obs["governance"]["main"], "boot_id": obs["host"]["boot_id"],
+                     "record_updated": ws.get("updated_utc") or "—"},
         "health_findings": obs["health"]["findings"],
         # Incidents are raised from non-INFO health findings. With no findings at all the health run did
         # not report, so "none open" would be unproven: the view says UNKNOWN instead (fail closed).
@@ -626,10 +681,10 @@ def _bind_screens(obs: dict, live: dict) -> None:
     sc = live["scenario"]
     now = obs["observed_utc"]
     findings = obs["health"]["findings"]
-    backup_f = _finding(obs, "backup_recency")
+    truth = backup_truth(obs)
+    backup_f = truth["finding"]
     sets = obs["backup_sets"]
-    drill = next((d for d in reversed(obs.get("drills", [])) if not d.get("unreadable")), None)
-    drill_ok = bool(drill) and drill.get("PLN_03_RESTORE_DRILL") == "PASS"
+    drill = truth["drill"]
     reboot = _reboot_acceptance(obs["workstreams"])
     sealed = [a for k, v in (drill or {}).get("checks", {}).items() if k.startswith("sealed:") for a in v.get("archives", [])]
 
@@ -681,12 +736,15 @@ def _bind_screens(obs: dict, live: dict) -> None:
 
     # Operations: backup, restore and recovery from records; actions are operator CLIs, not view buttons.
     live["ops"] = {
-        "backup": [_sevc(backup_f["severity"]), b(backup_f["detail"], backup_f["detail"])] if backup_f else ["unk", "unknown"],
+        "backup": ([_sevc(backup_f["severity"]) if truth["coverage"][0] == "ok" or not truth["integrity"] else "warn",
+                    b(f"{backup_f['detail']} · integrity {'PASS' if truth['integrity'] else 'FAIL'} · "
+                      f"{truth['coverage'][1]['en']}",
+                      f"{backup_f['detail']} · السلامة {'ناجحة' if truth['integrity'] else 'فاشلة'} · "
+                      f"{truth['coverage'][1]['ar']}")] if backup_f else ["unk", "unknown"]),
         "last_set": sets[-1] if sets else None,
         "retention": b("Append-only; no pruning (deleting sets needs an Owner decision)",
                        "إضافة فقط؛ لا حذف (حذف المجموعات يحتاج قرار المالك)"),
-        "restore": ["ok", b(f"Drill PASS · {drill.get('backup_set')}", f"التمرين ناجح · {drill.get('backup_set')}")] if drill_ok
-        else (["fail", "fail"] if drill else ["unk", "notRecorded"]),
+        "restore": truth["restore"],
         "restore_when": _utc(drill["_mtime"]) if drill else None,
         "points": len(sets),
         "reboot": (["ok", b(reboot["en"], reboot["ar"])] if reboot
