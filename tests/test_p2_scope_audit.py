@@ -1796,6 +1796,28 @@ P3_OWNER_DECISIONS_SCOPE: dict[str, str] = {
 }
 
 
+# PR #104, merged. Two parents: 5a12a780 (main before) + 825aa114
+# (P3 Tier-3 client-side encryption). These entries were BRANCH_SCOPE while it was in flight.
+P3_TIER3_ENCRYPTION_MERGE = "823cb229ec9d66e9c83badd27f7f2a292d9de757"
+
+# P3 Tier-3 client-side encryption, the tool the Owner decision of 2026-11-03 requires (PLN_05_DESTINATION_DECISIONS.md
+# §8): offsite.py gains seal / verify_sealed / open_sealed (GnuPG, WRAP_EXISTING) and refuses a remote push of an
+# unsealed set; the procedure documents the key pair, sealing and opening. No host change; nothing is uploaded.
+_T3E = "P3 Tier-3 client-side encryption"
+P3_TIER3_ENCRYPTION_SCOPE: dict[str, str] = {
+    "research/p3/offsite.py": f"{_T3E} — seal / verify_sealed / open_sealed; remote push of an unsealed set refused",
+    "scripts/p3/offsite.py": f"{_T3E} — CLI --seal and --open modes; push unchanged",
+    "tests/test_p3_offsite_seal.py": f"{_T3E} — ciphertext only, key off host, fingerprint, tamper, wrong key, drill, CLI",
+    "tests/test_p3_offsite_and_units.py": f"{_T3E} — the remote target only ever receives a sealed set",
+    "tests/test_p3_offsite_gate.py": f"{_T3E} — the gate round trip now pushes, pulls and opens a sealed set",
+    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_T3E} — §8 and the status line name the tool",
+    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_T3E} — §4 step 6 key pair off host, §5 seal + push, §6 open; T3-R8 row",
+    "research/p3/records/p3_workstreams.json": f"{_T3E} — PLN-05 line; Owner/next texts",
+    "tests/test_p2_scope_audit.py": "P3 Owner decisions 2026-11-03 (PR #103) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1874,6 +1896,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_DECISION_H_APPLIED": (P3_DECISION_H_APPLIED_MERGE, P3_DECISION_H_APPLIED_SCOPE),
     "P3_STATUS_RECONCILE_101": (P3_STATUS_RECONCILE_101_MERGE, P3_STATUS_RECONCILE_101_SCOPE),
     "P3_OWNER_DECISIONS": (P3_OWNER_DECISIONS_MERGE, P3_OWNER_DECISIONS_SCOPE),
+    "P3_TIER3_ENCRYPTION": (P3_TIER3_ENCRYPTION_MERGE, P3_TIER3_ENCRYPTION_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1881,20 +1904,16 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 Tier-3 client-side encryption, the tool the Owner decision of 2026-11-03 requires (PLN_05_DESTINATION_DECISIONS.md
-# §8): offsite.py gains seal / verify_sealed / open_sealed (GnuPG, WRAP_EXISTING) and refuses a remote push of an
-# unsealed set; the procedure documents the key pair, sealing and opening. No host change; nothing is uploaded.
-_T3E = "P3 Tier-3 client-side encryption"
+# P3 backup hardening, 2026-11-03 host finding: set 20261103T183447Z verified PASS but its three Docker volume
+# archives were root:root 0644 (the root helper container wrote them through a bind mount). The exporter now streams
+# the archive out of the container into a file backup.py creates 0600 as the backup user, and refuses anything else.
+# No host change; historical sets untouched.
+_VOL = "P3 backup volume-archive permissions"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/offsite.py": f"{_T3E} — seal / verify_sealed / open_sealed; remote push of an unsealed set refused",
-    "scripts/p3/offsite.py": f"{_T3E} — CLI --seal and --open modes; push unchanged",
-    "tests/test_p3_offsite_seal.py": f"{_T3E} — ciphertext only, key off host, fingerprint, tamper, wrong key, drill, CLI",
-    "tests/test_p3_offsite_and_units.py": f"{_T3E} — the remote target only ever receives a sealed set",
-    "tests/test_p3_offsite_gate.py": f"{_T3E} — the gate round trip now pushes, pulls and opens a sealed set",
-    "docs/p3/PLN_05_DESTINATION_DECISIONS.md": f"{_T3E} — §8 and the status line name the tool",
-    "docs/p3/PLN_05_TIER3_PROCEDURE.md": f"{_T3E} — §4 step 6 key pair off host, §5 seal + push, §6 open; T3-R8 row",
-    "research/p3/records/p3_workstreams.json": f"{_T3E} — PLN-05 line; Owner/next texts",
-    "tests/test_p2_scope_audit.py": "P3 Owner decisions 2026-11-03 (PR #103) pinned to its merge; this branch's scope",
+    "research/p3/backup.py": f"{_VOL} — volume export streamed to a 0600 file owned by the backup user; refused otherwise",
+    "tests/test_p3_backup_volume_export.py": f"{_VOL} — owner/mode regression, read-only no-network no-write-mount helper, failure paths, real Docker",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_VOL} — design rule and the 2026-11-03 finding",
+    "tests/test_p2_scope_audit.py": "P3 Tier-3 client-side encryption (PR #104) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
