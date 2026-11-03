@@ -1737,6 +1737,24 @@ P3_STATUS_RECONCILE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #101, merged. Two parents: 6d2f2075 (main before) + 49a7ba4b
+# (P3 Decision H applied). These entries were BRANCH_SCOPE while it was in flight.
+P3_DECISION_H_APPLIED_MERGE = "c35d6ec0c276bfac25f4926e221aaae5c8326fd2"
+
+# P3 Decision H applied (record only): the Owner's 2026-11-03 decision on unattended upgrades and its host application
+# (U1, Owner-run), the unplanned 2026-11-03 reboot recorded as an out-of-band observation (not accepted), and the
+# governed status lines. Documents and the status record only; no runtime, strategy, risk, dataset or code change.
+_DHA = "P3 Decision H applied"
+P3_DECISION_H_APPLIED_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_DHA} — status DECIDED/APPLIED, §5 Owner decision and host application record",
+    "docs/p3/PLN_04_RECOVERY.md": f"{_DHA} — out-of-band update and unplanned reboot 2026-11-03: observational verify-boot, not accepted",
+    "research/p3/records/p3_workstreams.json": f"{_DHA} — PLN-04 evidence, reboot open items, Owner/next texts (PLN-04 still PARTIAL); PLN-06 host-access line",
+    "docs/p3/PLN_06_HOST_ACCESS_HARDENING.md": f"{_DHA} — host access A1–A4: A1 PASS record, A2 procedure prepared for review (not run)",
+    "tests/test_p2_scope_audit.py": "P3 status reconciliation (PR #97) pinned to its merge; this branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1812,6 +1830,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN_10_ACCEPTANCE": (P3_PLN_10_ACCEPTANCE_MERGE, P3_PLN_10_ACCEPTANCE_SCOPE),
     "P3_PLN_11_EXEC_PACK": (P3_PLN_11_EXEC_PACK_MERGE, P3_PLN_11_EXEC_PACK_SCOPE),
     "P3_STATUS_RECONCILE": (P3_STATUS_RECONCILE_MERGE, P3_STATUS_RECONCILE_SCOPE),
+    "P3_DECISION_H_APPLIED": (P3_DECISION_H_APPLIED_MERGE, P3_DECISION_H_APPLIED_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1819,16 +1838,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 Decision H applied (record only): the Owner's 2026-11-03 decision on unattended upgrades and its host application
-# (U1, Owner-run), the unplanned 2026-11-03 reboot recorded as an out-of-band observation (not accepted), and the
-# governed status lines. Documents and the status record only; no runtime, strategy, risk, dataset or code change.
-_DHA = "P3 Decision H applied"
+# P3 status reconciliation after PR #101: the governed status texts brought current and the PLN-06 host-access
+# record updated to the corrected A2 v2 procedure (prepared for Owner review, not run). Documents and the status
+# record only; no host, runtime, strategy, risk, dataset or code change.
+_RS101 = "P3 status reconciliation after #101"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md": f"{_DHA} — status DECIDED/APPLIED, §5 Owner decision and host application record",
-    "docs/p3/PLN_04_RECOVERY.md": f"{_DHA} — out-of-band update and unplanned reboot 2026-11-03: observational verify-boot, not accepted",
-    "research/p3/records/p3_workstreams.json": f"{_DHA} — PLN-04 evidence, reboot open items, Owner/next texts (PLN-04 still PARTIAL); PLN-06 host-access line",
-    "docs/p3/PLN_06_HOST_ACCESS_HARDENING.md": f"{_DHA} — host access A1–A4: A1 PASS record, A2 procedure prepared for review (not run)",
-    "tests/test_p2_scope_audit.py": "P3 status reconciliation (PR #97) pinned to its merge; this branch's scope",
+    "research/p3/records/p3_workstreams.json": f"{_RS101} — Owner/next texts, PLN-06 host-access line (A2 v2 prepared)",
+    "docs/p3/PLN_06_HOST_ACCESS_HARDENING.md": f"{_RS101} — A2 v2: risks A/B corrected, gates, tests, execution and rollback",
+    "tests/test_p2_scope_audit.py": "P3 Decision H applied (PR #101) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
