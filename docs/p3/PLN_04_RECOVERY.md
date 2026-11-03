@@ -245,3 +245,75 @@ scripts/p3/recovery.py snapshot --out ~/tlos-paper/p3-evidence/pre_reboot_snapsh
 python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["boot_posture"]; print(p["status"]); [print(" -", x) for x in p["problems"]]' <that file>
 ```
 Reboot only when the result is `READY`. `NOT_READY` lists exactly what will not come back by itself.
+
+## Out-of-band update and unplanned reboot (2026-11-03)
+**Status: RECORDED, NOT ACCEPTED.** This is an observation, not a run under
+[`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md). It does not close R1 or PLN-04.
+Whether it counts is an Owner decision.
+
+Host evidence lives in `~/tlos-paper/p3-evidence/` and is not committed:
+
+| File | sha256 |
+|---|---|
+| `oob_update_reboot_20261103T141650Z.md` | `b5db7200…20820e` |
+| `oob_update_reboot_20261103T141650Z.d/verify_boot_observational_20261103T142004Z.json` | `feb34c6e…5282cb` |
+| `oob_update_reboot_20261103T141650Z.d/package_reconciliation.txt` | `0ef2842a…1c1cc4` |
+
+### What happened
+All times are local (EET).
+
+- **15:55:** the desktop Software Updater, opened from the Owner's GNOME session, refreshed the package lists.
+- **16:00:34–16:02:10:** aptdaemon installed every pending update.
+- **16:02:54–16:02:58:** aptdaemon removed the old 7.0.0-34 kernel set.
+- **16:03:12:** the reboot was chosen in the GNOME end-session dialog, and logind logged "The system will reboot
+  now!"
+- The previous boot ended cleanly with `Reached target reboot.target`, `Shutting down` and `Journal stopped` at
+  16:03:26. Boot `8b074f2c` was followed by boot `f9c2931f`.
+- Claude ran no sudo, no apt and no reboot.
+- Decision H was still open at the time; it was applied about 24 minutes later
+  ([`PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md`](PLN_04_07_DECISION_H_UNATTENDED_UPGRADES.md) §5).
+
+### Package reconciliation
+There were 104 dpkg actions, and every one has a known origin:
+
+| Origin | Count | Content |
+|---|---|---|
+| Kernel security set | 20 | 7.0.0-38 → 7.0.0-42.42, including the Canonical-signed NVIDIA 595 modules |
+| Ubuntu `-updates` | 65 | including systemd 259.5 → 259.9, udev, gnome-shell/mutter, sssd, qemu, snapd (deb), cloud-init, xserver |
+| Third-party | 9 | Docker: docker-ce/cli 29.8.2 → 29.9.2, containerd.io 2.3.6 → 2.4.2, compose 5.6.0 → 5.7.0, buildx, rootless-extras; plus tailscale 1.104.2 → 1.104.5, code, claude-desktop |
+| Removed | 10 | the old 7.0.0-34 kernel set |
+
+The NVIDIA userspace is unchanged at 595.99.02, and module 595.99.02 loads on 7.0.0-42.
+
+### Observational verify-boot
+- **Command:** `scripts/p3/recovery.py verify-boot --before reboot_baseline_snapshot_20261031T173329Z.json`
+  (sha256 `f060dd09…b7ce30`).
+- **Code and baseline:** run at `6d2f207` with a clean tools checkout. The baseline's boot is exactly the boot
+  that ended.
+- **Result: `PLN_04_REBOOT_CHECK = PASS`, 16/16**, including `rebooted` (`8b074f2c` → `f9c2931f`).
+- **Limit:** the tool samples the current state about 20 minutes after boot. It is not a frozen post-boot
+  snapshot.
+- **Immutable corroboration from the journal and Docker:**
+  - 16:03:49: `/srv/project-data` mounted.
+  - 16:04:04: `user@1000` started, and `tlos-runtime.service` logged `GUARD_OK` (UUID `6d45029b…`).
+  - 16:04:11: the TLOS containers were started by `tlos-runtime` (restart policy `no`), with RestartCount 0
+    afterwards.
+- **Same boot, later checks:** `RUNTIME_VERIFY` 23/23 and health INFO.
+
+### Gap attestation (read-only), 2026-10-31T17:33Z → 2026-11-03T14:03Z
+- **None of the runbook's prohibited changes happened:**
+  - the tools checkout did not move (reflog: the last move was 2026-10-31 19:33, to `6d2f207`);
+  - no user unit file was modified, and no user manager was reloaded;
+  - neither node-exporter nor auditd is installed.
+- **Container stop/start in the window:** only the daily backup quiesce (`tlos-runtime.service`, 05:31–05:33).
+- **Changes outside the prohibited list that still changed the system under test:**
+  - A4: AnyDesk and RustDesk system units were disabled on 2026-11-03. Neither is in the snapshot.
+  - The 104 package actions immediately before the reboot.
+
+### Classification
+- The reboot checks pass and the shutdown was clean.
+- **Procedural deviations** (recorded, not waived):
+  1. The reboot was not run under the runbook, and no preflight was taken. This is an unplanned Owner action.
+  2. An uncontrolled package transaction, including Docker and systemd, ran immediately before it.
+- `R1_EVIDENCE_STATUS = OBSERVATIONAL_PASS`. R1 and PLN-04 stay open until the Owner decides.
+

@@ -1,4 +1,4 @@
-# P3-PLN-04/07 — Decision H: unattended upgrades under the host freeze (prepared for the Owner; NOT_RUN)
+# P3-PLN-04/07 — Decision H: unattended upgrades under the host freeze (DECIDED: option C; applied on the host 2026-11-03)
 
 **Authority:** [`P3_CONTRACT.md`](P3_CONTRACT.md) §3 PLN-04 and PLN-07 (frozen at fcd06b21), executed under
 [`OWNER_P3_EXECUTION_AUTHORIZATION.md`](OWNER_P3_EXECUTION_AUTHORIZATION.md) (7b1b1fa1). The finding comes from
@@ -8,8 +8,10 @@ and C below.
 PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO
 
 ```text
-DECISION_H            = OPEN (the Owner decides)
-HOST SETTINGS CHANGED = NONE — every command below is NOT_RUN and needs explicit Owner authorization
+DECISION_H            = DECIDED — option (C), security-only in a fixed window; Owner decision U1, 2026-11-03
+HOST SETTINGS CHANGED = APPLIED by the Owner 2026-11-03T14:27:13Z (U1) — §5 is the application record;
+                        §4 below is the text as prepared and stays unchanged
+FIRST WINDOW          = 2026-11-04T04:20:00Z — its package delta is still to be verified (§5.4)
 ```
 
 ## 1. Facts
@@ -187,3 +189,89 @@ How the delta is classified:
 Proposed later changes, not made here:
 - `recovery.py`: a `package_set_sha256` field and a verify-boot "recorded, not drift" check. This is Lane B code;
 - `health.py`: a `reboot_required` and last-unattended-run finding. This is Lane A, PLN-06.
+
+## 5. Owner decision and host application record (2026-11-03)
+Host evidence lives in `~/tlos-paper/p3-evidence/` on hamza-workstation. It is not committed, and is cited by
+sha256 below.
+
+### 5.1 The decision
+The Owner approved option (C), referred to as U1. It covers:
+- security origins only;
+- a fixed window at **04:20 UTC**, which is always 50 minutes after the 03:30 UTC backup, in both seasons;
+- `Automatic-Reboot` and `Automatic-Reboot-WithUsers` set to `"false"`;
+- the experiment freeze switch;
+- no run while the backup is running;
+- a package baseline before the first run, and a package delta after every run;
+- the original configuration and its hashes kept.
+
+Two settings are deliberately not changed:
+- **Metered connections:** not overridden. The Owner first confirms the tariff.
+- **Snap refresh schedule:** unchanged, until a specific conflict is shown.
+
+### 5.2 What was installed
+Four new files were installed, and no vendor file was edited:
+
+| File | sha256 |
+|---|---|
+| `/etc/apt/apt.conf.d/52tlos-unattended-upgrades` | `90dc0367…b1d060` |
+| `/etc/systemd/system/apt-daily-upgrade.timer.d/50-tlos-window.conf` | `4a5d7b60…4360e3` |
+| `/etc/systemd/system/apt-daily-upgrade.service.d/50-tlos-freeze-delta.conf` | `855dff09…3277f9` |
+| `/usr/local/sbin/tlos-apt-delta` (v2) | `9c1e30a0…e9f1fa` |
+
+The vendor files `10periodic`, `20auto-upgrades`, `50unattended-upgrades` and the `apt-daily-upgrade` timer and
+service units match their recorded pre-U1 hashes.
+
+Differences from the §4.1 text as prepared:
+- **No `Origins-Pattern` clear:** the vendor file sets no `Origins-Pattern`. The effective configuration was
+  verified to contain exactly the three `-security` origins.
+- **The window:** it is the fixed `04:20 UTC` timer, with `RandomizedDelaySec=0` and `Persistent=false`.
+- **The freeze:** it is enforced by an `ExecCondition` hook (`/etc/tlos/apt-freeze`, or the backup unit
+  running). A skipped run is SKIPPED, not FAILED.
+- **The delta:** a per-run `/var/log/tlos-apt/delta-<UTC>.txt` (+ `.sha256`, directory `root:adm 0750`).
+- **`needrestart`:** not installed, so no service is restarted by a run.
+
+The two hook fixes made before application are:
+- **v1 → v2, freeze delta:** systemd runs `ExecStopPost` after an `ExecCondition` skip, but not `ExecStartPre`. In
+  v1, a frozen day therefore wrote a diff against a stale or missing `pre.list`. v2 pairs pre and post through
+  `run.pending`, so a skipped run records "skipped", never a diff. This was reproduced and then tested through
+  user systemd.
+- **Backup guard:** the guard tests the `tlos-p3-backup.service` cgroup. A backup started by hand is not
+  detected, so set the freeze for it.
+
+The preflight of the apply script was hardened before the Owner ran it:
+- **Backup check:** it uses the set's own `VERIFY = PASS` journal line and the record-digest match, rather than
+  the unit `Result`. After a reboot, `Result` reads `success` for a unit that has not run.
+- **`sudo` and `fuser`:** a `sudo -v` / `fuser` failure stops the run.
+
+### 5.3 Application and independent verification
+- **Applied by:** the Owner, in a local terminal, at `2026-11-03T14:27:13Z` on boot `f9c2931f`.
+- **Apply script and result:** `u1_apply.sh` sha256 `0db1841a…919485`. PREFLIGHT PASS and 14/14 checks PASS. It
+  installed no packages, started no update, did not reboot, and did not touch SSH, UFW, Tailscale or Docker.
+- **Independent check by Claude** (`u1_verification_20261103T143054Z.md`, sha256 `6ab874f0…7f5b`):
+  - the installed hashes match;
+  - the effective origins are exactly the three `-security` origins;
+  - automatic reboot is off;
+  - the timer is `*-*-* 04:20:00 UTC`, next run `2026-11-04T04:20:00Z`;
+  - the freeze file is absent;
+  - the package set is unchanged;
+  - the only system event was one `daemon-reload`;
+  - `RUNTIME_VERIFY` 23/23 and health INFO;
+  - Docker 7/7 required containers running;
+  - backup 8/8 sets digest-OK.
+- **`U1 = PASS`.**
+
+### 5.4 Still open
+- **U1-D1:** verify the first window's `/var/log/tlos-apt/delta-*.txt`:
+  - the result line;
+  - the pre/post hashes;
+  - the package lines, or "skipped";
+  - the `reboot-required` line.
+
+  Then re-run health and `RUNTIME_VERIFY`.
+- **Outside this policy, by design:** the desktop Software Updater, or any manual `apt`, installs everything.
+  On 2026-11-03, before U1, it installed 104 package actions, Docker and systemd included, and was followed by a
+  reboot. See [`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md) §"Out-of-band update and unplanned reboot (2026-11-03)".
+  Classification under (C): that delta predates the decision and is recorded as an out-of-band host event, not
+  as a lawful window run.
+- **The §4.6 code changes** (`package_set_sha256` in `recovery.py`, a `reboot_required` health finding) remain
+  proposals.
