@@ -102,12 +102,44 @@ def _read_manifest(path: Path) -> dict[str, str]:
     return {line[66:]: line[:64] for line in path.read_text(encoding="utf-8").splitlines() if len(line) > 66}
 
 
+PRIVATE_UMASK = 0o077
+
+
+def group_or_other_accessible(path: Path) -> list[str]:
+    """Every entry under ``path`` (itself included) whose mode grants anything to group or other."""
+    path = Path(path)
+    loose = []
+    for entry in [path, *path.rglob("*")]:
+        if not entry.is_symlink() and stat.S_IMODE(entry.lstat().st_mode) & 0o077:
+            loose.append(f"{stat.S_IMODE(entry.lstat().st_mode):04o} {entry.relative_to(path).as_posix()}")
+    return loose
+
+
 def create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path],
                   volumes: tuple[str, ...] = (), stamp: str | None = None,
                   volume_exporter: Callable[[str, Path], None] | None = None,
                   data: dict[str, str] | None = None, compose_project: str | None = None,
                   inspector: Callable[[str], list[dict]] | None = None,
                   data_lister: Callable[[str], dict[str, str]] | None = None) -> dict:
+    """Write one private backup set (see ``_create_backup``). The process umask is 077 for the whole creation,
+    whatever the caller's, so every directory, archive, bundle and manifest the set holds is owner-only.
+    The set holds the runtime ``.env`` and Grafana's database (P3 security audit SEC-03). Before the set is
+    published, any entry still open to group or other refuses it. Other (historical) sets are never touched."""
+    old = os.umask(PRIVATE_UMASK)
+    try:
+        return _create_backup(target, roots=roots, repos=repos, volumes=volumes, stamp=stamp,
+                              volume_exporter=volume_exporter, data=data, compose_project=compose_project,
+                              inspector=inspector, data_lister=data_lister)
+    finally:
+        os.umask(old)
+
+
+def _create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path],
+                   volumes: tuple[str, ...], stamp: str | None,
+                   volume_exporter: Callable[[str, Path], None] | None,
+                   data: dict[str, str] | None, compose_project: str | None,
+                   inspector: Callable[[str], list[dict]] | None,
+                   data_lister: Callable[[str], dict[str, str]] | None) -> dict:
     """Write one backup set. ``data`` maps a name to a live data source, either an absolute host directory
     (a bind mount) or a named volume. With ``compose_project``, the project's containers are inspected first,
     and the set is refused unless every writable mount they use is backed up and no declared data source is
@@ -191,6 +223,9 @@ def create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path
         "real_money_authorized": False,
     }
     (staging / RECORD).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    loose = group_or_other_accessible(staging)
+    if loose:
+        raise BackupError(f"GROUP_OR_OTHER_ACCESSIBLE_ENTRIES = {len(loose)}; the set is not published: {loose[:10]}")
     staging.rename(set_dir)
     return record
 
@@ -342,6 +377,16 @@ def _under(path: str, root: str) -> bool:
     return path == root or path.startswith(root.rstrip("/") + "/")
 
 
+def _root_archives(source: str, root_paths: list[str]) -> bool:
+    """Is ``source`` under a declared root **and** archived by it? A path through a derived (excluded) directory,
+    e.g. ``…/.venv/…``, is under the root but never reaches the archive, so it covers nothing."""
+    for candidate in {source, os.path.realpath(source)}:
+        for root in root_paths:
+            if _under(candidate, root) and not _excluded(os.path.relpath(candidate, root)):
+                return True
+    return False
+
+
 def live_data_coverage(mounts: list[dict], *, data: dict[str, str], roots: dict[str, Path]) -> dict:
     """PASS when every writable mount of the live containers is backed up, as a declared data source or under
     a declared root, and every declared data source is mounted by some container (none is stale).
@@ -358,8 +403,7 @@ def live_data_coverage(mounts: list[dict], *, data: dict[str, str], roots: dict[
             covered = "not_state"
         elif source in declared:
             covered = "data"
-        elif m.get("type") == "bind" and any(_under(os.path.realpath(source), r) or _under(source, r)
-                                             for r in root_paths):
+        elif m.get("type") == "bind" and _root_archives(source, root_paths):
             covered = "root"
         else:
             covered = None
@@ -488,6 +532,14 @@ def _windows_relative(path: str, root: str) -> str | None:
     return norm_path[len(norm_root) + 1:].replace("\\", "/")
 
 
+def expected_artifact_count(record: dict) -> int:
+    """How many artifacts ``create_backup`` lists in SHA256SUMS for this record: an archive and a manifest per
+    root and per data source, a bundle per repository, an archive per volume. A historical record has no
+    ``data_sources`` key and counts as before."""
+    return (2 * len(record["roots"]) + len(record["repos"]) + len(record["volumes"])
+            + 2 * len(record.get("data_sources") or {}))
+
+
 def compare_hash_export(set_dir: Path, export_csv: Path, export_root: str) -> dict:
     """Is the copy that ``export_csv`` hashed, file by file, the backup set whose manifests are in ``set_dir``?
 
@@ -499,7 +551,7 @@ def compare_hash_export(set_dir: Path, export_csv: Path, export_root: str) -> di
     The rules are ``verify_backup``'s: the manifest digest equals the record, and every listed artifact is
     present with an equal hash. To them it adds the checks a copy needs: the copy's two manifests are
     byte-identical to these, the listed count is what ``create_backup`` writes for the record
-    (2 × roots + repos + volumes), and the copy holds no unlisted file. Read-only; nothing is extracted, so no
+    (``expected_artifact_count``), and the copy holds no unlisted file. Read-only; nothing is extracted, so no
     secret is read. An unreadable or empty export is UNPROVEN, which withholds PASS exactly as FAIL does.
     """
     set_dir = Path(set_dir)
@@ -512,7 +564,7 @@ def compare_hash_export(set_dir: Path, export_csv: Path, export_root: str) -> di
         sums_digest = sha256_file(set_dir / SUMS)
         record_digest = sha256_file(set_dir / RECORD)
         listed = _read_manifest(set_dir / SUMS)
-        expected_count = 2 * len(record["roots"]) + len(record["repos"]) + len(record["volumes"])
+        expected_count = expected_artifact_count(record)
         rows = _export_rows(export_csv)
     except (OSError, KeyError, TypeError, ValueError) as exc:
         checks["inputs_readable"] = {"status": "UNPROVEN", "detail": f"{type(exc).__name__}: {exc}"[:300]}

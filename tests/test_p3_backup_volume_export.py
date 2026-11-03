@@ -8,7 +8,7 @@ root-owned 0600 files in a volume are archived, not skipped (no ``docker run --u
 
 Most tests emulate ``docker run`` with the host's GNU tar on a synthetic "volume", so the real file handling,
 stdout wiring and post-checks run without Docker. The last test uses real Docker only when the daemon is up
-and the helper image is already present locally. It never pulls.
+and the helper image is present (pulled on GitHub Actions only).
 """
 
 from __future__ import annotations
@@ -180,13 +180,19 @@ def test_a_non_regular_archive_is_refused(tmp_path):
 
 
 def _docker_ready() -> bool:
-    if shutil.which("docker") is None:
+    """The helper image is pulled on GitHub Actions only; elsewhere it must already be local. Never a pull here."""
+    if shutil.which("docker") is None or _REAL_RUN(["docker", "info"], capture_output=True, timeout=30).returncode:
         return False
     probe = _REAL_RUN(["docker", "image", "inspect", backup.VOLUME_HELPER_IMAGE], capture_output=True, timeout=30)
-    return probe.returncode == 0
+    if probe.returncode == 0:
+        return True
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return _REAL_RUN(["docker", "pull", "-q", backup.VOLUME_HELPER_IMAGE], capture_output=True,
+                         timeout=600).returncode == 0
+    return False
 
 
-@pytest.mark.skipif(not _docker_ready(), reason="needs a running Docker daemon with the helper image already local")
+@pytest.mark.skipif(not _docker_ready(), reason="needs Docker with the helper image (pulled on GitHub Actions only)")
 def test_real_docker_root_only_volume_files_are_archived_into_a_private_file(tmp_path, loose_umask):
     vol = f"tlos-test-{uuid.uuid4().hex[:12]}"
     _REAL_RUN(["docker", "volume", "create", vol], check=True, capture_output=True)

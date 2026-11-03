@@ -318,14 +318,192 @@ def test_the_cli_create_takes_live_data_and_refuses_bad_coverage(tmp_path, live,
     assert "LIVE_DATA_COVERAGE = FAIL" in capsys.readouterr().err and not (tmp_path / "b" / "s2").exists()
 
 
+# ------------------------------------------------------------------------------------------------------------
+# P0: the portable-copy comparison counts the data artifacts (2 per data source), end to end
+# ------------------------------------------------------------------------------------------------------------
+
+EXPORT_ROOT = r"E:\tlos-backups\20261103T200000Z"
+
+
+def export_of(directory: Path, path: Path, *, skip=(), extra=None) -> Path:
+    """A ``Get-FileHash | Export-Csv`` (PowerShell 7 shape) of a copy of ``directory``."""
+    rows = []
+    for f in sorted(p for p in directory.rglob("*") if p.is_file()):
+        rel = f.relative_to(directory).as_posix()
+        if rel in skip:
+            continue
+        digest = backup.sha256_file(f) if not extra or rel not in extra else extra[rel]
+        rows.append(f'"SHA256","{digest.upper()}","{EXPORT_ROOT}\\{rel.replace("/", chr(92))}"')
+    for rel, digest in ((extra or {}).items()):
+        if not (directory / rel).exists():
+            rows.append(f'"SHA256","{digest.upper()}","{EXPORT_ROOT}\\{rel.replace("/", chr(92))}"')
+    path.write_text('"Algorithm","Hash","Path"\n' + "\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def test_a_live_data_set_passes_verify_drill_and_compare_export(tmp_path, live, monkeypatch):
+    set_dir = make_set(tmp_path, live, monkeypatch)
+    record = json.loads((set_dir / backup.RECORD).read_text())
+    assert backup.expected_artifact_count(record) == 2 * 1 + 0 + 0 + 2 * 3 == len(backup._read_manifest(set_dir / backup.SUMS))
+    assert backup.verify_backup(set_dir)["status"] == "PASS"
+    assert backup.restore_drill(set_dir, tmp_path / "scratch")["PLN_03_RESTORE_DRILL"] == "PASS"
+    report = backup.compare_hash_export(set_dir, export_of(set_dir, tmp_path / "x.csv"), EXPORT_ROOT)
+    assert report["PORTABLE_COPY_MATCHES_SET"] == "PASS", report["checks"]
+
+
+@pytest.mark.parametrize("rel", ["data/grafana.tar", "data/prometheus.files.sha256"])
+def test_a_tampered_or_missing_data_artifact_fails_everywhere(tmp_path, live, monkeypatch, rel):
+    set_dir = make_set(tmp_path, live, monkeypatch)
+    # in the copy: a changed artifact, then a missing one
+    changed = backup.compare_hash_export(set_dir, export_of(set_dir, tmp_path / "c.csv", extra={rel: "0" * 64}),
+                                         EXPORT_ROOT)
+    assert changed["PORTABLE_COPY_MATCHES_SET"] == "FAIL" and changed["checks"]["artifacts"]["mismatched"] == [rel]
+    missing = backup.compare_hash_export(set_dir, export_of(set_dir, tmp_path / "m.csv", skip={rel}), EXPORT_ROOT)
+    assert missing["PORTABLE_COPY_MATCHES_SET"] == "FAIL" and missing["checks"]["artifacts"]["missing"] == [rel]
+    # in the set itself: tampered, then missing
+    target = set_dir / rel
+    target.chmod(0o600)
+    target.write_bytes(target.read_bytes() + b"x")
+    assert backup.verify_backup(set_dir)["status"] == "FAIL"
+    assert backup.restore_drill(set_dir, tmp_path / "s1")["PLN_03_RESTORE_DRILL"] == "FAIL"
+    target.unlink()
+    assert backup.verify_backup(set_dir)["status"] == "FAIL"
+    with pytest.raises((backup.BackupError, OSError)):  # tar or the manifest read cannot find it: CLI exit 2
+        backup.restore_drill(set_dir, tmp_path / "s2")
+
+
+def test_an_additional_file_in_the_copy_fails(tmp_path, live, monkeypatch):
+    set_dir = make_set(tmp_path, live, monkeypatch)
+    report = backup.compare_hash_export(
+        set_dir, export_of(set_dir, tmp_path / "x.csv", extra={"data/loki.tar": "a" * 64}), EXPORT_ROOT)
+    assert report["PORTABLE_COPY_MATCHES_SET"] == "FAIL" and report["checks"]["no_unlisted_file"]["extra"] == ["data/loki.tar"]
+
+
+def test_a_copy_whose_manifests_drop_the_data_artifacts_fails_the_count(tmp_path, live, monkeypatch):
+    # The regression: SHA256SUMS and the record are rewritten consistently without the six data artifacts, and the
+    # data files are left out of the copy. Every listed artifact matches; only the count from the record exposes it.
+    # Counting 2 x roots + repos + volumes alone (the pre-fix count) passed this copy.
+    set_dir = make_set(tmp_path, live, monkeypatch)
+    sums = {k: v for k, v in backup._read_manifest(set_dir / backup.SUMS).items() if not k.startswith("data/")}
+    (set_dir / backup.SUMS).chmod(0o600)
+    backup._write_manifest(sums, set_dir / backup.SUMS)
+    record = json.loads((set_dir / backup.RECORD).read_text())
+    record["sha256sums_digest"] = backup.sha256_file(set_dir / backup.SUMS)
+    (set_dir / backup.RECORD).write_text(json.dumps(record, indent=2) + "\n")
+    shutil.rmtree(set_dir / "data")
+    report = backup.compare_hash_export(set_dir, export_of(set_dir, tmp_path / "x.csv"), EXPORT_ROOT)
+    assert report["checks"]["artifacts"]["status"] == "PASS"
+    assert report["checks"]["listed_count"] == {"status": "FAIL", "listed": 2, "expected_from_record": 8}
+    assert report["PORTABLE_COPY_MATCHES_SET"] == "FAIL"
+
+
+def test_a_historical_record_without_data_sources_still_compares_and_counts_as_before(tmp_path, live, monkeypatch):
+    monkeypatch.setattr(backup.subprocess, "run", FakeDocker(live["containers"]))
+    backup.create_backup(tmp_path / "b", roots={"trading": live["trading"]}, repos={}, volumes=("v1",),
+                         volume_exporter=lambda v, out: out.write_bytes(b"tar"), stamp="old")
+    set_dir = tmp_path / "b" / "old"
+    record = json.loads((set_dir / backup.RECORD).read_text())
+    del record["data_sources"], record["live_data_coverage"]  # exactly what a set before this change carries
+    (set_dir / backup.RECORD).write_text(json.dumps(record, indent=2) + "\n")
+    assert backup.expected_artifact_count(record) == 3
+    assert backup.verify_backup(set_dir)["status"] == "PASS"
+    report = backup.compare_hash_export(set_dir, export_of(set_dir, tmp_path / "x.csv"), EXPORT_ROOT)
+    assert report["PORTABLE_COPY_MATCHES_SET"] == "PASS", report["checks"]
+
+
+# ------------------------------------------------------------------------------------------------------------
+# P1: no false coverage through backup filtering; every new set is private whatever the caller's umask
+# ------------------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("excluded", [".venv", "__pycache__", ".pytest_cache"])
+def test_a_writable_bind_through_an_excluded_directory_is_not_covered_by_its_root(live, excluded):
+    inside = live["runtime"] / excluded / "state"
+    rows = [{"container": "c", "type": "bind", "source": str(inside), "destination": "/s", "rw": True},
+            {"container": "c", "type": "bind", "source": str(live["runtime"] / "prometheus"), "destination": "/p",
+             "rw": True}]
+    report = backup.live_data_coverage(rows, data={}, roots={"trading": live["trading"]})
+    assert [r["covered_by"] for r in report["mounts"]] == [None, "root"]
+    assert report["LIVE_DATA_COVERAGE"] == "FAIL" and report["uncovered_rw"] == [f"c:/s <- bind {inside}"]
+
+
+def test_every_new_set_is_owner_only_whatever_the_callers_umask(tmp_path, live, monkeypatch):
+    target = tmp_path / "backups"
+    historical = target / "20261025T171416Z"
+    historical.mkdir(parents=True)
+    (historical / "SHA256SUMS").write_text("historical\n")
+    for p in (target, historical, historical / "SHA256SUMS"):
+        p.chmod(0o775 if p.is_dir() else 0o664)
+    old = os.umask(0o002)  # as the earlier host service ran
+    try:
+        set_dir = make_set(tmp_path, live, monkeypatch)
+        assert os.umask(0o002) == 0o002, "the caller's umask is restored"
+    finally:
+        os.umask(old)
+    assert backup.group_or_other_accessible(set_dir) == []
+    assert stat.S_IMODE(set_dir.stat().st_mode) == 0o700
+    for f in set_dir.rglob("*"):
+        assert stat.S_IMODE(f.stat().st_mode) in (0o600, 0o700), f
+    # nothing historical is touched or "fixed"
+    assert stat.S_IMODE(historical.stat().st_mode) == 0o775
+    assert stat.S_IMODE((historical / "SHA256SUMS").stat().st_mode) == 0o664
+    assert (historical / "SHA256SUMS").read_text() == "historical\n"
+
+
+def test_a_set_with_a_loose_entry_is_not_published(tmp_path, live, monkeypatch):
+    def loose_exporter(volume, out):
+        out.write_bytes(b"tar")
+        out.chmod(0o644)  # what the pre-#105 helper container produced
+    monkeypatch.setattr(backup.subprocess, "run", FakeDocker(live["containers"]))
+    with pytest.raises(backup.BackupError, match=r"GROUP_OR_OTHER_ACCESSIBLE_ENTRIES = 1; .*0644 volumes/v1.tar"):
+        backup.create_backup(tmp_path / "b", roots={}, repos={}, volumes=("v1",), volume_exporter=loose_exporter,
+                             stamp="s")
+    assert not (tmp_path / "b" / "s").exists()
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Real Docker. The production helper image is pulled only on GitHub Actions; elsewhere the image must already be
+# local, and a local stand-in (no python3) never counts as the production image.
+# ------------------------------------------------------------------------------------------------------------
+
 def _docker_ready() -> bool:
-    if shutil.which("docker") is None:
+    if shutil.which("docker") is None or _REAL_RUN(["docker", "info"], capture_output=True, timeout=30).returncode:
         return False
     probe = _REAL_RUN(["docker", "image", "inspect", backup.VOLUME_HELPER_IMAGE], capture_output=True, timeout=30)
-    return probe.returncode == 0
+    if probe.returncode == 0:
+        return True
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return _REAL_RUN(["docker", "pull", "-q", backup.VOLUME_HELPER_IMAGE], capture_output=True,
+                         timeout=600).returncode == 0
+    return False
 
 
-@pytest.mark.skipif(not _docker_ready(), reason="needs a running Docker daemon with the helper image already local")
+DOCKER_READY = _docker_ready()
+
+
+@pytest.mark.skipif(not DOCKER_READY, reason="needs Docker with the helper image (pulled on GitHub Actions only)")
+def test_the_production_helper_image_has_every_command_the_backup_uses():
+    run = _REAL_RUN(["docker", "run", "--rm", "--network", "none", backup.VOLUME_HELPER_IMAGE, "sh", "-c",
+                     "python3 -c 'import sys; print(\"PYTHON\", *sys.version_info[:2])' && . /etc/os-release && "
+                     "echo OS $ID $VERSION_ID && tar --version && find --version && xargs --version && "
+                     "sha256sum --version"], capture_output=True, text=True, timeout=120)
+    if "PYTHON 3 12" not in run.stdout:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            pytest.fail(f"the pulled {backup.VOLUME_HELPER_IMAGE} is not the production image: {run.stdout} {run.stderr}")
+        pytest.skip("a local stand-in, not the production image")
+    for needle in ("OS debian", "tar (GNU tar)", "find (GNU findutils)", "xargs (GNU findutils)",
+                   "sha256sum (GNU coreutils)"):
+        assert needle in run.stdout, (needle, run.stdout)
+    # the exact options the backup relies on, on a throwaway in-container tree
+    flags = _REAL_RUN(["docker", "run", "--rm", "--network", "none", backup.VOLUME_HELPER_IMAGE, "sh", "-c",
+                       "mkdir -p /v/d && printf a > /v/d/f && ln -s d/f /v/l && "
+                       + backup._LIST_SCRIPT + " && tar -C /v -cf - . | tar -tf - >/dev/null"],
+                      capture_output=True, timeout=120)
+    assert flags.returncode == 0, flags.stderr
+    listed = backup._parse_source_listing(flags.stdout)
+    assert listed == {"d/f": backup.hashlib.sha256(b"a").hexdigest(), "l": backup._symlink_digest(b"d/f")}
+
+
+@pytest.mark.skipif(not DOCKER_READY, reason="needs Docker with the helper image (pulled on GitHub Actions only)")
 def test_real_docker_root_only_grafana_files_in_a_bind_are_backed_up_and_restored(tmp_path, monkeypatch):
     project = f"tlos-test-{uuid.uuid4().hex[:10]}"
     data = tmp_path / "data"

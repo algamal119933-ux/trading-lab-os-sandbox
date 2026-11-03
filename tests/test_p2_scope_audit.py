@@ -1929,10 +1929,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # check against the compose project's containers, and drill restoration of the data. No host change.
 _LDC = "P3 backup live data coverage"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_LDC} — data sources, archive == live source, LIVE_DATA_COVERAGE, drill restores data",
+    "research/p3/backup.py": f"{_LDC} — data sources, archive == live source, LIVE_DATA_COVERAGE, drill restores data; "
+                             "compare-export counts data artifacts; owner-only sets",
     "scripts/p3/backup.py": f"{_LDC} — create --data/--compose-project; coverage subcommand (read-only)",
-    "tests/test_p3_backup_live_data.py": f"{_LDC} — live binds byte for byte, drill, stale/uncovered refused, running writer, real Docker",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_LDC} — design rule and the 2026-11-03 finding",
+    "tests/test_p3_backup_live_data.py": f"{_LDC} — live binds byte for byte, drill, compare-export, stale/uncovered "
+                                         "refused, running writer, private sets, production image, real Docker",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_LDC} — design rules, the 2026-11-03 finding and correction, drill limits",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_LDC} — correction: the old named-volume exports do not prove live data",
+    "tests/test_p3_backup_volume_export.py": f"{_LDC} — real-Docker readiness: helper image pulled on GitHub Actions only",
     "tests/test_p2_scope_audit.py": "P3 backup volume-archive permissions (PR #105) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
