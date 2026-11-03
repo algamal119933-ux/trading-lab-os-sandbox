@@ -812,3 +812,43 @@ def test_collect_reads_the_newest_sets_own_coverage(tmp_path):
                      docker=lambda cmd: subprocess.CompletedProcess(cmd, 0, "", ""), ledger_path=tmp_path / "none")
     assert obs["newest_backup"] == {"stamp": "20261104T050000Z", "coverage": "PASS", "observed": "before_runtime_stop",
                                     "data_sources": ["grafana"]}
+
+
+# ---- drill provenance: the copy a drill restored from is shown only as its record states it ----
+
+def _drill(**extra) -> dict:
+    return {"backup_set": "20261025T211956Z", "PLN_03_RESTORE_DRILL": "PASS", "_file": "d.json", "_mtime": 1.0,
+            "checks": {}, **extra}
+
+
+def test_a_drill_without_a_recorded_source_is_source_unknown_never_ssd():
+    restore = cr.project(_obs(drills=[_drill()]))["ops"]["restore"]
+    assert restore[0] == "ok" and "restored from SOURCE_UNKNOWN" in restore[1]["en"]
+    assert "mirror" not in restore[1]["en"].lower() and "ssd" not in restore[1]["en"].lower()
+
+
+def test_a_drill_recorded_from_the_second_device_mirror_says_so():
+    d = _drill(source={"set_dir": "/home/hamza/tlos-backups-ssd-mirror/current", "tier": "SECOND_DEVICE_MIRROR",
+                       "realpath": "/home/hamza/tlos-backups-ssd-mirror/sets/20261025T211956Z"})
+    restore = cr.project(_obs(drills=[d]))["ops"]["restore"]
+    assert "restored from the second-device mirror (/home/hamza/tlos-backups-ssd-mirror/sets/" in restore[1]["en"]
+
+
+def test_a_drill_from_under_the_configured_store_is_the_primary_store_and_anything_else_is_unknown():
+    d = _drill(source={"tier": "UNCLASSIFIED", "realpath": "/srv/project-data/tlos-backups/20261025T211956Z"})
+    live = cr.project(_obs(drills=[d], backup_target="/srv/project-data/tlos-backups"))
+    assert "restored from the primary store (/srv/project-data/tlos-backups/20261025T211956Z)" in live["ops"]["restore"][1]["en"]
+    for target in (None, "/srv/project-data/tlos-backups-other"):
+        live = cr.project(_obs(drills=[d], backup_target=target))
+        assert "SOURCE_UNKNOWN" in live["ops"]["restore"][1]["en"], target
+    # a record that merely claims a path elsewhere is not promoted to any tier
+    d = _drill(source={"tier": "UNCLASSIFIED", "realpath": "/tmp/copy/20261025T211956Z"})
+    assert "SOURCE_UNKNOWN" in cr.project(_obs(drills=[d], backup_target="/srv/project-data/tlos-backups"))[
+        "ops"]["restore"][1]["en"]
+
+
+def test_restore_never_implies_live_data_coverage_or_offsite():
+    live = cr.project(_obs(drills=[_drill()], newest_backup=None))
+    assert live["ops"]["restore"][0] == "ok"                       # the set's own drill passed
+    assert live["scenario"]["dims"]["evidence"][0] == "warn"       # coverage stays a separate, unproven claim
+    assert "offsite" not in live["ops"]["restore"][1]["en"].lower() and "tier-3" not in live["ops"]["restore"][1]["en"].lower()

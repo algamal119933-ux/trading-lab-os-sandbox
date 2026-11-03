@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import socket
 import subprocess
@@ -268,6 +269,7 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
         "host": {"uptime_s": float(uptime.split()[0]) if uptime else None, "boot_id": boot_id,
                  "ntp_synced": {"yes": True, "no": False}.get(ntp or "")},
         "backup_sets": sets,
+        "backup_target": str(backup_target) if backup_target is not None else None,
         "newest_backup": newest_backup,
         "workstreams": json.loads(Path(workstreams_path).read_text(encoding="utf-8")),
     }
@@ -278,7 +280,11 @@ def backup_truth(obs: dict) -> dict:
     """Three separate claims about the newest backup set; none implies another.
     integrity: the set verifies (health backup_recency, which also bounds its age by the RPO).
     coverage:  the set's own record carries LIVE_DATA_COVERAGE = PASS (sets before the live-data change carry none).
-    restore:   a persisted drill of *this* set passed. A drill of an older set never proves the newest one."""
+    restore:   a persisted drill of *this* set passed. A drill of an older set never proves the newest one. The
+               copy it restored from is named only as the drill record states it: a second-device mirror only when
+               the record says so, the primary store only when its recorded path lies under the configured store,
+               otherwise SOURCE_UNKNOWN (every drill recorded before the source was written). Offsite (Tier-3)
+               recovery is a separate claim this view does not make."""
     backup_f = _finding(obs, "backup_recency")
     sets = obs.get("backup_sets") or []
     newest = sets[-1] if sets else None
@@ -300,12 +306,28 @@ def backup_truth(obs: dict) -> dict:
     elif drill.get("PLN_03_RESTORE_DRILL") != "PASS":
         restore = ["fail", "fail"]
     elif drill.get("backup_set") == newest:
-        restore = ["ok", b(f"Drill PASS · {newest}", f"التمرين ناجح · {newest}")]
+        src_en, src_ar = drill_source(drill, obs.get("backup_target"))
+        restore = ["ok", b(f"Drill PASS · {newest} · restored from {src_en}",
+                           f"التمرين ناجح · {newest} · الاستعادة من {src_ar}")]
     else:
         restore = ["warn", b(f"Drill PASS on older set {drill.get('backup_set')}; newest set {newest or 'none'} not drilled",
                              f"التمرين ناجح على مجموعة أقدم {drill.get('backup_set')}؛ "
                              f"المجموعة الأحدث {newest or 'لا يوجد'} لم تُمرَّن")]
     return {"integrity": integrity, "coverage": coverage, "restore": restore, "drill": drill, "finding": backup_f}
+
+
+def drill_source(drill: dict, backup_target: str | None) -> tuple[str, str]:
+    """Which copy a drill restored from, as its own record states it; never inferred beyond that."""
+    src = drill.get("source") if isinstance(drill.get("source"), dict) else {}
+    real = src.get("realpath")
+    if src.get("tier") == "SECOND_DEVICE_MIRROR":
+        return f"the second-device mirror ({real})", f"نسخة الجهاز الثاني ({real})"
+    if real and backup_target:
+        store = os.path.realpath(backup_target)
+        if real == store or real.startswith(store.rstrip("/") + "/"):
+            return f"the primary store ({real})", f"المخزن الأساسي ({real})"
+    return "SOURCE_UNKNOWN (the drill record does not state which copy it restored)", \
+        "SOURCE_UNKNOWN (سجل التمرين لا يذكر النسخة التي استُعيدت منها)"
 
 
 def _finding(obs: dict, check: str) -> dict | None:

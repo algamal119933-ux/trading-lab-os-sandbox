@@ -1953,7 +1953,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # PLN-02/PLN-03 limitations found on 2026-11-03 recorded (statuses unchanged). Read-only view; no host change.
 _CRT = "P3 Control Room backup truth"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/control_room.py": f"{_CRT} — backup_truth(); evidence dimension, ops and known list; identity provenance",
+    "research/p3/control_room.py": f"{_CRT} — backup_truth(); drill source as recorded (else SOURCE_UNKNOWN); identity provenance",
     "research/p3/control_room_live.js": f"{_CRT} — identity rows: tools checkout HEAD and governed record date",
     "tests/test_p3_control_room.py": f"{_CRT} — older drill, integrity-only, covered PASS, failed verify, provenance",
     "research/p3/records/p3_workstreams.json": f"{_CRT} — Owner/next current after #104-#106; PLN-02/03 limitations",
