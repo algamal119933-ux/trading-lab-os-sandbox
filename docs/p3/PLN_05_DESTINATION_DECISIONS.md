@@ -12,7 +12,7 @@ HOST_LOSS_REDUNDANCY       = NOT_PROVEN
 PORTABLE_COPY (Toshiba)    = EXISTS (OWNER-REPORTED) · supplementary · NOT Tier-3
 WINDOWS_SIDE_SHA256_CHECK  = NOT_RUN
 TIER3_DESTINATION          = CLASS A (VPS, Owner root) CHOSEN 2026-11-03 (§8) · provider NOT PROVISIONED
-DATA_AT_REST (item 7)      = CLIENT-SIDE ENCRYPTION BEFORE UPLOAD (§8) · tool NOT YET BUILT (separate PR)
+DATA_AT_REST (item 7)      = CLIENT-SIDE ENCRYPTION BEFORE UPLOAD (§8) · tool `offsite.py --seal/--open` · NOT_RUN on the host
 ```
 
 Claude ran nothing on any machine for this record. It has not seen the host output behind any OWNER-REPORTED
@@ -130,7 +130,7 @@ record is its written form; the Owner's merge of it is the decision.
 | 1. Destination | **Class A**: a VPS or cloud VM on which the Owner has root (§6). The Windows PC stays withdrawn; the Toshiba copy stays supplementary, not Tier-3 | Provider, region and account (Owner); the §9 inputs of the procedure |
 | 2. Capacity | ≥ 30 GB, 50 GB recommended (unchanged) | Sized when provisioned |
 | 3. Transport | Unchanged: the `tlos-offsite` account and the forced-command gate (procedure §4) | Gate install by the Owner |
-| 7. Data at rest | **Client-side encryption before upload.** The workstation encrypts each verified set to a public key; only ciphertext and its sha256 leave the host. The decryption key is **never** stored on the workstation or the destination; it is kept by the Owner off the host (for example the Windows PC plus an offline copy) and is brought only to a restore drill | The encryption tool: a new reuse decision, `AUDIT_BEFORE_USE`, delivered with tests in its own PR. Until it is merged and installed, **no set is uploaded** |
+| 7. Data at rest | **Client-side encryption before upload.** The workstation encrypts each verified set to a public key; only ciphertext and its sha256 leave the host. The decryption key is **never** stored on the workstation or the destination; it is kept by the Owner off the host (for example the Windows PC plus an offline copy) and is brought only to a restore drill | The encryption tool: a new reuse decision, `AUDIT_BEFORE_USE`. Delivered as `offsite.py --seal/--open` (GnuPG, which ships with Ubuntu: WRAP_EXISTING) with `tests/test_p3_offsite_seal.py`; procedure §4 step 6, §5, §6. Until it is merged, **no set is uploaded**, and `offsite.py` refuses a remote push of an unsealed set |
 
 Effects:
 - **Nothing is uploaded unencrypted.** The current `offsite.py` push (plaintext rsync) must not be pointed at the
