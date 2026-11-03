@@ -427,3 +427,34 @@ def test_cli_runtime_check_uses_compose_labels(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "mlflow       FAIL status exited" in out and "RUNTIME_RECOVERY = FAIL" in out
     assert ["--filter", f"label=com.docker.compose.project={PROJECT}"] == calls[0][4:6]
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Drill provenance: the record states which copy was restored
+# ------------------------------------------------------------------------------------------------------------
+
+def test_a_drill_records_its_source_copy_and_tier(tmp_path, live, monkeypatch, legacy_mirror):
+    set_dir = make_plain_set(tmp_path, live, monkeypatch, "20261104T010000Z")
+    primary = backup.restore_drill(set_dir, tmp_path / "s1")
+    assert primary["source"] == {"set_dir": str(set_dir), "realpath": os.path.realpath(set_dir),
+                                 "tier": "UNCLASSIFIED"}
+    backup.publish_mirror(set_dir, legacy_mirror, margin_bytes=0)
+    via_current = backup.restore_drill(legacy_mirror / backup.MIRROR_CURRENT, tmp_path / "s2")
+    assert via_current["PLN_03_RESTORE_DRILL"] == "PASS"
+    assert via_current["source"]["tier"] == "SECOND_DEVICE_MIRROR"
+    assert via_current["source"]["realpath"] == os.path.realpath(legacy_mirror / "sets" / "20261104T010000Z")
+    # a directory merely named sets/ without a published mirror around it is not promoted
+    fake = tmp_path / "elsewhere" / "sets" / "20261104T010000Z"
+    shutil.copytree(set_dir, fake)
+    assert backup.restore_drill(fake, tmp_path / "s3")["source"]["tier"] == "UNCLASSIFIED"
+
+
+def test_cli_drill_json_carries_the_source(tmp_path, live, monkeypatch, legacy_mirror, capsys):
+    import backup as cli
+    set_dir = make_plain_set(tmp_path, live, monkeypatch, "20261104T010000Z")
+    backup.publish_mirror(set_dir, legacy_mirror, margin_bytes=0)
+    out = tmp_path / "drill.json"
+    assert cli.main(["drill", "--set", str(legacy_mirror / "current"), "--scratch", str(tmp_path / "s"),
+                     "--json", str(out)]) == 0
+    assert json.loads(out.read_text())["source"]["tier"] == "SECOND_DEVICE_MIRROR"
+    capsys.readouterr()

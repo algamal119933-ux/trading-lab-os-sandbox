@@ -1952,7 +1952,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # full generations without destroying the last verified one; runtime-check judges each service. No host change.
 _HI = "P3 backup host integration"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check",
+    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check, drill source",
     "scripts/p3/backup.py": f"{_HI} — coverage --json report, create --coverage-report, mirror, runtime-check",
     "tests/test_p3_backup_host_integration.py": f"{_HI} — binding refusals, concurrency, mirror interruptions, runtime",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_HI} — host integration support and its limits",

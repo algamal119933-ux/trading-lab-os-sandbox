@@ -73,6 +73,10 @@ Design rules:
     - Legacy partial copies (`latest`, `previous`, `.incoming`) are never touched. Their removal is a separate
       Owner decision.
     - Interruption at every step, including mid-copy, is tested.
+  - **Drill provenance.** A drill record now states which copy it restored: `source.set_dir`, `source.realpath`
+    and `source.tier`. The tier is `SECOND_DEVICE_MIRROR` only for a generation under the `sets/` of a published
+    mirror (its lock file present), and `UNCLASSIFIED` otherwise, including an offsite-opened copy. Drills recorded
+    earlier have no source, and the Control Room shows them as `SOURCE_UNKNOWN`.
   - **`runtime-check`.** Each compose service individually: exactly one container, running, not restarting,
     healthy if it has a healthcheck, and started after the restoration began. It polls up to `--wait`, then
     FAILs; it never hangs. An incomplete recovery exits 1.

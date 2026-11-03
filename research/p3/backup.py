@@ -594,7 +594,18 @@ def restore_drill(set_dir: Path, scratch: Path, *, archive_verifier: Callable[[P
             checks[f"config_load:{target}"] = {"status": "FAIL", "detail": "named runtime not found in the restore"}
     verdict = all(c["status"] == "PASS" for c in checks.values())
     return {"drill_version": "P3_RESTORE_DRILL_V1", "backup_set": record["stamp"], "checks": checks,
+            "source": drill_source(set_dir),
             "PLN_03_RESTORE_DRILL": "PASS" if verdict else "FAIL", "real_money_authorized": False}
+
+
+def drill_source(set_dir: Path) -> dict:
+    """Which copy a drill restored from: the path given, its realpath, and a tier this module can prove. A set
+    under ``<mirror>/sets/`` of a mirror published by ``publish_mirror`` (its lock file present) is the
+    SECOND_DEVICE_MIRROR; anything else is UNCLASSIFIED here (the Control Room names the primary store by
+    comparing the realpath with the configured store; it never guesses a tier)."""
+    real = Path(os.path.realpath(set_dir))
+    mirror = real.parent.name == MIRROR_SETS and (real.parent.parent / MIRROR_LOCK).is_file()
+    return {"set_dir": str(set_dir), "realpath": str(real), "tier": "SECOND_DEVICE_MIRROR" if mirror else "UNCLASSIFIED"}
 
 
 
