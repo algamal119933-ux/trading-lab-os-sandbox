@@ -4,7 +4,9 @@
     scripts/p3/backup.py create --target /mnt/tlos-wdc/tlos-backups \\
         --root runtime=/home/hamza/projects/trading/trading_lab_os_final \\
         --repo runtime=/home/hamza/projects/trading/trading_lab_os_final \\
-        [--volume trading_lab_os_final_grafana_data ...]
+        [--volume trading_lab_os_final_grafana_data ...] \\
+        [--data grafana=/srv/project-data/trading-data/runtime/data/grafana ...] [--compose-project tlos_runtime]
+    scripts/p3/backup.py coverage --compose-project tlos_runtime --data NAME=SOURCE ... [--root NAME=PATH ...]
     scripts/p3/backup.py verify --set /mnt/tlos-wdc/tlos-backups/<stamp>
     scripts/p3/backup.py drill  --set /mnt/tlos-wdc/tlos-backups/<stamp> --scratch <empty dir> [--config-load trading/trading_lab_os_final]
     scripts/p3/backup.py compare-export --set <dir with the set's SHA256SUMS + BACKUP_RECORD.json> \\
@@ -14,7 +16,11 @@ See research/p3/backup.py. `create` writes only under --target, in a new <stamp>
 never overwrites one. `drill` writes only under --scratch. `--config-load <runtime>` runs the pinned
 Freqtrade image with --network none and the restored user_data mounted read-only. It issues
 only list-strategies and show-config, exactly as CI's freqtrade-load job does, and no trading
-command. `compare-export` (PLN-05 portable copy) reads two manifests and a CSV and writes nothing but
+command. `--data` archives a live data source (a bind-mounted host directory, or a named volume) through
+the read-only root helper and proves the archive equal to the source. `--compose-project` first
+refuses the set unless the project's containers' writable mounts are all covered and no declared
+data source is stale (LIVE_DATA_COVERAGE). `coverage` runs that check alone, read-only, and writes
+nothing. `compare-export` (PLN-05 portable copy) reads two manifests and a CSV and writes nothing but
 --json. Exit codes: 0 PASS · 1 FAIL · 2 error (and, for compare-export, UNPROVEN).
 
 PAPER / RESEARCH ONLY. REAL_MONEY_AUTHORIZED = NO.
@@ -38,6 +44,10 @@ from p3 import backup  # noqa: E402
 
 ENGINE_IMAGE = "freqtradeorg/freqtrade@sha256:da3428fde0f7f9f976eaafba8abc7eba42bf978f23e4808347e15d476ad9a643"
 CONFIG_ERROR = re.compile(r"CRITICAL - Invalid configuration|Configuration error|OperationalException")
+
+
+def _sources(values: list[str]) -> dict[str, str]:
+    return {name: str(path) for name, path in _pairs(values).items()}
 
 
 def _pairs(values: list[str]) -> dict[str, Path]:
@@ -82,7 +92,15 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--root", action="append", default=[])
     create.add_argument("--repo", action="append", default=[])
     create.add_argument("--volume", action="append", default=[])
+    create.add_argument("--data", action="append", default=[], metavar="NAME=SOURCE",
+                        help="a live data source: an absolute host directory (bind mount) or a volume name")
+    create.add_argument("--compose-project", help="refuse the set unless LIVE_DATA_COVERAGE passes for this project")
     create.add_argument("--stamp")
+    coverage = sub.add_parser("coverage")
+    coverage.add_argument("--compose-project", required=True)
+    coverage.add_argument("--data", action="append", default=[], metavar="NAME=SOURCE")
+    coverage.add_argument("--root", action="append", default=[])
+    coverage.add_argument("--json", type=Path)
     verify = sub.add_parser("verify")
     verify.add_argument("--set", required=True, type=Path, dest="set_dir")
     drill = sub.add_parser("drill")
@@ -112,11 +130,26 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "create":
             record = backup.create_backup(args.target, roots=_pairs(args.root), repos=_pairs(args.repo),
-                                          volumes=tuple(args.volume), stamp=args.stamp)
+                                          volumes=tuple(args.volume), stamp=args.stamp,
+                                          data=_sources(args.data), compose_project=args.compose_project)
             print(json.dumps(record, indent=2))
             verdict = backup.verify_backup(args.target / record["stamp"])
             print(f"BACKUP_SET = {record['stamp']} · VERIFY = {verdict['status']}")
             return 0 if verdict["status"] == "PASS" else 1
+        if args.command == "coverage":
+            report = backup.live_data_coverage(backup._docker_project_mounts(args.compose_project),
+                                               data=_sources(args.data), roots=_pairs(args.root))
+            if args.json:
+                args.json.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+            for row in report["mounts"]:
+                print(f"  {row['container']}:{row['destination']} <- {row['type']} {row['source']} "
+                      f"rw={row['rw']} covered_by={row['covered_by']}")
+            for item in report["uncovered_rw"]:
+                print(f"  UNCOVERED_RW {item}")
+            for item in report["stale_data_sources"]:
+                print(f"  STALE_DATA_SOURCE {item}")
+            print(f"LIVE_DATA_COVERAGE = {report['LIVE_DATA_COVERAGE']}")
+            return 0 if report["LIVE_DATA_COVERAGE"] == "PASS" else 1
         if args.command == "verify":
             verdict = backup.verify_backup(args.set_dir)
             print(f"VERIFY = {verdict['status']} {verdict.get('mismatched', '')}")

@@ -27,6 +27,22 @@ Design rules:
   file, 0600, owned by that user. This fixes the 2026-11-03 host finding: set `20261103T183447Z` verified PASS, but its three
   volume archives were `root:root 0644`, written by the container through a bind mount. Regression tests:
   `tests/test_p3_backup_volume_export.py`. Historical sets are not changed.
+- **Live data sources and coverage** (2026-11-03 host finding: the runtime's Grafana, Prometheus and MLflow containers
+  bind-mount `/srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}`, while the backup exported named
+  volumes that no container uses).
+  - `create --data NAME=SOURCE` archives a live source into `data/<name>.tar` (0600, the same root read-only helper).
+    SOURCE is an absolute host directory, mounted with `--mount type=bind,readonly`, which refuses a missing directory, or a
+    volume name.
+  - The source is then read again by the helper. Its per-file sha256 must equal the archive's, which is written to
+    `data/<name>.files.sha256`. A file the export could not read, or a writer still running, fails the set, so the runtime
+    must be stopped for the backup. This also proves that protected files (Grafana's `grafana.db`) were read.
+  - `create --compose-project P` refuses the set unless every **writable** mount of P's containers (running or stopped)
+    is a declared data source or under a declared root, **and** no declared data source is unused by every container
+    (`LIVE_DATA_COVERAGE`). Read-only configuration mounts are reported but do not decide the verdict. Host plumbing
+    (`/proc`, `/sys`, `/dev`, `/run`, `/var/run`, the Docker socket) and tmpfs are not state. `coverage` runs the
+    check alone, read-only.
+  - The drill restores every data source and compares it file by file (`data:<name>`). Sets without data sources
+    (all historical ones) drill as before. Regression tests: `tests/test_p3_backup_live_data.py`.
 - `--config-load <runtime>` runs the pinned engine `freqtrade@sha256:da3428…` with `--network none`, the restored user_data mounted read-only, and only `list-strategies` and `show-config`, as CI's freqtrade-load job does. **No trading command is issued.**
 
 ## Execution on hamza-workstation (2026-10-25)

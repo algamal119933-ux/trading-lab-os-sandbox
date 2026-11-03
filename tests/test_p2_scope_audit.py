@@ -1818,6 +1818,24 @@ P3_TIER3_ENCRYPTION_SCOPE: dict[str, str] = {
 }
 
 
+# PR #105, merged. Two parents: 823cb229 (main before) + d9278c2f
+# (P3 backup volume-archive permissions). These entries were BRANCH_SCOPE while it was in flight.
+P3_VOLUME_ARCHIVE_PERMS_MERGE = "5ea03493bde217433e3e7686ffda9b4190a100f2"
+
+# P3 backup hardening, 2026-11-03 host finding: set 20261103T183447Z verified PASS but its three Docker volume
+# archives were root:root 0644 (the root helper container wrote them through a bind mount). The exporter now streams
+# the archive out of the container into a file backup.py creates 0600 as the backup user, and refuses anything else.
+# No host change; historical sets untouched.
+_VOL = "P3 backup volume-archive permissions"
+P3_VOLUME_ARCHIVE_PERMS_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_VOL} — volume export streamed to a 0600 file owned by the backup user; refused otherwise",
+    "tests/test_p3_backup_volume_export.py": f"{_VOL} — owner/mode regression, read-only no-network no-write-mount helper, failure paths, real Docker",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_VOL} — design rule and the 2026-11-03 finding",
+    "tests/test_p2_scope_audit.py": "P3 Tier-3 client-side encryption (PR #104) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1897,6 +1915,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_STATUS_RECONCILE_101": (P3_STATUS_RECONCILE_101_MERGE, P3_STATUS_RECONCILE_101_SCOPE),
     "P3_OWNER_DECISIONS": (P3_OWNER_DECISIONS_MERGE, P3_OWNER_DECISIONS_SCOPE),
     "P3_TIER3_ENCRYPTION": (P3_TIER3_ENCRYPTION_MERGE, P3_TIER3_ENCRYPTION_SCOPE),
+    "P3_VOLUME_ARCHIVE_PERMS": (P3_VOLUME_ARCHIVE_PERMS_MERGE, P3_VOLUME_ARCHIVE_PERMS_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1904,16 +1923,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 backup hardening, 2026-11-03 host finding: set 20261103T183447Z verified PASS but its three Docker volume
-# archives were root:root 0644 (the root helper container wrote them through a bind mount). The exporter now streams
-# the archive out of the container into a file backup.py creates 0600 as the backup user, and refuses anything else.
-# No host change; historical sets untouched.
-_VOL = "P3 backup volume-archive permissions"
+# P3 backup live data coverage, 2026-11-03 host finding: the runtime containers bind-mount
+# /srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}, but the backup exported named volumes no
+# container uses. backup.py gains live data sources (bind or volume) proven equal to the source, a LIVE_DATA_COVERAGE
+# check against the compose project's containers, and drill restoration of the data. No host change.
+_LDC = "P3 backup live data coverage"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_VOL} — volume export streamed to a 0600 file owned by the backup user; refused otherwise",
-    "tests/test_p3_backup_volume_export.py": f"{_VOL} — owner/mode regression, read-only no-network no-write-mount helper, failure paths, real Docker",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_VOL} — design rule and the 2026-11-03 finding",
-    "tests/test_p2_scope_audit.py": "P3 Tier-3 client-side encryption (PR #104) pinned to its merge; this branch's scope",
+    "research/p3/backup.py": f"{_LDC} — data sources, archive == live source, LIVE_DATA_COVERAGE, drill restores data",
+    "scripts/p3/backup.py": f"{_LDC} — create --data/--compose-project; coverage subcommand (read-only)",
+    "tests/test_p3_backup_live_data.py": f"{_LDC} — live binds byte for byte, drill, stale/uncovered refused, running writer, real Docker",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_LDC} — design rule and the 2026-11-03 finding",
+    "tests/test_p2_scope_audit.py": "P3 backup volume-archive permissions (PR #105) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
