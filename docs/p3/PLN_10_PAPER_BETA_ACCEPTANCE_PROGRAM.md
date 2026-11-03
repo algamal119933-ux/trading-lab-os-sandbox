@@ -239,6 +239,37 @@ Template (all decisions open; validates to `LAUNCH_BLOCKED` on D1–D5):
 ```
 Even a complete configuration only yields `CONFIG_COMPLETE_FOR_OWNER_LAUNCH`. It launches nothing.
 
+### 8a. Preparing the Owner's RUN_CONFIG PR (reference facts only; no decision is made here)
+- **Starting file.** `docs/p3/PLN_10_RUN_CONFIG.TEMPLATE.json` equals `RUN_CONFIG_TEMPLATE` byte for byte (a test pins
+  it) and validates to `LAUNCH_BLOCKED` with D1–D5 open. To propose a configuration, the Owner copies it to
+  `docs/p3/PLN_10_RUN_CONFIG.json` in the Owner's own PR. The template file is never read as a configuration, and
+  no committed `PLN_10_RUN_CONFIG.json` may exist before that PR (`test_no_run_config_with_real_values_is_committed`).
+- **Facts the Owner copies, not choices** (pinned by tests to the code):
+  - `acceptance_criteria.matrix_sha256` = `matrix_digest()` = `6c0dfdeacbed7898af06e95b12da87f86b668923a8ee9b2ac5604a3c59e3400a`.
+  - `acceptance_criteria.criterion_ids` must list **all 19** ids of `ACCEPTANCE_MATRIX`: a subset is a waiver.
+  - `trial_window` must end no later than `2027-01-31T23:59:59Z`, the P3 authorization's `EXPIRES_UTC`.
+- **Still the Owner's to choose:**
+  - D1 runtime and its authority record;
+  - D2 start and duration;
+  - D3 bound;
+  - D4 `pnl_tolerance_quote` (and adopting the full matrix);
+  - D5 the launch authority record;
+  - and `run_id` / `frozen_commit`.
+- **Planning inputs, which are not decisions:** the 2026-11-03 reconciliation recommends a 42-day window, which
+  would put T0 no later than about 2026-12-10 so that PLN-11 fits before the expiry. That recommendation binds
+  nothing.
+
+**Canonical order (contract §5 and §1 above), unchanged:**
+1. Every PLN-02..PLN-09 is accepted by its own merged record.
+2. The Owner's RUN_CONFIG PR (D1–D5; `CONFIG_COMPLETE_FOR_OWNER_LAUNCH`).
+3. The host freeze at `frozen_commit` (§1 item 3).
+4. The separate launch authority record (D5) is merged.
+5. T0.
+6. The window, then the verdict (`CANDIDATE_FOR_OWNER_ACCEPTANCE` at best).
+7. The Owner's acceptance record.
+8. PLN-11.
+9. The P3 closure merged by the Owner.
+
 The options and consequences of each decision are in [`PLN_10_OWNER_DECISION_PACKET.md`](PLN_10_OWNER_DECISION_PACKET.md). No value is chosen there.
 
 ## 9. Stop conditions (contract §7)

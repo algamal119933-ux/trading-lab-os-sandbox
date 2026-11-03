@@ -1859,6 +1859,25 @@ P3_LIVE_DATA_COVERAGE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #108, merged. Two parents: 66a30de3 (main before) + cdfc6e1f
+# (P3 Control Room backup truth). These entries were BRANCH_SCOPE while it was in flight.
+P3_CONTROL_ROOM_BACKUP_TRUTH_MERGE = "3a20597e48a0f57038da692ed69ed0323de606f1"
+
+# P3 Control Room backup truth (PR-B, PLN-09): integrity, live-data coverage and restore are shown as separate claims;
+# a drill of an older set never proves the newest one; the identity SHA is labelled as this host's tools checkout with
+# its governed record date; the workstream record's Owner/next texts brought current after #104-#106, with the
+# PLN-02/PLN-03 limitations found on 2026-11-03 recorded (statuses unchanged). Read-only view; no host change.
+_CRT = "P3 Control Room backup truth"
+P3_CONTROL_ROOM_BACKUP_TRUTH_SCOPE: dict[str, str] = {
+    "research/p3/control_room.py": f"{_CRT} — backup_truth(); drill source as recorded (else SOURCE_UNKNOWN); identity provenance",
+    "research/p3/control_room_live.js": f"{_CRT} — identity rows: tools checkout HEAD and governed record date",
+    "tests/test_p3_control_room.py": f"{_CRT} — older drill, integrity-only, covered PASS, failed verify, provenance",
+    "research/p3/records/p3_workstreams.json": f"{_CRT} — Owner/next current after #104-#106; PLN-02/03 limitations",
+    "tests/test_p2_scope_audit.py": "P3 backup live data coverage (PR #106) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1940,6 +1959,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_TIER3_ENCRYPTION": (P3_TIER3_ENCRYPTION_MERGE, P3_TIER3_ENCRYPTION_SCOPE),
     "P3_VOLUME_ARCHIVE_PERMS": (P3_VOLUME_ARCHIVE_PERMS_MERGE, P3_VOLUME_ARCHIVE_PERMS_SCOPE),
     "P3_LIVE_DATA_COVERAGE": (P3_LIVE_DATA_COVERAGE_MERGE, P3_LIVE_DATA_COVERAGE_SCOPE),
+    "P3_CONTROL_ROOM_BACKUP_TRUTH": (P3_CONTROL_ROOM_BACKUP_TRUTH_MERGE, P3_CONTROL_ROOM_BACKUP_TRUTH_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1947,17 +1967,23 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 Control Room backup truth (PR-B, PLN-09): integrity, live-data coverage and restore are shown as separate claims;
-# a drill of an older set never proves the newest one; the identity SHA is labelled as this host's tools checkout with
-# its governed record date; the workstream record's Owner/next texts brought current after #104-#106, with the
-# PLN-02/PLN-03 limitations found on 2026-11-03 recorded (statuses unchanged). Read-only view; no host change.
-_CRT = "P3 Control Room backup truth"
+# P3 readiness preparation (repository only; no host step, no Owner decision taken): PLN-09 checklist brought to the
+# PR #108 view; a PLN-10 RUN_CONFIG template file and fill guide (facts only, D1-D5 open); PLN-02 runtime-data
+# inventory profile (BACKUP_SET_DATA); the workstream record's future-dated updated_utc corrected, with a guard test.
+_RP = "P3 readiness preparation"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/control_room.py": f"{_CRT} — backup_truth(); drill source as recorded (else SOURCE_UNKNOWN); identity provenance",
-    "research/p3/control_room_live.js": f"{_CRT} — identity rows: tools checkout HEAD and governed record date",
-    "tests/test_p3_control_room.py": f"{_CRT} — older drill, integrity-only, covered PASS, failed verify, provenance",
-    "research/p3/records/p3_workstreams.json": f"{_CRT} — Owner/next current after #104-#106; PLN-02/03 limitations",
-    "tests/test_p2_scope_audit.py": "P3 backup live data coverage (PR #106) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_RP} — preconditions P3/P4 reopened; G4, S10, S11 per PR #108",
+    "docs/p3/PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md": f"{_RP} — §8a fill guide and canonical order; no decision",
+    "docs/p3/PLN_10_RUN_CONFIG.TEMPLATE.json": f"{_RP} — equals RUN_CONFIG_TEMPLATE; LAUNCH_BLOCKED",
+    "tests/test_p3_acceptance.py": f"{_RP} — template file pinned to the code; fill-guide facts pinned",
+    "research/p3/state_inventory.py": f"{_RP} — BACKUP_SET_DATA recovery kind",
+    "scripts/p3/state_inventory.py": f"{_RP} — --backup-set / --drill-json",
+    "research/p3/records/state_classes.json": f"{_RP} — runtime_data profile",
+    "tests/test_p3_state_inventory_runtime_data.py": f"{_RP} — every missing link withholds PASS",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_RP} — runtime service data scope; host run after H5/H7",
+    "research/p3/records/p3_workstreams.json": f"{_RP} — updated_utc corrected to the time the content was written",
+    "tests/test_p3_control_room.py": f"{_RP} — the record is never dated after the commit that wrote it",
+    "tests/test_p2_scope_audit.py": "P3 Control Room backup truth (PR #108) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

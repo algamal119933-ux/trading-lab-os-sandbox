@@ -1,0 +1,28 @@
+{
+  "record_type": "P3_PLN10_RUN_CONFIG_V1",
+  "run_id": null,
+  "frozen_commit": null,
+  "dry_run": true,
+  "real_money_authorized": false,
+  "paper_runtime": {
+    "runtime_id": null,
+    "authority_record": null,
+    "authority_merge": null
+  },
+  "trial_window": {
+    "start_utc": null,
+    "duration_hours": null
+  },
+  "emergency_stop_bound_s": null,
+  "acceptance_criteria": {
+    "matrix_sha256": null,
+    "criterion_ids": null,
+    "pnl_tolerance_quote": null
+  },
+  "launch_authority": {
+    "granted_by": null,
+    "record_path": null,
+    "merge_commit": null,
+    "paper_launch_authorized": false
+  }
+}

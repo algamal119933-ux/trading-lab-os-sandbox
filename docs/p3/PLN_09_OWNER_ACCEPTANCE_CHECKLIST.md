@@ -9,14 +9,14 @@ The Owner performs this walkthrough. It is **preparation only**. This file grant
 
 This walkthrough needs **no runtime and no trading authority**. It reads one static, offline page. It never starts, stops or changes anything, and it does not need, imply or grant any paper or live launch (`PAPER_LAUNCH_AUTHORIZED = NO`).
 
-Preconditions, as of main `82a53a16` (2026-11-03):
+Preconditions, as of main `3a20597e` (2026-11-04, after PR #108):
 
 | # | Precondition | State |
 |---|---|---|
 | P1 | The planned reboot and its `verify-boot` check ([`PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md`](PLN_04_REBOOT_ACCEPTANCE_RUNBOOK.md), PLN-04/07) | **Done.** RUN 3 PASS 10/10, gap attestation clean, accepted by the merge of PR #94 ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md)) |
 | P2 | The Control Room mobile slice and this checklist merged | **Done** (PR #88) |
-| P3 | The Owner lifts the host freeze for the controlled `tlos-p3` update only, and updates `~/projects/trading/tlos-p3` to an Owner-chosen main SHA ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions", item 3; item 2 was met by the merge of PR #94) | **Done (OWNER-REPORTED):** the tools checkout was updated to main `6d2f2075` on 2026-10-31. Record its `git rev-parse HEAD` at `PLN09-W-ID` |
-| P4 | The first hourly health run after that update has been read; a CRITICAL there is handled first ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4, last paragraph) | **Done (OWNER-REPORTED):** first run read, HEALTH = INFO. Re-read the latest run before the walkthrough |
+| P3 | The Owner lifts the host freeze for the controlled `tlos-p3` update only, and updates `~/projects/trading/tlos-p3` to an Owner-chosen main SHA ([`PLN_04_RECOVERY.md`](PLN_04_RECOVERY.md), "Host-freeze lift conditions", item 3; item 2 was met by the merge of PR #94) | **Open again.** The checkout is at `6d2f2075` (OWNER-REPORTED, 2026-11-03), which predates the backup-truth view (PR #108) and the backup host integration (PR #107). The walkthrough checks **that** view, so `tlos-p3` must first be updated, under its own Owner authorization (host step H2), to a main SHA that contains #108 (and #107 once merged). Record its `git rev-parse HEAD` at `PLN09-W-ID` |
+| P4 | The first hourly health run after that update has been read; a CRITICAL there is handled first ([`PLN_06_ALERTING.md`](PLN_06_ALERTING.md) §4, last paragraph) | **Open again with P3.** Read the first hourly health run after that update before the walkthrough |
 
 > **Not before P3 and P4.** Until then, do not update `tlos-p3`, do not restart any service, and do not start any runtime.
 >
@@ -43,7 +43,7 @@ Before the steps, record the page identity once (evidence id `PLN09-W-ID`): the 
 | G1 | any screen, top line | it reads "LIVE PROJECTION · READ-ONLY · NOT EVIDENCE AUTHORITY", with the observation time and host · شريط "عرض مباشر للقراءة فقط" ظاهر | the line is missing, or shows no time or host | `PLN09-W-G1` | ☐ |
 | G2 | every screen | no "DEMO", "DEMO-PAIR" or "DEMO-PRICE" text anywhere · لا قيم تجريبية | any DEMO value appears on a bound screen | `PLN09-W-G2` | ☐ |
 | G3 | identity bar; Risk & Authority | PAPER and "Real money blocked" in the bar; Real money = Blocked (or Unknown — treated as blocked) in the matrix · المال الحقيقي محظور | Real money reads allowed, ok or green anywhere | `PLN09-W-G3` | ☐ |
-| G4 | Truth Strip | order Health · Authority · Evidence · Freshness · Runtime · Reconciliation · الترتيب مطابق | another order, or a dimension missing | `PLN09-W-G4` | ☐ |
+| G4 | Truth Strip | order Health · Authority · Evidence · Freshness · Runtime · Reconciliation · الترتيب مطابق. **Evidence** reads Pass only when the newest set verifies **and** its own record carries live-data coverage PASS; a verified set without coverage reads **"Integrity only"** (warning), and the exception text says integrity is not recoverability | another order, a dimension missing, or Evidence = Pass for a set whose record has no live-data coverage | `PLN09-W-G4` | ☐ |
 | G5 | every screen | anything not observed reads Unknown; Paper trading / Long entries never read "Allowed" while Runtime is not Running · غير المرصود يظهر "غير معروف" | an unobserved value is green, or a capability reads "Allowed · paper" with no running runtime | `PLN09-W-G5` | ☐ |
 | G6 | the page, more than 2 h after its observation time (or compare banner time with the clock) | the stale banner appears and the dimensions turn stale; Authority stays as recorded unless the authorization has expired · العرض القديم يُعلَن | an old page still reads Fresh | `PLN09-W-G6` | ☐ |
 | G7 | AR toggle | the layout mirrors, the frozen Arabic terms are used, nothing is left in English · العربية من اليمين لليسار | layout not mirrored or untranslated text | `PLN09-W-G7` | ☐ |
@@ -63,8 +63,8 @@ Before the steps, record the page identity once (evidence id `PLN09-W-ID`): the 
 | S7 | Risk & Authority · المخاطر والصلاحيات | capability matrix from the registry, contract §23 and the authorization at 7b1b1fa1; exposure 0 % **only** while Runtime = Stopped; otherwise Unknown | exposure 0 % with Runtime Unknown or Running; a blocked capability shown allowed | `PLN09-W-S7` | ☐ |
 | S8 | Evidence & Reconciliation · الأدلة والمطابقة | P2 reconcile 14/14, backup verify, drill record, ledger chain, PLN-07 audit, each with its source; the 2 unbacked executions shown as a finding | a check without a source, or the finding hidden | `PLN09-W-S8` | ☐ |
 | S9 | History · السجل | git merges, backup sets, operator ledger, drills and audits in time order | an event without a source, or out of order | `PLN09-W-S9` | ☐ |
-| S10 | Operations · العمليات | backup, restore and recovery from the newest set, `p3-evidence/drills/*.json` and the operator ledger. Host reboot recovery: with the F-CR-1 fix (PR #97) merged, it reads "Reboot correctness PASS · … accepted by PR #94" and the Resume "unverified" list shows the open PLN-04 decisions from the workstream record; without it, it reads "not yet exercised" — record that as finding F-CR-1 (§5) | a reboot PASS shown with no record behind it, or "not yet exercised" after PR #97 is merged | `PLN09-W-S10` | ☐ |
-| S11 | System · النظام | host, disks, timers, runtime pin vs main match the host (`uptime`, `systemctl --user list-timers`, `git rev-parse`) | a value that the host contradicts | `PLN09-W-S11` | ☐ |
+| S10 | Operations · العمليات | three separate backup claims (PR #108): **integrity** (`backup.py verify` of the newest set), **live-data coverage** (that set's own record: PASS with its observation phase, or UNPROVEN), and **restore**: "Drill PASS" only for a drill of **that** set, naming the copy it restored from **as the drill record states it** (`the second-device mirror`, `the primary store`, or `SOURCE_UNKNOWN`; every drill recorded before PR #107 reads SOURCE_UNKNOWN). A drill of an older set reads as a warning naming both sets. No offsite (Tier-3) claim appears here. Sources: the newest set's record, `p3-evidence/drills/*.json` and the operator ledger. Host reboot recovery: with the F-CR-1 fix (PR #97) merged, it reads "Reboot correctness PASS · … accepted by PR #94" and the Resume "unverified" list shows the open PLN-04 decisions from the workstream record; without it, it reads "not yet exercised" — record that as finding F-CR-1 (§5) | a reboot PASS shown with no record behind it, or "not yet exercised" after PR #97 is merged; restore OK for a drill of another set; any copy named SSD/mirror that the drill record does not state; integrity shown as recoverability | `PLN09-W-S10` | ☐ |
+| S11 | System · النظام | host, disks, timers and the runtime pin match the host (`uptime`, `systemctl --user list-timers`, `git rev-parse`). Build & identity names **"Tools checkout HEAD (this host)"** (not GitHub main) with "Governed record as of <updated_utc>" and the note that it may be behind GitHub main; compare that SHA with `git -C ~/projects/trading/tlos-p3 rev-parse HEAD` | a value that the host contradicts, or the local SHA labelled as GitHub main | `PLN09-W-S11` | ☐ |
 | S12 | Settings · الإعدادات | viewer preferences only; Return detection = not active (static view); notifications cite `scripts/p3/scheduled_health.sh` | any setting that changes risk, mode or authority | `PLN09-W-S12` | ☐ |
 
 ## 4. Mobile tabs · تبويبات الجوال
@@ -85,7 +85,7 @@ Open with a window narrower than 720 px, or `#mobile` at the end of the address.
 ## 4a. What is already verified, and what is not (three separate levels)
 | Level | State | Evidence |
 |---|---|---|
-| Implementation | Done: 12 desktop screens + 4 mobile tabs bound | PRs #80, #81, #87, #88 merged |
+| Implementation | Done: 12 desktop screens + 4 mobile tabs bound; backup truth separated (integrity · coverage · restore with its recorded source) and checkout provenance labelled | PRs #80, #81, #87, #88, #108 merged |
 | Repository verification (cloud, synthetic data) | Done | `tests/test_p3_control_room.py`. Headless Chromium EN + AR at desktop 1440 px and mobile 390 px: 0 console errors, no DEMO text, RTL in AR, navigation-only buttons on mobile, UNKNOWN on missing evidence. Frozen prototype digest `e17d50dc…` verified by the build |
 | **Host acceptance (this checklist)** | **PENDING** | Owner walkthrough on the host after preconditions P3–P4 (§1); §6 sign-off |
 
@@ -95,7 +95,8 @@ CI green is not host acceptance. A merged PR is not operational closure.
 - The view is regenerated hourly. Between runs it ages, and past 2 h it says it is stale.
 - The Resume ladder is the frozen P2-closure ladder; the P3 stage shows in the stage chip and project chips (recorded delta in the authority record §2).
 - Market Workspace shows the last 56 sealed bars only; earlier fills have no marker.
-- The `owner` / `claude` / `next` texts come from the governed workstream record and change only by merged PR, so they can lag one merge behind.
+- The `owner` / `claude` / `next` texts come from the governed workstream record **of the host's checkout** and change only by merged PR **and** a checkout update, so they lag behind GitHub main until `tlos-p3` is updated (the System screen shows the record's date).
+- Every drill recorded before PR #107 has no source tier, so restore reads `SOURCE_UNKNOWN`. That is correct, not a defect.
 - No off-host observation exists yet (PLN-05 Tier 3 / PLN-06).
 - Until node-exporter and an alert channel are installed (PLN-06), a CRITICAL finding is visible here and in the journal/desktop notification, but is not pushed to the phone.
 - Incidents have no acknowledge/close workflow in the view (operator CLI only, by design).
