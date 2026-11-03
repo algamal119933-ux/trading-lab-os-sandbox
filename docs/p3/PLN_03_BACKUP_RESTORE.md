@@ -12,7 +12,7 @@ PAPER / RESEARCH ONLY · REAL_MONEY_AUTHORIZED = NO · H1_LAUNCHED = NO
 | CLI (`create`, `verify`, `drill`) | `scripts/p3/backup.py` | — |
 | Scheduled wrapper | `scripts/p3/scheduled_backup.sh` | — |
 | systemd user units (daily 03:30 UTC, Persistent) | `scripts/p3/units/tlos-p3-backup.{service,timer}` | REUSE (systemd) |
-| Tests | `tests/test_p3_backup.py`: 13 tests, synthetic only. Each refusal is produced: tampered artifact, rewritten SHA256SUMS, overwrite attempt, non-empty scratch, failing sealed archive, failed config load, missing named runtime | — |
+| Tests | `tests/test_p3_backup_volume_export.py` (volume archive owner/mode, failure paths, real Docker when available); `tests/test_p3_backup.py`: 13 tests, synthetic only. Each refusal is produced: tampered artifact, rewritten SHA256SUMS, overwrite attempt, non-empty scratch, failing sealed archive, failed config load, missing named runtime | — |
 
 Design rules:
 - A set is written once to `<target>/<stamp>/`, through a staging rename, and never overwritten.
@@ -20,6 +20,13 @@ Design rules:
 - Each root carries a per-file sha256 manifest. Symlinks are recorded by their target text, the same rule PLN-02 uses.
 - `SHA256SUMS` covers every artifact, and `BACKUP_RECORD.json` pins the digest of `SHA256SUMS`.
 - The drill restores only into an empty scratch directory.
+- Docker volumes are archived by a root helper container (`python:3.12-slim`), so root-owned 0600 files in a volume are included.
+  That is why `docker run --user` is not used. The container has only the volume mounted read-only, `--network none`, and **no host
+  write mount**: it streams the archive to stdout. `backup.py` creates the file itself with `O_EXCL`, mode 0600 and the backup
+  user's uid:gid, whatever the umask. It then refuses (no set is published) any archive that is not a regular, non-empty
+  file, 0600, owned by that user. This fixes the 2026-11-03 host finding: set `20261103T183447Z` verified PASS, but its three
+  volume archives were `root:root 0644`, written by the container through a bind mount. Regression tests:
+  `tests/test_p3_backup_volume_export.py`. Historical sets are not changed.
 - `--config-load <runtime>` runs the pinned engine `freqtrade@sha256:da3428…` with `--network none`, the restored user_data mounted read-only, and only `list-strategies` and `show-config`, as CI's freqtrade-load job does. **No trading command is issued.**
 
 ## Execution on hamza-workstation (2026-10-25)

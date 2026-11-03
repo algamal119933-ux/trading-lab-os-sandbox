@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -149,9 +150,45 @@ def create_backup(target: Path, *, roots: dict[str, Path], repos: dict[str, Path
     return record
 
 
+VOLUME_HELPER_IMAGE = "python:3.12-slim"
+ARCHIVE_MODE = 0o600
+
+
 def _docker_volume_export(volume: str, out: Path) -> None:
-    _run(["docker", "run", "--rm", "--network", "none", "-v", f"{volume}:/v:ro", "-v", f"{out.parent}:/out",
-          "python:3.12-slim", "tar", "-C", "/v", "-cf", f"/out/{out.name}", "."], timeout=900)
+    """Export a Docker volume to ``out``: private to the backup user (0600, its uid:gid), whatever the umask.
+
+    The helper container runs as root so it can read every file in the volume, including root-owned 0600
+    ones. ``docker run --user`` would silently archive less. The container has no write mount: it streams
+    the archive to stdout. This process creates the file itself with O_EXCL and mode 0600. Ownership and mode
+    therefore come from the backup user by construction, not from a root ``chown`` after the fact. A
+    volume archive holds Grafana's database, so it gets the same owner-only rule as the rest of the set
+    (P3 security audit SEC-03). The result is then re-checked, and anything else fails closed.
+    """
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), ARCHIVE_MODE)
+    with os.fdopen(fd, "wb") as handle:
+        result = subprocess.run(["docker", "run", "--rm", "--network", "none", "-v", f"{volume}:/v:ro",
+                                 VOLUME_HELPER_IMAGE, "tar", "-C", "/v", "-cf", "-", "."],
+                                stdout=handle, stderr=subprocess.PIPE, timeout=900)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", "replace").strip()[:400]
+        raise BackupError(f"volume export of {volume} failed ({result.returncode}): {stderr}")
+    _require_private_archive(out)
+
+
+def _require_private_archive(path: Path) -> None:
+    """Refuse a volume archive that is not a regular file, owned by this uid:gid, with mode exactly 0600."""
+    st = os.lstat(path)
+    problems = []
+    if not stat.S_ISREG(st.st_mode):
+        problems.append("not a regular file")
+    if (st.st_uid, st.st_gid) != (os.getuid(), os.getgid()):
+        problems.append(f"owner {st.st_uid}:{st.st_gid}, expected {os.getuid()}:{os.getgid()}")
+    if stat.S_IMODE(st.st_mode) != ARCHIVE_MODE:
+        problems.append(f"mode {stat.S_IMODE(st.st_mode):04o}, expected {ARCHIVE_MODE:04o}")
+    if st.st_size == 0:
+        problems.append("empty archive")
+    if problems:
+        raise BackupError(f"volume archive {path.name} is not private to the backup user: {'; '.join(problems)}")
 
 
 def verify_backup(set_dir: Path) -> dict:
