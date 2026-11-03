@@ -56,4 +56,9 @@ PLN_02_ACCEPTANCE          = PENDING. "Each item has a verified recovery source"
 
 ## Acceptance update (2026-10-25T18:51Z)
 Re-run against backup set `20261025T185052Z` (`scripts/p3/backup.py` through `scripts/p3/scheduled_backup.sh`): **all 14 roots PASS**. That is runtime, tlos-control plus 9 worktrees, the operator workspace, tlos-ar-render, the evidence docs and memory, with 0 unclassified, 0 unreadable and every class verified. The Docker volumes are in the set.
+
+**Correction (2026-11-03):** "the Docker volumes" were the named volumes `trading_lab_os_final_*`. The live runtime
+containers bind-mount `/srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}`, which no root above
+lists. Those volume exports are not evidence of runtime-data completeness; the root results above stand. Live data is
+covered from the set whose record shows `LIVE_DATA_COVERAGE = PASS` ([`PLN_03_BACKUP_RESTORE.md`](PLN_03_BACKUP_RESTORE.md)).
 **PLN-02 ACCEPTANCE = PASS** as of that set. It is re-checked after each scheduled backup.

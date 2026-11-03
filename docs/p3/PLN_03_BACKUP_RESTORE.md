@@ -27,6 +27,40 @@ Design rules:
   file, 0600, owned by that user. This fixes the 2026-11-03 host finding: set `20261103T183447Z` verified PASS, but its three
   volume archives were `root:root 0644`, written by the container through a bind mount. Regression tests:
   `tests/test_p3_backup_volume_export.py`. Historical sets are not changed.
+- **Live data sources and coverage** (2026-11-03 host finding: the runtime's Grafana, Prometheus and MLflow containers
+  bind-mount `/srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}`, while the backup exported named
+  volumes that no container uses).
+  - `create --data NAME=SOURCE` archives a live source into `data/<name>.tar` (0600, the same root read-only helper).
+    SOURCE is an absolute host directory, mounted with `--mount type=bind,readonly`, which refuses a missing directory, or a
+    volume name.
+  - The source is then read again by the helper. Its per-file sha256 must equal the archive's, which is written to
+    `data/<name>.files.sha256`. A file the export could not read, or a writer still running, fails the set, so the runtime
+    must be stopped for the backup. This also proves that protected files (Grafana's `grafana.db`) were read.
+  - `create --compose-project P` refuses the set unless every **writable** mount of P's containers (running or stopped)
+    is a declared data source or under a declared root, **and** no declared data source is unused by every container
+    (`LIVE_DATA_COVERAGE`). Read-only configuration mounts are reported but do not decide the verdict. Host plumbing
+    (`/proc`, `/sys`, `/dev`, `/run`, `/var/run`, the Docker socket) and tmpfs are not state. `coverage` runs the
+    check alone, read-only.
+  - The drill restores every data source and compares it file by file (`data:<name>`). Sets without data sources
+    (all historical ones) drill as before. Regression tests: `tests/test_p3_backup_live_data.py`.
+  - A writable bind counts as covered by a root only when the root actually archives it. A path through a derived
+    (excluded) directory such as `.venv` covers nothing.
+- **Every new set is owner-only.** `create_backup` runs under umask 077, whatever the caller's, so every directory
+  is 0700 and every archive, bundle and manifest is 0600. If any entry is still open to group or other
+  (`GROUP_OR_OTHER_ACCESSIBLE_ENTRIES > 0`), the set is not published. Earlier sets are never changed.
+- `compare-export` (portable copy) expects 2 artifacts per root and per data source, 1 per repository and 1 per
+  volume (`expected_artifact_count`). A record without `data_sources` counts as before.
+
+### What the drill proves, and what it does not
+| Property | Proven by | Status |
+|---|---|---|
+| File **content** and symlink targets equal to the source at backup time | archive manifest = the live source re-read by root (at `create`); restored tree = manifest (drill) | **Proven** |
+| Every file was readable (protected Grafana files included) | the same equality: an unread file is missing from the archive | **Proven** |
+| No writer changed the data during the backup | the re-read after the export | **Proven only between the two reads.** Runtime quiescence comes from the wrapper's stop |
+| Ownership (uid/gid) and permissions | recorded in the tar headers, which the root helper writes numerically. The drill restores with `--no-same-owner --no-same-permissions` and does not compare them | **Not proven.** A restore as root with `--same-owner -p` keeps them, but nothing checks it |
+| Empty directories | in the tar, restored by the drill; the manifest lists files only | **Not proven** |
+| Hard-link relationships | tar stores them and GNU tar restores them; the manifest compares content per path | **Not proven** (content of each link is) |
+| Application consistency (SQLite `grafana.db` / `mlflow.db` integrity, Prometheus TSDB) | nothing in the drill | **Not proven.** Needs `sqlite3 … 'PRAGMA integrity_check'` / `promtool tsdb analyze` on the restored copy, or starting the services on it |
 - `--config-load <runtime>` runs the pinned engine `freqtrade@sha256:da3428…` with `--network none`, the restored user_data mounted read-only, and only `list-strategies` and `show-config`, as CI's freqtrade-load job does. **No trading command is issued.**
 
 ## Execution on hamza-workstation (2026-10-25)
@@ -35,6 +69,11 @@ Design rules:
 - Roots: trading (projects/trading: the runtime checkout, 9 worktrees, tlos-control, v1), tlos-paper, tlos-ar-render, tlos-evidence-docs, claude-memory (memory/ only).
 - Bundles: trading_lab_os_final and h1-tools.
 - Volumes: trading_lab_os_final_{grafana,mlflow,prometheus}_data, exported read-only. **This closes the PLN-02 volume gap.**
+  - **Correction (2026-11-03):** this set's integrity and drill results stand as recorded. But these named volumes
+    were **not shown to be the runtime's live data**, and on 2026-11-03 the live containers bind-mounted
+    `/srv/project-data/trading-data/runtime/data/{grafana,prometheus,mlflow}` instead. No set before the live-data
+    change proves runtime-data completeness. A set does so only when its record carries
+    `live_data_coverage.LIVE_DATA_COVERAGE = PASS` and its drill passes `data:*`.
 - `verify`: PASS.
 
 **Restore drill** into `/home/hamza/tlos-restore-drill-20261025T171416Z-5` (empty scratch, Linux fs):
