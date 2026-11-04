@@ -22,7 +22,7 @@ Properties:
 - The output (`~/tlos-paper/p3-evidence/control_room/`) is regenerable, so the inventory classifies it as derived.
 
 ## Slice 1 delivered: shell, Command Center and System (verified 2026-10-25T21:5xZ, EN + AR/RTL)
-- **Shell:** identity bar (P3 · Paper Beta executing · 7b1b1fa1 · PAPER · real money blocked · Owner: action required), the Truth Strip in the frozen order (Health ok · Authority ok · Evidence ok · Freshness ok · Runtime stopped/observed · Reconciliation 14/14 P2 final), and the 12-item navigation unchanged.
+- **Shell:** identity bar (P3 · stage executing · 7b1b1fa1 · PAPER · real money blocked · Owner: action required), the Truth Strip in the frozen order (Health ok · Authority ok · Evidence ok · Freshness ok · Runtime stopped/observed · Reconciliation 14/14 P2 final), and the 12-item navigation unchanged.
 - **Command Center:**
   - verdict;
   - the four slots (Owner / Claude / System / next governed step);
@@ -94,7 +94,7 @@ The frozen mobile components are re-declared only where they carry data. Same ma
 
 | Mobile element | Bound from | Note |
 |---|---|---|
-| Stage label (mobile bar) | `LIVE.ident.stage` ("P3 · Paper Beta executing") | The prototype's `STAGELBL[step]` would read "P2 Closed" |
+| Stage label (mobile bar) | `LIVE.ident.stage` ("P3 · stage executing": the stage, never a trading runtime) | The prototype's `STAGELBL[step]` would read "P2 Closed" |
 | Status · project line | the governed project chips and next Owner gate (the workstream record) | Replaces the prototype's hard-coded "P2 · ladder" line |
 | Status · decision / exposure / incidents | the scenario (no cohort: no decisions; exposure 0 %; incidents from non-INFO health) | — |
 | Resume | the prototype's own body; every field it reads (step, verdict, outcome, lifecycle, checkpoint, healthy-at, known / unknown / unverified, responsibility, forbidden list) is projected from evidence by `control_room.py`, and a test pins that list | The ladder is the frozen P2-closure ladder (7/7), as on desktop |
@@ -147,3 +147,18 @@ Earlier status line (slice 3): **Status: 12 of 12 screens are bound.** What rema
 | Mobile (4 tabs + details) | the same scenario; the prototype's mobile components | 0.5 d |
 
 **Total about 6–7 working days** for all 12 screens bound, plus Owner review rounds. After slice 2, **8 of 12 screens are bound**. The remainder is Decisions, Trades & Positions, Market Workspace, Settings and Mobile, **about 3 working days**.
+
+## Stage, monitoring and launch gate shown apart (2026-11-04)
+The view had two ways to be misread: a stage label that read like trading, and a container count that did not name
+the monitoring stack. It now separates four things; nothing about the screens or navigation changes.
+- **Stage:** `ident.stage` reads "P3 · stage executing" (it used to read "P3 · Paper Beta executing"), and the verdict
+  reads "Stage P3 is executing". It names the stage under its authorization, never a trading runtime.
+- **Monitoring vs paper trading:** the System row reads "Paper trading stopped · monitoring N running". N counts the
+  monitoring runtime's compose containers (`tlos_runtime-*`: Grafana, Prometheus, MLflow); anything else is counted
+  as "other". The paper-runtime state itself still comes only from the kill switch's paper-container scope.
+- **Paper launch gate:** a KNOWN line derived from the PLN-10 gate. `observe()` reads
+  `docs/p3/PLN_10_RUN_CONFIG.json` (`acceptance.RUN_CONFIG_PATH`, created only by the Owner's PR) and runs
+  `acceptance.launch_readiness` on it. Absent or unreadable means "Paper launch not authorized" with the open Owner
+  decisions D1–D5. An observation without the gate is listed as UNKNOWN, treated as not authorized.
+- **Backup:** `LOCAL_BACKUP_HARDENED` is the governed PLN-03 record (re-accepted 2026-11-04), shown in the
+  workstream row. The backup truth of the *newest* set stays separate: integrity, coverage and restore, as before.

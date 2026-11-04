@@ -1950,6 +1950,23 @@ P3_PLN07_G3_RECORDER_SCOPE: dict[str, str] = {
 }
 
 
+# PR #112, merged. Two parents: b8667293 (main before) + 14cb2ded
+# (P3 H7/G8 correction). These entries were BRANCH_SCOPE while it was in flight.
+P3_H7_G8_CORRECTION_MERGE = "8e7597d2efaaa382fc5171626f555941cc614363"
+
+# P3 H7/G8 correction: the WAL check of restore_app_checks.sh matched "repair" in source=repair.go and queried with
+# count_over_time, which Prometheus rejects on multi-metric data (HTTP 422). Detection now reads msg=/err= fields, adds
+# the TSDB corruption counters and ERROR lines; the query keeps the metric name; logs and raw HTTP are kept.
+_G8 = "P3 H7/G8 correction"
+P3_H7_G8_CORRECTION_SCOPE: dict[str, str] = {
+    "scripts/p3/ops/restore_app_checks.sh": f"{_G8} — msg/err-field detection, counters, last_over_time, raw evidence",
+    "tests/test_p3_restore_app_checks.py": f"{_G8} — healthy blocks, genuine events, failed HTTP, samples at the stamp",
+    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_G8} — G8 table, the 2026-11-04 correction record, kept evidence",
+    "tests/test_p2_scope_audit.py": "P3 PLN-07 G-3 recorder (PR #109) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -2035,6 +2052,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_READINESS_PREP": (P3_READINESS_PREP_MERGE, P3_READINESS_PREP_SCOPE),
     "P3_BACKUP_HOST_INTEGRATION": (P3_BACKUP_HOST_INTEGRATION_MERGE, P3_BACKUP_HOST_INTEGRATION_SCOPE),
     "P3_PLN07_G3_RECORDER": (P3_PLN07_G3_RECORDER_MERGE, P3_PLN07_G3_RECORDER_SCOPE),
+    "P3_H7_G8_CORRECTION": (P3_H7_G8_CORRECTION_MERGE, P3_H7_G8_CORRECTION_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -2042,15 +2060,18 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 H7/G8 correction: the WAL check of restore_app_checks.sh matched "repair" in source=repair.go and queried with
-# count_over_time, which Prometheus rejects on multi-metric data (HTTP 422). Detection now reads msg=/err= fields, adds
-# the TSDB corruption counters and ERROR lines; the query keeps the metric name; logs and raw HTTP are kept.
-_G8 = "P3 H7/G8 correction"
+# P3 PLN-03 re-acceptance and project truth: the re-acceptance record (G1-G8 on set 20261104T143958Z, verified from
+# the host evidence), the governed workstream record brought current (stale PR-A/PR-B instructions removed), and the
+# Control Room showing the stage, the monitoring stack and the PLN-10 launch gate apart from paper trading.
+_RA = "P3 PLN-03 re-acceptance and project truth"
 BRANCH_SCOPE: dict[str, str] = {
-    "scripts/p3/ops/restore_app_checks.sh": f"{_G8} — msg/err-field detection, counters, last_over_time, raw evidence",
-    "tests/test_p3_restore_app_checks.py": f"{_G8} — healthy blocks, genuine events, failed HTTP, samples at the stamp",
-    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_G8} — G8 table, the 2026-11-04 correction record, kept evidence",
-    "tests/test_p2_scope_audit.py": "P3 PLN-07 G-3 recorder (PR #109) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_RA} — re-acceptance record: history, gates, evidence, limitations",
+    "research/p3/records/p3_workstreams.json": f"{_RA} — PLN-02/03/07/09/10 evidence and Owner/next current",
+    "research/p3/control_room.py": f"{_RA} — stage label, monitoring vs paper, PLN-10 launch gate line",
+    "tests/test_p3_control_room.py": f"{_RA} — launch gate fail-closed, monitoring named, stage label",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_RA} — the stage/monitoring/launch-gate projection note",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_RA} — M1 stage label",
+    "tests/test_p2_scope_audit.py": "P3 H7/G8 correction (PR #112) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

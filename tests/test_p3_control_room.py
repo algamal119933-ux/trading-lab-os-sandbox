@@ -867,3 +867,60 @@ def test_the_workstream_record_is_never_dated_after_the_commit_that_wrote_it():
         pytest.skip("no git history for the record here")
     bound = datetime.now(timezone.utc).timestamp() if dirty else float(run.stdout.strip())
     assert stamp <= bound + 60, f"updated_utc {ws['updated_utc']} is after the commit that wrote it"
+
+
+# ----------------------------------------------------------------------------------------------------------------
+# Stage vs trading, monitoring vs paper, and the PLN-10 launch gate (2026-11-04)
+# ----------------------------------------------------------------------------------------------------------------
+
+def test_the_launch_gate_is_read_from_the_run_configuration_and_blocked_unless_complete(tmp_path):
+    assert cr.launch_state(tmp_path) == {"present": False, "verdict": "LAUNCH_BLOCKED",
+                                         "open": ["D1", "D2", "D3", "D4", "D5"]}
+    cfg = tmp_path / "docs" / "p3" / "PLN_10_RUN_CONFIG.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text((REPO / "docs" / "p3" / "PLN_10_RUN_CONFIG.TEMPLATE.json").read_text(encoding="utf-8"))
+    st = cr.launch_state(tmp_path)
+    assert st["present"] is True and st["verdict"] == "LAUNCH_BLOCKED" and "D5" in st["open"]
+    cfg.write_text("{not json")
+    assert cr.launch_state(tmp_path)["verdict"] == "LAUNCH_BLOCKED" and cr.launch_state(tmp_path)["unreadable"]
+    # the repository itself: no Owner run configuration exists today
+    assert cr.launch_state(REPO)["verdict"] == "LAUNCH_BLOCKED"
+
+
+@pytest.mark.parametrize("launch,where,needle", [
+    ({"present": False, "verdict": "LAUNCH_BLOCKED", "open": ["D1", "D2", "D3", "D4", "D5"]}, "known",
+     "Paper launch not authorized: no Owner run configuration"),
+    ({"present": True, "verdict": "LAUNCH_BLOCKED", "open": ["D5"]}, "known",
+     "Paper launch not authorized: the run configuration is LAUNCH_BLOCKED; open Owner decisions: D5"),
+    ({"present": True, "verdict": "LAUNCH_BLOCKED", "open": ["D1"], "unreadable": True}, "known",
+     "the run configuration is unreadable"),
+    ({"present": True, "verdict": "CONFIG_COMPLETE_FOR_OWNER_LAUNCH", "open": []}, "known",
+     "the launch is the Owner's act"),
+    (None, "unknown", "Paper launch gate not observed (treated as not authorized)"),
+])
+def test_the_paper_launch_line_is_derived_from_the_gate_and_fails_closed(launch, where, needle):
+    over = {} if launch is None else {"launch": launch}
+    obs = _obs(**over)
+    obs.pop("launch", None) if launch is None else None
+    sc = cr.project(obs)["scenario"]
+    assert needle in _txt(sc[where])
+    if launch is None or launch["verdict"] == "LAUNCH_BLOCKED":
+        assert "launch is the Owner's act" not in _txt(sc["known"])
+
+
+def test_the_monitoring_stack_is_named_apart_from_paper_trading():
+    running = ["tlos_runtime-grafana-1", "tlos_runtime-prometheus-1", "tlos_runtime-mlflow-1"]
+    live = cr.project(_obs(running_containers=running))
+    sysc = live["scenario"]["sys"]["containers"]
+    assert sysc[0] == "off" and sysc[1]["en"] == "Paper trading stopped · monitoring 3 running"
+    assert "Paper trading stopped; monitoring stack 3 running." in live["scenario"]["system"]["en"]
+    sysc = cr.project(_obs(running_containers=running + ["unrelated"]))["scenario"]["sys"]["containers"]
+    assert sysc[1]["en"] == "Paper trading stopped · monitoring 3 running · 1 other running"
+    assert "monitoring state unknown" in cr.project(_obs(running_containers=None))["scenario"]["system"]["en"]
+
+
+def test_the_stage_label_names_the_stage_not_paper_trading():
+    live = cr.project(_obs())
+    assert live["ident"]["stage"]["en"] == "P3 · stage executing"
+    assert "Stage P3 is executing" in live["scenario"]["verdict"]["en"]
+    assert "Paper Beta executing" not in json.dumps(live["ident"]) + live["scenario"]["verdict"]["en"]

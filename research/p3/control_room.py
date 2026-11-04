@@ -32,13 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from p3 import backup, health, kill_switch, recovery, storage
+from p3 import acceptance, backup, health, kill_switch, recovery, storage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROTOTYPE = REPO_ROOT / "docs" / "p3" / "product_shape" / "Trading_Lab_OS_Prototype_v0.2.5_FINAL.html"
 PROTOTYPE_SHA256 = "e17d50dc9c8d0e6f6a629c4f215441ba4d00457d0e18a6eb5b45261c6651e3d9"
 ADAPTER_JS = Path(__file__).with_name("control_room_live.js")
 WORKSTREAMS = Path(__file__).with_name("records") / "p3_workstreams.json"
+MONITORING_PREFIX = "tlos_runtime-"  # container names of the monitoring runtime's compose project
 REGISTRY = REPO_ROOT / "research" / "fp" / "records" / "forward_paper_cohort_registry.json"
 AUTHORIZATION = REPO_ROOT / "docs" / "p3" / "OWNER_P3_EXECUTION_AUTHORIZATION.md"
 P2_CLOSURE = REPO_ROOT / "docs" / "p2" / "P2_CLOSURE.md"
@@ -134,6 +135,22 @@ def sealed_cohort(audits: list[dict]) -> dict | None:
 
 
 # ---------------------------------------------------------------- inputs
+def launch_state(repo_root: Path) -> dict:
+    """The PLN-10 launch gate as the governed run configuration states it (``acceptance.RUN_CONFIG_PATH``, created only
+    by the Owner's own PR). ``acceptance.launch_readiness`` decides: LAUNCH_BLOCKED unless every Owner decision D1-D5
+    is set. An absent or unreadable configuration is blocked; nothing here can make a launch look authorized."""
+    path = Path(repo_root) / acceptance.RUN_CONFIG_PATH
+    if not path.exists():
+        return {"present": False, "verdict": "LAUNCH_BLOCKED", "open": sorted(acceptance.OWNER_DECISIONS)}
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+        readiness = acceptance.launch_readiness(config)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"present": True, "verdict": "LAUNCH_BLOCKED", "open": sorted(acceptance.OWNER_DECISIONS),
+                "unreadable": True}
+    return {"present": True, "verdict": readiness["verdict"], "open": readiness["open_owner_decisions"]}
+
+
 def parse_authorization(text: str) -> dict:
     """The fields the projection needs from the Owner P3 authorization record. Fail-closed: a boundary
     counts as explicit only when its NO line is present and no contradicting line is; an expiry is
@@ -258,6 +275,7 @@ def collect(*, runner: Runner = _run, now: float | None = None, registry_path: P
                           for r in registry.get("instances", [])],
         },
         "authorization": parse_authorization(auth_text),
+        "launch": launch_state(repo_root),
         "p2_reconcile": {"passed": int(recon.group(1)), "total": int(recon.group(2))} if recon else None,
         "governance": {
             "main": _out(runner, ["git", "-C", str(repo_root), "rev-parse", "HEAD"]),
@@ -489,6 +507,22 @@ def project(obs: dict) -> dict:
         else:
             unknown.append(b("H1 launch boundary not explicit in the authorization record (treated as not authorized)",
                              "حد إطلاق H1 غير صريح في سجل التفويض (يُعامل كغير مصرّح)"))
+    launch = obs.get("launch") if isinstance(obs.get("launch"), dict) else None
+    if launch and launch.get("verdict") == "CONFIG_COMPLETE_FOR_OWNER_LAUNCH" and launch.get("present") is True:
+        known.append(b("Paper launch: the Owner's run configuration is complete (D1-D5 set); the launch is the Owner's act",
+                       "الإطلاق الورقي: إعدادات التشغيل لدى المالك مكتملة (D1-D5)؛ الإطلاق فعل المالك"))
+    elif launch and launch.get("verdict") == "LAUNCH_BLOCKED":
+        why = ("no Owner run configuration (docs/p3/PLN_10_RUN_CONFIG.json absent)" if launch.get("present") is False
+               else "the run configuration is unreadable" if launch.get("unreadable")
+               else "the run configuration is LAUNCH_BLOCKED")
+        why_ar = ("لا إعدادات تشغيل من المالك (الملف docs/p3/PLN_10_RUN_CONFIG.json غير موجود)" if launch.get("present") is False
+                  else "إعدادات التشغيل غير مقروءة" if launch.get("unreadable") else "إعدادات التشغيل محجوبة")
+        open_ = ", ".join(launch.get("open") or []) or "none listed"
+        known.append(b(f"Paper launch not authorized: {why}; open Owner decisions: {open_}",
+                       f"الإطلاق الورقي غير مصرّح: {why_ar}؛ قرارات المالك المفتوحة: {open_}"))
+    else:
+        unknown.append(b("Paper launch gate not observed (treated as not authorized)",
+                         "بوابة الإطلاق الورقي غير مرصودة (تُعامل كغير مصرّح)"))
     if backup_f:
         known.append(b(f"Backup: {backup_f['detail']} · verify {'PASS' if backup_f['severity'] == health.INFO else 'FAIL'}"
                        f" · {truth['coverage'][1]['en']}",
@@ -529,9 +563,13 @@ def project(obs: dict) -> dict:
     events.append({"t": now, "s": "unk" if not findings else "ok" if sev == health.INFO else "warn", "c": "system",
                    "d": b(f"Health check: {sev}", f"فحص الصحة: {sev}"), "src": b("health check", "فحص الصحة")})
 
+    mon_n = None if obs["running_containers"] is None else \
+        len([n for n in obs["running_containers"] if n.startswith(MONITORING_PREFIX) and n not in (paper or {})])
+    mon_en = "monitoring state unknown" if mon_n is None else f"monitoring stack {mon_n} running"
+    mon_ar = "حالة المراقبة غير معروفة" if mon_n is None else f"منظومة المراقبة {mon_n} تعمل"
     system_txt = b(
-        f"No paper runtime. Backups daily (newest {newest or 'none'}); health hourly: {sev}.",
-        f"لا تشغيل ورقي. النسخ يوميًا (الأحدث {newest or 'لا يوجد'})؛ الصحة كل ساعة: {sev}.")
+        f"Paper trading stopped; {mon_en}. Backups daily (newest {newest or 'none'}); health hourly: {sev}.",
+        f"التداول الورقي متوقف؛ {mon_ar}. النسخ يوميًا (الأحدث {newest or 'لا يوجد'})؛ الصحة كل ساعة: {sev}.")
     if not runtime_off:
         system_txt = b(f"{runtime_label['en']}. Health hourly: {sev}.", f"{runtime_label['ar']}. الصحة كل ساعة: {sev}.")
 
@@ -540,10 +578,16 @@ def project(obs: dict) -> dict:
     boot = _utc(obs["observed_epoch"] - up) if up is not None else None
     running = obs["running_containers"]
     others = None if running is None else [n for n in running if n not in (paper or {})]
+    # The monitoring stack (compose project tlos_runtime: Grafana, Prometheus, MLflow) is not a trading cohort.
+    monitoring = None if others is None else [n for n in others if n.startswith(MONITORING_PREFIX)]
+    rest = None if others is None else [n for n in others if not n.startswith(MONITORING_PREFIX)]
     sys_ = {
         "host": ["ok", b(f"Up · {up / 86400:.1f} d", f"يعمل · {up / 86400:.1f} يوم")] if up is not None else ["unk", "unknown"],
         "containers": ["unk", "unknown"] if running is None else
-        (["off", b(f"No paper runtime · {len(others)} other running", f"لا تشغيل ورقي · {len(others)} أخرى تعمل")]
+        (["off", b(f"Paper trading stopped · monitoring {len(monitoring)} running"
+                   + (f" · {len(rest)} other running" if rest else ""),
+                   f"التداول الورقي متوقف · المراقبة {len(monitoring)} تعمل"
+                   + (f" · {len(rest)} أخرى تعمل" if rest else ""))]
          if runtime_off else [runtime_dim[0], b(f"{len(running)} running", f"{len(running)} تعمل")]),
         "feed": ["off", b("No feed · no runtime", "لا تغذية · لا تشغيل")] if runtime_off else ["unk", "unknown"],
         "api": ["off", b("Not used · no runtime", "غير مستخدمة · لا تشغيل")] if runtime_off else ["unk", "unknown"],
@@ -554,7 +598,7 @@ def project(obs: dict) -> dict:
         "boot": boot or "—",
     }
 
-    stage_en, stage_ar = ("P3 Paper Beta is executing", "النسخة التجريبية الورقية P3 قيد التنفيذ") if authority_ok \
+    stage_en, stage_ar = ("Stage P3 is executing", "المرحلة P3 قيد التنفيذ") if authority_ok \
         else ("P3 authorization is not valid", "تفويض P3 غير صالح")
     rt_en, rt_ar = ("No paper runtime is running.", "لا يعمل أي تشغيل ورقي.") if runtime_off \
         else (f"{runtime_label['en']}.", f"{runtime_label['ar']}.")
@@ -625,7 +669,7 @@ def project(obs: dict) -> dict:
         # the client re-checks expiry itself: a page generated before expiry must not say "valid" after it
         "auth_expires_epoch": expires_epoch if authority_ok else None,
         "hostname": obs["hostname"],
-        "ident": {"stage": b("P3 · Paper Beta executing", "P3 · النسخة التجريبية الورقية قيد التنفيذ") if authority_ok
+        "ident": {"stage": b("P3 · stage executing", "P3 · المرحلة قيد التنفيذ") if authority_ok
                   else b("P3 · authorization not valid", "P3 · التفويض غير صالح"), "ref": "7b1b1fa1"},
         "project": {"chips": project_chips,
                     "gate": _ws_text(ws, "next"),
