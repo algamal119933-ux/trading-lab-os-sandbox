@@ -279,3 +279,116 @@ Tests: `tests/test_p3_storage.py`. **Residuals.**
    Until then the governed wrapper (`scheduled_backup.sh`) is not what the timer runs on that host.
 
 PLN-03 stays **ACCEPTED** for its procedure and drills. This change touches only where the store is found, not how a set is made, verified or restored.
+
+## Re-acceptance after the live-data change (2026-11-04)
+**Why it was needed.** On 2026-11-03 a limitation was found: the accepted sets exported named volumes that the live
+runtime does not use. Its data had moved to bind mounts under `/srv/project-data/trading-data/runtime/data`. The
+contract asks for the drill to be repeated after a change. The repository side was merged as #106 (live-data backup),
+#108 (Control Room backup truth), #111 (governed host wrapper and H2–H7 runbook, replacing #107) and #112 (G8
+correction). The host steps H2–H7 then ran, each under its own Owner authorization
+(`PLN_03_HOST_INSTALL_H2_H7.md`).
+
+**History of this re-acceptance.**
+1. **H2–H6:** tools checkout `6d2f2075` → `b8667293`; wrapper installed (`561c44d2…` → `4308f50c…`, rollback copy
+   kept); one backup run through the existing unit wrote set **`20261104T143958Z`** (`Result=success`,
+   `ExecMainStatus=0`, `BACKUP = PASS`).
+2. **First H7 (2026-11-04T14:49Z): G7 PASS, G8 FAIL** on `prometheus WAL_RECOVERY`. Kept unchanged:
+   `h7_restore_20261104T144942Z.d/`.
+3. **Root cause (2026-11-04):** both reasons were defects in the check, not in the data.
+   - The seven `repair|corrupt` matches were `source=repair.go:54 msg="Found healthy block"`. Production Prometheus,
+     restarted at 16:40 on the same bytes, logged the same seven lines with `wal_corruptions_total = 0` and
+     `mmap_chunk_corruptions_total = 0` (`h7_readonly_20261104T153247Z.d/`).
+   - The `-1` was an HTTP 422 from Prometheus. `count_over_time` drops the metric name, so two metrics of one target
+     collide.
+   - The original run's own log is not recoverable (`json-file` driver, container removed).
+4. **#112 (merge `8e7597d2`):**
+   - detection reads only the `msg=`/`err=` fields, and also requires the two TSDB corruption counters (0) and no ERROR
+     line;
+   - the query uses `last_over_time`;
+   - raw logs and HTTP responses are kept.
+   - The acceptance requirement is unchanged.
+5. **H7 re-acceptance (2026-11-04T16:28Z):** tools checkout `b8667293` → `8e7597d2`. The drill used a fresh scratch
+   from the same SSD set. The first scratch was not touched. **G7 PASS, G8 PASS.**
+
+**Set identity.**
+- `20261104T143958Z`, created `2026-11-04T14:40:11Z`, 757,825,066 bytes.
+- `sha256(SHA256SUMS)` = `7f7219400604205c9d4444527c08c0f30a29f1ffc8b768462547e32e0ccf148b` = the record's
+  `sha256sums_digest`.
+- HDD (`/srv/project-data/tlos-backups/`) and SSD (`~/tlos-backups-ssd-mirror/sets/`) copies: identical record,
+  identical `SHA256SUMS`, same 19 files with the same sizes and times. `current` → `sets/20261104T143958Z`.
+- Data sources: grafana 1,259 files (531,100,044 B, `grafana.db` included), prometheus 35 (5,259,634 B), mlflow 1
+  (872,448 B). Roots: trading, tlos-paper, tlos-ar-render, tlos-evidence-docs, claude-memory. Bundle:
+  trading_lab_os_final.
+
+**Gates (verified by Claude on 2026-11-04 from the files themselves, read-only, not from the terminal output):**
+
+| Gate | Result | Evidence |
+|---|---|---|
+| G1 live-data coverage | PASS | record `live_data_coverage`: `PASS`, `before_runtime_stop`; its `report_sha256` = sha256 of `backup_coverage_20261104T143958Z.json`; 3 sources with file counts; `grafana.db` in `data/grafana.files.sha256`; H3 negative control FAIL as designed |
+| G2 backup integrity | PASS | the run's own verify (`ARCHIVE_INTEGRITY = PASS`, journal); re-acceptance `VERIFY = PASS []` on the SSD set; record digest matches |
+| G3 permissions | PASS (by construction) | `create` refuses to publish any entry open to group or other (`GROUP_OR_OTHER_ACCESSIBLE_ENTRIES`), and the set was published. **Gap:** no saved post-hoc `find -perm` listing (no H6 directory was written) |
+| G4 SSD mirror | PASS | `backup_mirror_20261104T143958Z.json`: `SSD_MIRROR = PASS`, `current = sets/20261104T143958Z`, legacy `latest`/`previous` untouched (legacy SOURCE_SET hashes identical before/after); identical file list on HDD and SSD |
+| G5 runtime recovery | PASS | `RUNTIME_RECOVERY = PASS` after the backup (16:40:17) and before/after the re-acceptance; runtime unit active, `NRestarts=0` |
+| G6 schedule | PASS | unit hash unchanged before/after H4 (`2563b52c…`); timer listed; next run 2026-11-05 03:30Z |
+| G7 isolated restore | PASS | `PLN_03_RESTORE_DRILL = PASS` (13 checks incl. `data:grafana/prometheus/mlflow`, `git:*`, `config_load:*`); `source.tier = SECOND_DEVICE_MIRROR` |
+| G8 application consistency | PASS | `RESTORE_APP_CHECKS = PASS`: Grafana SQLite integrity ok; MLflow 1 experiment read; Prometheus ready in 2 s, `WAL replay completed`, 0 repair/corruption events, 0 ERROR lines, both counters 0, query HTTP 200 → 5 series at the stamp |
+
+**Also verified:**
+- The set's `data/prometheus.tar` equals its `SHA256SUMS` entry and the re-acceptance "before" hash now. The set is
+  unchanged.
+- The installed wrapper (`4308f50c…`) equals the governed file at both `b8667293` and `8e7597d2`.
+- No throwaway container was left.
+- The raw Prometheus log and the HTTP bodies are kept in `app.prometheus.log` and `app.http/`.
+
+**Evidence** (`/home/hamza/tlos-paper/p3-evidence/`; every directory's `SHA256SUMS` verified, sha256 of each manifest):
+
+| Directory or file | sha256 |
+|---|---|
+| `backup_install_20261104T140532Z.d/SHA256SUMS` (H2) | `4a0321efb9984e5529c02d47e89ecef241792f132af9a2ac93a613357fafff63` |
+| `h3_verify_20261104T140937Z.d/SHA256SUMS` | `9ac1e667910f5634fc9afe5f98d09101a181ce43cfdf94606fdc62b63a12591a` |
+| `h4_install_20261104T141246Z.d/SHA256SUMS` | `1c29d36ba2f59f92f3f5242db7afe29959cf440a211bde276b665bfbde559ebb` |
+| `h5_real_20261104T143958Z.d/SHA256SUMS` | `78ee0135b797abf29ffc6d6853dfba3c39c4b05964401f045f717612fb9a55cf` |
+| `h7_restore_20261104T144942Z.d/SHA256SUMS` (first H7, G8 FAIL) | `9238d31c25d8961d84d6d14d1ba725665229b1e79b2e7c14283f254023dae4af` |
+| `h7_readonly_20261104T153247Z.d/SHA256SUMS` (root cause) | `d865f68136fb1c3413697b4591870c0538e0042994b43b6bfff8910c3e994958` |
+| `h7_reaccept_20261104T162813Z.d/SHA256SUMS` (re-acceptance) | `516595e56c0f236e2da34b987320a8e6c80246ffb962c15a94d9d89aa63cb54e` |
+| `backup_coverage_20261104T143958Z.json` | `fa26d9503cf21013f9784cf8f2c908d04769f8cac3ff6c15948985817260bf45` |
+| `backup_mirror_20261104T143958Z.json` | `39406562cbab1a5cdb6d83c57203fd10f4acb70f325e9a780dfa6314a1b623cb` |
+
+`h5_safe_20261104T143653Z.d/` holds a first H5 attempt that refused before starting anything (timer parse). It is kept.
+
+**What is and is not established:**
+
+| Claim | State |
+|---|---|
+| Backup integrity | PROVEN for set `20261104T143958Z` (G2, G3) |
+| Live-data coverage | PROVEN for that set: observed before the stop, bound into the set (G1) |
+| Isolated restoration | PROVEN from the second-device copy into a scratch (G7) |
+| Application consistency | PROVEN on the restored copy: Grafana database file, MLflow read, Prometheus TSDB open and WAL replay (G8) |
+| Operational readiness | PARTIAL. The run used the existing unit under `systemctl start`; the first timer-driven run with the governed wrapper is due 2026-11-05 03:30Z and is not yet observed. Interrupted-run recovery and the exit-7 path are CI-tested only |
+| Offsite disaster recovery | NOT PROVEN. Both copies are on one machine, one PSU. PLN-05 Tier 3 (VPS, sealed upload) is not provisioned; `HOST_LOSS_REDUNDANCY = NOT_PROVEN` |
+
+**Remaining limitations:**
+- **Prometheus:** the recent window held 5 series only. The scrape target is the Freqtrade exporter, and it is down
+  because the paper runtime is stopped. G8 proves the WAL was captured and replayed up to the last scrape
+  (head max time 4.2 s before the stamp). It does **not** prove every historical sample was recovered.
+- **Prometheus throwaway:** it ran with the image's default configuration and retention. It deleted one obsolete block
+  in the scratch copy, so older history is hash-verified only.
+- **Grafana:** checked at the database file. A started Grafana is not part of G8.
+- **Restore fidelity:** ownership and modes are not restored as in production (the drill restores as `hamza`), and
+  empty directories are not proven.
+- **Scope:** one set, one drill. Later sets carry their own integrity and coverage, but no drill until another runs.
+  The Control Room shows these separately.
+- **Evidence custody:** the evidence lives on the same host. It is included in later sets' `tlos-paper` root, not
+  offsite.
+- **Evidence gaps (not gate failures):**
+  - G3 has no saved post-hoc permission listing.
+  - The re-acceptance kept "before" fingerprints of the set and the first scratch; the "after" comparison was printed,
+    not saved. The set itself was re-hashed afterwards and is unchanged.
+
+```text
+PLN_03_REACCEPTANCE   = PASS (set 20261104T143958Z; G7 PASS, G8 PASS after the #112 correction)
+LOCAL_BACKUP_HARDENED = PASS (G1–G8 on that set; local only: not offsite, not a trading authorization)
+HOST_LOSS_REDUNDANCY  = NOT_PROVEN (PLN-05)
+PAPER_LAUNCH_AUTHORIZED = NO · REAL_MONEY_AUTHORIZED = NO
+```
+This record takes effect when the Owner merges it.

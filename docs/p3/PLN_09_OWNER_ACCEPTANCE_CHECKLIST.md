@@ -72,7 +72,7 @@ Open with a window narrower than 720 px, or `#mobile` at the end of the address.
 
 | # | Open | PASS when | FAIL when | Evidence id | ✓ |
 |---|---|---|---|---|---|
-| M1 | Status · الحالة | stage = "P3 · Paper Beta executing" (or "authorization not valid" if it expired); Owner / Claude / System / Next; project chips; next Owner gate; exposure; open incidents — same scenario as desktop | the stage reads "P2 Closed", or a value differs from desktop | `PLN09-W-M1` | ☐ |
+| M1 | Status · الحالة | stage = "P3 · stage executing" (or "authorization not valid" if it expired); Owner / Claude / System / Next; project chips; next Owner gate; exposure; open incidents — same scenario as desktop | the stage reads "P2 Closed", or a value differs from desktop | `PLN09-W-M1` | ☐ |
 | M2 | Resume · استئناف | step 7/7 (P2 closure ladder); verdict; closure outcome PASS; lifecycle; checkpoint; healthy-at; known / unknown / unverified; Forbidden now = Real money · H1 launch · Restarting FP-CONTROL-3 · Strategy, risk or dataset change · Reopening the product shape | a field without its source, or another forbidden list | `PLN09-W-M2` | ☐ |
 | M3 | Incidents · الحوادث | rows open a read-only detail; "None open" when INFO; **Unknown** when no findings | "None open" without findings | `PLN09-W-M3` | ☐ |
 | M4 | More → Decisions | last **sealed** decision with the 9-stage trace, marked "Sealed record"; Unknown if the record is missing | a decision not marked sealed | `PLN09-W-M4` | ☐ |
