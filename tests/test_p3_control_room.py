@@ -852,3 +852,18 @@ def test_restore_never_implies_live_data_coverage_or_offsite():
     assert live["ops"]["restore"][0] == "ok"                       # the set's own drill passed
     assert live["scenario"]["dims"]["evidence"][0] == "warn"       # coverage stays a separate, unproven claim
     assert "offsite" not in live["ops"]["restore"][1]["en"].lower() and "tier-3" not in live["ops"]["restore"][1]["en"].lower()
+
+
+def test_the_workstream_record_is_never_dated_after_the_commit_that_wrote_it():
+    """updated_utc is when the governed record's content was written; a future date misdates the Owner's view
+    (2026-11-04 finding: a Cairo local time was written as UTC). It may not exceed the committer time of the
+    newest commit that touched the file (or now, for an uncommitted edit)."""
+    ws = json.loads(cr.WORKSTREAMS.read_text(encoding="utf-8"))
+    stamp = datetime.strptime(ws["updated_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    rel = cr.WORKSTREAMS.relative_to(REPO).as_posix()
+    run = subprocess.run(["git", "-C", str(REPO), "log", "-1", "--format=%ct", "--", rel], capture_output=True, text=True)
+    dirty = subprocess.run(["git", "-C", str(REPO), "diff", "--quiet", "HEAD", "--", rel]).returncode != 0
+    if run.returncode != 0 or not run.stdout.strip():
+        pytest.skip("no git history for the record here")
+    bound = datetime.now(timezone.utc).timestamp() if dirty else float(run.stdout.strip())
+    assert stamp <= bound + 60, f"updated_utc {ws['updated_utc']} is after the commit that wrote it"

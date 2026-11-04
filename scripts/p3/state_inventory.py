@@ -4,6 +4,8 @@
     scripts/p3/state_inventory.py --root /home/hamza/projects/trading/trading_lab_os_final \\
         [--cold-manifest <sha256sum file> --cold-prefix projects/trading/trading_lab_os_final/] \\
         [--profile runtime|worktree|operator] [--json report.json]
+    scripts/p3/state_inventory.py --root /srv/project-data/trading-data/runtime/data/grafana --profile runtime_data \
+        --backup-set <set dir> --drill-json <drill of that set> [--json report.json]
 
 See research/p3/state_inventory.py. Reads only; writes nothing but --json.
 Exit codes: 0 PLN_02_STATE_INVENTORY = PASS · 1 NOT_PASS · 2 error.
@@ -38,15 +40,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profile", default="runtime", help="runtime | worktree | operator")
     parser.add_argument("--cold-manifest", type=Path)
     parser.add_argument("--cold-prefix", default="")
+    parser.add_argument("--backup-set", type=Path, help="for BACKUP_SET_DATA: the set that covers this root")
+    parser.add_argument("--drill-json", type=Path, help="for BACKUP_SET_DATA: a persisted drill of that set")
     parser.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
     try:
+        backup_set = None
+        if args.backup_set is not None:
+            from p3 import backup
+            backup_set = {"set_dir": str(args.backup_set),
+                          "record": json.loads((args.backup_set / backup.RECORD).read_text(encoding="utf-8")),
+                          "verify": backup.verify_backup(args.backup_set),
+                          "drill": json.loads(args.drill_json.read_text(encoding="utf-8")) if args.drill_json else None}
         report = inv.inventory(
             args.root, inv.load_classes(args.classes, args.profile),
             publication=json.loads(PUBLICATION.read_text(encoding="utf-8")),
             lock=json.loads(LOCK.read_text(encoding="utf-8")),
             cold_manifest=inv.load_manifest(args.cold_manifest, args.cold_prefix) if args.cold_manifest else None,
             archive_verifier=publish_evidence_digest.verify_archive,
+            backup_set=backup_set,
         )
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"P3_STATE_INVENTORY_ERROR: {exc}", file=sys.stderr)
