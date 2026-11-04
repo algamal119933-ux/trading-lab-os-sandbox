@@ -2031,6 +2031,7 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/data_truth.py": f"{_P7} — --host-boots/--host-down; feed-compare --engine-recording",
     "tests/test_p3_data_truth_g1_g3.py": f"{_P7} — whole-cover rule and refusals; recorder boundaries",
     "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_P7} — §10 implementation and the literal whole-cover reading",
+    "tests/test_p3_backup_wrapper.py": f"{_P7} — test-harness race: wait until the stub's stop is saved, not only logged",
     "tests/test_p2_scope_audit.py": "P3 backup host integration (PR #111) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
