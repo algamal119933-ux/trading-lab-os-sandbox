@@ -15,6 +15,11 @@ already trusts:
     COLD_BACKUP     the file's sha256 is in a cold-backup manifest (sha256sum format); a different
                     hash is STALE, and an absent one is MISSING
     DISPOSABLE      derived and regenerable (virtualenvs, bytecode, caches); no recovery is owed
+    BACKUP_SET_DATA live service data (Grafana, Prometheus, MLflow) that changes while the runtime runs and is
+                    owned by the containers. A per-file hash against a manifest can never be current for it, so its
+                    recovery source is the newest backup set that covers *this* root: the set verifies, its record
+                    lists the root as a data source with LIVE_DATA_COVERAGE = PASS (proven by research/p3/backup.py,
+                    which re-reads the source as root), and a persisted drill of *that* set restored data:<name>
 
 It reads only and writes nothing outside ``--json``. A file that no class claims, or a directory
 that cannot be read, is a coverage failure: the inventory cannot vouch for what it cannot see.
@@ -34,7 +39,7 @@ from pathlib import Path
 from typing import Callable
 
 PASS, STALE, MISSING, FAIL, UNVERIFIED = "PASS", "STALE", "MISSING", "FAIL", "UNVERIFIED"
-RECOVERY_KINDS = ("GIT_REMOTE", "SEALED_ARCHIVE", "DATASET_LOCK", "COLD_BACKUP", "DISPOSABLE")
+RECOVERY_KINDS = ("GIT_REMOTE", "SEALED_ARCHIVE", "DATASET_LOCK", "COLD_BACKUP", "DISPOSABLE", "BACKUP_SET_DATA")
 
 
 def sha256_file(path: Path) -> str:
@@ -222,9 +227,35 @@ def verify_cold(root: Path, files: list[str], manifest: dict[str, str] | None) -
     return {"status": status, "counts": counts, "examples": examples}
 
 
+def verify_backup_set_data(root: Path, files: list[str], backup_set: dict | None) -> dict:
+    """``backup_set``: {"set_dir", "record", "verify", "drill"} as the CLI loads them. Every link is required."""
+    if backup_set is None:
+        return {"status": UNVERIFIED, "detail": "no backup set supplied"}
+    record, drill = backup_set.get("record") or {}, backup_set.get("drill")
+    stamp = record.get("stamp")
+    if (backup_set.get("verify") or {}).get("status") != PASS:
+        return {"status": FAIL, "detail": f"backup set {stamp} does not verify"}
+    real = os.path.realpath(root)
+    name = next((n for n, info in (record.get("data_sources") or {}).items()
+                 if os.path.realpath(str(info.get("source", ""))) == real), None)
+    if name is None:
+        return {"status": MISSING, "detail": f"backup set {stamp} does not back up {real} as a data source"}
+    coverage = (record.get("live_data_coverage") or {}).get("LIVE_DATA_COVERAGE")
+    if coverage != PASS:
+        return {"status": UNVERIFIED, "detail": f"backup set {stamp}: live-data coverage is {coverage or 'not recorded'}"}
+    check = ((drill or {}).get("checks") or {}).get(f"data:{name}") or {}
+    if not drill or drill.get("backup_set") != stamp or drill.get("PLN_03_RESTORE_DRILL") != PASS \
+            or check.get("status") != PASS:
+        return {"status": UNVERIFIED, "detail": f"no passing drill of set {stamp} restoring data:{name}"}
+    info = record["data_sources"][name]
+    return {"status": PASS, "detail": f"set {stamp} data:{name}: {info.get('files')} files at backup time, "
+                                      f"coverage {coverage} ({(record.get('live_data_coverage') or {}).get('observed')}),"
+                                      f" drill PASS; {len(files)} files seen now (live data changes after the set)"}
+
+
 def inventory(root: Path, classes: list[StateClass], *, publication: dict, lock: dict,
               cold_manifest: dict[str, str] | None,
-              archive_verifier: Callable[[Path], object]) -> dict:
+              archive_verifier: Callable[[Path], object], backup_set: dict | None = None) -> dict:
     root = Path(root).resolve()
     sealed = {a["archive_name"] for a in publication.get("archives", [])}
     files, unreadable = walk(root)
@@ -233,7 +264,7 @@ def inventory(root: Path, classes: list[StateClass], *, publication: dict, lock:
     report_classes = []
     for cls in classes:
         members = assigned[cls.id]
-        size = sum((root / f).lstat().st_size for f in members)
+        size = sum((root / f).lstat().st_size for f in members)  # lstat needs only directory access, not file read
         if not members:
             recovery = {"status": PASS, "detail": "no files in this class"}
         elif cls.recovery == "GIT_REMOTE":
@@ -244,6 +275,8 @@ def inventory(root: Path, classes: list[StateClass], *, publication: dict, lock:
             recovery = verify_dataset(root, members, lock)
         elif cls.recovery == "COLD_BACKUP":
             recovery = verify_cold(root, members, cold_manifest)
+        elif cls.recovery == "BACKUP_SET_DATA":
+            recovery = verify_backup_set_data(root, members, backup_set)
         else:
             recovery = {"status": PASS, "detail": "disposable; regenerated, not recovered"}
         report_classes.append({"id": cls.id, "authority": cls.authority, "recovery_kind": cls.recovery,
