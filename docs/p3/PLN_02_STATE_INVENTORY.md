@@ -92,3 +92,82 @@ done
 **Open dependency.** If a service directory cannot be traversed by the backup user (Prometheus and MLflow
 ownership is not yet known here), coverage fails truthfully. The fix is an Owner decision about directory
 permissions, not a tool exception. Tests: `tests/test_p3_state_inventory_runtime_data.py`.
+
+## Runtime service data: host acceptance (2026-11-04)
+The three roots under `/srv/project-data/trading-data/runtime/data/` were inventoried against the re-accepted
+PLN-03 set `20261104T143958Z`. The drill link was the H7 re-acceptance drill
+`h7_reaccept_20261104T162813Z.d/drill.json` (`backup_set = 20261104T143958Z`, `data:*` PASS). Claude verified the
+evidence below by reading the files (read-only), not from a summary.
+
+| Root | Walk | Files | Unreadable dirs | Coverage | Recovery (BACKUP_SET_DATA) | Inventory |
+|---|---|---|---|---|---|---|
+| prometheus | unprivileged (`hamza`) | 37 (35 in the set; live data grows) | 0 | PASS | PASS | **PASS** |
+| mlflow | unprivileged (`hamza`) | 1 | 0 | PASS | PASS | **PASS** |
+| grafana | unprivileged (`hamza`) | 1,259 | **4** (`csv`, `pdf`, `png`, `unified-search`) | FAIL | PASS | NOT_PASS (exit 1) |
+| grafana | privileged, read-only (Owner) | 1,259 | 0 | PASS | PASS | **PASS** (exit 0) |
+
+**How the recovery link was proven:** each Recovery PASS is the tool's own check of every link:
+- the set verifies;
+- its record lists the root as a data source with `LIVE_DATA_COVERAGE = PASS` (`before_runtime_stop`);
+- the drill of that same stamp restored `data:<name>`.
+
+**Why the Grafana coverage holds:**
+- The privileged walk saw exactly the 1,259 files the unprivileged walk saw. The four directories it could not
+  enter hold no files.
+- The same count was read independently at backup time. `backup.py` read the source as root, compared it with the
+  archive (`live == archived`), and recorded `files: 1259`.
+- So the privileged walk found nothing the backup does not cover.
+
+**Evidence** (`/home/hamza/tlos-paper/p3-evidence/`; both manifests verify and cover every file):
+
+| Directory | sha256 of its `SHA256SUMS` | Written (UTC) |
+|---|---|---|
+| `pln02_runtime_data_20261104T174252Z.d` (3 roots, unprivileged) | `31b8d3c898e75d03c27cf1a8c57d649eef76797da20551bc7389bb5eee1f25bc` | 2026-11-04T17:42:52Z |
+| `pln02_grafana_privileged_20261104T174741Z.d` (Grafana, privileged) | `8487c47690b112eba4f7e63dac7f6aeb5502f4a03920102f1c9c3fca562f10c6` | 2026-11-04T17:47:51Z |
+
+**Tool identity:** `research/p3/state_inventory.py`, its class profile and `backup.py` are byte-identical in every
+tools checkout the host has had since H2 (`b8667293`, `8e7597d2`, `20c9779d`). They were last changed in #110.
+
+**Owner-reported, not evidenced in the files:**
+- the privileged walk's exact invocation and identity;
+- that no permission was changed to obtain it.
+
+A read-only `stat` of the Grafana root and the four directories would evidence the second point. It is not a gate.
+
+**Lesson (Grafana permissions):**
+- **Observed:** an unprivileged walk cannot enter four Grafana directories, so coverage fails truthfully.
+- **Cause (Owner-reported):** they belong to the container user (UID 472) and are not traversable by `hamza`.
+- **Method that worked:** a privileged read-only walk run by the Owner, with the same `--backup-set` and
+  `--drill-json`. No filesystem change, and no tool exception.
+- **For the next run:** the scheduled re-check of this root needs the same Owner-run privileged walk. The ownership
+  of these directories is decided in the separate Grafana permission review, never by loosening modes so that an
+  inventory can pass.
+
+**State found since the 2026-10-25 inventory that no PLN-02 run has walked** (found by Claude while checking the
+"100%" claim against current main; not a host observation):
+- `~/projects/trading/tlos-runtime/`. It holds the installed backup wrapper (`backup.sh`) and the runtime's compose
+  override. It sits inside the backup root `trading`, so set `20261104T143958Z` archives it in
+  `roots/trading.tar.zst` and lists its files in `roots/trading.files.sha256`. That is a recovery source, but no
+  inventory has proven it file by file. The existing tool can do so with no code change (read-only, `operator`
+  profile; `load_manifest` reads that manifest format):
+  ```bash
+  S=/srv/project-data/tlos-backups/sets/20261104T143958Z   # or the newest scheduled set
+  python3 scripts/p3/state_inventory.py --root ~/projects/trading/tlos-runtime --profile operator \
+    --cold-manifest "$S/roots/trading.files.sha256" --cold-prefix tlos-runtime/ \
+    --json ~/tlos-paper/p3-evidence/pln02_tlos_runtime_<stamp>.json
+  ```
+  A file changed after the set was written reports STALE. Then the next scheduled set is used, not a tool exception.
+- The `tlos-runtime.service` user unit. The P3 timers are governed in `scripts/p3/units/`; this unit is not, and its
+  file location is not inside any backup root that the repository records. Its recovery source is **UNVERIFIED**. A
+  read-only `systemctl --user cat tlos-runtime.service` shows the path. Then it is either inside a backup root or a
+  gap.
+
+```text
+PLN_02_RUNTIME_DATA_INVENTORY = PASS (grafana, prometheus, mlflow; set 20261104T143958Z)
+PLN_02_ACCEPTANCE             = NOT YET. PASS for the 14 recorded roots and the 3 runtime-data roots. Two later
+                                items are not yet proven: the tlos-runtime directory (in the set, not inventoried)
+                                and the tlos-runtime.service unit (recovery source UNVERIFIED). "100% of TLOS state"
+                                is not claimed until both are.
+PLN_02_FORMAL_CLOSURE         = NO. It needs both items above, then an Owner merge of the record that shows them.
+```
+This record takes effect when the Owner merges it.
