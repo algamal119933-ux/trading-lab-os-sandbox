@@ -1967,6 +1967,27 @@ P3_H7_G8_CORRECTION_SCOPE: dict[str, str] = {
 }
 
 
+
+# PR #113, merged. Two parents: 8e7597d2 (main before) + 738ac809
+# (P3 PLN-03 re-acceptance). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN03_REACCEPTANCE_MERGE = "20c9779d4e7396114801f66448e96e5dab409e6d"
+
+# P3 PLN-03 re-acceptance and project truth: the re-acceptance record (G1-G8 on set 20261104T143958Z, verified from
+# the host evidence), the governed workstream record brought current (stale PR-A/PR-B instructions removed), and the
+# Control Room showing the stage, the monitoring stack and the PLN-10 launch gate apart from paper trading.
+_RA = "P3 PLN-03 re-acceptance and project truth"
+P3_PLN03_REACCEPTANCE_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_RA} — re-acceptance record: history, gates, evidence, limitations",
+    "research/p3/records/p3_workstreams.json": f"{_RA} — PLN-02/03/07/09/10 evidence and Owner/next current",
+    "research/p3/control_room.py": f"{_RA} — stage label, monitoring vs paper, PLN-10 launch gate line",
+    "tests/test_p3_control_room.py": f"{_RA} — launch gate fail-closed, monitoring named, stage label",
+    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_RA} — the stage/monitoring/launch-gate projection note",
+    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_RA} — M1 stage label",
+    "tests/test_p2_scope_audit.py": "P3 H7/G8 correction (PR #112) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -2053,6 +2074,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_BACKUP_HOST_INTEGRATION": (P3_BACKUP_HOST_INTEGRATION_MERGE, P3_BACKUP_HOST_INTEGRATION_SCOPE),
     "P3_PLN07_G3_RECORDER": (P3_PLN07_G3_RECORDER_MERGE, P3_PLN07_G3_RECORDER_SCOPE),
     "P3_H7_G8_CORRECTION": (P3_H7_G8_CORRECTION_MERGE, P3_H7_G8_CORRECTION_SCOPE),
+    "P3_PLN03_REACCEPTANCE": (P3_PLN03_REACCEPTANCE_MERGE, P3_PLN03_REACCEPTANCE_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -2060,18 +2082,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 PLN-03 re-acceptance and project truth: the re-acceptance record (G1-G8 on set 20261104T143958Z, verified from
-# the host evidence), the governed workstream record brought current (stale PR-A/PR-B instructions removed), and the
-# Control Room showing the stage, the monitoring stack and the PLN-10 launch gate apart from paper trading.
-_RA = "P3 PLN-03 re-acceptance and project truth"
+# P3 PLN-02 runtime-data closure: the host inventory of the three runtime data roots against set 20261104T143958Z
+# recorded from the evidence files, the "100%" claim corrected to what is proven (two later state items named, with
+# their read-only checks), and the governed workstream record brought current. Repository-only; no host change.
+_P2C = "P3 PLN-02 runtime-data inventory record"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_RA} — re-acceptance record: history, gates, evidence, limitations",
-    "research/p3/records/p3_workstreams.json": f"{_RA} — PLN-02/03/07/09/10 evidence and Owner/next current",
-    "research/p3/control_room.py": f"{_RA} — stage label, monitoring vs paper, PLN-10 launch gate line",
-    "tests/test_p3_control_room.py": f"{_RA} — launch gate fail-closed, monitoring named, stage label",
-    "docs/p3/PLN_09_CONTROL_ROOM.md": f"{_RA} — the stage/monitoring/launch-gate projection note",
-    "docs/p3/PLN_09_OWNER_ACCEPTANCE_CHECKLIST.md": f"{_RA} — M1 stage label",
-    "tests/test_p2_scope_audit.py": "P3 H7/G8 correction (PR #112) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_P2C} — host acceptance of grafana/prometheus/mlflow; remaining items",
+    "research/p3/records/p3_workstreams.json": f"{_P2C} — PLN-02 evidence and Owner/claude/next current after #113",
+    "tests/test_p2_scope_audit.py": "P3 PLN-03 re-acceptance (PR #113) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
