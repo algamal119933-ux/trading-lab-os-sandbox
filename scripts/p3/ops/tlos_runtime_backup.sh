@@ -23,7 +23,8 @@
 # It is NOT offsite: one machine, one PSU. Offsite is P3-PLN-05 (Owner destination decision, PR #95).
 # PAPER / RESEARCH ONLY. Exit: 0 = backup created, verified, mirrored, runtime restored.
 #   3 refused (store, target, stamp) · 4 coverage refused before the stop · 5 mirror failed (set valid on the HDD)
-#   6 runtime not restored · 75 another run holds the lock · 130/143 interrupted · otherwise create/verify failed.
+#   6 runtime not restored (whatever else failed first; that status is printed) · 75 another run holds the lock
+#   130/143 interrupted · otherwise create/verify failed.
 set -euo pipefail
 umask 077
 export PYTHONDONTWRITEBYTECODE=1
@@ -86,7 +87,12 @@ restore_runtime() {
 on_exit() {
   local rc=$?
   trap - EXIT
-  if ! restore_runtime; then echo "RUNTIME_RESTORE_FAILED" >&2; [ "$rc" = 0 ] && rc=6; fi
+  if ! restore_runtime; then
+    # A runtime left down outranks whatever ended the run: the documented status is 6. The original status is kept
+    # in the message, not lost.
+    echo "RUNTIME_RESTORE_FAILED (the run had ended with exit $rc before the restore was attempted)" >&2
+    rc=6
+  fi
   exit "$rc"
 }
 trap 'exit 143' TERM

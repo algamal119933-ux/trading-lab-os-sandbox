@@ -344,6 +344,24 @@ def test_a_failed_restart_is_exit_6_and_never_masked(host):
     assert not state(host)["active"] and marker(host).exists(), "the marker records who stopped it"
 
 
+def test_a_backup_failure_and_a_restart_failure_together_exit_6_and_keep_the_original_status(host):
+    set_state(host, fail_export=["prometheus"], fail_start=True)
+    code, _, err = run(host)
+    assert code == 6, err
+    assert "injected export failure" in err
+    assert "RUNTIME_RESTORE_FAILED (the run had ended with exit 2 before the restore was attempted)" in err
+    assert not state(host)["active"] and marker(host).exists() and sets(host) == []
+
+
+def test_an_interrupted_run_whose_restart_fails_is_exit_6_not_143(host):
+    set_state(host, slow_export_s=4, fail_start=True)
+    proc = run(host, wait=False)
+    wait_for_stop(host, proc)
+    os.killpg(proc.pid, signal.SIGTERM)
+    _, err = proc.communicate(timeout=60)
+    assert proc.returncode == 6 and "ended with exit 143" in err
+
+
 def test_a_running_container_whose_application_does_not_answer_is_not_a_recovery(host):
     set_state(host, probe_fail=["grafana"])
     code, out, err = run(host)

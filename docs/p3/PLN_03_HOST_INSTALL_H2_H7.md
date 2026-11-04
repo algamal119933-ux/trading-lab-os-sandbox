@@ -43,21 +43,29 @@ SVCS=(--service grafana --service prometheus --service mlflow)
 ```
 
 ## H2: tools checkout update (authorization 1)
+Every checkout move and every wrapper replacement goes through `scripts/p3/ops/backup_host_install.sh`. It refuses
+(exit 3) unless `tlos-p3-backup.service` is `inactive` or `failed`, and it holds the wrapper's own lock while it
+works (exit 75 if a run holds it). A oneshot run is `activating`, so nothing moves under a running backup. It changes
+no unit and no timer: its only `systemctl` call is the read-only `show -p ActiveState`.
 ```bash
-cd "$P3" && git status --porcelain | tee "$E/h2_status.txt"   # must be empty
-git rev-parse HEAD | tee "$E/h2_before.txt"                   # expect 6d2f20756c417e2707ae2344055ff0cd3f130c77
-git fetch origin main && git merge-base --is-ancestor HEAD <M> && echo FF_OK | tee -a "$E/h2_before.txt"
-git -c advice.detachedHead=false checkout --detach <M>
-git rev-parse HEAD | tee "$E/h2_after.txt"                    # = <M>
+systemctl --user show -p ActiveState --value tlos-p3-backup.service | tee "$E/h2_unit_state.txt"   # inactive
+git -C "$P3" rev-parse HEAD | tee "$E/h2_before.txt"          # expect 6d2f20756c417e2707ae2344055ff0cd3f130c77
+git -C "$P3" fetch origin main                                # changes no working file
+git -C "$P3" show <M>:scripts/p3/ops/backup_host_install.sh > "$E/install.sh"   # 6d2f2075 does not contain it yet
+git -C "$P3" rev-parse <M>:scripts/p3/ops/backup_host_install.sh; git hash-object "$E/install.sh"   # equal
+bash "$E/install.sh" checkout <M> | tee "$E/h2_checkout.txt"
+#   refuses a dirty tree, a SHA not on origin/main, and anything that is not a fast-forward; ends detached at <M>
+git -C "$P3" rev-parse HEAD | tee "$E/h2_after.txt"           # = <M>
 systemctl --user list-timers tlos-p3-backup.timer tlos-p3-health.timer --no-pager | tee "$E/h2_timers.txt"
 ```
-- **PASS:** a clean tree, a fast-forward, and HEAD = `<M>`.
+- **PASS:** exit 0, `CHECKOUT 6d2f2075… -> <M>`, HEAD = `<M>`, detached.
 - **Effect:**
   - The **old** wrapper keeps running on schedule. It calls the new `backup.py` with its old `--volume` arguments,
     which still works: the volume archives are now private (#105), and the set is owner-only.
   - The hourly health job and the Control Room now run the #108 code, so the PLN-09 walkthrough can follow.
   - Read the next hourly health run before going on.
-- **Rollback:** `git -C "$P3" checkout --detach 6d2f20756c417e2707ae2344055ff0cd3f130c77`.
+- **Rollback:** with the unit inactive, `git -C "$P3" checkout --detach 6d2f20756c417e2707ae2344055ff0cd3f130c77`
+  (the script prints this line).
 
 ## H3 + H4: read-only pre-checks, then install the wrapper (authorization 2)
 **H3**, read-only, with the runtime running:
@@ -78,13 +86,24 @@ tools. Without these, a scheduled run would refuse (exit 4) or report a failed r
 **H4**, which changes only the wrapper file:
 ```bash
 sha256sum "$W" | tee "$E/h4_before.txt"                        # must be 561c44d2c0602a7a0471b60a024bc3d7a25ef5d98457391f1ea6c5c17413b531
-cp -p "$W" "$W.pre-p3-$(date -u +%Y%m%dT%H%M%SZ)"
 systemctl --user cat tlos-p3-backup.service | sha256sum | tee "$E/h4_unit.txt"
-install -m 0700 "$P3/scripts/p3/ops/tlos_runtime_backup.sh" "$W"
+bash "$P3/scripts/p3/ops/backup_host_install.sh" install | tee "$E/h4_install.txt"
+#   INSTALLED <W> sha256 <governed> (mode 700) · ROLLBACK_COPY <W>.pre-p3-<stamp> sha256 561c44d2…
 sha256sum "$W" "$P3/scripts/p3/ops/tlos_runtime_backup.sh" | tee "$E/h4_after.txt"   # both equal
-bash -n "$W" && stat -c '%a %U:%G' "$W"                        # 700 hamza:hamza
+stat -c '%a %U:%G' "$W"; ls -A "$(dirname "$W")" | grep -c '^\.backup\.sh\.' # 700 hamza:hamza · 0 temporaries
+systemctl --user cat tlos-p3-backup.service | sha256sum | diff - "$E/h4_unit.txt"   # unit unchanged
 ```
-- **Rollback:** `install -m 0700 "$W.pre-p3-<stamp>" "$W"`, then `sha256sum "$W"` must equal `561c44d2…`.
+What `install` does, in order, and refuses (exit 3, nothing replaced) at the first step that does not hold:
+1. the unit is `inactive` or `failed`, and the wrapper lock is free;
+2. the current wrapper's sha256 is exactly the original `561c44d2…` (an already-installed governed copy is a no-op);
+3. `cp -p` keeps a rollback copy `"$W.pre-p3-<UTC stamp>"`, whose sha256 must equal the original;
+4. the governed script is copied to a temporary file **in the wrapper's own directory**, set to 0700, and must hash
+   to the governed blob and pass `bash -n`;
+5. one `mv -f` renames it over `$W`. Same directory, same filesystem: the rename is atomic, so the unit can only
+   ever start the whole old file or the whole new one. Any refusal removes the temporary file.
+- **Rollback:** with the unit inactive,
+  `bash "$P3/scripts/p3/ops/backup_host_install.sh" rollback "$W.pre-p3-<stamp>"`. It accepts only a copy whose
+  sha256 is the original, and replaces the wrapper the same atomic way. Then `sha256sum "$W"` = `561c44d2…`.
 
 ## H5: one backup run through the existing unit (authorization 3)
 Note the legacy mirror state first, so it can be shown untouched afterwards:
@@ -132,17 +151,30 @@ mkdir -p -m 700 /srv/project-data/tlos-restore-drills; X=/srv/project-data/tlos-
 umask 077; $PY $P3/scripts/p3/backup.py drill --set ~/tlos-backups-ssd-mirror/current --scratch "$X" \
   --config-load trading/trading_lab_os_final --json "$E/h7_drill.json"
 #   G7: PLN_03_RESTORE_DRILL = PASS incl. data:grafana/prometheus/mlflow, git:*, config_load:*; source.tier = SECOND_DEVICE_MIRROR
-python3 -c "import sqlite3,sys;[print(p,sqlite3.connect('file:'+p+'?mode=ro',uri=True).execute('pragma integrity_check').fetchone()[0]) for p in sys.argv[1:]]" \
-  "$X/data/grafana/grafana.db" "$X/data/mlflow/mlflow.db"                          # G8: ok, ok
-docker run --rm --network none --user "$(id -u):$(id -g)" -v "$X/data/mlflow:/mlflow" ghcr.io/mlflow/mlflow:v3.15.1 \
-  python -c "import mlflow;c=mlflow.MlflowClient('sqlite:////mlflow/mlflow.db');e=c.search_experiments();print(len(e),[x.artifact_location for x in e][:3])"   # G8: experiments listed
-docker run -d --name tlos-drill-prom --network none --user "$(id -u):$(id -g)" -v "$X/data/prometheus:/prometheus" \
-  prom/prometheus:v3.14.0 --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
-sleep 30; docker exec tlos-drill-prom wget -qO- http://127.0.0.1:9090/-/ready; docker logs tlos-drill-prom 2>&1 | grep -Ei 'replay|corrupt|error' | tee "$E/h7_prom.txt"
-docker rm -f tlos-drill-prom                                                        # G8: "Ready", WAL replay completed, no corruption
+bash $P3/scripts/p3/ops/restore_app_checks.sh "$X/data" <stamp> "$E/h7_app.json" | tee "$E/h7_app.txt"
+#   G8: exit 0 and RESTORE_APP_CHECKS = PASS
+docker ps -a --filter name=tlos-drill-prom --format '{{.Names}}' | wc -l             # 0: the throwaway is gone
 ```
-- **Consistency limits:** file-hash equality is not application consistency. G8 is where it is checked, on the
-  restored copy only.
+G8 is four checks with fixed PASS conditions. Each is FAIL otherwise; no step waits a fixed time.
+
+| Check | PASS only if |
+|---|---|
+| `grafana_db SQLITE_INTEGRITY` | read-only `pragma integrity_check` = `ok` and `foreign_key_check` returns nothing |
+| `mlflow APPLICATION_READ` | the pinned `ghcr.io/mlflow/mlflow:v3.15.1` opens the restored `mlflow.db` with `MlflowClient`, exits 0 and lists ≥ 1 experiment |
+| `prometheus APPLICATION_READY` | the pinned `prom/prometheus:v3.14.0`, started on the restored TSDB, stays running and answers `/-/ready` before the 300 s deadline (polled every 2 s) |
+| `prometheus WAL_RECOVERY` | its log contains `WAL replay completed`, **no** log line mentions a repair or corruption, and `count(count_over_time({__name__=~".+"}[15m]))` evaluated **at the set stamp** is > 0 |
+
+- **Why the stamp:** samples the throwaway server scrapes after it starts are later than the stamp, so they cannot
+  satisfy the WAL check. Only data restored from the set can.
+- **Cleanup:** the Prometheus container (`tlos-drill-prom-<stamp>-<pid>`) is removed on every exit: pass, fail,
+  error, SIGINT and SIGTERM. The last command above confirms it.
+- **Consistency limits:**
+  - `verify` and the drill's hash comparison prove the restored files equal the set. They are **not** application
+    consistency, and are never reported as such.
+  - G8 checks the applications on the restored copy. Grafana is checked at the database file only; a started
+    Grafana is **not** part of G8.
+  - Prometheus writes to the scratch copy when it starts (new WAL segment, lock file). That is the scratch copy, not
+    the set.
 - **Not proven here:** ownership and modes (the drill restores as `hamza`), and empty directories.
 - **Rollback:** nothing to roll back. The scratch `$X` holds restored secrets (0700). It is kept until the Owner
   decides.

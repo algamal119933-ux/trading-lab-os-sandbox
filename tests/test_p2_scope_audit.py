@@ -1980,6 +1980,10 @@ BRANCH_SCOPE: dict[str, str] = {
     "scripts/p3/ops/tlos_runtime_backup.sh": f"{_HI} — the host's effective backup wrapper, governed: verbatim, then patched",
     "tests/test_p3_backup_wrapper.py": f"{_HI} — the wrapper end to end: lifecycle, failure injection, signals, lock",
     "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_HI} — exact H2–H7 installation, gates and rollback (not executed)",
+    "scripts/p3/ops/backup_host_install.sh": f"{_HI} — H2/H4 guarded: unit idle, lock held, hash precondition, atomic rename",
+    "tests/test_p3_backup_host_install.py": f"{_HI} — the H2/H4 guards and the atomic wrapper replacement",
+    "scripts/p3/ops/restore_app_checks.sh": f"{_HI} — H7/G8 application checks on the restored copy, fixed PASS criteria",
+    "tests/test_p3_restore_app_checks.py": f"{_HI} — each G8 criterion, its failures, and the throwaway's cleanup",
     "tests/test_p2_scope_audit.py": "P3 Control Room backup truth (PR #108) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
