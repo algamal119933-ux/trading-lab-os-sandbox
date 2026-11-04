@@ -1929,6 +1929,27 @@ P3_BACKUP_HOST_INTEGRATION_SCOPE: dict[str, str] = {
 }
 
 
+# PR #109, merged. Two parents: 803fb8a3 (main before) + da69d4d0
+# (P3 PLN-07 G-3 recorder + G-1 host-down). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN07_G3_RECORDER_MERGE = "b8667293add34741d7b1bfac8ccf57baf4759370"
+
+# P3 PLN-07 Owner decisions 2026-11-03 (§9) implemented: the G-3 engine-bar recorder (read-only Freqtrade API, closed
+# bars, outside every lane) feeding the G-2 comparator, and the G-1 EXPLAINED_HOST_DOWN class from out-of-lane host
+# records covering a missed bar's whole opportunity. Repository only; nothing scheduled on the host.
+_P7 = "P3 PLN-07 G-3 recorder + G-1 host-down"
+P3_PLN07_G3_RECORDER_SCOPE: dict[str, str] = {
+    "research/p3/data_truth.py": f"{_P7} — EXPLAINED_HOST_DOWN; host_down_intervals; journal boot boundaries",
+    "research/p3/engine_bars.py": f"{_P7} — read-only engine-bar recorder (G-3)",
+    "scripts/p3/engine_bars.py": f"{_P7} — recorder CLI",
+    "scripts/p3/data_truth.py": f"{_P7} — --host-boots/--host-down; feed-compare --engine-recording",
+    "tests/test_p3_data_truth_g1_g3.py": f"{_P7} — whole-cover rule and refusals; recorder boundaries",
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_P7} — §10 implementation and the literal whole-cover reading",
+    "tests/test_p3_backup_wrapper.py": f"{_P7} — test-harness race: wait until the stub's stop is saved, not only logged",
+    "tests/test_p2_scope_audit.py": "P3 backup host integration (PR #111) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -2013,6 +2034,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_CONTROL_ROOM_BACKUP_TRUTH": (P3_CONTROL_ROOM_BACKUP_TRUTH_MERGE, P3_CONTROL_ROOM_BACKUP_TRUTH_SCOPE),
     "P3_READINESS_PREP": (P3_READINESS_PREP_MERGE, P3_READINESS_PREP_SCOPE),
     "P3_BACKUP_HOST_INTEGRATION": (P3_BACKUP_HOST_INTEGRATION_MERGE, P3_BACKUP_HOST_INTEGRATION_SCOPE),
+    "P3_PLN07_G3_RECORDER": (P3_PLN07_G3_RECORDER_MERGE, P3_PLN07_G3_RECORDER_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -2020,22 +2042,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 PLN-07 Owner decisions 2026-11-03 (§9) implemented: the G-3 engine-bar recorder (read-only Freqtrade API, closed
-# bars, outside every lane) feeding the G-2 comparator, and the G-1 EXPLAINED_HOST_DOWN class from out-of-lane host
-# records covering a missed bar's whole opportunity. Repository only; nothing scheduled on the host.
-_P7 = "P3 PLN-07 G-3 recorder + G-1 host-down"
+# P3 H7/G8 correction: the WAL check of restore_app_checks.sh matched "repair" in source=repair.go and queried with
+# count_over_time, which Prometheus rejects on multi-metric data (HTTP 422). Detection now reads msg=/err= fields, adds
+# the TSDB corruption counters and ERROR lines; the query keeps the metric name; logs and raw HTTP are kept.
+_G8 = "P3 H7/G8 correction"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/data_truth.py": f"{_P7} — EXPLAINED_HOST_DOWN; host_down_intervals; journal boot boundaries",
-    "research/p3/engine_bars.py": f"{_P7} — read-only engine-bar recorder (G-3)",
-    "scripts/p3/engine_bars.py": f"{_P7} — recorder CLI",
-    "scripts/p3/data_truth.py": f"{_P7} — --host-boots/--host-down; feed-compare --engine-recording",
-    "tests/test_p3_data_truth_g1_g3.py": f"{_P7} — whole-cover rule and refusals; recorder boundaries",
-    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_P7} — §10 implementation and the literal whole-cover reading",
-    "tests/test_p3_backup_wrapper.py": f"{_P7} — test-harness race: wait until the stub's stop is saved, not only logged",
-    "tests/test_p2_scope_audit.py": "P3 backup host integration (PR #111) pinned to its merge; this branch's scope",
+    "scripts/p3/ops/restore_app_checks.sh": f"{_G8} — msg/err-field detection, counters, last_over_time, raw evidence",
+    "tests/test_p3_restore_app_checks.py": f"{_G8} — healthy blocks, genuine events, failed HTTP, samples at the stamp",
+    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_G8} — G8 table, the 2026-11-04 correction record, kept evidence",
+    "tests/test_p2_scope_audit.py": "P3 PLN-07 G-3 recorder (PR #109) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
-
 
 def _git(*args: str) -> str:
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout

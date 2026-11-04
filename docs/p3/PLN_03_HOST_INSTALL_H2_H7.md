@@ -229,7 +229,26 @@ G8 is four checks with fixed PASS conditions. Each is FAIL otherwise; no step wa
 | `grafana_db SQLITE_INTEGRITY` | read-only `pragma integrity_check` = `ok` and `foreign_key_check` returns nothing |
 | `mlflow APPLICATION_READ` | the pinned `ghcr.io/mlflow/mlflow:v3.15.1` opens the restored `mlflow.db` with `MlflowClient`, exits 0 and lists ≥ 1 experiment |
 | `prometheus APPLICATION_READY` | the pinned `prom/prometheus:v3.14.0`, started on the restored TSDB, stays running and answers `/-/ready` before the 300 s deadline (polled every 2 s) |
-| `prometheus WAL_RECOVERY` | its log contains `WAL replay completed`, **no** log line mentions a repair or corruption, and `count(count_over_time({__name__=~".+"}[15m]))` evaluated **at the set stamp** is > 0 |
+| `prometheus WAL_RECOVERY` | all of: the log has `msg="WAL replay completed"`; **no** repair or corruption event, i.e. `repair`/`corrupt` in a line's `msg=` or `err=` field (never `source=`); **no** `level=ERROR` line; `prometheus_tsdb_wal_corruptions_total` and `prometheus_tsdb_mmap_chunk_corruptions_total` read from the server and both 0 (unreadable = FAIL); and `count(last_over_time({__name__=~".+"}[15m]))` evaluated **at the set stamp** returns HTTP 200 and > 0 |
+
+**Correction of 2026-11-04 (first H7 run, set `20261104T143958Z`, G8 FAIL).** Both reasons were defects in the
+check, not in the data:
+- the seven matches were `source=repair.go:54 msg="Found healthy block"`: the old `grep -Eic 'repair|corrupt'`
+  matched the **source file name**. Production Prometheus, restarted at 16:40 on the same bytes, logged the same seven
+  lines with `wal_corruptions_total = 0` and `mmap_chunk_corruptions_total = 0`;
+- the `-1` was a failed HTTP request. `count_over_time` drops the metric name, so on real data two metrics of one
+  target collide and Prometheus v3.14.0 rejects the whole query with HTTP 422 (`promql/engine.go`). The old check
+  then discarded the response.
+
+The original run's own log is gone (`json-file` driver, container removed), so its seven lines are not
+reconstructed. The check now matches only the `msg=`/`err=` fields, also requires the two counters and no ERROR line,
+and queries with `last_over_time`, which keeps the name. The acceptance requirement is unchanged.
+
+**Evidence kept beside `$E/h7_app.json`, on PASS and FAIL:**
+- `h7_app.prometheus.log`: the complete log, saved before the container is removed;
+- `h7_app.http/`: for `/metrics` and the query, the raw body and a `.meta.json` with the URL, HTTP status, headers or
+  transport error. A helper container (`python:3.12-slim`) fetches them; it shares only the throwaway's loopback;
+- `images.txt`: image identities. Every image is used only if present locally (`--pull never`).
 
 - **Why the stamp:** samples the throwaway server scrapes after it starts are later than the stamp, so they cannot
   satisfy the WAL check. Only data restored from the set can.
