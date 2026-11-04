@@ -13,7 +13,10 @@ Proved here:
   *this* run's set, and only that set verified and mirrored;
 - failures: each produces its documented exit code, with the runtime restored or the failure reported, never masked;
 - interruptions: SIGTERM to the process group (systemd stop or timeout, KillMode=control-group) restores the
-  runtime; after SIGKILL the next run finds the marker and restores it;
+  runtime; after SIGKILL the next run finds the marker, recovers and proves the runtime *before* it backs up, then
+  observes fresh coverage; a failed recovery refuses the backup;
+- hardened vs archive-only: exit 0 / BACKUP = PASS only with LIVE_DATA_COVERAGE = PASS bound into the set (checked
+  on every run of every test); a runtime stopped on purpose stays stopped and its set is archive-only (exit 7);
 - concurrency: a second run is refused while one holds the lock, so the runtime is stopped and started once.
 
 Synthetic tests are not host acceptance.
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sqlite3
 import stat
@@ -223,7 +227,25 @@ def run(host, *, wait=True, **kw):
         return proc
     out, err = proc.communicate(timeout=180)
     time.sleep(1.1)  # the next run gets a new second-resolution stamp
+    assert_no_unhardened_pass(host, proc.returncode, out, err)
     return proc.returncode, out, err
+
+
+def record(host, stamp) -> dict:
+    return json.loads((host["mount"] / "tlos-backups" / stamp / backup.RECORD).read_text())
+
+
+def assert_no_unhardened_pass(host, code, out, err) -> None:
+    """Exit 0 and BACKUP = PASS mean a hardened backup, and only that: the set's own record carries
+    LIVE_DATA_COVERAGE = PASS observed before the runtime stop. Exit 0 with coverage UNPROVEN is a defect."""
+    if code != 0 and "BACKUP = PASS" not in out:
+        return
+    assert code == 0 and "BACKUP = PASS" in out, (code, out, err)
+    assert "UNPROVEN" not in out + err and "ARCHIVE_ONLY" not in out + err, err
+    stamp = re.search(r"BACKUP = PASS \(\S*/(\d{8}T\d{6}Z), ", out).group(1)
+    cov = record(host, stamp)["live_data_coverage"]
+    assert cov["LIVE_DATA_COVERAGE"] == "PASS" and cov["observed"] == "before_runtime_stop", cov
+    assert "LIVE_DATA_COVERAGE = PASS" in out and "ARCHIVE_INTEGRITY = PASS" in out
 
 
 def calls(host) -> list[str]:
@@ -246,7 +268,7 @@ def test_a_normal_run_backs_up_the_live_data_binds_its_coverage_restores_and_mir
     code, out, err = run(host)
     assert code == 0, err
     assert calls(host) == ["is-active tlos-runtime.service", "is-active tlos-runtime.service",
-                           "is-active tlos-runtime.service", "stop tlos-runtime.service", "start tlos-runtime.service"]
+                           "stop tlos-runtime.service", "start tlos-runtime.service"]
     assert state(host)["active"] and not marker(host).exists()
     (stamp,) = sets(host)
     set_dir = host["mount"] / "tlos-backups" / stamp
@@ -292,15 +314,20 @@ def test_only_this_runs_set_is_verified_and_mirrored_never_another(host):
     assert (decoy / "BACKUP_RECORD.json").read_text() == "{}"
 
 
-def test_an_intentionally_stopped_runtime_stays_stopped_and_the_set_says_coverage_unproven(host):
+def test_an_intentionally_stopped_runtime_stays_stopped_and_its_set_is_archive_only_exit_7(host):
     set_state(host, active=False)
-    code, _, err = run(host)
-    assert code == 0, err
+    code, out, err = run(host)
+    assert code == 7, err
     assert "stop tlos-runtime.service" not in calls(host) and "start tlos-runtime.service" not in calls(host)
-    assert not state(host)["active"]
+    assert not state(host)["active"] and not marker(host).exists()
     (stamp,) = sets(host)
-    assert json.loads((host["mount"] / "tlos-backups" / stamp / backup.RECORD).read_text())["live_data_coverage"] is None
-    assert "LIVE_DATA_COVERAGE=UNPROVEN" in err
+    assert record(host, stamp)["live_data_coverage"] is None
+    # The archive is real and separate from coverage: verified, mirrored, and said so.
+    assert backup.verify_backup(host["mount"] / "tlos-backups" / stamp)["status"] == "PASS"
+    assert os.readlink(host["mirror"] / "current") == f"sets/{stamp}"
+    assert f"ARCHIVE_INTEGRITY = PASS ({host['mount']}/tlos-backups/{stamp} verified" in out
+    assert "RUNTIME_LEFT_STOPPED" in err and "LIVE_DATA_COVERAGE = UNPROVEN" in err
+    assert f"BACKUP = ARCHIVE_ONLY ({host['mount']}/tlos-backups/{stamp})" in err and "BACKUP = PASS" not in out
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -369,13 +396,16 @@ def test_a_running_container_whose_application_does_not_answer_is_not_a_recovery
     assert "grafana" in out and "application FAIL" in out and "HTTP" in out
 
 
-def test_after_a_failed_restart_the_next_run_recovers_the_runtime(host):
+def test_after_a_failed_restart_the_next_run_recovers_first_then_takes_a_hardened_backup(host):
     set_state(host, fail_start=True)
     assert run(host)[0] == 6
     set_state(host, fail_start=False)
-    code, _, err = run(host)
-    assert code == 0, err
-    assert "RECOVERING" in err and "LIVE_DATA_COVERAGE=UNPROVEN" in err
+    before = len(calls(host))
+    code, out, err = run(host)
+    assert code == 0, err  # run() also checks the bound coverage
+    assert "RECOVERING" in err and "RECOVERED" in err
+    assert [c for c in calls(host)[before:] if c.split()[0] in ("start", "stop")] == \
+        ["start tlos-runtime.service", "stop tlos-runtime.service", "start tlos-runtime.service"]
     assert state(host)["active"] and not marker(host).exists()
 
 
@@ -426,8 +456,56 @@ def test_after_sigkill_the_next_run_finds_the_marker_and_restores_the_runtime(ho
     time.sleep(1.1)
     set_state(host, slow_export_s=0)
     code, _, err = run(host)  # the lock died with its holder
-    assert code == 0, err
+    assert code == 0, err  # hardened: run() checks the coverage bound into the new set
     assert "RECOVERING" in err and state(host)["active"] and not marker(host).exists()
+
+
+def interrupted(host):
+    """An earlier run stopped the runtime and was SIGKILLed before restoring it: marker present, runtime down."""
+    set_state(host, active=False)
+    marker(host).write_text("2026-11-04T03:31:00Z\n")
+
+
+def test_interrupted_and_recovered_the_runtime_is_proven_back_before_fresh_coverage_and_the_backup(host):
+    interrupted(host)
+    code, out, err = run(host)
+    assert code == 0, err  # BACKUP = PASS with this run's coverage bound (checked by run())
+    assert err.index("RECOVERING") < err.index("RECOVERED")
+    assert [c for c in calls(host) if c.split()[0] in ("start", "stop")] == \
+        ["start tlos-runtime.service", "stop tlos-runtime.service", "start tlos-runtime.service"]
+    (stamp,) = sets(host)
+    cov = record(host, stamp)["live_data_coverage"]
+    # Containers exist only while the runtime runs, so a PASS observation was made after the recovery.
+    assert cov["LIVE_DATA_COVERAGE"] == "PASS" and cov["observed"] == "before_runtime_stop"
+    assert (host["evid"] / f"backup_coverage_{stamp}.json").is_file()
+    assert state(host)["active"] and not marker(host).exists()
+
+
+def test_interrupted_with_the_runtime_since_started_by_someone_else_is_proven_not_restarted(host):
+    interrupted(host)
+    set_state(host, active=True)
+    code, _, err = run(host)
+    assert code == 0, err
+    assert "RECOVERED" in err
+    assert [c for c in calls(host) if c.split()[0] in ("start", "stop")] == \
+        ["stop tlos-runtime.service", "start tlos-runtime.service"]
+
+
+@pytest.mark.parametrize("failure", ["start_fails", "running_but_not_answering"])
+def test_interrupted_and_recovery_failed_refuses_any_backup_and_keeps_the_marker(host, failure):
+    interrupted(host)
+    if failure == "start_fails":
+        set_state(host, fail_start=True)
+    else:
+        set_state(host, active=True, probe_fail=["prometheus"])
+    code, out, err = run(host)
+    assert code == 6, err
+    assert "RUNTIME_RECOVERY_FAILED" in err and "no backup is attempted" in err
+    assert "BACKUP = PASS" not in out and "ARCHIVE_INTEGRITY" not in out
+    assert sets(host) == [] and not list(host["evid"].glob("backup_coverage_*.json"))
+    assert "stop tlos-runtime.service" not in calls(host)
+    assert marker(host).exists(), "the next run must try the recovery again"
+    assert not (host["mirror"] / "current").exists()
 
 
 def test_a_second_run_is_refused_while_one_holds_the_lock(host):
@@ -438,6 +516,7 @@ def test_a_second_run_is_refused_while_one_holds_the_lock(host):
     assert second[0] == 75 and "another backup run holds" in second[2]
     out, err = first.communicate(timeout=120)
     assert first.returncode == 0, err
+    assert_no_unhardened_pass(host, first.returncode, out, err)
     assert calls(host).count("stop tlos-runtime.service") == 1
     assert calls(host).count("start tlos-runtime.service") == 1
     assert len(sets(host)) == 1

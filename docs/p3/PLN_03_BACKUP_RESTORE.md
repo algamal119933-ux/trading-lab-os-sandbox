@@ -82,14 +82,23 @@ Design rules:
     FAILs; it never hangs. An incomplete recovery exits 1.
   - **Limits.** No EXIT trap survives power loss or SIGKILL. After power loss, `tlos-runtime.service` starts at boot.
     After a SIGKILL during a backup, the runtime stays down until the next start. The governed wrapper therefore
-    records a marker before stopping the runtime and restores the runtime on its next run (after the H1 inputs).
+    records a marker before stopping the runtime. Its next run recovers and proves the runtime **before** it backs
+    up anything (see the wrapper below).
     Tests: `tests/test_p3_backup_host_integration.py`.
 
 - **Governed host wrapper.** `scripts/p3/ops/tlos_runtime_backup.sh` is the host's effective `backup.sh`. Commit
   `ca0e917` is the verbatim original (sha256 `561c44d2…b531`, rebuilt from the H1 report and hash-checked); the
   next commit is the patch:
   - one run at a time (`flock`, exit 75);
-  - an interrupted-run marker, so a run after a SIGKILL or a timeout escalation restores the runtime;
+  - recovery first: a marker left by a run killed after stopping the runtime (SIGKILL, timeout escalation) makes
+    the next run restart the runtime and prove it (running, answering its probes) before anything else. Then it
+    observes fresh coverage and backs up as usual. If the recovery fails, no backup is attempted (exit 6) and the
+    marker stays. The marker is in `$XDG_RUNTIME_DIR`, so a reboot clears it; from then on the boot path owns the
+    runtime (`docs/p3/PLN_03_HOST_INSTALL_H2_H7.md` §R);
+  - a runtime that is not running and that no backup run stopped (no marker) was stopped on purpose and is never
+    started by the backup. Its set is **archive-only**: verified and mirrored, coverage UNPROVEN, exit 7;
+  - two separate results: `ARCHIVE_INTEGRITY` (verify and mirror) and `LIVE_DATA_COVERAGE`, read back from the
+    set's own record. Only both together give `BACKUP = PASS` and exit 0;
   - coverage observed before `compose down`, bound into **this** run's set (`--stamp`). Only that set is verified
     and mirrored; the original took "the newest set" by `sort | tail -1`;
   - a restore that is proven, never masked: each of grafana, prometheus and mlflow running, started by this

@@ -20,6 +20,7 @@ import hashlib
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -29,11 +30,21 @@ SCRIPT = REPO / "scripts" / "p3" / "ops" / "backup_host_install.sh"
 GOVERNED = REPO / "scripts" / "p3" / "ops" / "tlos_runtime_backup.sh"
 ORIG_SHA = "561c44d2c0602a7a0471b60a024bc3d7a25ef5d98457391f1ea6c5c17413b531"
 
+# Read-only queries only; anything else (a unit or timer change) exits 9 and fails the test. The unit state file
+# holds one state per line: each query consumes the first line, the last one stays (to model a run that starts
+# during the change). The timer's next firing is "@<epoch>" in another file.
 SYSTEMCTL = """#!/usr/bin/env bash
 echo "$*" >> "$TLOS_TEST_LOG"
-[ "$*" = "--user show -p ActiveState --value tlos-p3-backup.service" ] || exit 9
-cat "$TLOS_TEST_STATE"
+case "$*" in
+  "--user show -p ActiveState --value tlos-p3-backup.service")
+    mapfile -t L < "$TLOS_TEST_STATE"; echo "${L[0]}"
+    if [ "${#L[@]}" -gt 1 ]; then printf '%s\\n' "${L[@]:1}" > "$TLOS_TEST_STATE"; fi ;;
+  "--user show -p NextElapseUSecRealtime --value --timestamp=unix tlos-p3-backup.timer") cat "$TLOS_TEST_NEXT" ;;
+  *) exit 9 ;;
+esac
 """
+READ_ONLY = {"--user show -p ActiveState --value tlos-p3-backup.service",
+             "--user show -p NextElapseUSecRealtime --value --timestamp=unix tlos-p3-backup.timer"}
 
 
 def sha(path: Path) -> str:
@@ -81,15 +92,17 @@ def host(tmp_path, monkeypatch):
     wrapper.chmod(0o700)
     state = tmp_path / "unit_state"
     state.write_text("inactive\n")
+    next_ = tmp_path / "timer_next"
+    next_.write_text(f"@{int(time.time()) + 6 * 3600}\n")
     env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "TLOS_HOME": str(tmp_path / "home"),
            "XDG_RUNTIME_DIR": str(run_dir), "TLOS_TEST_STATE": str(state),
-           "TLOS_TEST_LOG": str(tmp_path / "systemctl.log")}
+           "TLOS_TEST_LOG": str(tmp_path / "systemctl.log"), "TLOS_TEST_NEXT": str(next_)}
     # The script pins the real original's sha256; the test feeds it a copy of the script with the stand-in's.
     script = tmp_path / "backup_host_install.sh"
     script.write_text(SCRIPT.read_text().replace(ORIG_SHA, hashlib.sha256(original.encode()).hexdigest()))
     script.chmod(0o755)
     return {"env": env, "script": script, "wrapper": wrapper, "p3": p3, "first": first, "second": second,
-            "state": state, "run": run_dir, "log": tmp_path / "systemctl.log",
+            "state": state, "next": next_, "run": run_dir, "log": tmp_path / "systemctl.log",
             "orig_sha": hashlib.sha256(original.encode()).hexdigest()}
 
 
@@ -116,8 +129,8 @@ def test_install_replaces_the_original_atomically_and_keeps_a_verified_rollback_
     assert stat.S_IMODE(copies[0].stat().st_mode) == 0o700
     assert leftovers(host) == []
     assert "INSTALLED" in out and "ROLLBACK_COPY" in out
-    # Only the read-only state query was issued: no unit or timer was touched.
-    assert set(host["log"].read_text().splitlines()) == {"--user show -p ActiveState --value tlos-p3-backup.service"}
+    # Only read-only queries were issued: no unit or timer was touched.
+    assert set(host["log"].read_text().splitlines()) == READ_ONLY
 
     assert run(host, "install")[0] == 0 and "ALREADY_INSTALLED" in run(host, "install")[1]
     code, out, err = run(host, "rollback", str(copies[0]))
@@ -142,6 +155,42 @@ def test_nothing_changes_while_the_backup_unit_is_not_idle(host, unit_state, arg
 def test_an_idle_or_failed_unit_permits_the_install(host, unit_state):
     host["state"].write_text(unit_state + "\n")
     assert run(host, "install")[0] == 0
+
+
+@pytest.mark.parametrize("args", [("install",), ("checkout", "SECOND")])
+@pytest.mark.parametrize("next_", ["SOON", "", "n/a", "garbage"])
+def test_nothing_changes_near_the_legacy_timer_firing_or_when_it_cannot_be_read(host, args, next_):
+    # The legacy wrapper takes no lock: only the timer's schedule keeps it from starting mid-change.
+    host["next"].write_text((f"@{int(time.time()) + 600}" if next_ == "SOON" else next_) + "\n")
+    args = tuple(host["second"] if a == "SECOND" else a for a in args)
+    code, _, err = run(host, *args)
+    assert code == 3 and "tlos-p3-backup.timer" in err, err
+    assert sha(host["wrapper"]) == host["orig_sha"] and git(host["p3"], "rev-parse", "HEAD") == host["first"]
+    assert not list(host["wrapper"].parent.glob("backup.sh.pre-p3-*")) and leftovers(host) == []
+
+
+def test_a_formatted_timer_timestamp_is_read_too(host):
+    host["next"].write_text(time.strftime("%a %Y-%m-%d %H:%M:%S UTC\n", time.gmtime(time.time() + 6 * 3600)))
+    assert run(host, "install")[0] == 0
+
+
+@pytest.mark.parametrize("args", [("install",), ("checkout", "SECOND")])
+def test_a_legacy_run_that_starts_during_the_change_is_reported_not_hidden(host, args):
+    host["state"].write_text("inactive\nactivating\n")
+    args = tuple(host["second"] if a == "SECOND" else a for a in args)
+    code, out, err = run(host, *args)
+    assert code == 4 and "RACE" in err and "activating" in err
+    # The change itself was atomic and complete: the running legacy wrapper keeps reading its own (old) inode.
+    assert ("INSTALLED" in out and sha(host["wrapper"]) == sha(GOVERNED)) or \
+        ("CHECKOUT" in out and git(host["p3"], "rev-parse", "HEAD") == host["second"])
+
+
+def test_the_atomic_rename_leaves_an_already_open_wrapper_reading_the_old_file(host):
+    # What makes a legacy run that started just before the rename safe: it holds the old inode.
+    with open(host["wrapper"], "rb") as running:
+        assert run(host, "install")[0] == 0
+        assert hashlib.sha256(running.read()).hexdigest() == host["orig_sha"]
+    assert sha(host["wrapper"]) == sha(GOVERNED)
 
 
 def test_nothing_changes_while_a_backup_run_holds_the_wrapper_lock(host):

@@ -9,13 +9,17 @@
 # Guards, for every subcommand:
 # - It holds the backup wrapper's own lock ($XDG_RUNTIME_DIR/tlos-p3-backup.lock), so a governed backup run cannot
 #   start while files change under it. A run already holding the lock means exit 75.
-# - It refuses unless tlos-p3-backup.service is inactive or failed (a oneshot is "activating" while it runs).
-#   The original wrapper takes no lock, so this state check is what protects it.
+# - The ORIGINAL (legacy) wrapper takes no lock, so the lock does not protect it. Three checks do:
+#   tlos-p3-backup.service must be inactive or failed (a oneshot is "activating" while it runs); the timer's next
+#   firing must be more than TLOS_TIMER_MARGIN_S (900 s) away (read-only: NextElapseUSecRealtime; the firing itself
+#   may come up to RandomizedDelaySec=300 s later, which only widens the gap); and the unit is checked again after
+#   the change. A run that started during the change is reported (exit 4), never hidden.
 # - A replacement goes to a verified temporary file in the same directory, then one atomic rename. The wrapper
 #   is never half-written.
 # - install requires the current wrapper to be exactly the 2026-11-03 original (sha256 below) and keeps a verified
 #   rollback copy beside it. rollback accepts only a copy with that sha256.
-# Exit: 0 done · 2 usage · 3 refused (state, hash, tree) · 75 lock held. PAPER / RESEARCH ONLY.
+# Exit: 0 done · 2 usage · 3 refused (state, timer, hash, tree), nothing changed · 4 the change was made but a backup
+# run started during it (read its journal before going on) · 75 lock held. PAPER / RESEARCH ONLY.
 set -euo pipefail
 umask 077
 H="${TLOS_HOME:-/home/hamza}"
@@ -31,8 +35,23 @@ sha() { sha256sum "$1" | cut -d' ' -f1; }
 [ $# -ge 1 ] || { echo "usage: $0 checkout <sha> | install | rollback <copy>" >&2; exit 2; }
 exec 9>"$RUNDIR/tlos-p3-backup.lock"
 flock -n 9 || { echo "REFUSED: a backup run holds $RUNDIR/tlos-p3-backup.lock" >&2; exit 75; }
-state="$(systemctl --user show -p ActiveState --value tlos-p3-backup.service)"
+unit_state() { systemctl --user show -p ActiveState --value tlos-p3-backup.service; }
+state="$(unit_state)"
 case "$state" in inactive|failed) ;; *) refuse "tlos-p3-backup.service is '$state'; wait until it is inactive" ;; esac
+next="$(systemctl --user show -p NextElapseUSecRealtime --value --timestamp=unix tlos-p3-backup.timer)"
+case "$next" in @[0-9]*) next="${next#@}" ;; *) next="$(date -d "$next" +%s 2>/dev/null || true)" ;; esac
+[[ "$next" =~ ^[0-9]+$ ]] || refuse "cannot read when tlos-p3-backup.timer fires next"
+left=$(( next - $(date +%s) ))
+[ "$left" -gt "${TLOS_TIMER_MARGIN_S:-900}" ] \
+  || refuse "tlos-p3-backup.timer fires in ${left} s; the legacy wrapper takes no lock: wait until that run is over"
+after_check() {  # the legacy wrapper may still have started during the change: say so
+  local now
+  now="$(unit_state)"
+  case "$now" in inactive|failed) ;; *)
+    echo "RACE: tlos-p3-backup.service became '$now' during the change; let it finish and read its journal" >&2
+    exit 4 ;;
+  esac
+}
 
 TMP=""
 replace_wrapper() {  # $1 = verified source, $2 = its expected sha256
@@ -58,6 +77,7 @@ case "$1" in
     git -C "$P3" -c advice.detachedHead=false checkout -q --detach "$2"
     [ "$(git -C "$P3" rev-parse HEAD)" = "$2" ] || refuse "HEAD is not $2 after the checkout"
     echo "CHECKOUT $before -> $2 · ROLLBACK git -C $P3 checkout --detach $before (service inactive first)"
+    after_check
     ;;
   install)
     [ -f "$SRC" ] || refuse "$SRC missing"
@@ -71,12 +91,14 @@ case "$1" in
     [ "$(sha "$keep")" = "$ORIG_SHA" ] || refuse "the rollback copy does not hash to the original"
     replace_wrapper "$SRC" "$new_sha"
     echo "INSTALLED $W sha256 $new_sha (mode $(stat -c %a "$W")) · ROLLBACK_COPY $keep sha256 $ORIG_SHA"
+    after_check
     ;;
   rollback)
     [ $# -eq 2 ] || { echo "usage: $0 rollback <copy>" >&2; exit 2; }
     [ "$(sha "$2")" = "$ORIG_SHA" ] || refuse "$2 is not the original wrapper"
     replace_wrapper "$2" "$ORIG_SHA"
     echo "ROLLED_BACK $W sha256 $ORIG_SHA"
+    after_check
     ;;
   *) echo "usage: $0 checkout <sha> | install | rollback <copy>" >&2; exit 2 ;;
 esac

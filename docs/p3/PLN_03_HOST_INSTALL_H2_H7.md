@@ -26,8 +26,10 @@ no unit or timer change, no private GPG key on the host.
 
 ## 1. Rules for every step
 - **Timing:** one host operation at a time; never within 45 min of the 04:20Z unattended-upgrades window; never
-  during another drill. Check the timer first: `systemctl --user list-timers tlos-p3-backup.timer`. H4 and H5 must
-  not overlap the timer's next firing.
+  during another drill. Check the timer first: `systemctl --user list-timers tlos-p3-backup.timer`. H2, H4 and H5
+  must not overlap the timer's firing (03:30 UTC + up to 300 s, `Persistent=true`). `backup_host_install.sh`
+  enforces this for H2 and H4 (§ "Legacy wrapper race"); for H5 it is the operator's check. Not within 10 min
+  after a boot either: `Persistent=true` makes a missed 03:30 run fire right after the user manager starts.
 - **Evidence:** everything goes to
   `E=~/tlos-paper/p3-evidence/backup_install_$(date -u +%Y%m%dT%H%M%SZ).d`, created with `mkdir -m 700 "$E"`.
 - **Stop rule:** anything unexpected means stop, keep the state, and send the evidence. No improvised fixes.
@@ -43,10 +45,28 @@ SVCS=(--service grafana --service prometheus --service mlflow)
 ```
 
 ## H2: tools checkout update (authorization 1)
-Every checkout move and every wrapper replacement goes through `scripts/p3/ops/backup_host_install.sh`. It refuses
-(exit 3) unless `tlos-p3-backup.service` is `inactive` or `failed`, and it holds the wrapper's own lock while it
-works (exit 75 if a run holds it). A oneshot run is `activating`, so nothing moves under a running backup. It changes
-no unit and no timer: its only `systemctl` call is the read-only `show -p ActiveState`.
+Every checkout move and every wrapper replacement goes through `scripts/p3/ops/backup_host_install.sh`. It changes
+no unit and no timer: its only `systemctl` calls are two read-only `show` queries.
+
+**Legacy wrapper race.** Until H4, the installed wrapper is the original, and it takes **no lock**. The install
+script's lock (exit 75 if held) therefore protects only against the governed wrapper. Against the original, three
+checks apply, in this order:
+1. **Unit idle:** `tlos-p3-backup.service` is `inactive` or `failed` (a oneshot is `activating` while it runs).
+   Otherwise exit 3, nothing changed.
+2. **Timer far enough:** the timer's next firing (`NextElapseUSecRealtime`) is more than 900 s away. The firing may
+   come up to `RandomizedDelaySec` = 300 s after that time, which only widens the gap. Otherwise, or if the time
+   cannot be read, exit 3, nothing changed.
+3. **Re-check after the change:** if the unit became active during the change, exit 4 with `RACE`. The change is
+   complete; read the run's journal before going on.
+
+What each step risks if the original starts anyway (by hand, or a clock jump):
+- **H4:** nothing. `mv` gives the wrapper path a new inode; a running original keeps reading its own open file, and
+  the next start reads the whole new one (test: `test_the_atomic_rename_leaves_an_already_open_wrapper_reading…`).
+- **H2:** the original calls `backup.py` from the tree being checked out. A file read mid-checkout can fail that
+  run's `create` or `verify`. Sets appear only by rename from `.<stamp>.incoming`, so no partial set is published.
+  The original's own restart is unproven (it masks failures with `|| true`), so after a `RACE`, also check the
+  runtime with `runtime-check --probe` (the H5 rollback block).
+- The hourly health job also reads the tree; a run during the checkout can fail once. The next hour is clean.
 ```bash
 systemctl --user show -p ActiveState --value tlos-p3-backup.service | tee "$E/h2_unit_state.txt"   # inactive
 git -C "$P3" rev-parse HEAD | tee "$E/h2_before.txt"          # expect 6d2f20756c417e2707ae2344055ff0cd3f130c77
@@ -113,19 +133,60 @@ systemctl --user start tlos-p3-backup.service                  # oneshot: return
 systemctl --user show tlos-p3-backup.service -p Result -p ExecMainStatus | tee "$E/h5_result.txt"
 journalctl --user -u tlos-p3-backup.service --since "-2h" --no-pager > "$E/h5_journal.txt"
 ```
-- **PASS:** `Result=success`, `ExecMainStatus=0`, and the journal shows `BACKUP = PASS (<set>, mirrored …)`.
+- **Before:** the runtime is `active`, and no marker exists
+  (`test ! -e "$XDG_RUNTIME_DIR/tlos-p3-backup.runtime-stopped"`). Without a running runtime the run can only be
+  archive-only (exit 7), which is not H5.
+- **PASS:** `Result=success`, `ExecMainStatus=0`, and the journal shows, in this order, `ARCHIVE_INTEGRITY = PASS`,
+  `LIVE_DATA_COVERAGE = PASS (observed before the runtime stop, bound into <set>)` and `BACKUP = PASS (<set>, …)`.
+  `BACKUP = PASS` is printed only when the set's own record carries `PASS before_runtime_stop`.
 - The runtime is stopped only between the coverage observation and the proven restore (minutes).
 - **On a non-zero exit, do not retry.** Keep the state and send the evidence. The code says where it stopped:
   - 3: refused before anything;
   - 4: coverage refused, runtime untouched;
   - 5: mirror failed, set valid, runtime back;
-  - 6: runtime not restored;
+  - 6: runtime not restored, or (`RUNTIME_RECOVERY_FAILED`) an earlier run's stop could not be recovered, so no
+    backup was attempted; the marker is kept;
+  - 7: archive only: the set verifies and is mirrored, but `LIVE_DATA_COVERAGE` is not PASS. Not a hardened backup;
   - 75: another run holds the lock.
 - **Runtime rollback if needed:**
   ```bash
   systemctl --user start tlos-runtime.service
   $PY $P3/scripts/p3/backup.py runtime-check --compose-project tlos_runtime "${SVCS[@]}" --wait 180 --probe
   ```
+
+## R: interrupted runs, the marker and reboots (wrapper behavior; nothing to run)
+The wrapper's order, after the lock:
+1. **Marker present** (an earlier run stopped the runtime and was killed: SIGKILL, timeout escalation): the runtime
+   is started (or, if someone started it since, only checked) and must be running and answering its probes.
+   - Proven: `RECOVERED`, the marker is removed, and the run continues from a running runtime.
+   - Not proven: `BACKUP_REFUSED: RUNTIME_RECOVERY_FAILED`, exit 6. No set, no coverage report, no stop; the marker
+     stays, so the next run tries again.
+2. Store checks, then this run's stamp (taken after the recovery).
+3. **Runtime running:** fresh `LIVE_DATA_COVERAGE` is observed now and must PASS (exit 4 otherwise). After a
+   recovery this is a new observation, never the interrupted run's.
+4. **Runtime not running and no marker:** no backup run stopped it, so it was stopped on purpose or failed on its
+   own. It is never started here. The set is archive-only: exit 7.
+5. Stop, create, proven restore (exit 6 wins over any other status), verify, mirror. Then the two results:
+   `ARCHIVE_INTEGRITY`, then `LIVE_DATA_COVERAGE` read back from the set's record. Exit 0 only with both.
+
+**Reboot and the marker.** The marker is in `$XDG_RUNTIME_DIR` (`/run/user/1000`), a tmpfs that exists as long as
+the user manager. With linger `yes` that is from boot to shutdown, so a logout does not clear it; a reboot or power
+loss does. That is deliberate:
+- `systemctl --user stop` does not survive a reboot. After a boot, whether the runtime runs depends only on the boot
+  path: the unit is enabled with the boot-ready drop-in (`boot-autostart.sh e8e68231…`). Run 4 on 2026-10-30, a
+  clean reboot, showed it active at 11.2 s, 23/23, 0 restarts.
+- A persistent marker would outlive the fact it records. After a reboot, it could make the backup start a runtime
+  the Owner had stopped since. So a cleared marker loses nothing the boot path does not already cover.
+- **Gap:** if the boot path fails to start the runtime, there is no marker. This case is **not proven**: the
+  late-mount path is unit-tested only, and power-loss recovery is untested (decision G). The next backup then finds
+  the runtime down and unmarked, does not start it, and ends with exit 7. That shows as a failed unit and as
+  `coverage UNPROVEN` in the Control Room, never as a hardened backup. Before this change, the same situation gave
+  exit 0.
+- A run cut off by a power loss leaves only `.<stamp>.incoming` on the HDD. It is never a published set; it is
+  replaced only if the same stamp recurs, and otherwise stays until the Owner removes it.
+- With `Persistent=true`, a missed 03:30 run fires about 12.6 s after boot, before the HDD is mounted on a slow boot
+  (29.6 s on 2026-10-30). That run refuses with exit 3 (store UUID), and the next attempt is the following 03:30.
+  This is unchanged by this PR; changing the timer needs Owner authorization.
 
 ## H6: gates (read-only)
 ```bash
@@ -166,6 +227,21 @@ G8 is four checks with fixed PASS conditions. Each is FAIL otherwise; no step wa
 
 - **Why the stamp:** samples the throwaway server scrapes after it starts are later than the stamp, so they cannot
   satisfy the WAL check. Only data restored from the set can.
+- **What G8 proves about Prometheus:**
+  - the restored TSDB directory opens in the pinned v3.14.0, and the head is rebuilt from the checkpoint and WAL
+    segments without a repair or a corruption report;
+  - samples from the 15 minutes before the stamp are queryable. Blocks are cut at 2-hour boundaries, so this recent
+    data lives only in the WAL and head. It was therefore captured in the set and replayed.
+- **What it cannot prove:**
+  - completeness: "> 0 series" is not "every series and sample up to the stop"; nothing is compared with the live
+    server's series count or last sample time;
+  - silent loss in the newest WAL segment: a torn record is detected only if Prometheus reports it, and the clean
+    shutdown before the export makes one unlikely, not impossible;
+  - older history: older blocks are checked only as the files `verify` hashes, not queried one by one;
+  - the production configuration: the throwaway uses the image's default `prometheus.yml`, so scrape jobs, rules
+    and alerts are not exercised;
+  - the production path and ownership: it runs as `hamza` on the scratch copy; the live data is `nobody:nogroup`;
+  - another Prometheus version; and a second run on the same scratch, which this run has already written to.
 - **Cleanup:** the Prometheus container (`tlos-drill-prom-<stamp>-<pid>`) is removed on every exit: pass, fail,
   error, SIGINT and SIGTERM. The last command above confirms it.
 - **Consistency limits:**
