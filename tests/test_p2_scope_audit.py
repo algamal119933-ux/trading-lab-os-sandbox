@@ -1988,6 +1988,22 @@ P3_PLN03_REACCEPTANCE_SCOPE: dict[str, str] = {
 }
 
 
+# PR #114, merged. Two parents: 20c9779d (main before) + f8dfd243
+# (P3 PLN-02 runtime-data record). These entries were BRANCH_SCOPE while it was in flight.
+P3_PLN02_RUNTIME_DATA_MERGE = "bce2e4893e18861e2a3384bf089d11c86e0676ce"
+
+# P3 PLN-02 runtime-data closure: the host inventory of the three runtime data roots against set 20261104T143958Z
+# recorded from the evidence files, the "100%" claim corrected to what is proven (two later state items named, with
+# their read-only checks), and the governed workstream record brought current. Repository-only; no host change.
+_P2C = "P3 PLN-02 runtime-data inventory record"
+P3_PLN02_RUNTIME_DATA_SCOPE: dict[str, str] = {
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_P2C} — host acceptance of grafana/prometheus/mlflow; remaining items",
+    "research/p3/records/p3_workstreams.json": f"{_P2C} — PLN-02 evidence and Owner/claude/next current after #113",
+    "tests/test_p2_scope_audit.py": "P3 PLN-03 re-acceptance (PR #113) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -2075,6 +2091,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_PLN07_G3_RECORDER": (P3_PLN07_G3_RECORDER_MERGE, P3_PLN07_G3_RECORDER_SCOPE),
     "P3_H7_G8_CORRECTION": (P3_H7_G8_CORRECTION_MERGE, P3_H7_G8_CORRECTION_SCOPE),
     "P3_PLN03_REACCEPTANCE": (P3_PLN03_REACCEPTANCE_MERGE, P3_PLN03_REACCEPTANCE_SCOPE),
+    "P3_PLN02_RUNTIME_DATA": (P3_PLN02_RUNTIME_DATA_MERGE, P3_PLN02_RUNTIME_DATA_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -2082,14 +2099,17 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 PLN-02 runtime-data closure: the host inventory of the three runtime data roots against set 20261104T143958Z
-# recorded from the evidence files, the "100%" claim corrected to what is proven (two later state items named, with
-# their read-only checks), and the governed workstream record brought current. Repository-only; no host change.
-_P2C = "P3 PLN-02 runtime-data inventory record"
+# P3 PLN-02 closure: the remaining items (tlos-runtime inventory; byte-exact recovery provenance of every TLOS systemd
+# user unit and drop-in) recorded from the host evidence and isolated scratch tests; governed copies of the two host
+# drop-ins of tlos-p3-backup.service that had no recovery source; the inventory scope reconciled. No host change.
+_P2X = "P3 PLN-02 closure: systemd provenance"
 BRANCH_SCOPE: dict[str, str] = {
-    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_P2C} — host acceptance of grafana/prometheus/mlflow; remaining items",
-    "research/p3/records/p3_workstreams.json": f"{_P2C} — PLN-02 evidence and Owner/claude/next current after #113",
-    "tests/test_p2_scope_audit.py": "P3 PLN-03 re-acceptance (PR #113) pinned to its merge; this branch's scope",
+    "docs/p3/PLN_02_STATE_INVENTORY.md": f"{_P2X} — tlos-runtime PASS, unit provenance table, scope, Grafana root stat",
+    "scripts/p3/ops/systemd/tlos-p3-backup.service.d/10-hdd-destination.conf": f"{_P2X} — governed copy of host bytes",
+    "scripts/p3/ops/systemd/tlos-p3-backup.service.d/20-umask-0077.conf": f"{_P2X} — governed copy of host bytes",
+    "tests/test_p3_systemd_provenance.py": f"{_P2X} — pinned host hashes, wrapper path, umask, unit-copy glob",
+    "research/p3/records/p3_workstreams.json": f"{_P2X} — PLN-02 evidence and Owner/claude/next current after #114",
+    "tests/test_p2_scope_audit.py": "P3 PLN-02 runtime-data record (PR #114) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 
