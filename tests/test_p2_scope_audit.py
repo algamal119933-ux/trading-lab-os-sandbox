@@ -1903,6 +1903,32 @@ P3_READINESS_PREP_SCOPE: dict[str, str] = {
 }
 
 
+# PR #111 (replacement for #107, same commit), merged. Two parents: 7ec98939 (main before) + ccda4476
+# (P3 backup host integration). These entries were BRANCH_SCOPE while it was in flight.
+P3_BACKUP_HOST_INTEGRATION_MERGE = "803fb8a36e9bce13f3044855a48d7ccce55f88d6"
+
+# P3 backup host integration (PR-A): the host stops its runtime with compose down, so coverage observed before the
+# stop is bound into the set (create --coverage-report); one run at a time (flock); the SSD mirror publishes verified
+# full generations without destroying the last verified one; runtime-check judges each service. No host change.
+_HI = "P3 backup host integration"
+P3_BACKUP_HOST_INTEGRATION_SCOPE: dict[str, str] = {
+    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check "
+                             "(+ application probes), drill source",
+    "scripts/p3/backup.py": f"{_HI} — coverage --json report, create --coverage-report, mirror, runtime-check",
+    "tests/test_p3_backup_host_integration.py": f"{_HI} — binding refusals, concurrency, mirror interruptions, runtime",
+    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_HI} — host integration support and its limits",
+    "scripts/p3/ops/tlos_runtime_backup.sh": f"{_HI} — the host's effective backup wrapper, governed: verbatim, then patched",
+    "tests/test_p3_backup_wrapper.py": f"{_HI} — the wrapper end to end: lifecycle, failure injection, signals, lock",
+    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_HI} — exact H2–H7 installation, gates and rollback (not executed)",
+    "scripts/p3/ops/backup_host_install.sh": f"{_HI} — H2/H4 guarded: unit idle, lock held, hash precondition, atomic rename",
+    "tests/test_p3_backup_host_install.py": f"{_HI} — the H2/H4 guards and the atomic wrapper replacement",
+    "scripts/p3/ops/restore_app_checks.sh": f"{_HI} — H7/G8 application checks on the restored copy, fixed PASS criteria",
+    "tests/test_p3_restore_app_checks.py": f"{_HI} — each G8 criterion, its failures, and the throwaway's cleanup",
+    "tests/test_p2_scope_audit.py": "P3 readiness preparation (PR #110) pinned to its merge; that branch's scope",
+    "MANIFEST.txt": "repository integrity — regenerated after staging",
+}
+
+
 MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "S2": (S2_MERGE, S2_SCOPE),
     "S3": (S3_MERGE, S3_SCOPE),
@@ -1986,6 +2012,7 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
     "P3_LIVE_DATA_COVERAGE": (P3_LIVE_DATA_COVERAGE_MERGE, P3_LIVE_DATA_COVERAGE_SCOPE),
     "P3_CONTROL_ROOM_BACKUP_TRUTH": (P3_CONTROL_ROOM_BACKUP_TRUTH_MERGE, P3_CONTROL_ROOM_BACKUP_TRUTH_SCOPE),
     "P3_READINESS_PREP": (P3_READINESS_PREP_MERGE, P3_READINESS_PREP_SCOPE),
+    "P3_BACKUP_HOST_INTEGRATION": (P3_BACKUP_HOST_INTEGRATION_MERGE, P3_BACKUP_HOST_INTEGRATION_SCOPE),
 }
 
 # The stage in flight. Every path this branch touches → the requirement it
@@ -1993,24 +2020,19 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # against the merge commit, where it stops depending on which branch is checked
 # out and starts being a permanent record.
 
-# P3 backup host integration (PR-A): the host stops its runtime with compose down, so coverage observed before the
-# stop is bound into the set (create --coverage-report); one run at a time (flock); the SSD mirror publishes verified
-# full generations without destroying the last verified one; runtime-check judges each service. No host change.
-_HI = "P3 backup host integration"
+# P3 PLN-07 Owner decisions 2026-11-03 (§9) implemented: the G-3 engine-bar recorder (read-only Freqtrade API, closed
+# bars, outside every lane) feeding the G-2 comparator, and the G-1 EXPLAINED_HOST_DOWN class from out-of-lane host
+# records covering a missed bar's whole opportunity. Repository only; nothing scheduled on the host.
+_P7 = "P3 PLN-07 G-3 recorder + G-1 host-down"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check "
-                             "(+ application probes), drill source",
-    "scripts/p3/backup.py": f"{_HI} — coverage --json report, create --coverage-report, mirror, runtime-check",
-    "tests/test_p3_backup_host_integration.py": f"{_HI} — binding refusals, concurrency, mirror interruptions, runtime",
-    "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_HI} — host integration support and its limits",
-    "scripts/p3/ops/tlos_runtime_backup.sh": f"{_HI} — the host's effective backup wrapper, governed: verbatim, then patched",
-    "tests/test_p3_backup_wrapper.py": f"{_HI} — the wrapper end to end: lifecycle, failure injection, signals, lock",
-    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_HI} — exact H2–H7 installation, gates and rollback (not executed)",
-    "scripts/p3/ops/backup_host_install.sh": f"{_HI} — H2/H4 guarded: unit idle, lock held, hash precondition, atomic rename",
-    "tests/test_p3_backup_host_install.py": f"{_HI} — the H2/H4 guards and the atomic wrapper replacement",
-    "scripts/p3/ops/restore_app_checks.sh": f"{_HI} — H7/G8 application checks on the restored copy, fixed PASS criteria",
-    "tests/test_p3_restore_app_checks.py": f"{_HI} — each G8 criterion, its failures, and the throwaway's cleanup",
-    "tests/test_p2_scope_audit.py": "P3 readiness preparation (PR #110) pinned to its merge; this branch's scope",
+    "research/p3/data_truth.py": f"{_P7} — EXPLAINED_HOST_DOWN; host_down_intervals; journal boot boundaries",
+    "research/p3/engine_bars.py": f"{_P7} — read-only engine-bar recorder (G-3)",
+    "scripts/p3/engine_bars.py": f"{_P7} — recorder CLI",
+    "scripts/p3/data_truth.py": f"{_P7} — --host-boots/--host-down; feed-compare --engine-recording",
+    "tests/test_p3_data_truth_g1_g3.py": f"{_P7} — whole-cover rule and refusals; recorder boundaries",
+    "docs/p3/PLN_07_DATA_TRUTH_COVERAGE.md": f"{_P7} — §10 implementation and the literal whole-cover reading",
+    "tests/test_p3_backup_wrapper.py": f"{_P7} — test-harness race: wait until the stub's stop is saved, not only logged",
+    "tests/test_p2_scope_audit.py": "P3 backup host integration (PR #111) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
 

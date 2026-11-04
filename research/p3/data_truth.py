@@ -6,7 +6,9 @@ G-1  ``audit_input_ledger``  — the missing-bar audit of a captured input ledge
      reports missing, duplicate, out-of-order and off-grid bars on the frozen timeframe, plus records of a
      foreign pair or timeframe. Each missing bar is classified against what the lane itself recorded, in
      the categories the P2 closure audit used by hand (P2_CLOSURE §4): ``EXPLAINED_INPUT_REJECTED``,
-     ``EXPLAINED_FETCH_FAILURE``, ``EXPLAINED_DOWNTIME_THEN_RESTART`` or ``UNEXPLAINED``. Contract §4:
+     ``EXPLAINED_FETCH_FAILURE``, ``EXPLAINED_DOWNTIME_THEN_RESTART``, then (Owner decision 2026-11-03,
+     PLN_07 §9) ``EXPLAINED_HOST_DOWN`` from an out-of-lane host record covering the bar's whole
+     opportunity, else ``UNEXPLAINED``. Contract §4:
      a missing candle is *recorded, never filled*, so a gap with an incident behind it is compliant and an
      unexplained gap is a finding.
 G-2  ``compare_feeds``  — a pure comparator of two recorded bar sequences of one pair, the captured live
@@ -70,8 +72,13 @@ FEED_FINDINGS = (
 INPUT_REJECTED = "EXPLAINED_INPUT_REJECTED"
 FETCH_FAILURE = "EXPLAINED_FETCH_FAILURE"
 DOWNTIME_THEN_RESTART = "EXPLAINED_DOWNTIME_THEN_RESTART"
+HOST_DOWN = "EXPLAINED_HOST_DOWN"
 UNEXPLAINED = "UNEXPLAINED"
-GAP_CLASSES = (INPUT_REJECTED, FETCH_FAILURE, DOWNTIME_THEN_RESTART, UNEXPLAINED)
+GAP_CLASSES = (INPUT_REJECTED, FETCH_FAILURE, DOWNTIME_THEN_RESTART, HOST_DOWN, UNEXPLAINED)
+# Out-of-lane host records the Owner accepted for EXPLAINED_HOST_DOWN (PLN_07 §9): the journal's boot boundaries,
+# a NUT event, or the health/power-event record. Any other source explains nothing.
+HOST_DOWN_SOURCES = ("journal_boot_boundary", "nut", "health")
+MAX_RECORD_MS = 253_402_300_799_999  # 9999-12-31T23:59:59.999Z
 
 
 class DataTruthError(RuntimeError):
@@ -132,8 +139,14 @@ def audit_input_ledger(
     timeframe: str,
     start_ms: int | None = None,
     end_ms: int | None = None,
+    host_down: list[dict] | None = None,
 ) -> dict:
     """Audit one lane's input ledger against the frozen pairs and timeframe. Read-only.
+
+    ``host_down``: out-of-lane host-down intervals (``host_down_intervals``). A missing bar the lane's own records do
+    not explain is ``EXPLAINED_HOST_DOWN`` only when one interval covers its **whole** opportunity, from its close to
+    the lane's next capture (Owner decision 2026-11-03, PLN_07 §9). A partial cover, or a bar with no later capture
+    (an open-ended opportunity), explains nothing.
 
     The expected grid per pair runs from ``start_ms`` (else the pair's first captured bar) to ``end_ms``
     (else its last), both snapped inward to the timeframe grid; the audit cannot know about bars before
@@ -151,6 +164,7 @@ def audit_input_ledger(
         "pairs": list(pairs),
         "timeframe": timeframe,
         "window": {"start_ms": start_ms, "end_ms": end_ms},
+        "host_down_records": None,
         "per_pair": {},
         "findings": [],
         "result": UNPROVEN,
@@ -248,6 +262,11 @@ def audit_input_ledger(
         elif category == "run_started":
             restarts.append(when)
 
+    down, rejected_records = host_down_intervals(host_down or [])
+    report["host_down_records"] = {"accepted": [{"start_utc": audit_data.iso(a), "end_utc": audit_data.iso(b),
+                                                 "source": src} for a, b, src in down],
+                                   "rejected": rejected_records[:MAX_EXAMPLES], "rejected_count": len(rejected_records)}
+
     off_grid, out_of_order, duplicates = [], [], []
     total_missing = 0
     unexplained_total = 0
@@ -291,6 +310,8 @@ def audit_input_ledger(
                 cls = FETCH_FAILURE
             elif any(close <= when <= horizon for when in restarts):
                 cls = DOWNTIME_THEN_RESTART
+            elif horizon != math.inf and any(a <= close and horizon <= b for a, b, _ in down):
+                cls = HOST_DOWN
             else:
                 cls = UNEXPLAINED
                 unexplained.append(audit_data.iso(ts))
@@ -327,7 +348,8 @@ def audit_input_ledger(
     elif unexplained_total:
         gaps = _finding("missing_bars", FAIL,
                         f"{unexplained_total} of {total_missing} missing bar(s) have no recorded incident "
-                        "(input_rejected, market_fetch_failed or run_started) inside their capture opportunity",
+                        "(input_rejected, market_fetch_failed or run_started) inside their capture opportunity "
+                        "and no host-down record covering all of it",
                         unexplained_total)
     else:
         gaps = _finding("missing_bars", PASS,
@@ -335,6 +357,55 @@ def audit_input_ledger(
                         if total_missing else "no bar is missing inside the window", total_missing)
     findings.append(gaps)
     return finish(findings)
+
+
+def host_down_intervals(records: list[dict]) -> tuple[list[tuple[int, int, str]], list[dict]]:
+    """Normalise host-down records to ``(start_ms, end_ms, source)``; return (accepted, rejected-with-reason).
+    A record is accepted only from an Owner-accepted source with a readable start strictly before its end.
+    A rejected record explains nothing (fail-closed)."""
+    accepted, rejected = [], []
+    for index, record in enumerate(records if isinstance(records, list) else []):
+        if not isinstance(record, dict):
+            rejected.append({"index": index, "reason": "not an object"})
+            continue
+        source = record.get("source")
+        start = record.get("start_ms") if record.get("start_ms") is not None else record.get("start_utc")
+        end = record.get("end_ms") if record.get("end_ms") is not None else record.get("end_utc")
+        try:
+            start = int(start) if isinstance(start, (int, float)) and not isinstance(start, bool) else audit_data.to_ms(start)
+            end = int(end) if isinstance(end, (int, float)) and not isinstance(end, bool) else audit_data.to_ms(end)
+        except (TypeError, ValueError, AttributeError):
+            rejected.append({"index": index, "reason": "unreadable start or end"})
+            continue
+        if source not in HOST_DOWN_SOURCES:
+            rejected.append({"index": index, "reason": f"source {source!r} is not an accepted host record"})
+        elif not start < end:
+            rejected.append({"index": index, "reason": "start is not before end"})
+        elif not (0 <= start and end <= MAX_RECORD_MS):
+            rejected.append({"index": index, "reason": "a time outside the readable calendar"})
+        else:
+            accepted.append((start, end, source))
+    return sorted(accepted), rejected
+
+
+def host_down_from_journal_boots(boots: list[dict]) -> list[dict]:
+    """Host-down intervals from ``journalctl --list-boots -o json``: from the last entry of one boot to the first
+    entry of the next (both microseconds since the epoch), in boot order. Overlapping or unreadable boots give no
+    interval; nothing is inferred between boots the journal does not list."""
+    rows = []
+    for boot in boots if isinstance(boots, list) else []:
+        try:
+            rows.append((int(boot["first_entry"]), int(boot["last_entry"]), str(boot.get("boot_id", "?"))))
+        except (KeyError, TypeError, ValueError):
+            continue
+    rows.sort()
+    out = []
+    for (_, last, boot_id), (first, _, next_id) in zip(rows, rows[1:]):
+        if first > last:
+            # microseconds to milliseconds, rounded inward: the interval may shrink, never grow
+            out.append({"start_ms": -(-last // 1000), "end_ms": first // 1000, "source": "journal_boot_boundary",
+                        "boots": [boot_id, next_id]})
+    return out
 
 
 # --------------------------------------------------------------------------------------------------

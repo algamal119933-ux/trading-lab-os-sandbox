@@ -2,9 +2,14 @@
 """P3-PLN-07 data-truth audits over recorded evidence (research/p3/data_truth.py).
 
     scripts/p3/data_truth.py ledger-bars  --evidence-dir <lane or sealed archive>/evidence \
-        --pair BTC/USDT --pair ETH/USDT --timeframe 1h [--start ISO --end ISO] [--json out.json]
+        --pair BTC/USDT --pair ETH/USDT --timeframe 1h [--start ISO --end ISO] [--json out.json] \
+        [--host-boots boots.json] [--host-down records.json]
     scripts/p3/data_truth.py feed-compare --evidence-dir <...>/evidence --pair BTC/USDT --timeframe 1h \
-        --engine-bars engine_bars.json [--start ISO --end ISO] [--json out.json]
+        (--engine-bars engine_bars.json | --engine-recording <G-3 recorder .jsonl>) [--start ISO --end ISO] [--json out.json]
+
+``--host-boots`` is the output of ``journalctl --list-boots -o json``; ``--host-down`` is a JSON list of
+``{"start_utc", "end_utc", "source": "journal_boot_boundary" | "nut" | "health"}``. They feed the G-1 class
+EXPLAINED_HOST_DOWN, which needs an interval covering a missed bar's whole opportunity (PLN_07 §9).
 
 ``--engine-bars`` is a JSON list of ``{"ts", "open", "high", "low", "close", "volume"}`` rows recorded
 from the engine's feed; this tool never fetches one. Read-only: a ``--json`` path inside the evidence
@@ -39,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", help="window start, ISO-8601 UTC")
     parser.add_argument("--end", help="window end, ISO-8601 UTC")
     parser.add_argument("--engine-bars", type=Path)
+    parser.add_argument("--engine-recording", type=Path, help="a G-3 recorder file (scripts/p3/engine_bars.py)")
+    parser.add_argument("--host-boots", type=Path, help="journalctl --list-boots -o json")
+    parser.add_argument("--host-down", type=Path, help="JSON list of host-down records")
     parser.add_argument("--json", type=Path)
     args = parser.parse_args(argv)
 
@@ -51,14 +59,25 @@ def main(argv: list[str] | None = None) -> int:
         start = audit_data.to_ms(args.start) if args.start else None
         end = audit_data.to_ms(args.end) if args.end else None
         if args.audit == "ledger-bars":
+            host_down = []
+            if args.host_boots is not None:
+                host_down += data_truth.host_down_from_journal_boots(
+                    json.loads(args.host_boots.read_text(encoding="utf-8")))
+            if args.host_down is not None:
+                host_down += json.loads(args.host_down.read_text(encoding="utf-8"))
             report = data_truth.audit_input_ledger(args.evidence_dir, pairs=args.pairs, timeframe=args.timeframe,
-                                                   start_ms=start, end_ms=end)
+                                                   start_ms=start, end_ms=end, host_down=host_down)
         else:
-            if args.engine_bars is None or len(args.pairs) != 1:
-                print("P3_DATA_TRUTH_ERROR: feed-compare needs exactly one --pair and --engine-bars", file=sys.stderr)
+            if (args.engine_bars is None) == (args.engine_recording is None) or len(args.pairs) != 1:
+                print("P3_DATA_TRUTH_ERROR: feed-compare needs exactly one --pair and one of --engine-bars or "
+                      "--engine-recording", file=sys.stderr)
                 return 2
             live = data_truth.live_rows_from_input_ledger(args.evidence_dir, args.pairs[0])
-            engine = json.loads(args.engine_bars.read_text(encoding="utf-8"))
+            if args.engine_recording is not None:
+                from p3 import engine_bars
+                engine = engine_bars.engine_rows(args.engine_recording, args.pairs[0], args.timeframe)
+            else:
+                engine = json.loads(args.engine_bars.read_text(encoding="utf-8"))
             report = data_truth.compare_feeds(live, engine, pair=args.pairs[0], timeframe=args.timeframe,
                                               start_ms=start, end_ms=end)
     except (data_truth.DataTruthError, OSError, ValueError) as exc:

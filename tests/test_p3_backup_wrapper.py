@@ -442,7 +442,9 @@ def test_a_mirror_failure_is_exit_5_with_the_set_valid_and_the_runtime_back(host
 def wait_for_stop(host, proc, timeout=30):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if "stop tlos-runtime.service" in calls(host):
+        # The stub logs the call before it saves the new state: wait for both, or a SIGKILL to the process group
+        # can land in between and leave the runtime recorded as still active.
+        if "stop tlos-runtime.service" in calls(host) and not state(host)["active"]:
             return
         if proc.poll() is not None:
             raise AssertionError(proc.communicate())
