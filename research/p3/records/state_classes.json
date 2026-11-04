@@ -159,6 +159,9 @@
           "*"
         ]
       }
+    ],
+    "runtime_data": [
+      {"id": "service_data", "authority": "RUNTIME_SERVICE_STATE", "recovery": "BACKUP_SET_DATA", "globs": ["*"]}
     ]
   }
 }

@@ -62,3 +62,33 @@ containers bind-mount `/srv/project-data/trading-data/runtime/data/{grafana,prom
 lists. Those volume exports are not evidence of runtime-data completeness; the root results above stand. Live data is
 covered from the set whose record shows `LIVE_DATA_COVERAGE = PASS` ([`PLN_03_BACKUP_RESTORE.md`](PLN_03_BACKUP_RESTORE.md)).
 **PLN-02 ACCEPTANCE = PASS** as of that set. It is re-checked after each scheduled backup.
+
+## Runtime service data under `/srv/project-data` (preparation, 2026-11-04; host acceptance NOT claimed)
+**Why this is a new scope, not a repeated test.** The 2026-10-25 acceptance stands for the 14 roots it inventoried.
+After the 2026-10-29 store migration, the runtime's Grafana, Prometheus and MLflow data lives in bind-mounted
+directories under `/srv/project-data/trading-data/runtime/data/`, which no inventoried root contains. The contract
+asks for 100% of TLOS state, so these roots must be inventoried once. This adds state; it does not re-test what was
+accepted.
+
+**How their recovery source is verified.** Profile `runtime_data`, class `service_data`, recovery kind
+`BACKUP_SET_DATA`.
+- The data is owned by the containers and changes while the runtime runs, so a per-file hash against a manifest
+  could never be current.
+- The recovery source is the newest backup set that covers **this** root. Every link is required:
+  - the set verifies;
+  - its record lists the root as a data source with `LIVE_DATA_COVERAGE = PASS`, which `backup.py` proved by
+    re-reading the source as root;
+  - a persisted drill of **that** set restored `data:<name>`.
+- Coverage is still walked (names and `lstat` only). An unreadable directory is a coverage FAIL, as for every
+  other root.
+
+**Host run, after PLN-03 host steps H5 and H7, under the Owner's authorization for those steps.** It is read-only:
+```bash
+for s in grafana prometheus mlflow; do
+  python3 scripts/p3/state_inventory.py --root /srv/project-data/trading-data/runtime/data/$s --profile runtime_data \
+    --backup-set <the H5 set> --drill-json <the H7 drill of that set> --json ~/tlos-paper/p3-evidence/inventory_$s.json
+done
+```
+**Open dependency.** If a service directory cannot be traversed by the backup user (Prometheus and MLflow
+ownership is not yet known here), coverage fails truthfully. The fix is an Owner decision about directory
+permissions, not a tool exception. Tests: `tests/test_p3_state_inventory_runtime_data.py`.

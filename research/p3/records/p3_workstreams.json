@@ -2,7 +2,7 @@
   "record": "P3_WORKSTREAMS_V1",
   "authority": "docs/p3/P3_CONTRACT.md §3 (frozen fcd06b21); execution authorized by docs/p3/OWNER_P3_EXECUTION_AUTHORIZATION.md (7b1b1fa1)",
   "note": "Governed status record read by the Control Room projection. It changes only through a merged PR; the Control Room never writes it. Each status cites its evidence.",
-  "updated_utc": "2026-11-04T01:00:00Z",
+  "updated_utc": "2026-11-03T22:43:45Z",
   "workstreams": [
     {"id": "PLN-00", "status": "ACCEPTED", "en": "P2→P3 reconciliation", "ar": "مطابقة P2→P3", "evidence": "PR #71 merge f597041a"},
     {"id": "PLN-01", "status": "ACCEPTED", "en": "Contract freeze", "ar": "تجميد العقد", "evidence": "PR #72 merge fcd06b21"},

@@ -51,6 +51,68 @@ Design rules:
 - `compare-export` (portable copy) expects 2 artifacts per root and per data source, 1 per repository and 1 per
   volume (`expected_artifact_count`). A record without `data_sources` counts as before.
 
+- **Host integration support (PR-A, 2026-11-04).** The host stops its runtime with `docker compose down`, which removes the
+  containers, so coverage can only be observed while the runtime still runs.
+  - **Bound pre-stop coverage.** `coverage --json F` writes a report, 0600 and never overwritten, with
+    `report_version`, `generated_utc`, `compose_project`, the exact `data` and the resolved `roots`.
+    `create --coverage-report F` refuses the set, writing nothing, unless the report says PASS, names exactly this
+    create's data and roots, and was observed 0–1800 s ago. The record carries the report with
+    `observed: before_runtime_stop` and `report_sha256`. `--compose-project` (observed at create) and
+    `--coverage-report` are mutually exclusive. Without either, the record's coverage is `null` (UNPROVEN), and
+    such a set counts toward no gate.
+  - **One run at a time.** `create` holds an exclusive flock on `<target>/.backup.lock` and `mirror` one on
+    `<mirror>/.mirror.lock`. A second run is refused and writes nothing. The kernel releases a lock when its holder
+    dies, SIGKILL included. The wrapper's runtime stop/start needs its own lock in the wrapper.
+  - **Second-device mirror (`mirror`).** It publishes a verified full copy as `sets/<stamp>` and points `current` at
+    it.
+    - Invariant: the last verified full generation is never destroyed while a replacement is published.
+    - The copy is staged under a dot-name and renamed only after verify, file-list, record and permission checks,
+      so a non-dot name always means verified.
+    - `current` is switched atomically; older generations beyond `--keep` are retired by rename, then deleted.
+    - No space is ever made by deleting.
+    - Legacy partial copies (`latest`, `previous`, `.incoming`) are never touched. Their removal is a separate
+      Owner decision.
+    - Interruption at every step, including mid-copy, is tested.
+  - **Drill provenance.** A drill record now states which copy it restored: `source.set_dir`, `source.realpath`
+    and `source.tier`. The tier is `SECOND_DEVICE_MIRROR` only for a generation under the `sets/` of a published
+    mirror (its lock file present), and `UNCLASSIFIED` otherwise, including an offsite-opened copy. Drills recorded
+    earlier have no source, and the Control Room shows them as `SOURCE_UNKNOWN`.
+  - **`runtime-check`.** Each compose service individually: exactly one container, running, not restarting,
+    healthy if it has a healthcheck, and started after the restoration began. It polls up to `--wait`, then
+    FAILs; it never hangs. An incomplete recovery exits 1.
+  - **Limits.** No EXIT trap survives power loss or SIGKILL. After power loss, `tlos-runtime.service` starts at boot.
+    After a SIGKILL during a backup, the runtime stays down until the next start. The governed wrapper therefore
+    records a marker before stopping the runtime. Its next run recovers and proves the runtime **before** it backs
+    up anything (see the wrapper below).
+    Tests: `tests/test_p3_backup_host_integration.py`.
+
+- **Governed host wrapper.** `scripts/p3/ops/tlos_runtime_backup.sh` is the host's effective `backup.sh`. Commit
+  `ca0e917` is the verbatim original (sha256 `561c44d2…b531`, rebuilt from the H1 report and hash-checked); the
+  next commit is the patch:
+  - one run at a time (`flock`, exit 75);
+  - recovery first: a marker left by a run killed after stopping the runtime (SIGKILL, timeout escalation) makes
+    the next run restart the runtime and prove it (running, answering its probes) before anything else. Then it
+    observes fresh coverage and backs up as usual. If the recovery fails, no backup is attempted (exit 6) and the
+    marker stays. The marker is in `$XDG_RUNTIME_DIR`, so a reboot clears it; from then on the boot path owns the
+    runtime (`docs/p3/PLN_03_HOST_INSTALL_H2_H7.md` §R);
+  - the store identity (UUID) is checked first, before the recovery: no runtime is started on an unproven store
+    (exit 3, marker kept). The runtime's own unit and guard are host-local and not governed by this repository;
+  - a runtime that is not running and that no backup run stopped (no marker) is down for an unknown cause (an Owner
+    stop, a failed boot start and a missing mount look the same) and is never started by the backup. Its set is **archive-only**: verified and mirrored, coverage UNPROVEN, exit 7;
+  - two separate results: `ARCHIVE_INTEGRITY` (verify and mirror) and `LIVE_DATA_COVERAGE`, read back from the
+    set's own record. Only both together give `BACKUP = PASS` and exit 0;
+  - coverage observed before `compose down`, bound into **this** run's set (`--stamp`). Only that set is verified
+    and mirrored; the original took "the newest set" by `sort | tail -1`;
+  - a restore that is proven, never masked: each of grafana, prometheus and mlflow running, started by this
+    restoration, and answering its own readiness probe (`runtime-check --probe`; no container defines a Docker
+    healthcheck). Otherwise exit 6;
+  - the live bind-mounted data instead of the old named volumes;
+  - a verified full-set SSD copy via `backup.py mirror`. The legacy partial copies are left untouched.
+  - Lifecycle tests: `tests/test_p3_backup_wrapper.py`, which runs the real wrapper and `backup.py` against stubbed
+    `systemctl`/`docker`/`findmnt` and local probe servers, with failure injection, SIGTERM, SIGKILL and
+    concurrency.
+  - Installation and rollback: [`PLN_03_HOST_INSTALL_H2_H7.md`](PLN_03_HOST_INSTALL_H2_H7.md).
+
 ### What the drill proves, and what it does not
 | Property | Proven by | Status |
 |---|---|---|

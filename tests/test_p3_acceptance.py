@@ -563,3 +563,25 @@ def test_every_walkthrough_step_says_what_to_open_pass_fail_and_its_evidence_id(
         assert cells[4] == f"`PLN09-W-{item}`", item
     assert "PLN09-W-ID" in text and "PASS / FAIL per evidence id" in text
     assert "PLN09_OWNER_ACCEPTANCE   = PENDING" in text
+
+
+# -- run-config template file (preparation for the Owner's RUN_CONFIG PR; decides nothing) ----------------------------
+import json  # noqa: E402
+
+TEMPLATE_PATH = REPO_ROOT / "docs" / "p3" / "PLN_10_RUN_CONFIG.TEMPLATE.json"
+
+
+def test_the_committed_template_file_is_the_code_template_and_blocks_launch():
+    assert TEMPLATE_PATH.as_posix() != (REPO_ROOT / acc.RUN_CONFIG_PATH).as_posix()
+    data = json.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
+    assert data == acc.RUN_CONFIG_TEMPLATE
+    readiness = acc.launch_readiness(data)
+    assert readiness["verdict"] == "LAUNCH_BLOCKED" and readiness["open_owner_decisions"] == ["D1", "D2", "D3", "D4", "D5"]
+    assert data["launch_authority"]["paper_launch_authorized"] is False and data["real_money_authorized"] is False
+
+
+def test_the_fill_guide_states_the_current_matrix_digest_id_count_and_expiry():
+    text = (REPO_ROOT / "docs" / "p3" / "PLN_10_PAPER_BETA_ACCEPTANCE_PROGRAM.md").read_text(encoding="utf-8")
+    assert f"`{acc.matrix_digest()}`" in text
+    assert f"**all {len(acc.ACCEPTANCE_MATRIX)}** ids" in text
+    assert f"`{acc.P3_AUTHORIZATION_EXPIRES_UTC}`" in text
