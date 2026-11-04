@@ -120,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     rcheck.add_argument("--service", action="append", required=True)
     rcheck.add_argument("--wait", type=float, default=0.0)
     rcheck.add_argument("--started-after", type=float)
+    rcheck.add_argument("--probe", action="store_true",
+                        help="also require each application's readiness probe on its published loopback port")
     verify = sub.add_parser("verify")
     verify.add_argument("--set", required=True, type=Path, dest="set_dir")
     drill = sub.add_parser("drill")
@@ -180,9 +182,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "runtime-check":
             report = backup.runtime_check(args.compose_project, tuple(args.service), wait_s=args.wait,
-                                          started_after=args.started_after)
+                                          started_after=args.started_after, probe=args.probe)
             for name, result in report["services"].items():
-                print(f"  {name:12} {result['status']} {'; '.join(result['problems'])}")
+                print(f"  {name:12} {result['status']} container {result['container']} · application "
+                      f"{result['application']}{(' · ' + '; '.join(result['problems'])) if result['problems'] else ''}")
             print(f"RUNTIME_RECOVERY = {report['RUNTIME_RECOVERY']}")
             return 0 if report["RUNTIME_RECOVERY"] == "PASS" else 1
         if args.command == "verify":

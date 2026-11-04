@@ -848,16 +848,58 @@ def _started_epoch(text: str) -> float | None:
         return None
 
 
+# Application-level probes, read-only GETs on the container port the service listens on, reached through the port
+# Docker publishes on the loopback (found in `docker inspect`, never assumed). None of the runtime's containers
+# defines a Docker healthcheck (host H1, 2026-11-04), so a running container is not proof of a working application.
+APP_PROBES: dict[str, tuple[str, str]] = {
+    "grafana": ("3000/tcp", "/api/health"),        # JSON with "database": "ok"
+    "prometheus": ("9090/tcp", "/-/ready"),        # 200 when the TSDB is loaded and the server is ready
+    "mlflow": ("5000/tcp", "/health"),             # 200 "OK" from the tracking server (backed by mlflow.db)
+}
+
+
+def _published_loopback(container: dict, port: str) -> int | None:
+    for binding in ((container.get("NetworkSettings") or {}).get("Ports") or {}).get(port) or []:
+        if binding.get("HostIp") in ("127.0.0.1", "::1", "0.0.0.0", "") and str(binding.get("HostPort", "")).isdigit():
+            return int(binding["HostPort"])
+    return None
+
+
+def http_probe(service: str, url: str, timeout: float = 5.0) -> tuple[bool, str]:
+    """GET ``url``; the service's own readiness rule decides. Read-only."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, method="GET"), timeout=timeout) as resp:  # noqa: S310
+            body = resp.read(4096).decode("utf-8", "replace")
+            status = resp.status
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return False, f"{url}: {type(exc).__name__}"
+    if status != 200:
+        return False, f"{url}: HTTP {status}"
+    if service == "grafana":
+        try:
+            ok = json.loads(body).get("database") == "ok"
+        except ValueError:
+            ok = False
+        return ok, f"{url}: database={'ok' if ok else 'not ok'}"
+    return True, f"{url}: HTTP 200"
+
+
 def runtime_check(project: str, services: tuple[str, ...], *, started_after: float | None = None,
                   wait_s: float = 0, poll_s: float = 2,
                   state_of: Callable[[str, str], list[dict]] | None = None,
-                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time) -> dict:
+                  sleep: Callable[[float], None] = time.sleep, clock: Callable[[], float] = time.time,
+                  probe: bool = False, prober: Callable[[str, str], tuple[bool, str]] | None = None) -> dict:
     """Is each named service of the compose project back? Per service: exactly one container, running, not
     restarting, healthy when it defines a healthcheck, and (with ``started_after``) started by this restoration.
+    With ``probe``, the application must also answer its readiness probe (``APP_PROBES``) on its published
+    loopback port; a service with no probe or no published port is UNPROVEN, which fails the recovery.
     Polls for up to ``wait_s`` seconds; whatever is not OK by then is FAIL (an incomplete recovery is a failure)."""
     if not services:
         raise BackupError("runtime_check needs the services that must be back")
     state_of = state_of or _docker_service_state
+    prober = prober or http_probe
     deadline = clock() + wait_s
     while True:
         results = {}
@@ -876,8 +918,26 @@ def runtime_check(project: str, services: tuple[str, ...], *, started_after: flo
                 started = _started_epoch(st.get("StartedAt", ""))
                 if started_after is not None and (started is None or started + 1 < started_after):
                     problems.append(f"started {st.get('StartedAt')} before this restoration")
-            results[service] = {"status": "FAIL" if problems else "PASS", "problems": problems}
+            application = None
+            if probe:
+                spec = APP_PROBES.get(service)
+                port = _published_loopback(containers[0], spec[0]) if spec and len(containers) == 1 else None
+                if spec is None:
+                    application = "UNPROVEN: no application probe is defined for this service"
+                elif port is None:
+                    application = f"UNPROVEN: {spec[0]} is not published on the loopback"
+                elif not problems:
+                    ok, detail = prober(service, f"http://127.0.0.1:{port}{spec[1]}")
+                    application = ("PASS: " if ok else "FAIL: ") + detail
+                else:
+                    application = "NOT_PROBED: the container is not back"
+                if not application.startswith("PASS"):
+                    problems.append(f"application {application}")
+            results[service] = {"status": "FAIL" if problems else "PASS", "problems": problems,
+                                "container": "FAIL" if [p for p in problems if not p.startswith("application")]
+                                else "PASS", "application": application or "NOT_PROBED"}
         ok = all(r["status"] == "PASS" for r in results.values())
         if ok or clock() >= deadline:
-            return {"compose_project": project, "services": results, "RUNTIME_RECOVERY": "PASS" if ok else "FAIL"}
+            return {"compose_project": project, "services": results, "application_probed": probe,
+                    "RUNTIME_RECOVERY": "PASS" if ok else "FAIL"}
         sleep(poll_s)

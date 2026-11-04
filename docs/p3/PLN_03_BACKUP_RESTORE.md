@@ -85,6 +85,23 @@ Design rules:
     records a marker before stopping the runtime and restores the runtime on its next run (after the H1 inputs).
     Tests: `tests/test_p3_backup_host_integration.py`.
 
+- **Governed host wrapper.** `scripts/p3/ops/tlos_runtime_backup.sh` is the host's effective `backup.sh`. Commit
+  `ca0e917` is the verbatim original (sha256 `561c44d2…b531`, rebuilt from the H1 report and hash-checked); the
+  next commit is the patch:
+  - one run at a time (`flock`, exit 75);
+  - an interrupted-run marker, so a run after a SIGKILL or a timeout escalation restores the runtime;
+  - coverage observed before `compose down`, bound into **this** run's set (`--stamp`). Only that set is verified
+    and mirrored; the original took "the newest set" by `sort | tail -1`;
+  - a restore that is proven, never masked: each of grafana, prometheus and mlflow running, started by this
+    restoration, and answering its own readiness probe (`runtime-check --probe`; no container defines a Docker
+    healthcheck). Otherwise exit 6;
+  - the live bind-mounted data instead of the old named volumes;
+  - a verified full-set SSD copy via `backup.py mirror`. The legacy partial copies are left untouched.
+  - Lifecycle tests: `tests/test_p3_backup_wrapper.py`, which runs the real wrapper and `backup.py` against stubbed
+    `systemctl`/`docker`/`findmnt` and local probe servers, with failure injection, SIGTERM, SIGKILL and
+    concurrency.
+  - Installation and rollback: [`PLN_03_HOST_INSTALL_H2_H7.md`](PLN_03_HOST_INSTALL_H2_H7.md).
+
 ### What the drill proves, and what it does not
 | Property | Proven by | Status |
 |---|---|---|

@@ -425,7 +425,7 @@ def test_cli_runtime_check_uses_compose_labels(monkeypatch, capsys):
     monkeypatch.setattr(backup.subprocess, "run", fake_run)
     assert cli.main(["runtime-check", "--compose-project", PROJECT] + sum((["--service", s] for s in SERVICES), [])) == 1
     out = capsys.readouterr().out
-    assert "mlflow       FAIL status exited" in out and "RUNTIME_RECOVERY = FAIL" in out
+    assert "mlflow       FAIL container FAIL · application NOT_PROBED · status exited" in out and "RUNTIME_RECOVERY = FAIL" in out
     assert ["--filter", f"label=com.docker.compose.project={PROJECT}"] == calls[0][4:6]
 
 
@@ -458,3 +458,68 @@ def test_cli_drill_json_carries_the_source(tmp_path, live, monkeypatch, legacy_m
                      "--json", str(out)]) == 0
     assert json.loads(out.read_text())["source"]["tier"] == "SECOND_DEVICE_MIRROR"
     capsys.readouterr()
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Application probes: a running container is not a working application (no Docker healthcheck on the host)
+# ------------------------------------------------------------------------------------------------------------
+
+def published(port_key: str, host_port: str = "3000", ip: str = "127.0.0.1") -> dict:
+    c = state()
+    c["NetworkSettings"] = {"Ports": {port_key: [{"HostIp": ip, "HostPort": host_port}]}}
+    return c
+
+
+def test_probe_pass_needs_the_application_answer_not_just_a_running_container():
+    seen = []
+
+    def prober(service, url):
+        seen.append(url)
+        return service != "grafana", "stub"
+    states = {"grafana": [published("3000/tcp", "3000")], "prometheus": [published("9090/tcp", "9090")],
+              "mlflow": [published("5000/tcp", "5000")]}
+    report = backup.runtime_check(PROJECT, SERVICES, state_of=lambda p, s: states[s], probe=True, prober=prober)
+    assert report["RUNTIME_RECOVERY"] == "FAIL" and report["application_probed"] is True
+    g = report["services"]["grafana"]
+    assert g["container"] == "PASS" and g["application"].startswith("FAIL") and g["status"] == "FAIL"
+    assert sorted(seen) == ["http://127.0.0.1:3000/api/health", "http://127.0.0.1:5000/health",
+                            "http://127.0.0.1:9090/-/ready"]
+
+
+@pytest.mark.parametrize("container,why", [
+    (lambda: state(), "is not published on the loopback"),
+    (lambda: published("3000/tcp", "3000", ip="10.0.0.5"), "is not published on the loopback"),
+])
+def test_an_unprobeable_application_is_unproven_and_fails(container, why):
+    report = backup.runtime_check(PROJECT, ("grafana",), state_of=lambda p, s: [container()], probe=True,
+                                  prober=lambda s, u: (True, "never called"))
+    assert report["RUNTIME_RECOVERY"] == "FAIL" and why in report["services"]["grafana"]["application"]
+
+
+def test_a_service_without_a_defined_probe_is_unproven():
+    report = backup.runtime_check(PROJECT, ("loki",), state_of=lambda p, s: [state()], probe=True)
+    assert "no application probe is defined" in report["services"]["loki"]["application"]
+
+
+def test_the_http_probe_rules(monkeypatch):
+    assert backup.http_probe("mlflow", "http://127.0.0.1:1/health")[0] is False  # connection refused, real socket
+    class Resp:
+        def __init__(self, status, body):
+            self.status, self.body = status, body
+
+        def read(self, n):
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    import urllib.request
+    answers = {"g-ok": Resp(200, b'{"database": "ok"}'), "g-bad": Resp(200, b'{"database": "failing"}'),
+               "p": Resp(200, b"Prometheus Server is Ready."), "m503": Resp(503, b"")}
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: answers[req.full_url.rsplit("/", 1)[1]])
+    assert backup.http_probe("grafana", "http://x/g-ok")[0] is True
+    assert backup.http_probe("grafana", "http://x/g-bad")[0] is False
+    assert backup.http_probe("prometheus", "http://x/p")[0] is True
+    assert backup.http_probe("mlflow", "http://x/m503") == (False, "http://x/m503: HTTP 503")

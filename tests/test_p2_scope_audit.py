@@ -1972,11 +1972,14 @@ MERGED_STAGE_SCOPES: dict[str, tuple[str, dict[str, str]]] = {
 # full generations without destroying the last verified one; runtime-check judges each service. No host change.
 _HI = "P3 backup host integration"
 BRANCH_SCOPE: dict[str, str] = {
-    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check, drill source",
+    "research/p3/backup.py": f"{_HI} — coverage report + binding, exclusive locks, publish_mirror, runtime_check "
+                             "(+ application probes), drill source",
     "scripts/p3/backup.py": f"{_HI} — coverage --json report, create --coverage-report, mirror, runtime-check",
     "tests/test_p3_backup_host_integration.py": f"{_HI} — binding refusals, concurrency, mirror interruptions, runtime",
     "docs/p3/PLN_03_BACKUP_RESTORE.md": f"{_HI} — host integration support and its limits",
     "scripts/p3/ops/tlos_runtime_backup.sh": f"{_HI} — the host's effective backup wrapper, governed: verbatim, then patched",
+    "tests/test_p3_backup_wrapper.py": f"{_HI} — the wrapper end to end: lifecycle, failure injection, signals, lock",
+    "docs/p3/PLN_03_HOST_INSTALL_H2_H7.md": f"{_HI} — exact H2–H7 installation, gates and rollback (not executed)",
     "tests/test_p2_scope_audit.py": "P3 Control Room backup truth (PR #108) pinned to its merge; this branch's scope",
     "MANIFEST.txt": "repository integrity — regenerated after staging",
 }
