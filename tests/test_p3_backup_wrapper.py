@@ -16,7 +16,9 @@ Proved here:
   runtime; after SIGKILL the next run finds the marker, recovers and proves the runtime *before* it backs up, then
   observes fresh coverage; a failed recovery refuses the backup;
 - hardened vs archive-only: exit 0 / BACKUP = PASS only with LIVE_DATA_COVERAGE = PASS bound into the set (checked
-  on every run of every test); a runtime stopped on purpose stays stopped and its set is archive-only (exit 7);
+  on every run of every test); a runtime that is down without a marker (cause unknown) stays down and its set is
+  archive-only (exit 7);
+- store identity first: on the wrong store nothing is started, not even an interrupted run's recovery;
 - concurrency: a second run is refused while one holds the lock, so the runtime is stopped and started once.
 
 Synthetic tests are not host acceptance.
@@ -314,7 +316,7 @@ def test_only_this_runs_set_is_verified_and_mirrored_never_another(host):
     assert (decoy / "BACKUP_RECORD.json").read_text() == "{}"
 
 
-def test_an_intentionally_stopped_runtime_stays_stopped_and_its_set_is_archive_only_exit_7(host):
+def test_a_runtime_down_without_a_marker_stays_down_cause_unknown_and_its_set_is_archive_only_exit_7(host):
     set_state(host, active=False)
     code, out, err = run(host)
     assert code == 7, err
@@ -326,7 +328,8 @@ def test_an_intentionally_stopped_runtime_stays_stopped_and_its_set_is_archive_o
     assert backup.verify_backup(host["mount"] / "tlos-backups" / stamp)["status"] == "PASS"
     assert os.readlink(host["mirror"] / "current") == f"sets/{stamp}"
     assert f"ARCHIVE_INTEGRITY = PASS ({host['mount']}/tlos-backups/{stamp} verified" in out
-    assert "RUNTIME_LEFT_STOPPED" in err and "LIVE_DATA_COVERAGE = UNPROVEN" in err
+    assert "RUNTIME_DOWN_CAUSE_UNKNOWN" in err and "LIVE_DATA_COVERAGE = UNPROVEN" in err
+    assert "on purpose" not in err and "intentional" not in err.lower()
     assert f"BACKUP = ARCHIVE_ONLY ({host['mount']}/tlos-backups/{stamp})" in err and "BACKUP = PASS" not in out
 
 
@@ -338,6 +341,20 @@ def test_the_wrong_store_is_refused_before_anything(host):
     host["env"]["TLOS_TEST_UUID"] = "other"
     code, _, err = run(host)
     assert code == 3 and "not the expected HDD" in err and calls(host) == [] and sets(host) == []
+
+
+def test_an_interrupted_run_on_the_wrong_store_is_not_recovered_until_the_store_is_proven(host):
+    set_state(host, active=False)
+    marker(host).write_text("2026-11-04T03:31:00Z\n")
+    host["env"]["TLOS_TEST_UUID"] = "other"  # e.g. the HDD not mounted: /srv/project-data is the root filesystem
+    code, out, err = run(host)
+    assert code == 3 and "not the expected HDD" in err and "marker is kept" in err
+    assert calls(host) == [], "no systemctl call at all: the runtime is not started on an unproven store"
+    assert "RECOVERING" not in err and sets(host) == [] and not list(host["evid"].glob("backup_coverage_*.json"))
+    assert marker(host).exists() and not state(host)["active"]
+    host["env"]["TLOS_TEST_UUID"] = UUID  # the store is back: the next run recovers, then backs up (hardened)
+    code, _, err = run(host)
+    assert code == 0 and "RECOVERED" in err and not marker(host).exists()
 
 
 def test_coverage_failure_refuses_before_the_stop(host):

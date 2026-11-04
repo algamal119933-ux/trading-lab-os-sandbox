@@ -4,16 +4,19 @@
 # Governed copy: scripts/p3/ops/tlos_runtime_backup.sh. Installed at ~/projects/trading/tlos-runtime/backup.sh,
 # mode 0700. It patches the host original (sha256 561c44d2…b531, 2026-11-03), and the repository diff is the change.
 #
-# 1. One run at a time (flock).
+# 1. One run at a time (flock), then the store identity: /srv/project-data must be the expected HDD (UUID), before
+#    anything else, the recovery included. The runtime's data are bind mounts under it; its own unit and guard are
+#    host-local and not governed here, so no runtime is started on an unproven store (exit 3, marker kept).
 # 2. Recovery first. If an earlier run stopped the runtime and was killed before restoring it (SIGKILL, timeout
 #    escalation), its marker is found. This run restores the runtime and proves it (running, answering its probes)
 #    before anything else. If that fails, no backup is attempted (exit 6) and the marker stays for the next run.
 #    The marker lives in $XDG_RUNTIME_DIR, as long as the user manager: a reboot clears it, and the boot path
 #    (tlos-runtime.service enabled) owns the runtime from then on.
-# 3. Checks that /srv/project-data is the expected HDD (UUID).
+# 3. Checks the backup target and this run's stamp.
 # 4. While the runtime runs, LIVE_DATA_COVERAGE is observed (`compose down` removes the containers) and written to
 #    a report that `create` binds into this run's set. A runtime that is not running and that no backup run stopped
-#    (no marker) was stopped on purpose: it is never started here. Its set can only be archive-only (exit 7).
+#    (no marker) is down for a cause this run cannot know: an Owner stop, a failed boot start or a missing mount
+#    look the same. It is never started here, and its set can only be archive-only (exit 7).
 # 5. Stops the monitoring runtime so its SQLite (Grafana, MLflow) and TSDB/WAL (Prometheus) files are exported
 #    quiescent, then restores it if it was running. The restore must be proven: each of grafana, prometheus and
 #    mlflow running, started by this restoration, and answering its own readiness probe. A failed restore fails
@@ -60,6 +63,10 @@ DATA_ARGS=(--data "grafana=$DATA/grafana" --data "prometheus=$DATA/prometheus" -
 exec 9>"$RUNDIR/tlos-p3-backup.lock"
 flock -n 9 || { echo "BACKUP_REFUSED: another backup run holds $RUNDIR/tlos-p3-backup.lock" >&2; exit 75; }
 
+[ "$(findmnt -no UUID "$MOUNT" 2>/dev/null || true)" = "$UUID" ] \
+  || { echo "BACKUP_REFUSED: $MOUNT is not the expected HDD ($UUID); nothing is started or written" \
+         "$([ -e "$MARKER" ] && echo "(the interrupted-run marker is kept for the next run)")" >&2; exit 3; }
+
 runtime_proven() {  # [--started-after <epoch>]: grafana, prometheus and mlflow running and answering their probes
   "$PY" "$P3/scripts/p3/backup.py" runtime-check --compose-project "$PROJECT" "${SERVICES[@]}" "$@" \
     --wait "${TLOS_RUNTIME_WAIT_S:-180}" --probe
@@ -84,8 +91,6 @@ if [ -e "$MARKER" ]; then
   fi
 fi
 
-[ "$(findmnt -no UUID "$MOUNT" 2>/dev/null || true)" = "$UUID" ] \
-  || { echo "BACKUP_REFUSED: $MOUNT is not the expected HDD ($UUID)" >&2; exit 3; }
 [ -d "$TARGET" ] || { echo "BACKUP_REFUSED: $TARGET missing" >&2; exit 3; }
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SET="$TARGET/$STAMP"
@@ -100,7 +105,8 @@ if systemctl --user is-active --quiet tlos-runtime.service; then
     --json "$COV" || { echo "BACKUP_REFUSED: LIVE_DATA_COVERAGE before the stop, see $COV" >&2; exit 4; }
   COV_ARGS=(--coverage-report "$COV")
 else
-  echo "RUNTIME_LEFT_STOPPED: tlos-runtime is not running and no backup run stopped it; it is not started here" >&2
+  echo "RUNTIME_DOWN_CAUSE_UNKNOWN: tlos-runtime is not running and no backup run stopped it (an Owner stop, a" \
+    "failed boot start or a missing mount look the same here); it is not started here" >&2
   echo "LIVE_DATA_COVERAGE = UNPROVEN: no container can be observed; this set can only be archive-only" >&2
 fi
 

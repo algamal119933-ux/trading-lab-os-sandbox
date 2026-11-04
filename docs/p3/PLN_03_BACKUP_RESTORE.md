@@ -95,8 +95,10 @@ Design rules:
     observes fresh coverage and backs up as usual. If the recovery fails, no backup is attempted (exit 6) and the
     marker stays. The marker is in `$XDG_RUNTIME_DIR`, so a reboot clears it; from then on the boot path owns the
     runtime (`docs/p3/PLN_03_HOST_INSTALL_H2_H7.md` §R);
-  - a runtime that is not running and that no backup run stopped (no marker) was stopped on purpose and is never
-    started by the backup. Its set is **archive-only**: verified and mirrored, coverage UNPROVEN, exit 7;
+  - the store identity (UUID) is checked first, before the recovery: no runtime is started on an unproven store
+    (exit 3, marker kept). The runtime's own unit and guard are host-local and not governed by this repository;
+  - a runtime that is not running and that no backup run stopped (no marker) is down for an unknown cause (an Owner
+    stop, a failed boot start and a missing mount look the same) and is never started by the backup. Its set is **archive-only**: verified and mirrored, coverage UNPROVEN, exit 7;
   - two separate results: `ARCHIVE_INTEGRITY` (verify and mirror) and `LIVE_DATA_COVERAGE`, read back from the
     set's own record. Only both together give `BACKUP = PASS` and exit 0;
   - coverage observed before `compose down`, bound into **this** run's set (`--stamp`). Only that set is verified

@@ -156,16 +156,21 @@ journalctl --user -u tlos-p3-backup.service --since "-2h" --no-pager > "$E/h5_jo
 
 ## R: interrupted runs, the marker and reboots (wrapper behavior; nothing to run)
 The wrapper's order, after the lock:
+0. **Store identity:** `/srv/project-data` must have UUID `6d45029b…`, else exit 3. Nothing is started or written,
+   the recovery included, and the marker is kept. The runtime's bind mounts live under the store, and its unit
+   and guard (`tlos-runtime.sh`, reported to check the mount and UUID; `GUARD_OK` logged at boot, PLN-04) are
+   host-local and not pinned by this repository. So the wrapper does not rely on them.
 1. **Marker present** (an earlier run stopped the runtime and was killed: SIGKILL, timeout escalation): the runtime
    is started (or, if someone started it since, only checked) and must be running and answering its probes.
    - Proven: `RECOVERED`, the marker is removed, and the run continues from a running runtime.
    - Not proven: `BACKUP_REFUSED: RUNTIME_RECOVERY_FAILED`, exit 6. No set, no coverage report, no stop; the marker
      stays, so the next run tries again.
-2. Store checks, then this run's stamp (taken after the recovery).
+2. Target check, then this run's stamp (taken after the recovery).
 3. **Runtime running:** fresh `LIVE_DATA_COVERAGE` is observed now and must PASS (exit 4 otherwise). After a
    recovery this is a new observation, never the interrupted run's.
-4. **Runtime not running and no marker:** no backup run stopped it, so it was stopped on purpose or failed on its
-   own. It is never started here. The set is archive-only: exit 7.
+4. **Runtime not running and no marker:** no backup run stopped it. The cause is **unknown** to the wrapper: an
+   Owner stop, a failed boot start and a missing mount look the same (`RUNTIME_DOWN_CAUSE_UNKNOWN`). It is never
+   started here. The set is archive-only: exit 7, fail-closed.
 5. Stop, create, proven restore (exit 6 wins over any other status), verify, mirror. Then the two results:
    `ARCHIVE_INTEGRITY`, then `LIVE_DATA_COVERAGE` read back from the set's record. Exit 0 only with both.
 
@@ -178,7 +183,8 @@ loss does. That is deliberate:
 - A persistent marker would outlive the fact it records. After a reboot, it could make the backup start a runtime
   the Owner had stopped since. So a cleared marker loses nothing the boot path does not already cover.
 - **Gap:** if the boot path fails to start the runtime, there is no marker. This case is **not proven**: the
-  late-mount path is unit-tested only, and power-loss recovery is untested (decision G). The next backup then finds
+  late-mount path is unit-tested only, and power-loss recovery is untested (decision G is Option C; the UPS
+  implementation and its acceptance are pending). The next backup then finds
   the runtime down and unmarked, does not start it, and ends with exit 7. That shows as a failed unit and as
   `coverage UNPROVEN` in the Control Room, never as a hardened backup. Before this change, the same situation gave
   exit 0.
